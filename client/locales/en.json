@@ -1,0 +1,535 @@
+{
+  "common": {
+    "appName": "Sen Viet",
+    "workspace": "Workspace",
+    "administration": "Administration",
+    "today": "Today",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "search": "Search",
+    "filter": "Filter",
+    "exportReport": "Export report",
+    "newAction": "New action",
+    "updateToday": "Updated today",
+    "loading": "Loading...",
+    "confirm": "Confirm",
+    "edit": "Edit",
+    "delete": "Delete",
+    "back": "Back",
+    "newBookingEyebrow": "New booking",
+    "createBooking": "Create booking",
+    "openFrontDesk": "Open front desk",
+    "todayCheckInOutDescription": "Track arrivals and departures directly from the dashboard.",
+    "upcomingCheckIns": "Upcoming check-ins",
+    "upcomingCheckOuts": "Upcoming check-outs",
+    "todayTrips": "trips today",
+    "early": "early",
+    "waiting": "waiting",
+    "guestName": "Guest name",
+    "guestNamePlaceholder": "Enter guest name",
+    "specialRequest": "Special guest requests (if any)",
+    "newBookingConfirm": "Confirm booking",
+    "cancelBooking": "Cancel",
+    "branchManager": "Branch manager",
+    "goodMorning": "Good morning, {{name}}",
+    "comparedYesterday": "compared with yesterday",
+    "comparedLastWeek": "compared with last week",
+    "guestCount": "guests",
+    "roomsInUse": "rooms in use",
+    "arrivals": "arrivals",
+    "departures": "departures",
+    "earlyCheckInRequests": "early check-in requests",
+    "tasksUpdated": "Updated by your team",
+    "pendingTask": "Pending",
+    "upcoming": "Upcoming",
+    "closeAria": "Close",
+    "dateLabel": "Monday, October 14, 2024"
+  },
+  "navigation": {
+    "overview": "Overview",
+    "checkInOut": "Check-in / Check-out",
+    "bookings": "Bookings",
+    "customers": "Customers",
+    "rooms": "Rooms",
+    "tasks": "Tasks",
+    "invoices": "Invoices",
+    "promotions": "Promotions",
+    "staff": "Staff & shifts",
+    "permissions": "Permissions",
+    "reports": "Revenue reports",
+    "settings": "Settings"
+  },
+  "auth": {
+    "welcomeBack": "Welcome back",
+    "loginTitle": "Hello, Linh",
+    "loginDescription": "Sign in to continue managing your branch.",
+    "loginSystem": "Sign in to the system",
+    "workEmail": "Work email",
+    "password": "Password",
+    "rememberLogin": "Remember me",
+    "forgotPassword": "Forgot password?",
+    "login": "Log in",
+    "contactAdmin": "Contact administrator",
+    "requiredFields": "Please enter both your email and password.",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
+    ,"logout": "Log out"
+  },
+  "dashboard": {
+    "branchOverview": "Branch overview",
+    "whatsNew": "What's new today?",
+    "todayRevenue": "Today's revenue",
+    "roomOccupancy": "Room occupancy",
+    "currentGuests": "Current guests",
+    "arrivalsDepartures": "Today's arrivals & departures",
+    "todayCheckInOut": "Today's check-in / check-out",
+    "upcomingCheckIns": "Upcoming check-ins",
+    "upcomingCheckOuts": "Upcoming check-outs",
+    "roomStatus": "Room status",
+    "tasksToHandle": "Tasks to handle",
+    "viewAll": "View all"
+  },
+  "report": {
+    "monthTitle": "October 2024 report",
+    "updatedToday": "Sen Viet · Updated today",
+    "thisMonth": "This month",
+    "export": "Export report",
+    "revenueByDay": "Revenue by day",
+    "millionUnit": "Unit: million VND",
+    "revenue": "Revenue",
+    "occupancy": "Room occupancy",
+    "weeklyOccupancy": "Weekly occupancy rate",
+    "roomStatusMix": "Room status mix",
+    "branchRooms": "Overview of 24 rooms in the branch",
+    "rooms": "rooms",
+    "occupied": "Occupied",
+    "ready": "Ready",
+    "cleaning": "Cleaning",
+    "maintenance": "Maintenance"
+  },
+  "customer": {
+    "listTitle": "Customer list",
+    "listDescription": "Store profiles, stay history, and returning guest care.",
+    "add": "Add customer",
+    "total": "Total customers",
+    "loyal": "Loyal customers",
+    "returning": "Returning this month",
+    "searchPlaceholder": "Search name, phone number or email...",
+    "allTiers": "All groups",
+    "visits": "stays",
+    "totalSpend": "total spend",
+    "lastStay": "latest stay",
+    "priority": "Priority",
+    "noResults": "No matching customers found.",
+    "profile": "Customer profile",
+    "addTitle": "Add customer",
+    "fullName": "Full name",
+    "phone": "Phone number",
+    "identityNumber": "Citizen ID",
+    "email": "Email",
+    "note": "Notes",
+    "notePlaceholder": "Preferences or special requests",
+    "save": "Save customer",
+    "careNote": "Care note",
+    "close": "Close",
+    "notUpdated": "Not updated",
+    "noStay": "No stays yet",
+    "noNote": "No notes.",
+    "tiers": { "loyal": "Loyal", "potential": "Potential", "new": "New" }
+  },
+  "pages": {
+    "bookings": { "eyebrow": "Hotel operations", "title": "Bookings", "description": "Manage reservations, staying guests, and check-in / check-out schedules.", "stats": ["Today's bookings", "Pending confirmation", "Today's check-ins", "Expected revenue"] },
+    "customers": { "eyebrow": "Customer relations", "title": "Customer management", "description": "Manage profiles, stay history, and returning guest care.", "stats": ["Total customers", "Loyal customers", "Returning this month", "Average spending"] },
+    "checkInOut": { "eyebrow": "Front desk operations", "title": "Check-in / Check-out", "description": "Manage arrivals, departures, and guest stay status for today.", "stats": ["Waiting for check-in", "Currently staying", "Waiting for check-out", "Completed"] },
+    "promotions": { "eyebrow": "Sales & guest care", "title": "Promotions", "description": "Create offers and manage discount codes for guests at Sen Viet.", "stats": ["Currently active", "Uses this month", "Guest savings", "Expiring soon"] },
+    "rooms": { "eyebrow": "Asset management", "title": "Rooms", "description": "Track room status, room types, and housekeeping assignments.", "stats": ["Total rooms", "Ready", "In use", "Maintenance"] },
+    "tasks": { "eyebrow": "Operations team", "title": "Tasks", "description": "Assign housekeeping, handle requests, and track shift progress.", "stats": ["To do", "In progress", "Completed"] },
+    "invoices": { "eyebrow": "Branch finance", "title": "Invoices", "description": "Review invoices, payments, and guest transaction reconciliation.", "stats": ["This month's revenue", "Paid", "Pending payment", "Refunded"] },
+    "staff": { "eyebrow": "People management", "title": "Staff & shifts", "description": "Manage employees, roles, schedules, and branch assignments.", "stats": ["Total staff", "Currently working", "Today's shifts", "On leave"] },
+    "permissions": { "eyebrow": "System administration", "title": "Permissions", "description": "Set roles and access permissions for each staff group.", "stats": ["Roles", "Staff", "Access permissions", "Last updated"] },
+    "reports": { "eyebrow": "Business analytics", "title": "Revenue reports", "description": "Track occupancy, ADR, RevPAR, and business performance over time.", "stats": ["Monthly revenue", "Room occupancy", "ADR", "RevPAR"] },
+    "settings": { "eyebrow": "System setup", "title": "Settings", "description": "Configure your branch, room types, notifications, and account access.", "stats": ["Branch", "Time zone", "Language", "Role"] }
+  },
+  "booking": {
+    "adults": "Adults",
+    "children": "Children",
+    "infants": "Infants",
+    "capacityDescription": "Set the maximum guest capacity.",
+    "roomCalendar": "Room calendar",
+    "calendarInstruction": "Drag horizontally to select multiple nights for a room · Click one cell to select/deselect a room",
+    "roomTypeLabel": "Room / type",
+    "selectedRemove": "Selected · click to remove",
+    "selectRoomHint": "Click to select room",
+    "booked": "Booked",
+    "selecting": "Selecting",
+    "dragToSelect": "Drag / click to select",
+    "today": "Today",
+    "holdRooms": "Hold rooms",
+    "paymentMethod": "Select payment method",
+    "paymentRequired": "Please select a payment method to continue.",
+    "cash": "Cash",
+    "cashDescription": "Pay directly at the front desk",
+    "bankQr": "Bank QR code",
+    "bankQrDescription": "Pay using a bank QR code",
+    "wallet": "E-wallet",
+    "walletDescription": "Pay using an electronic wallet",
+    "bookingSummary": "Booking summary",
+    "roomRate": "Room rate",
+    "serviceFee": "Service fee",
+    "total": "Total",
+    "change": "Change",
+    "continue": "Continue",
+    "continuePayment": "Continue to payment",
+    "confirmPayment": "Confirm payment and booking",
+    "successDetail": "Held {{count}} rooms from {{checkIn}} to {{checkOut}} for the guest.",
+    "calendarSelectionDescription": "Drag vertically on the calendar to select multiple rooms on the same date. Click one cell to select/deselect a room. Only the first or last date can be removed.",
+    "stayingGuest": "Guest staying in room",
+    "guestNumber": "Guest {{count}}",
+    "privateNote": "Private note for room",
+    "booking": "Booking",
+    "newBooking": "New booking",
+    "bookingToday": "Today's bookings",
+    "selectRoom": "Select a room",
+    "guestInformation": "Guest information",
+    "guestName": "Guest name",
+    "phoneNumber": "Phone number",
+    "checkInDate": "Check-in date",
+    "checkOutDate": "Check-out date",
+    "notes": "Notes",
+    "confirmBooking": "Confirm booking",
+    "bookingSuccess": "Booking created successfully",
+    "createAnother": "Create another booking",
+    "available": "Available",
+    "occupied": "Occupied",
+    "pendingConfirmation": "Pending confirmation"
+    ,"dateAndRooms": "Dates & rooms"
+    ,"payment": "Payment"
+    ,"selectDateAndRoom": "Select dates and rooms"
+    ,"bookingInformation": "Booking information"
+    ,"changeRoom": "Change room"
+    ,"nights": "nights"
+    ,"noDateSelected": "No dates selected"
+    ,"searchRooms": "Search room number or type"
+    ,"unavailable": "Booked / unavailable"
+    ,"dragToSelectRooms": "Drag vertically to select rooms"
+    ,"showFullRooms": "Show fully booked rooms"
+    ,"selectedRooms": "Selected"
+    ,"rooms": "rooms"
+    ,"estimatedTotal": "Estimated total"
+    ,"selectDateToAddRoom": "Select dates on the calendar to add another room."
+  },
+  "room": {
+    "ready": "Ready",
+    "cleaning": "Cleaning",
+    "staying": "Occupied",
+    "maintenance": "Maintenance",
+    "totalRooms": "Total rooms",
+    "roomType": "Room type",
+    "beds": "Beds",
+    "capacity": "Capacity",
+    "perNight": "/ night",
+    "roomList": "Room list",
+    "roomsAtBranch": "rooms at Sen Viet branch",
+    "realTimeUpdate": "Real-time update",
+    "addBuilding": "Add building",
+    "addRoom": "Add room",
+    "buildings": "Buildings",
+    "allBuildings": "All buildings",
+    "allFloors": "All floors",
+    "allStatuses": "All statuses",
+    "searchRooms": "Search by room number or room type...",
+    "roomStatus": "Room status",
+    "maxGuests": "Up to {{count}} guests",
+    "confirmCleaning": "Confirm cleaning complete",
+    "unassignedCleaning": "Housekeeping not assigned",
+    "edit": "Edit",
+    "details": "Details",
+    "assign": "Assign",
+    "noRooms": "No rooms found",
+    "changeFilters": "Try changing the keyword or status filter."
+    ,"singleBed": "single bed"
+    ,"doubleSingleBeds": "2 single beds"
+    ,"kingBed": "King-size bed"
+    ,"housekeepingReady": "Ready to work"
+    ,"floorLabel": "Floor {{floor}}"
+    ,"photoCount": "{{count}} photos"
+    ,"maxGuestsLabel": "Up to {{count}} guests"
+    ,"airConditioning": "Air conditioning"
+    ,"privateBathroom": "Private bathroom"
+    ,"wifi": "WiFi"
+    ,"generatedCode": "Generated room code"
+    ,"pricePerNight": "Price / night"
+    ,"guestCapacity": "Guest capacity"
+    ,"area": "Area"
+    ,"buildingLabel": "Building"
+    ,"searchAmenities": "Search and select amenities..."
+    ,"noMatchingAmenities": "No matching amenities"
+    ,"description": "Room description"
+    ,"descriptionPlaceholder": "Enter a short room description"
+    ,"images": "Room images"
+    ,"uploadImages": "Click to upload images"
+    ,"imageLimit": "Multiple images supported, up to 8 images"
+    ,"defaultImages": "If no images are added, the system will use default images."
+    ,"saveChanges": "Save changes"
+    ,"createRoom": "Create room"
+    ,"editRoomBadge": "EDIT ROOM"
+    ,"editRoomTitle": "Edit room {{room}}"
+    ,"editRoomDescription": "Update room information and save changes to the list."
+    ,"createRoomBadge": "NEW ROOM SETUP"
+    ,"createRoomTitle": "Create new room"
+    ,"createRoomDescription": "Quickly add the key details, amenities, and images for this room."
+    ,"importRooms": "Import rooms from Excel/CSV"
+    ,"readingFile": "Reading file..."
+    ,"floorOption": "Floor {{floor}}"
+    ,"roomLabel": "Room"
+    ,"roomInformation": "Room information"
+    ,"currentStatus": "Current status"
+    ,"housekeepingStaff": "Housekeeping staff:"
+    ,"roomSpecifications": "Room specifications"
+    ,"maximumGuests": "Maximum guests:"
+    ,"bedLabel": "Bed:"
+    ,"areaLabel": "Area:"
+    ,"locationLabel": "Location:"
+    ,"amenitiesLabel": "Amenities"
+    ,"gallery": "Photo gallery"
+    ,"viewAllPhotos": "View all photos"
+  },
+  "modules": {
+    "bookingEyebrow": "Hotel operations",
+    "customerEyebrow": "Customer relations",
+    "frontDeskEyebrow": "Front desk operations",
+    "promotionEyebrow": "Sales & guest care",
+    "assetEyebrow": "Asset management",
+    "teamEyebrow": "Operations team",
+    "financeEyebrow": "Branch finance",
+    "peopleEyebrow": "People management",
+    "systemEyebrow": "System administration",
+    "analyticsEyebrow": "Business analytics",
+    "setupEyebrow": "System setup"
+  },
+  "settings": {
+    "languageTitle": "Language",
+    "languageDescription": "Choose the display language for the interface.",
+    "title": "Settings",
+    "description": "Configure your branch, room types, notifications, and account access.",
+    "branch": "Branch",
+    "timezone": "Time zone",
+    "language": "Language",
+    "role": "Role",
+    "manager": "Manager"
+  },
+  "staff": {
+    "to": "to",
+    "morning": "Morning shift",
+    "evening": "Evening shift",
+    "frontDesk": "Front desk",
+    "housekeeping": "Housekeeping",
+    "dailySchedule": "Daily schedule",
+    "todayShifts": "Today's shifts",
+    "staffShiftsTab": "Staff shifts",
+    "assignmentTab": "Shift assignments",
+    "weeklyOverview": "Weekly shift overview",
+    "weeklyOverviewDescription": "Select a day below to view and edit shifts.",
+    "assignShift": "Assign shift",
+    "savedSchedule": "Saved shift schedule",
+    "weeklyStaffSummary": "Total staff working each day of the week.",
+    "staffCount": "staff",
+    "fullShifts": "Fully staffed",
+    "assignForWeek": "Assign shifts for the week",
+    "adjustWeekSchedule": "Adjust a position in the weekly schedule.",
+    "weeklySchedule": "Weekly schedule",
+    "weeklyScheduleDescription": "Track all staff and tasks for each day.",
+    "edit": "Edit",
+    "morningShort": "Morning",
+    "eveningShort": "Evening",
+    "weeklyShiftDetail": "4 positions each day · 1 morning and 1 evening staff member per department",
+    "selectedDayDetail": "Shift details for the selected day",
+    "selectedDayDescription": "Positions and tasks for the selected day",
+    "daysFullyStaffed": "Days fully staffed",
+    "totalAssignments": "Total shift assignments",
+    "rotatingStaff": "Rotating staff",
+    "employee": "Employee",
+    "task": "Task",
+    "saveAssignments": "Save assignments",
+    "days": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    }
+  },
+  "invoice": {
+    "listTitle": "Invoice list",
+    "listDescription": "Track payments and guest stay status",
+    "searchPlaceholder": "Search invoice number, guest name or room...",
+    "allPayments": "All payments",
+    "invoice": "Invoice",
+    "guest": "Guest",
+    "roomAndTime": "Room & time",
+    "total": "Total",
+    "payment": "Payment",
+    "stay": "Stay",
+    "actions": "Actions",
+    "createdOn": "Created on 04/09/2026",
+    "view": "View",
+    "checkIn": "Check-in",
+    "checkOut": "Check-out",
+    "viewDetails": "View details",
+    "noResults": "No invoices found",
+    "changeFilters": "Try changing the keyword or payment filter.",
+    "showing": "Showing {{shown}} / {{total}} invoices",
+    "lastSynced": "Last synced: just now",
+    "checkoutComplete": "Check-out complete",
+    "assignCleaning": "Assign housekeeping",
+    "checkoutDescription": "Room {{room}} just checked out. Choose a staff member to move it to Cleaning.",
+    "cleaner": "Housekeeper",
+    "cancel": "Cancel",
+    "confirmAndGoRooms": "Confirm & go to rooms",
+    "creditCard": "Credit card",
+    "bankTransfer": "Bank transfer",
+    "atCounter": "At counter",
+    "paidStatus": "Paid",
+    "pendingStatus": "Pending payment",
+    "refundedStatus": "Refunded",
+    "upcomingStay": "Upcoming",
+    "currentStay": "Staying",
+    "checkedIn": "Checked in",
+    "checkedOutStay": "Checked out"
+  },
+  "permission": {
+    "accessTitle": "Access permissions",
+    "accessDescription": "Set which functions each staff member can view and use.",
+    "save": "Save permissions",
+    "saved": "Changes saved",
+    "role": "Role",
+    "notice": "Only the branch manager can change access permissions. Changes apply immediately to staff accounts.",
+    "roles": {
+      "branchManager": { "name": "Branch manager", "description": "Full access to the branch" },
+      "receptionist": { "name": "Receptionist", "description": "Bookings and guest reception" },
+      "housekeeping": { "name": "Housekeeping", "description": "Clean rooms and update status" },
+      "accountant": { "name": "Accountant", "description": "Invoices and revenue reports" }
+    },
+    "permissions": {
+      "overview": "View overview",
+      "bookings": "Manage bookings",
+      "roomStatus": "Update room status",
+      "invoices": "Manage invoices",
+      "reports": "View reports",
+      "staff": "Manage staff"
+    }
+  },
+  "promotion": {
+    "createTitle": "Create promotion",
+    "createDescription": "Set up a new offer for guests.",
+    "programName": "Program name",
+    "code": "Promotion code",
+    "discount": "Discount",
+    "validity": "Validity",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe the terms",
+    "cancel": "Cancel",
+    "save": "Save promotion",
+    "programs": "Promotion programs",
+    "programsDescription": "Create and manage offers for guests at Sen Viet.",
+    "create": "Create promotion",
+    "active": "Active",
+    "usesThisMonth": "Uses this month",
+    "guestSavings": "Guest savings",
+    "codeList": "Promotion code list",
+    "codeListDescription": "Track validity and status for each offer.",
+    "copied": "Copied",
+    "offerLevel": "Offer",
+    "paused": "Paused",
+    "toggleStatus": "Change status for {{name}}",
+    "newPromotion": "New promotion",
+    "defaultDetail": "An offer for guests staying at Sen Viet",
+    "exampleWeekendOffer": "Example: Weekend offer",
+    "discountOptions": "Discount options",
+    "fromDate": "Start date",
+    "toDate": "End date",
+    "copyCode": "Copy promotion code"
+  },
+  "frontDesk": {
+    "todayTitle": "Today's front desk",
+    "todayDescription": "Process arrivals and departures quickly in one place.",
+    "waitingCheckIn": "Waiting for check-in",
+    "waitingCheckOut": "Waiting for check-out",
+    "allToday": "All today",
+    "onlyCheckIn": "Check-in only",
+    "onlyCheckOut": "Check-out only",
+    "searchPlaceholder": "Search guest name or room number...",
+    "stay": "Stay",
+    "checkInTime": "Check-in time",
+    "checkOutTime": "Check-out time",
+    "complete": "Complete",
+    "noMatches": "No matching visits today",
+    "changeSearch": "Try changing the search term or check-in/check-out filter.",
+    "cleaningAssignment": "Housekeeping assignment",
+    "cleaningDescription": "Choose a staff member so the room is ready for the next guest.",
+    "assigned": "assigned",
+    "needsCleaning": "Needs cleaning",
+    "chooseEmployee": "Choose employee",
+    "roomDetails": "Room details",
+    "basicInfo": "Basic information",
+    "floor": "Floor",
+    "beds": "Beds",
+    "area": "Area",
+    "view": "View",
+    "rate": "Rate",
+    "operationalStatus": "Operational status",
+    "roomStatus": "Room status",
+    "currentVisit": "Current visit",
+    "visitStatus": "Visit status",
+    "note": "Note",
+    "amenities": "Room amenities",
+    "close": "Close",
+    "checkoutComplete": "Check-out complete",
+    "assignRoom": "Assign housekeeping for room {{room}}",
+    "chooseStaff": "Choose one of the two staff members to start cleaning {{type}}.",
+    "availableShift": "Housekeeping · Available for shift",
+    "later": "Later",
+    "unknownRoomType": "Unknown room type",
+    "notUpdated": "Not updated",
+    "updating": "Updating",
+    "syncNote": "Room details will be synced from the room system."
+  },
+  "calendar": {
+    "title": "Booking calendar",
+    "subtitle": "Track room availability and quickly choose dates.",
+    "roomLabel": "Room",
+    "standardRoom": "Standard Room",
+    "deluxeRoom": "Deluxe Room",
+    "suiteRoom": "Suite Room",
+    "superiorRoom": "Superior Room",
+    "bookingSchedule": "Booking schedule",
+    "scheduleDescription": "Track room schedules and quickly choose a date to view.",
+    "room": "Room",
+    "thisWeek": "This week",
+    "booked": "Booked",
+    "occupied": "Occupied",
+    "ready": "Ready",
+    "selectDaysDescription": "Drag across empty cells to select multiple days · Gray cells are occupied",
+    "selectedRoom": "Room {{room}} selected · {{days}} days",
+    "continueBooking": "Continue booking",
+    "chooseDate": "Choose date"
+    ,"sunShort": "Sun"
+    ,"monShort": "Mon"
+    ,"tueShort": "Tue"
+    ,"wedShort": "Wed"
+    ,"thuShort": "Thu"
+    ,"friShort": "Fri"
+    ,"satShort": "Sat"
+  },
+  "status": {
+    "active": "Active",
+    "completed": "Completed",
+    "pending": "Pending",
+    "cancelled": "Cancelled",
+    "paid": "Paid",
+    "refunded": "Refunded"
+  }
+}

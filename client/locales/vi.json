@@ -1,0 +1,535 @@
+{
+  "common": {
+    "appName": "Sen Việt",
+    "workspace": "Không gian làm việc",
+    "administration": "Quản trị",
+    "today": "Hôm nay",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "close": "Đóng",
+    "search": "Tìm kiếm",
+    "filter": "Bộ lọc",
+    "exportReport": "Xuất báo cáo",
+    "newAction": "Thao tác mới",
+    "updateToday": "Cập nhật hôm nay",
+    "loading": "Đang tải...",
+    "confirm": "Xác nhận",
+    "edit": "Chỉnh sửa",
+    "delete": "Xóa",
+    "back": "Quay lại",
+    "newBookingEyebrow": "Đặt phòng mới",
+    "createBooking": "Tạo đặt phòng",
+    "openFrontDesk": "Mở quầy lễ tân",
+    "todayCheckInOutDescription": "Theo dõi khách đến và khách trả phòng ngay từ dashboard.",
+    "upcomingCheckIns": "Khách sắp check-in",
+    "upcomingCheckOuts": "Khách sắp check-out",
+    "todayTrips": "lượt hôm nay",
+    "early": "sớm",
+    "waiting": "chờ xử lý",
+    "guestName": "Tên khách hàng",
+    "guestNamePlaceholder": "Nhập tên khách",
+    "specialRequest": "Yêu cầu đặc biệt của khách (nếu có)",
+    "newBookingConfirm": "Xác nhận đặt phòng",
+    "cancelBooking": "Hủy bỏ",
+    "branchManager": "Quản lý chi nhánh",
+    "goodMorning": "Chào buổi sáng, {{name}}",
+    "comparedYesterday": "so với hôm qua",
+    "comparedLastWeek": "so với tuần trước",
+    "guestCount": "khách",
+    "roomsInUse": "phòng đang sử dụng",
+    "arrivals": "đến",
+    "departures": "đi",
+    "earlyCheckInRequests": "yêu cầu check-in sớm",
+    "tasksUpdated": "Cập nhật từ đội ngũ của bạn",
+    "pendingTask": "Chờ xử lý",
+    "upcoming": "Sắp tới",
+    "closeAria": "Đóng",
+    "dateLabel": "Thứ Hai, 14 tháng 10, 2024"
+  },
+  "navigation": {
+    "overview": "Tổng quan",
+    "checkInOut": "Check-in / Check-out",
+    "bookings": "Đặt phòng",
+    "customers": "Khách hàng",
+    "rooms": "Phòng",
+    "tasks": "Công việc",
+    "invoices": "Hóa đơn",
+    "promotions": "Khuyến mãi",
+    "staff": "Nhân viên & ca làm",
+    "permissions": "Phân quyền",
+    "reports": "Báo cáo doanh thu",
+    "settings": "Cài đặt"
+  },
+  "auth": {
+    "welcomeBack": "Chào mừng trở lại",
+    "loginTitle": "Xin chào, Linh",
+    "loginDescription": "Đăng nhập để tiếp tục quản lý chi nhánh của bạn.",
+    "loginSystem": "Đăng nhập hệ thống",
+    "workEmail": "Email công việc",
+    "password": "Mật khẩu",
+    "rememberLogin": "Ghi nhớ đăng nhập",
+    "forgotPassword": "Quên mật khẩu?",
+    "login": "Đăng nhập",
+    "contactAdmin": "Liên hệ quản trị viên",
+    "requiredFields": "Vui lòng nhập đầy đủ email và mật khẩu.",
+    "showPassword": "Hiện mật khẩu",
+    "hidePassword": "Ẩn mật khẩu"
+    ,"logout": "Đăng xuất"
+  },
+  "dashboard": {
+    "branchOverview": "Tổng quan chi nhánh",
+    "whatsNew": "Hôm nay có gì mới?",
+    "todayRevenue": "Doanh thu hôm nay",
+    "roomOccupancy": "Công suất phòng",
+    "currentGuests": "Khách đang lưu trú",
+    "arrivalsDepartures": "Đến & đi hôm nay",
+    "todayCheckInOut": "Check-in / Check-out hôm nay",
+    "upcomingCheckIns": "Khách sắp check-in",
+    "upcomingCheckOuts": "Khách sắp check-out",
+    "roomStatus": "Tình trạng phòng",
+    "tasksToHandle": "Công việc cần xử lý",
+    "viewAll": "Xem tất cả"
+  },
+  "report": {
+    "monthTitle": "Báo cáo tháng 10/2024",
+    "updatedToday": "Sen Việt · Cập nhật hôm nay",
+    "thisMonth": "Tháng này",
+    "export": "Xuất báo cáo",
+    "revenueByDay": "Doanh thu theo ngày",
+    "millionUnit": "Đơn vị: triệu đồng",
+    "revenue": "Doanh thu",
+    "occupancy": "Công suất phòng",
+    "weeklyOccupancy": "Tỷ lệ lấp đầy trong tuần",
+    "roomStatusMix": "Cơ cấu tình trạng phòng",
+    "branchRooms": "Tổng quan 24 phòng trong chi nhánh",
+    "rooms": "phòng",
+    "occupied": "Đang ở",
+    "ready": "Sẵn sàng",
+    "cleaning": "Đang dọn",
+    "maintenance": "Bảo trì"
+  },
+  "customer": {
+    "listTitle": "Danh sách khách hàng",
+    "listDescription": "Lưu trữ thông tin, lịch sử lưu trú và chăm sóc khách quay lại.",
+    "add": "Thêm khách hàng",
+    "total": "Tổng khách hàng",
+    "loyal": "Khách thân thiết",
+    "returning": "Khách quay lại tháng này",
+    "searchPlaceholder": "Tìm tên, số điện thoại hoặc email...",
+    "allTiers": "Tất cả nhóm",
+    "visits": "lần lưu trú",
+    "totalSpend": "tổng chi tiêu",
+    "lastStay": "lưu trú gần nhất",
+    "priority": "Ưu tiên",
+    "noResults": "Không tìm thấy khách hàng phù hợp.",
+    "profile": "Hồ sơ khách hàng",
+    "addTitle": "Thêm khách hàng",
+    "fullName": "Họ và tên",
+    "phone": "Số điện thoại",
+    "identityNumber": "Căn cước công dân",
+    "email": "Email",
+    "note": "Ghi chú",
+    "notePlaceholder": "Sở thích hoặc yêu cầu đặc biệt",
+    "save": "Lưu khách hàng",
+    "careNote": "Ghi chú chăm sóc",
+    "close": "Đóng",
+    "notUpdated": "Chưa cập nhật",
+    "noStay": "Chưa lưu trú",
+    "noNote": "Chưa có ghi chú.",
+    "tiers": { "loyal": "Thân thiết", "potential": "Tiềm năng", "new": "Mới" }
+  },
+  "pages": {
+    "bookings": { "eyebrow": "Vận hành lưu trú", "title": "Đặt phòng", "description": "Quản lý lịch đặt phòng, khách lưu trú và lịch check-in / check-out.", "stats": ["Đặt phòng hôm nay", "Đang chờ xác nhận", "Check-in hôm nay", "Doanh thu dự kiến"] },
+    "customers": { "eyebrow": "Quan hệ khách hàng", "title": "Quản lý khách hàng", "description": "Quản lý hồ sơ, lịch sử lưu trú và chăm sóc khách quay lại.", "stats": ["Tổng khách hàng", "Khách thân thiết", "Khách quay lại tháng này", "Chi tiêu trung bình"] },
+    "checkInOut": { "eyebrow": "Vận hành lễ tân", "title": "Check-in / Check-out", "description": "Quản lý nhận phòng, trả phòng và trạng thái lưu trú của khách trong ngày.", "stats": ["Chờ check-in", "Đang lưu trú", "Chờ check-out", "Đã hoàn tất"] },
+    "promotions": { "eyebrow": "Kinh doanh & chăm sóc khách", "title": "Khuyến mãi", "description": "Tạo ưu đãi và quản lý mã giảm giá cho khách lưu trú tại Sen Việt.", "stats": ["Đang hoạt động", "Lượt sử dụng tháng này", "Tiết kiệm cho khách", "Sắp hết hạn"] },
+    "rooms": { "eyebrow": "Quản lý tài sản", "title": "Phòng", "description": "Theo dõi tình trạng phòng, loại phòng và phân công dọn dẹp tại chi nhánh.", "stats": ["Tổng số phòng", "Sẵn sàng", "Đang sử dụng", "Bảo trì"] },
+    "tasks": { "eyebrow": "Đội ngũ vận hành", "title": "Công việc", "description": "Phân công dọn phòng, xử lý yêu cầu và theo dõi tiến độ theo ca.", "stats": ["Việc cần làm", "Đang xử lý", "Đã hoàn tất"] },
+    "invoices": { "eyebrow": "Tài chính chi nhánh", "title": "Hóa đơn", "description": "Tra cứu hóa đơn, thanh toán và đối soát giao dịch của khách hàng.", "stats": ["Doanh thu tháng này", "Đã thanh toán", "Chờ thanh toán", "Hoàn tiền"] },
+    "staff": { "eyebrow": "Quản trị nhân sự", "title": "Nhân viên & ca làm", "description": "Quản lý nhân viên, chức vụ, lịch làm việc và phân công trong chi nhánh.", "stats": ["Tổng nhân viên", "Đang làm việc", "Ca hôm nay", "Nghỉ phép"] },
+    "permissions": { "eyebrow": "Quản trị hệ thống", "title": "Phân quyền", "description": "Thiết lập vai trò và quyền truy cập cho từng nhóm nhân viên trong chi nhánh.", "stats": ["Vai trò", "Nhân viên", "Quyền truy cập", "Cập nhật gần nhất"] },
+    "reports": { "eyebrow": "Phân tích kinh doanh", "title": "Báo cáo doanh thu", "description": "Theo dõi công suất phòng, ADR, RevPAR và hiệu quả kinh doanh theo thời gian.", "stats": ["Doanh thu tháng", "Công suất phòng", "ADR", "RevPAR"] },
+    "settings": { "eyebrow": "Thiết lập hệ thống", "title": "Cài đặt", "description": "Cấu hình chi nhánh, loại phòng, thông báo và quyền truy cập tài khoản.", "stats": ["Chi nhánh", "Múi giờ", "Ngôn ngữ", "Vai trò"] }
+  },
+  "booking": {
+    "adults": "Người lớn",
+    "children": "Trẻ em",
+    "infants": "Em bé",
+    "capacityDescription": "Thiết lập số lượng khách tối đa.",
+    "roomCalendar": "Lịch phòng",
+    "calendarInstruction": "Kéo ngang để chọn nhiều đêm cho phòng · Bấm 1 ô để chọn/bỏ phòng",
+    "roomTypeLabel": "Phòng / loại phòng",
+    "selectedRemove": "Đã chọn · bấm để bỏ",
+    "selectRoomHint": "Nhấn để chọn phòng",
+    "booked": "Đã kín",
+    "selecting": "Đang chọn",
+    "dragToSelect": "Kéo / bấm chọn",
+    "today": "Hôm nay",
+    "holdRooms": "Giữ phòng",
+    "paymentMethod": "Chọn phương thức thanh toán",
+    "paymentRequired": "Vui lòng chọn một phương thức để hoàn tất.",
+    "cash": "Tiền mặt",
+    "cashDescription": "Thanh toán trực tiếp tại quầy",
+    "bankQr": "Quét mã ngân hàng",
+    "bankQrDescription": "Thanh toán bằng mã QR ngân hàng",
+    "wallet": "Ví điện tử",
+    "walletDescription": "Thanh toán qua ví điện tử",
+    "bookingSummary": "Tóm tắt đặt phòng",
+    "roomRate": "Tiền phòng",
+    "serviceFee": "Phí dịch vụ",
+    "total": "Tổng cộng",
+    "change": "Thay đổi",
+    "continue": "Tiếp tục",
+    "continuePayment": "Tiếp tục thanh toán",
+    "confirmPayment": "Xác nhận thanh toán và đặt phòng",
+    "successDetail": "Đã giữ {{count}} phòng từ {{checkIn}} đến {{checkOut}} cho khách hàng.",
+    "calendarSelectionDescription": "Kéo dọc trên lịch để chọn nhiều phòng cùng ngày. Bấm 1 ô để chọn/bỏ phòng. Chỉ được bỏ ngày đầu hoặc ngày cuối của khoảng ngày.",
+    "stayingGuest": "Khách lưu trú phòng",
+    "guestNumber": "Khách {{count}}",
+    "privateNote": "Ghi chú riêng cho phòng",
+    "booking": "Đặt phòng",
+    "newBooking": "Đặt phòng mới",
+    "bookingToday": "Đặt phòng hôm nay",
+    "selectRoom": "Chọn phòng",
+    "guestInformation": "Thông tin khách",
+    "guestName": "Tên khách hàng",
+    "phoneNumber": "Số điện thoại",
+    "checkInDate": "Ngày nhận phòng",
+    "checkOutDate": "Ngày trả phòng",
+    "notes": "Ghi chú",
+    "confirmBooking": "Xác nhận đặt phòng",
+    "bookingSuccess": "Đặt phòng thành công",
+    "createAnother": "Tạo đặt phòng khác",
+    "available": "Còn phòng",
+    "occupied": "Đã kín",
+    "pendingConfirmation": "Đang chờ xác nhận"
+    ,"dateAndRooms": "Ngày & phòng"
+    ,"payment": "Thanh toán"
+    ,"selectDateAndRoom": "Chọn ngày và phòng"
+    ,"bookingInformation": "Thông tin đặt phòng"
+    ,"changeRoom": "Đổi phòng"
+    ,"nights": "đêm lưu trú"
+    ,"noDateSelected": "Chưa chọn ngày"
+    ,"searchRooms": "Tìm số hoặc loại phòng"
+    ,"unavailable": "Đã đặt / không thể chọn"
+    ,"dragToSelectRooms": "Kéo dọc để chọn nhiều phòng"
+    ,"showFullRooms": "Hiện cả phòng đã kín"
+    ,"selectedRooms": "Đã chọn"
+    ,"rooms": "phòng"
+    ,"estimatedTotal": "Tạm tính"
+    ,"selectDateToAddRoom": "Chọn ngày trên lịch để thêm phòng khác."
+  },
+  "room": {
+    "ready": "Sẵn sàng",
+    "cleaning": "Đang dọn",
+    "staying": "Đang ở",
+    "maintenance": "Bảo trì",
+    "totalRooms": "Tổng số phòng",
+    "roomType": "Loại phòng",
+    "beds": "Giường",
+    "capacity": "Sức chứa",
+    "perNight": "/ đêm",
+    "roomList": "Danh sách phòng",
+    "roomsAtBranch": "phòng tại chi nhánh Sen Việt",
+    "realTimeUpdate": "Cập nhật thời gian thực",
+    "addBuilding": "Thêm tòa nhà",
+    "addRoom": "Thêm phòng",
+    "buildings": "Tòa nhà",
+    "allBuildings": "Tất cả các tòa",
+    "allFloors": "Tất cả các tầng",
+    "allStatuses": "Tất cả trạng thái",
+    "searchRooms": "Tìm theo số phòng hoặc loại phòng...",
+    "roomStatus": "Trạng thái phòng",
+    "maxGuests": "Tối đa {{count}} khách",
+    "confirmCleaning": "Xác nhận đã dọn xong",
+    "unassignedCleaning": "Chưa phân công dọn phòng",
+    "edit": "Sửa",
+    "details": "Chi tiết",
+    "assign": "Phân công",
+    "noRooms": "Không tìm thấy phòng",
+    "changeFilters": "Thử thay đổi từ khóa hoặc bộ lọc trạng thái."
+    ,"singleBed": "giường đơn"
+    ,"doubleSingleBeds": "2 giường đơn"
+    ,"kingBed": "giường King Size"
+    ,"housekeepingReady": "Sẵn sàng nhận việc"
+    ,"floorLabel": "Tầng {{floor}}"
+    ,"photoCount": "{{count}} ảnh"
+    ,"maxGuestsLabel": "Tối đa {{count}} khách"
+    ,"airConditioning": "Điều hòa"
+    ,"privateBathroom": "Phòng tắm riêng"
+    ,"wifi": "Wifi"
+    ,"generatedCode": "Mã phòng tự tạo"
+    ,"pricePerNight": "Giá phòng / đêm"
+    ,"guestCapacity": "Quy định số lượng người"
+    ,"area": "Diện tích"
+    ,"buildingLabel": "Tòa"
+    ,"searchAmenities": "Tìm và chọn tiện ích..."
+    ,"noMatchingAmenities": "Không có tiện ích phù hợp"
+    ,"description": "Mô tả phòng"
+    ,"descriptionPlaceholder": "Nhập mô tả ngắn về phòng"
+    ,"images": "Hình ảnh phòng"
+    ,"uploadImages": "Bấm để tải ảnh lên"
+    ,"imageLimit": "Hỗ trợ nhiều ảnh, tối đa 8 ảnh"
+    ,"defaultImages": "Nếu không thêm ảnh, hệ thống sẽ dùng ảnh mặc định."
+    ,"saveChanges": "Lưu thay đổi"
+    ,"createRoom": "Tạo phòng"
+    ,"editRoomBadge": "CHỈNH SỬA PHÒNG"
+    ,"editRoomTitle": "Sửa phòng {{room}}"
+    ,"editRoomDescription": "Cập nhật thông tin phòng và lưu thay đổi vào danh sách."
+    ,"createRoomBadge": "THIẾT LẬP PHÒNG MỚI"
+    ,"createRoomTitle": "Tạo phòng mới"
+    ,"createRoomDescription": "Điền nhanh thông tin chính, tiện ích và hình ảnh để đưa phòng vào danh sách kinh doanh."
+    ,"importRooms": "Nhập phòng từ Excel/CSV"
+    ,"readingFile": "Đang đọc file..."
+    ,"floorOption": "Tầng {{floor}}"
+    ,"roomLabel": "Phòng"
+    ,"roomInformation": "Thông tin phòng"
+    ,"currentStatus": "Tình trạng hiện tại"
+    ,"housekeepingStaff": "Nhân viên dọn phòng:"
+    ,"roomSpecifications": "Thông số phòng"
+    ,"maximumGuests": "Sức chứa:"
+    ,"bedLabel": "Giường:"
+    ,"areaLabel": "Diện tích:"
+    ,"locationLabel": "Vị trí:"
+    ,"amenitiesLabel": "Tiện ích"
+    ,"gallery": "Thư viện ảnh"
+    ,"viewAllPhotos": "Xem toàn bộ ảnh"
+  },
+  "modules": {
+    "bookingEyebrow": "Vận hành lưu trú",
+    "customerEyebrow": "Quan hệ khách hàng",
+    "frontDeskEyebrow": "Vận hành lễ tân",
+    "promotionEyebrow": "Kinh doanh & chăm sóc khách",
+    "assetEyebrow": "Quản lý tài sản",
+    "teamEyebrow": "Đội ngũ vận hành",
+    "financeEyebrow": "Tài chính chi nhánh",
+    "peopleEyebrow": "Quản trị nhân sự",
+    "systemEyebrow": "Quản trị hệ thống",
+    "analyticsEyebrow": "Phân tích kinh doanh",
+    "setupEyebrow": "Thiết lập hệ thống"
+  },
+  "settings": {
+    "languageTitle": "Ngôn ngữ",
+    "languageDescription": "Chọn ngôn ngữ hiển thị cho giao diện.",
+    "title": "Cài đặt",
+    "description": "Cấu hình chi nhánh, loại phòng, thông báo và quyền truy cập tài khoản.",
+    "branch": "Chi nhánh",
+    "timezone": "Múi giờ",
+    "language": "Ngôn ngữ",
+    "role": "Vai trò",
+    "manager": "Quản lý"
+  },
+  "staff": {
+    "to": "–",
+    "morning": "Ca sáng",
+    "evening": "Ca tối",
+    "frontDesk": "Lễ tân",
+    "housekeeping": "Housekeeping",
+    "dailySchedule": "Lịch làm việc theo ngày",
+    "todayShifts": "Danh sách ca trực hôm nay",
+    "staffShiftsTab": "Nhân viên ca làm",
+    "assignmentTab": "Phân công ca làm",
+    "weeklyOverview": "Lịch phân ca cả tuần",
+    "weeklyOverviewDescription": "Chọn một ngày bên dưới để xem và chỉnh sửa ca trực.",
+    "assignShift": "Phân ca làm",
+    "savedSchedule": "Lịch phân ca đã lưu",
+    "weeklyStaffSummary": "Tổng số nhân viên làm việc theo từng ngày trong tuần.",
+    "staffCount": "nhân viên",
+    "fullShifts": "Đủ ca",
+    "assignForWeek": "Phân ca cho cả tuần",
+    "adjustWeekSchedule": "Điều chỉnh một vị trí trong lịch tuần.",
+    "weeklySchedule": "Lịch phân ca theo tuần",
+    "weeklyScheduleDescription": "Theo dõi đầy đủ người trực và công việc của từng ngày.",
+    "edit": "Chỉnh sửa",
+    "morningShort": "Sáng",
+    "eveningShort": "Tối",
+    "weeklyShiftDetail": "4 vị trí mỗi ngày · 1 người sáng và 1 người tối cho từng bộ phận",
+    "selectedDayDetail": "Chi tiết ca ngày đang chọn",
+    "selectedDayDescription": "Các vị trí và công việc trong ngày được chọn ở lịch phía trên",
+    "daysFullyStaffed": "Ngày đã xếp đủ ca",
+    "totalAssignments": "Tổng lượt phân ca",
+    "rotatingStaff": "Nhân viên luân phiên",
+    "employee": "Nhân viên",
+    "task": "Công việc",
+    "saveAssignments": "Lưu phân ca",
+    "days": {
+      "mon": "Thứ 2",
+      "tue": "Thứ 3",
+      "wed": "Thứ 4",
+      "thu": "Thứ 5",
+      "fri": "Thứ 6",
+      "sat": "Thứ 7",
+      "sun": "Chủ nhật"
+    }
+  },
+  "invoice": {
+    "listTitle": "Danh sách hóa đơn",
+    "listDescription": "Theo dõi thanh toán và trạng thái lưu trú của khách hàng",
+    "searchPlaceholder": "Tìm mã hóa đơn, tên khách hoặc phòng...",
+    "allPayments": "Tất cả thanh toán",
+    "invoice": "Hóa đơn",
+    "guest": "Khách hàng",
+    "roomAndTime": "Phòng & thời gian",
+    "total": "Tổng tiền",
+    "payment": "Thanh toán",
+    "stay": "Lưu trú",
+    "actions": "Thao tác",
+    "createdOn": "Tạo ngày 04/09/2026",
+    "view": "Xem",
+    "checkIn": "Check-in",
+    "checkOut": "Check-out",
+    "viewDetails": "Xem chi tiết",
+    "noResults": "Không tìm thấy hóa đơn",
+    "changeFilters": "Thử thay đổi từ khóa hoặc bộ lọc thanh toán.",
+    "showing": "Hiển thị {{shown}} / {{total}} hóa đơn",
+    "lastSynced": "Đồng bộ lần cuối: vừa xong",
+    "checkoutComplete": "Hoàn tất check-out",
+    "assignCleaning": "Phân công dọn phòng",
+    "checkoutDescription": "Phòng {{room}} vừa check-out. Chọn nhân viên phụ trách để chuyển phòng sang trạng thái Đang dọn.",
+    "cleaner": "Nhân viên dọn phòng",
+    "cancel": "Hủy",
+    "confirmAndGoRooms": "Xác nhận & về trang phòng",
+    "creditCard": "Thẻ tín dụng",
+    "bankTransfer": "Chuyển khoản",
+    "atCounter": "Thanh toán tại quầy",
+    "paidStatus": "Đã thanh toán",
+    "pendingStatus": "Chờ thanh toán",
+    "refundedStatus": "Đã hoàn tiền",
+    "upcomingStay": "Sắp đến",
+    "currentStay": "Đang ở",
+    "checkedIn": "Đã check-in",
+    "checkedOutStay": "Đã trả phòng"
+  },
+  "permission": {
+    "accessTitle": "Phân quyền truy cập",
+    "accessDescription": "Thiết lập nhân viên được xem và thao tác những chức năng nào.",
+    "save": "Lưu phân quyền",
+    "saved": "Đã lưu thay đổi",
+    "role": "Vai trò",
+    "notice": "Chỉ quản lý chi nhánh mới có thể thay đổi quyền truy cập. Các thay đổi sẽ áp dụng ngay cho tài khoản nhân viên.",
+    "roles": {
+      "branchManager": { "name": "Quản lý chi nhánh", "description": "Toàn quyền trong chi nhánh" },
+      "receptionist": { "name": "Lễ tân", "description": "Đặt phòng và tiếp đón khách" },
+      "housekeeping": { "name": "Housekeeping", "description": "Dọn phòng và cập nhật trạng thái" },
+      "accountant": { "name": "Kế toán", "description": "Hóa đơn và báo cáo doanh thu" }
+    },
+    "permissions": {
+      "overview": "Xem tổng quan",
+      "bookings": "Quản lý đặt phòng",
+      "roomStatus": "Cập nhật trạng thái phòng",
+      "invoices": "Quản lý hóa đơn",
+      "reports": "Xem báo cáo",
+      "staff": "Quản lý nhân viên"
+    }
+  },
+  "promotion": {
+    "createTitle": "Tạo khuyến mãi",
+    "createDescription": "Thiết lập ưu đãi mới cho khách hàng.",
+    "programName": "Tên chương trình",
+    "code": "Mã khuyến mãi",
+    "discount": "Mức giảm",
+    "validity": "Thời hạn",
+    "description": "Mô tả",
+    "descriptionPlaceholder": "Mô tả điều kiện áp dụng",
+    "cancel": "Hủy",
+    "save": "Lưu khuyến mãi",
+    "programs": "Chương trình khuyến mãi",
+    "programsDescription": "Tạo và quản lý ưu đãi cho khách lưu trú tại Sen Việt.",
+    "create": "Tạo khuyến mãi",
+    "active": "Đang hoạt động",
+    "usesThisMonth": "Lượt sử dụng tháng này",
+    "guestSavings": "Tiết kiệm cho khách",
+    "codeList": "Danh sách mã khuyến mãi",
+    "codeListDescription": "Theo dõi thời hạn và trạng thái từng ưu đãi.",
+    "copied": "Đã sao chép",
+    "offerLevel": "Mức ưu đãi",
+    "paused": "Tạm dừng",
+    "toggleStatus": "Đổi trạng thái {{name}}",
+    "newPromotion": "Khuyến mãi mới",
+    "defaultDetail": "Ưu đãi dành cho khách lưu trú tại Sen Việt",
+    "exampleWeekendOffer": "Ví dụ: Ưu đãi cuối tuần",
+    "discountOptions": "Mức giảm",
+    "fromDate": "Từ ngày",
+    "toDate": "Đến ngày",
+    "copyCode": "Sao chép mã khuyến mãi"
+  },
+  "frontDesk": {
+    "todayTitle": "Quầy lễ tân hôm nay",
+    "todayDescription": "Xử lý nhận phòng và trả phòng nhanh chóng tại một nơi.",
+    "waitingCheckIn": "Chờ check-in",
+    "waitingCheckOut": "Chờ check-out",
+    "allToday": "Tất cả trong ngày",
+    "onlyCheckIn": "Chỉ check-in",
+    "onlyCheckOut": "Chỉ check-out",
+    "searchPlaceholder": "Tìm tên khách hoặc số phòng...",
+    "stay": "Lưu trú",
+    "checkInTime": "Giờ nhận phòng",
+    "checkOutTime": "Giờ trả phòng",
+    "complete": "Hoàn tất",
+    "noMatches": "Không có lượt phù hợp trong hôm nay",
+    "changeSearch": "Thử đổi từ khóa tìm kiếm hoặc bộ lọc check-in/check-out.",
+    "cleaningAssignment": "Phân công dọn phòng",
+    "cleaningDescription": "Chọn nhân viên phụ trách để phòng sẵn sàng cho khách tiếp theo.",
+    "assigned": "đã phân công",
+    "needsCleaning": "Cần dọn",
+    "chooseEmployee": "Chọn nhân viên",
+    "roomDetails": "Chi tiết phòng",
+    "basicInfo": "Thông tin cơ bản",
+    "floor": "Tầng",
+    "beds": "Giường",
+    "area": "Diện tích",
+    "view": "Hướng",
+    "rate": "Giá",
+    "operationalStatus": "Trạng thái vận hành",
+    "roomStatus": "Tình trạng phòng",
+    "currentVisit": "Lượt hiện tại",
+    "visitStatus": "Trạng thái lượt",
+    "note": "Ghi chú",
+    "amenities": "Tiện ích phòng",
+    "close": "Đóng",
+    "checkoutComplete": "Check-out hoàn tất",
+    "assignRoom": "Phân công dọn phòng {{room}}",
+    "chooseStaff": "Chọn một trong hai nhân viên để bắt đầu dọn {{type}}.",
+    "availableShift": "Housekeeping · Có thể nhận ca",
+    "later": "Để sau",
+    "unknownRoomType": "Chưa rõ loại phòng",
+    "notUpdated": "Chưa cập nhật",
+    "updating": "Đang cập nhật",
+    "syncNote": "Thông tin chi tiết phòng sẽ được đồng bộ từ hệ thống phòng."
+  },
+  "calendar": {
+    "title": "Lịch đặt phòng",
+    "subtitle": "Theo dõi lịch phòng và chọn ngày xem nhanh.",
+    "roomLabel": "Phòng",
+    "standardRoom": "Phòng tiêu chuẩn",
+    "deluxeRoom": "Phòng Deluxe",
+    "suiteRoom": "Phòng Suite",
+    "superiorRoom": "Phòng Superior",
+    "bookingSchedule": "Lịch đặt phòng",
+    "scheduleDescription": "Theo dõi lịch phòng và chọn ngày xem nhanh.",
+    "room": "Phòng",
+    "thisWeek": "Tuần này",
+    "booked": "Đã đặt",
+    "occupied": "Đang có khách",
+    "ready": "Sẵn sàng",
+    "selectDaysDescription": "Kéo qua các ô trống để chọn nhiều ngày · Ô xám là đã có khách",
+    "selectedRoom": "Đã chọn phòng {{room}} · {{days}} ngày",
+    "continueBooking": "Tiếp tục đặt phòng",
+    "chooseDate": "Chọn ngày"
+    ,"sunShort": "CN"
+    ,"monShort": "T2"
+    ,"tueShort": "T3"
+    ,"wedShort": "T4"
+    ,"thuShort": "T5"
+    ,"friShort": "T6"
+    ,"satShort": "T7"
+  },
+  "status": {
+    "active": "Đang hoạt động",
+    "completed": "Đã hoàn tất",
+    "pending": "Đang chờ",
+    "cancelled": "Đã hủy",
+    "paid": "Đã thanh toán",
+    "refunded": "Đã hoàn tiền"
+  }
+}
