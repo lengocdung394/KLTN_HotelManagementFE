@@ -2,6 +2,10 @@
   "name": "fusion-starter",
   "private": true,
   "type": "module",
+  
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "@swc/core"]
+  },
   "scripts": {
     "dev": "vite",
     "build": "pnpm install --no-frozen-lockfile && vite build",

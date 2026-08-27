@@ -1,9 +1,9 @@
 {
+  "outputDirectory": "dist/spa",
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/index.html",
-      "outputDirectory": "dist"
+      "destination": "/index.html"
     }
   ]
 }
