@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
+import DatePickerPopover from "../components/DatePickerPopover";
 import {
   CalendarCheck,
+  CalendarDays,
   Check,
   ChevronDown,
   Clock3,
@@ -237,6 +239,7 @@ export default function CheckInOutWorkspace() {
   const { t } = useTranslation();
   const [flowFilter, setFlowFilter] = useState<FlowFilter>("all");
   const [query, setQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [arrivalState, setArrivalState] = useState(arrivals);
   const [groupArrivalState, setGroupArrivalState] = useState(groupArrival);
   const [checkedInGroupRooms, setCheckedInGroupRooms] = useState<string[]>([]);
@@ -265,6 +268,7 @@ export default function CheckInOutWorkspace() {
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
   const [groupDepartureState, setGroupDepartureState] = useState(groupDeparture);
   const [selectedGroupDepartureRooms, setSelectedGroupDepartureRooms] = useState<string[]>([]);
+  const [confirmedGroupDepartureRooms, setConfirmedGroupDepartureRooms] = useState<string[]>([]);
   const dailyRecords = useMemo<DailyRecord[]>(() => {
     const checkInRecords = arrivalState.map((record) => ({
       ...record,
@@ -278,13 +282,145 @@ export default function CheckInOutWorkspace() {
       a.time.localeCompare(b.time),
     );
   }, [arrivalState, departureState]);
-  const filtered = dailyRecords.filter((record) => {
-    const matchesQuery = `${record.guest} ${record.room}`
-      .toLowerCase()
-      .includes(query.toLowerCase());
-    const matchesFlow = flowFilter === "all" || record.flow === flowFilter;
-    return matchesQuery && matchesFlow;
-  });
+  const filtered = dailyRecords
+    .filter((record) => {
+      const matchesQuery = `${record.guest} ${record.room}`
+        .toLowerCase()
+        .includes(query.toLowerCase());
+      const matchesFlow = flowFilter === "all" || record.flow === flowFilter;
+      return matchesQuery && matchesFlow;
+    })
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  const pendingRecords = filtered.filter(
+    (record) => record.status === "Chờ check-in" || record.status === "Đang ở",
+  );
+  const completedRecords = filtered.filter(
+    (record) =>
+      record.status === "Đã check-in" || record.status === "Đã trả phòng",
+  );
+
+  const renderRecord = (record: (typeof filtered)[number]) => {
+    const isCheckIn = record.flow === "check-in";
+    const canComplete =
+      (isCheckIn && record.status === "Chờ check-in") ||
+      (!isCheckIn && record.status === "Đang ở");
+    const serviceTotal =
+      (record.services || []).reduce(
+        (total, service) => total + service.amount,
+        0,
+      ) + (record.lateFee || 0);
+    const statusLabel =
+      record.status === "Chờ check-in"
+        ? t("frontDesk.waitingCheckIn")
+        : record.status === "Đang ở"
+          ? t("frontDesk.currentStay")
+          : record.status === "Đã check-in"
+            ? t("frontDesk.checkedIn")
+            : t("frontDesk.checkedOut");
+
+    return (
+      <article
+        key={record.id}
+        className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`grid h-10 w-10 place-items-center rounded-full ${isCheckIn ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}
+          >
+            {isCheckIn ? <LogIn size={18} /> : <LogOut size={18} />}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="font-bold text-slate-900">{record.guest}</h4>
+              <span className="text-xs text-slate-400">{record.id}</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isCheckIn ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}
+              >
+                {isCheckIn ? "Check-in" : "Check-out"}
+              </span>
+              {record.roomPaid && (
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  Đã thanh toán tiền phòng
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              <button
+                type="button"
+                onClick={() => openRoomModal(record)}
+                className="rounded px-1 font-semibold text-blue-700 underline-offset-2 hover:bg-blue-50 hover:underline"
+              >
+                {record.room}
+              </button>{" "}
+              ·{" "}
+              {record.guests
+                ? `${record.guests} ${t("common.guestCount")}`
+                : t("frontDesk.stay")}
+            </p>
+            {!isCheckIn && serviceTotal > 0 && (
+              <p className="mt-1 text-xs font-semibold text-amber-700">
+                Dịch vụ / phụ thu: {serviceTotal.toLocaleString("vi-VN")}đ
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4 sm:justify-end">
+          <div className="text-left sm:text-right">
+            <p className="text-xs font-semibold text-slate-500">
+              {isCheckIn ? t("frontDesk.checkInTime") : t("frontDesk.checkOutTime")}
+            </p>
+            <p className="mt-1 font-bold text-slate-800">{record.time}</p>
+          </div>
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === "Đã check-in" || record.status === "Đã trả phòng" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
+          >
+            {statusLabel}
+          </span>
+          {canComplete && (
+            <button
+              onClick={() =>
+                isCheckIn
+                  ? completeRecord(record.id, record.flow)
+                  : setCheckoutRecord(record)
+              }
+              className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+            >
+              <Check size={14} />
+              {t("frontDesk.complete")}
+            </button>
+          )}
+        </div>
+      </article>
+    );
+  };
+
+  const renderStatusGroup = (
+    title: string,
+    records: typeof filtered,
+    isCompleted: boolean,
+  ) => {
+    if (records.length === 0) return null;
+    return (
+      <div className="border-b border-slate-100 last:border-0">
+        <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+            {title} ({records.length})
+          </p>
+          <span
+            className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+              isCompleted
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-amber-50 text-amber-700"
+            }`}
+          >
+            {isCompleted ? "Đã xử lý" : "Chờ xử lý"}
+          </span>
+        </div>
+        {records.map(renderRecord)}
+      </div>
+    );
+  };
 
   const assignCleaner = (room: string, assignee: string) => {
     setCleaningTasks((current) =>
@@ -358,6 +494,16 @@ export default function CheckInOutWorkspace() {
     setGroupArrivalState((current) => ({ ...current, status: "Chờ check-in" }));
   };
 
+  const undoGroupRoomCheckOut = (room: string) => {
+    setConfirmedGroupDepartureRooms((current) =>
+      current.filter((item) => item !== room),
+    );
+    setSelectedGroupDepartureRooms((current) =>
+      current.filter((item) => item !== room),
+    );
+    setGroupDepartureState((current) => ({ ...current, status: "Đang ở" }));
+  };
+
   const toggleGroupRoomImmediately = (room: string) => {
     if (checkedInGroupRooms.includes(room)) {
       undoGroupRoomCheckIn(room);
@@ -386,9 +532,16 @@ export default function CheckInOutWorkspace() {
   };
 
   const completeGroupCheckout = () => {
-    setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
-    setSelectedGroupDepartureRooms([]);
+    if (selectedGroupDepartureRooms.length === 0) return;
+    const nextSelected = Array.from(new Set([...selectedGroupDepartureRooms]));
+    setSelectedGroupDepartureRooms(nextSelected);
+    if (nextSelected.length === groupDepartureState.rooms.length) {
+      setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
+    }
   };
+
+  const groupArrivalComplete = groupArrivalState.rooms.every((room) => checkedInGroupRooms.includes(room));
+  const groupDepartureComplete = groupDepartureState.rooms.every((room) => confirmedGroupDepartureRooms.includes(room));
 
   const groupDialogRooms = groupArrivalState.rooms.map((room) => ({
     id: room,
@@ -409,7 +562,7 @@ export default function CheckInOutWorkspace() {
     badge: room.slice(-2),
     title: `Phòng ${room}`,
     subtitle: `${groupDepartureState.id} · Dịch vụ/phụ thu: ${groupDepartureState.services[index].toLocaleString("vi-VN")}đ`,
-    status: selectedGroupDepartureRooms.includes(room) ? "complete" as const : "pending" as const,
+    status: confirmedGroupDepartureRooms.includes(room) ? "complete" as const : selectedGroupDepartureRooms.includes(room) ? "pending" as const : "pending" as const,
   }));
 
   const confirmCheckout = () => {
@@ -492,26 +645,34 @@ export default function CheckInOutWorkspace() {
               </span>
             </div>
           </div>
-          <label className="relative flex items-center">
-            <span className="sr-only">
-              {t("frontDesk.filterList", "Filter list type")}
-            </span>
-            <select
-              value={flowFilter}
-              onChange={(event) =>
-                setFlowFilter(event.target.value as FlowFilter)
-              }
-              className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm font-medium text-slate-700 outline-none focus:border-blue-400 sm:w-52"
-            >
-              <option value="all">{t("frontDesk.allToday")}</option>
-              <option value="check-in">{t("frontDesk.onlyCheckIn")}</option>
-              <option value="check-out">{t("frontDesk.onlyCheckOut")}</option>
-            </select>
-            <ChevronDown
-              size={14}
-              className="pointer-events-none absolute right-3 text-slate-400"
+          <div className="flex items-center gap-2 sm:justify-end">
+            <DatePickerPopover
+              value={selectedDate}
+              onChange={setSelectedDate}
+              placeholder="Chọn ngày"
+              buttonClassName="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
             />
-          </label>
+            <label className="relative flex items-center">
+              <span className="sr-only">
+                {t("frontDesk.filterList", "Filter list type")}
+              </span>
+              <select
+                value={flowFilter}
+                onChange={(event) =>
+                  setFlowFilter(event.target.value as FlowFilter)
+                }
+                className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm font-medium text-slate-700 outline-none focus:border-blue-400 sm:w-52"
+              >
+                <option value="all">{t("frontDesk.allToday")}</option>
+                <option value="check-in">{t("frontDesk.onlyCheckIn")}</option>
+                <option value="check-out">{t("frontDesk.onlyCheckOut")}</option>
+              </select>
+              <ChevronDown
+                size={14}
+                className="pointer-events-none absolute right-3 text-slate-400"
+              />
+            </label>
+          </div>
         </div>
       </div>
       <div className="border-b border-slate-100 bg-slate-50/60 p-4">
@@ -526,7 +687,7 @@ export default function CheckInOutWorkspace() {
         </div>
       </div>
       <div className="divide-y divide-slate-100">
-        {groupArrivalState.status === "Chờ check-in" &&
+        {!groupArrivalComplete && groupArrivalState.status === "Chờ check-in" &&
           (flowFilter === "all" || flowFilter === "check-in") &&
           `${groupArrivalState.guest} ${groupArrivalState.id} ${groupArrivalState.rooms.join(" ")}`
             .toLowerCase()
@@ -537,14 +698,23 @@ export default function CheckInOutWorkspace() {
               description={`${groupArrivalState.rooms.length} phòng · ${groupArrivalState.guests} khách · Nhận lúc ${groupArrivalState.time}`}
               items={groupArrivalState.rooms.map((room) => ({ id: room, title: `Phòng ${room}`, subtitle: groupArrivalState.id, status: checkedInGroupRooms.includes(room) ? "complete" as const : "pending" as const }))}
               selectedIds={checkedInGroupRooms}
+              draftSelectedIds={selectedGroupRooms}
               actionLabel={`Check-in cả đoàn`}
               actionCount={groupArrivalState.rooms.length}
               actionDisabled={false}
-              onToggle={toggleGroupRoomImmediately}
-              onAction={() => checkInGroup(groupArrivalState.rooms)}
+              onAction={(nextSelected) => {
+                if (nextSelected.length > 0) {
+                  const merged = Array.from(new Set([...checkedInGroupRooms, ...nextSelected]));
+                  setCheckedInGroupRooms(merged);
+                  setSelectedGroupRooms([]);
+                  if (merged.length === groupArrivalState.rooms.length) {
+                    setGroupArrivalState((current) => ({ ...current, status: "Đã check-in" }));
+                  }
+                }
+              }}
             />
           )}
-        {groupDepartureState.status === "Đang ở" &&
+        {!groupDepartureComplete && groupDepartureState.status === "Đang ở" &&
           (flowFilter === "all" || flowFilter === "check-out") &&
           `${groupDepartureState.guest} ${groupDepartureState.id} ${groupDepartureState.rooms.join(" ")}`
             .toLowerCase()
@@ -554,109 +724,27 @@ export default function CheckInOutWorkspace() {
               title={groupDepartureState.guest}
               description={`${groupDepartureState.rooms.length} phòng · ${groupDepartureState.guests} khách · Trả lúc ${groupDepartureState.time}`}
               items={groupDepartureItems}
-              selectedIds={selectedGroupDepartureRooms}
+              selectedIds={confirmedGroupDepartureRooms}
+              draftSelectedIds={selectedGroupDepartureRooms}
               actionLabel="Check-out cả đoàn"
               actionCount={groupDepartureState.rooms.length}
               actionDisabled={false}
-              onToggle={toggleGroupDepartureRoom}
-              onAction={completeGroupCheckout}
+              onAction={(nextSelected) => {
+                if (nextSelected.length > 0) {
+                  const merged = Array.from(new Set([...confirmedGroupDepartureRooms, ...nextSelected]));
+                  setConfirmedGroupDepartureRooms(merged);
+                  setSelectedGroupDepartureRooms([]);
+                  if (merged.length === groupDepartureState.rooms.length) {
+                    setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
+                  }
+                }
+              }}
             />
           )}
-        {filtered.map((record) => {
-          const isCheckIn = record.flow === "check-in";
-          const canComplete =
-            (isCheckIn && record.status === "Chờ check-in") ||
-            (!isCheckIn && record.status === "Đang ở");
-          const serviceTotal =
-            (record.services || []).reduce(
-              (total, service) => total + service.amount,
-              0,
-            ) + (record.lateFee || 0);
-          const statusLabel =
-            record.status === "Chờ check-in"
-              ? t("frontDesk.waitingCheckIn")
-              : record.status === "Đang ở"
-                ? t("frontDesk.currentStay")
-                : record.status === "Đã check-in"
-                  ? t("frontDesk.checkedIn")
-                  : t("frontDesk.checkedOut");
-          return (
-            <article
-              key={record.id}
-              className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`grid h-10 w-10 place-items-center rounded-full ${isCheckIn ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}
-                >
-                  {isCheckIn ? <LogIn size={18} /> : <LogOut size={18} />}
-                </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="font-bold text-slate-900">{record.guest}</h4>
-                    <span className="text-xs text-slate-400">{record.id}</span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isCheckIn ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}
-                    >
-                      {isCheckIn ? "Check-in" : "Check-out"}
-                    </span>
-                    {record.roomPaid && (
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                        Đã thanh toán tiền phòng
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-slate-500">
-                    <button
-                      type="button"
-                      onClick={() => openRoomModal(record)}
-                      className="rounded px-1 font-semibold text-blue-700 underline-offset-2 hover:bg-blue-50 hover:underline"
-                    >
-                      {record.room}
-                    </button>{" "}
-                    ·{" "}
-                    {record.guests
-                      ? `${record.guests} ${t("common.guestCount")}`
-                      : t("frontDesk.stay")}
-                  </p>
-                  {!isCheckIn && serviceTotal > 0 && (
-                    <p className="mt-1 text-xs font-semibold text-amber-700">
-                      Dịch vụ / phụ thu: {serviceTotal.toLocaleString("vi-VN")}đ
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-4 sm:justify-end">
-                <div className="text-left sm:text-right">
-                  <p className="text-xs font-semibold text-slate-500">
-                    {isCheckIn
-                      ? t("frontDesk.checkInTime")
-                      : t("frontDesk.checkOutTime")}
-                  </p>
-                  <p className="mt-1 font-bold text-slate-800">{record.time}</p>
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === "Đã check-in" || record.status === "Đã trả phòng" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
-                >
-                  {statusLabel}
-                </span>
-                {canComplete && (
-                  <button
-                    onClick={() =>
-                      isCheckIn
-                        ? completeRecord(record.id, record.flow)
-                        : setCheckoutRecord(record)
-                    }
-                    className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
-                  >
-                    <Check size={14} />
-                    {t("frontDesk.complete")}
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
+        <>
+          {renderStatusGroup("Chờ xử lý", pendingRecords, false)}
+          {renderStatusGroup("Đã check-in / Đã trả phòng", completedRecords, true)}
+        </>
       </div>
       {filtered.length === 0 && (
         <div className="p-8 text-center">
@@ -1156,7 +1244,7 @@ export default function CheckInOutWorkspace() {
           </div>
         </div>
       )}
-      {checkedInGroupRooms.length > 0 && (
+      {checkedInGroupRooms.length > 0 && (flowFilter === "all" || flowFilter === "check-in") && (
         <div className="border-t border-slate-100 bg-blue-50/40 p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1181,6 +1269,36 @@ export default function CheckInOutWorkspace() {
                 className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
               >
                 Phòng {room} · Bỏ check-in
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {selectedGroupDepartureRooms.length > 0 && (flowFilter === "all" || flowFilter === "check-out") && (
+        <div className="border-t border-slate-100 bg-amber-50/40 p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="font-bold text-slate-900">
+                Phòng đoàn đã check-out
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Bấm “Bỏ check-out” nếu chọn nhầm phòng để chọn lại.
+              </p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-amber-700">
+              {selectedGroupDepartureRooms.length}/{groupDepartureState.rooms.length}{" "}
+              phòng
+            </span>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {selectedGroupDepartureRooms.map((room) => (
+              <button
+                type="button"
+                key={room}
+                onClick={() => undoGroupRoomCheckOut(room)}
+                className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+              >
+                Phòng {room} · Bỏ check-out
               </button>
             ))}
           </div>
