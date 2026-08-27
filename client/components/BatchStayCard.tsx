@@ -16,27 +16,28 @@ type BatchStayCardProps = {
   description: string;
   items: BatchStayItem[];
   selectedIds: string[];
+  draftSelectedIds?: string[];
   actionLabel: string;
   actionCount?: number;
   actionDisabled?: boolean;
   onAction: (selected: string[]) => void;
 };
 
-export default function BatchStayCard({ mode, title, description, items, selectedIds, actionLabel, actionCount, actionDisabled, onAction }: BatchStayCardProps) {
+export default function BatchStayCard({ mode, title, description, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, onAction }: BatchStayCardProps) {
   const [isOpen, setIsOpen] = useState(true);
-  const [draftSelected, setDraftSelected] = useState<string[]>(selectedIds);
+  const [draftSelected, setDraftSelected] = useState<string[]>(draftSelectedIds ?? selectedIds ?? []);
 
   useEffect(() => {
-    setDraftSelected(selectedIds);
-  }, [selectedIds]);
+    setDraftSelected(draftSelectedIds ?? selectedIds ?? []);
+  }, [draftSelectedIds, selectedIds]);
 
   const isCheckIn = mode === "check-in";
   const colors = isCheckIn ? { border: "border-blue-200", background: "bg-blue-50/45", icon: "bg-blue-100 text-blue-700", button: "bg-blue-600 hover:bg-blue-700", selected: "border-blue-400 ring-blue-100", hover: "hover:border-blue-300", badge: "bg-blue-50 text-blue-700" } : { border: "border-amber-200", background: "bg-amber-50/45", icon: "bg-amber-100 text-amber-700", button: "bg-amber-600 hover:bg-amber-700", selected: "border-amber-400 ring-amber-100", hover: "hover:border-amber-300", badge: "bg-amber-50 text-amber-700" };
 
-  const confirmedIds = new Set(selectedIds);
+  const confirmedIds = new Set(selectedIds ?? []);
   const availableIds = items
     .map((item) => item.id)
-    .filter((id) => !confirmedIds.has(id));
+    .filter((id) => !confirmedIds.has(id) && !draftSelected.includes(id));
 
   const toggleDraft = (id: string) => {
     if (confirmedIds.has(id)) return;
@@ -59,10 +60,16 @@ export default function BatchStayCard({ mode, title, description, items, selecte
   };
 
   const hasDraftSelection = draftSelected.length > 0;
+  const selectedCount = draftSelected.length;
 
   const handleConfirm = () => {
     if (!hasDraftSelection) return;
     onAction([...draftSelected]);
+    setDraftSelected([]);
+  };
+
+  const handleClearDraft = () => {
+    setDraftSelected([]);
   };
 
   return <section className={`m-4 rounded-xl border p-5 ${colors.border} ${colors.background}`}>
@@ -86,7 +93,7 @@ export default function BatchStayCard({ mode, title, description, items, selecte
         className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
       >
         <Check size={14} />
-        {actionLabel} ({availableIds.length})
+        {actionLabel} ({actionCount ?? availableIds.length})
       </button>
     </div>
     {isOpen && (
@@ -121,17 +128,27 @@ export default function BatchStayCard({ mode, title, description, items, selecte
         <div className="mt-4 border-t border-slate-200/80 pt-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-slate-500">
-              {hasDraftSelection ? `${draftSelected.length} phòng đã chọn` : "Chưa chọn phòng nào"}
+              {hasDraftSelection ? `${selectedCount} phòng đã chọn` : "Chưa chọn phòng nào"}
             </p>
-            <button
-              type="button"
-              disabled={!hasDraftSelection}
-              onClick={handleConfirm}
-              className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              <Check size={14} />
-              Xác nhận
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!hasDraftSelection}
+                onClick={handleClearDraft}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Bỏ chọn
+              </button>
+              <button
+                type="button"
+                disabled={!hasDraftSelection}
+                onClick={handleConfirm}
+                className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                <Check size={14} />
+                Xác nhận ({selectedCount})
+              </button>
+            </div>
           </div>
         </div>
       </>
