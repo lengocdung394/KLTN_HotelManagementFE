@@ -166,6 +166,7 @@
     "dragToSelect": "Drag / click to select",
     "today": "Today",
     "holdRooms": "Hold rooms",
+    "viewBookedRooms": "View selected rooms",
     "paymentMethod": "Select payment method",
     "paymentRequired": "Please select a payment method to continue.",
     "cash": "Cash",

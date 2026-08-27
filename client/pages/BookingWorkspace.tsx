@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, QrCode, Search, SlidersHorizontal, Wallet, X } from "lucide-react";
+import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, QrCode, Search, Wallet } from "lucide-react";
 import GuestRoomForms from "./GuestRoomForms";
 
 const legacyRooms = [
@@ -327,7 +327,7 @@ function DesktopCalendar({
 }
 
 export default function BookingWorkspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [step, setStep] = useState<"rooms" | "guest" | "payment" | "success">("rooms");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank" | "wallet" | "">("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -480,7 +480,7 @@ export default function BookingWorkspace() {
                 setQuery("");
                 setBuilding("Tất cả các tòa");
                 setFloor("Tất cả các tầng");
-              }} className="flex items-center justify-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-50"><SlidersHorizontal size={16} />{t("booking.holdRooms")}</button>}
+              }} className="flex items-center justify-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-50">{t("booking.viewBookedRooms")}</button>}
               <button disabled={!selected.length || isAddingRoom || !hasDates} onClick={() => setStep("guest")} className="flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
               {t("booking.continue")} <ChevronRight size={16} />
               </button>
