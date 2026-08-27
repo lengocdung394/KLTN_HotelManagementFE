@@ -386,9 +386,17 @@ export default function CheckInOutWorkspace() {
   };
 
   const completeGroupCheckout = () => {
-    setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
-    setSelectedGroupDepartureRooms([]);
+    if (selectedGroupDepartureRooms.length === 0) return;
+    const nextSelected = Array.from(new Set([...selectedGroupDepartureRooms]));
+    setSelectedGroupDepartureRooms(nextSelected);
+    if (nextSelected.length === groupDepartureState.rooms.length) {
+      setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
+      setSelectedGroupDepartureRooms([]);
+    }
   };
+
+  const groupArrivalComplete = groupArrivalState.rooms.every((room) => checkedInGroupRooms.includes(room));
+  const groupDepartureComplete = groupDepartureState.rooms.every((room) => selectedGroupDepartureRooms.includes(room));
 
   const groupDialogRooms = groupArrivalState.rooms.map((room) => ({
     id: room,
@@ -526,7 +534,7 @@ export default function CheckInOutWorkspace() {
         </div>
       </div>
       <div className="divide-y divide-slate-100">
-        {groupArrivalState.status === "Chờ check-in" &&
+        {!groupArrivalComplete && groupArrivalState.status === "Chờ check-in" &&
           (flowFilter === "all" || flowFilter === "check-in") &&
           `${groupArrivalState.guest} ${groupArrivalState.id} ${groupArrivalState.rooms.join(" ")}`
             .toLowerCase()
@@ -540,11 +548,18 @@ export default function CheckInOutWorkspace() {
               actionLabel={`Check-in cả đoàn`}
               actionCount={groupArrivalState.rooms.length}
               actionDisabled={false}
-              onToggle={toggleGroupRoomImmediately}
-              onAction={() => checkInGroup(groupArrivalState.rooms)}
+              onAction={(nextSelected) => {
+                if (nextSelected.length > 0) {
+                  const merged = Array.from(new Set([...checkedInGroupRooms, ...nextSelected]));
+                  setCheckedInGroupRooms(merged);
+                  if (merged.length === groupArrivalState.rooms.length) {
+                    setGroupArrivalState((current) => ({ ...current, status: "Đã check-in" }));
+                  }
+                }
+              }}
             />
           )}
-        {groupDepartureState.status === "Đang ở" &&
+        {!groupDepartureComplete && groupDepartureState.status === "Đang ở" &&
           (flowFilter === "all" || flowFilter === "check-out") &&
           `${groupDepartureState.guest} ${groupDepartureState.id} ${groupDepartureState.rooms.join(" ")}`
             .toLowerCase()
@@ -558,8 +573,15 @@ export default function CheckInOutWorkspace() {
               actionLabel="Check-out cả đoàn"
               actionCount={groupDepartureState.rooms.length}
               actionDisabled={false}
-              onToggle={toggleGroupDepartureRoom}
-              onAction={completeGroupCheckout}
+              onAction={(nextSelected) => {
+                if (nextSelected.length > 0) {
+                  const merged = Array.from(new Set([...selectedGroupDepartureRooms, ...nextSelected]));
+                  setSelectedGroupDepartureRooms(merged);
+                  if (merged.length === groupDepartureState.rooms.length) {
+                    setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
+                  }
+                }
+              }}
             />
           )}
         {filtered.map((record) => {
