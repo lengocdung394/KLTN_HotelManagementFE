@@ -12,7 +12,10 @@ export default defineConfig(({ mode }) => ({
       allow: ["./client", "./shared", "index.html"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
     },
+    allowedHosts: true
   },
+  
+  allowedHosts: ['.loca.lt', 'all'],
   build: {
     outDir: "dist/spa",
   },
