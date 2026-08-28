@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, QrCode, Search, SlidersHorizontal, Wallet, X } from "lucide-react";
+import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, QrCode, Search, Wallet } from "lucide-react";
 import GuestRoomForms from "./GuestRoomForms";
 
 const legacyRooms = [
@@ -327,7 +327,7 @@ function DesktopCalendar({
 }
 
 export default function BookingWorkspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [step, setStep] = useState<"rooms" | "guest" | "payment" | "success">("rooms");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank" | "wallet" | "">("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -382,6 +382,9 @@ export default function BookingWorkspace() {
     return range ? Math.max(1, Math.round((new Date(range.checkOut).getTime() - new Date(range.checkIn).getTime()) / 86400000)) : nights;
   };
   const total = selectedRooms.reduce((sum, room) => sum + room.price * nightsForRoom(room.id), 0);
+  const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
+  const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
+  const formatStayPeriod = (range: RoomDateRange) => `${formatDateLabel(range.checkIn, "", i18n.language)} → ${formatDateLabel(range.checkOut, "", i18n.language)}`;
 
   if (step === "success")
     return (
@@ -480,7 +483,7 @@ export default function BookingWorkspace() {
                 setQuery("");
                 setBuilding("Tất cả các tòa");
                 setFloor("Tất cả các tầng");
-              }} className="flex items-center justify-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-50"><SlidersHorizontal size={16} />{t("booking.holdRooms")}</button>}
+              }} className="flex items-center justify-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-50">{t("booking.viewBookedRooms")}</button>}
               <button disabled={!selected.length || isAddingRoom || !hasDates} onClick={() => setStep("guest")} className="flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
               {t("booking.continue")} <ChevronRight size={16} />
               </button>
@@ -488,18 +491,19 @@ export default function BookingWorkspace() {
           </div>
         </div>
       ) : (
-        <div className="grid gap-6 p-5 lg:grid-cols-[1fr_280px]">
+        <div className="grid gap-6 p-5 lg:grid-cols-[1fr_360px]">
           <div>
             {step === "guest" ? <GuestRoomForms rooms={selectedRooms} /> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.bookingSummary")}</p>
             <p className="mt-3 text-sm font-bold text-slate-800">{selected.length} {t("booking.rooms")} · {nights} {t("booking.nights")}</p>
+            {!hasDifferentStayPeriods && summaryRanges[0] && <p className="mt-1 text-xs font-semibold text-violet-700 lg:whitespace-nowrap">{t("booking.stayPeriod", "Check-in / Check-out")}: {formatStayPeriod(summaryRanges[0].range)}</p>}
             <div className="mt-3 space-y-1">
-              {selectedRooms.map((room) => (
+              {summaryRanges.map(({ room, range }) => (
                 <div key={room.id} className="flex justify-between gap-2 text-xs text-slate-500">
-                  <span>{t("room.roomLabel", "Room")} {room.id} · {room.type}</span>
-                  <span>{money(room.price * nights)}</span>
+                  <span className="min-w-0">{t("room.roomLabel", "Room")} {room.id} · {room.type}{hasDifferentStayPeriods && <small className="mt-0.5 block text-[10px] text-slate-400">{t("booking.stayPeriod", "Check-in / Check-out")}: {formatStayPeriod(range)}</small>}</span>
+                  <span className="shrink-0">{money(room.price * nightsForRoom(room.id))}</span>
                 </div>
               ))}
             </div>

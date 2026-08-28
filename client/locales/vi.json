@@ -166,6 +166,7 @@
     "dragToSelect": "Kéo / bấm chọn",
     "today": "Hôm nay",
     "holdRooms": "Giữ phòng",
+    "viewBookedRooms": "Xem phòng đã chọn",
     "paymentMethod": "Chọn phương thức thanh toán",
     "paymentRequired": "Vui lòng chọn một phương thức để hoàn tất.",
     "cash": "Tiền mặt",
@@ -211,6 +212,8 @@
     ,"nights": "đêm lưu trú"
     ,"noDateSelected": "Chưa chọn ngày"
     ,"searchRooms": "Tìm số hoặc loại phòng"
+    ,"searchCustomer": "Tìm khách hàng đã lưu"
+    ,"searchCustomerPlaceholder": "Tìm theo tên hoặc số điện thoại"
     ,"unavailable": "Đã đặt / không thể chọn"
     ,"dragToSelectRooms": "Kéo dọc để chọn nhiều phòng"
     ,"showFullRooms": "Hiện cả phòng đã kín"
@@ -235,6 +238,16 @@
     "addBuilding": "Thêm tòa nhà",
     "addRoom": "Thêm phòng",
     "buildings": "Tòa nhà",
+    "floors": "Tầng nhà",
+    "rooms": "phòng",
+    "addFloor": "Thêm tầng nhà",
+    "editFloor": "Chỉnh sửa tầng nhà",
+    "floorManagement": "Quản lý tầng nhà",
+    "createFloor": "Tạo tầng nhà mới",
+    "createFloorDescription": "Nhập tên tầng nhà để thêm vào danh sách.",
+    "editFloorDescription": "Cập nhật tên tầng nhà.",
+    "floorName": "Tên tầng nhà",
+    "floorNamePlaceholder": "Ví dụ: Tầng 5",
     "allBuildings": "Tất cả các tòa",
     "allFloors": "Tất cả các tầng",
     "allStatuses": "Tất cả trạng thái",

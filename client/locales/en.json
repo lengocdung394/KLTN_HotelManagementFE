@@ -166,6 +166,7 @@
     "dragToSelect": "Drag / click to select",
     "today": "Today",
     "holdRooms": "Hold rooms",
+    "viewBookedRooms": "View selected rooms",
     "paymentMethod": "Select payment method",
     "paymentRequired": "Please select a payment method to continue.",
     "cash": "Cash",
@@ -211,6 +212,8 @@
     ,"nights": "nights"
     ,"noDateSelected": "No dates selected"
     ,"searchRooms": "Search room number or type"
+    ,"searchCustomer": "Find saved customer"
+    ,"searchCustomerPlaceholder": "Search by name or phone number"
     ,"unavailable": "Booked / unavailable"
     ,"dragToSelectRooms": "Drag vertically to select rooms"
     ,"showFullRooms": "Show fully booked rooms"
@@ -235,6 +238,16 @@
     "addBuilding": "Add building",
     "addRoom": "Add room",
     "buildings": "Buildings",
+    "floors": "Floors",
+    "rooms": "rooms",
+    "addFloor": "Add floor",
+    "editFloor": "Edit floor",
+    "floorManagement": "Floor management",
+    "createFloor": "Create floor",
+    "createFloorDescription": "Enter a floor name to add it to the list.",
+    "editFloorDescription": "Update the floor name.",
+    "floorName": "Floor name",
+    "floorNamePlaceholder": "Example: Floor 5",
     "allBuildings": "All buildings",
     "allFloors": "All floors",
     "allStatuses": "All statuses",

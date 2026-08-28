@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Upload, Users, X } from "lucide-react";
+import BuildingManagementPanel from "../components/BuildingManagementPanel";
+import FloorManagementPanel from "../components/FloorManagementPanel";
 
 type ImportedRoomRow = Record<string, string>;
 
@@ -164,7 +166,7 @@ const initialRooms: RoomRecord[] = buildingCodes.flatMap((building, buildingInde
 
 const employees = ["Nguyễn Thị Mai", "Lê Thị Hương", "Phạm Ngọc Anh", "Trần Minh Tú"];
 const statuses = ["Sẵn sàng", "Đang dọn", "Đang ở", "Bảo trì"];
-const floors = ["Tầng 1", "Tầng 2", "Tầng 3", "Tầng 4"];
+const initialFloors = ["Tầng 1", "Tầng 2", "Tầng 3", "Tầng 4"];
 const statusStyle: Record<string, string> = { "Sẵn sàng": "bg-emerald-50 text-emerald-700", "Đang dọn": "bg-amber-50 text-amber-700", "Đang ở": "bg-blue-50 text-blue-700", "Bảo trì": "bg-rose-50 text-rose-700" };
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 type Room = RoomRecord & { description?: string };
@@ -236,11 +238,12 @@ const emptyCreateRoomForm: CreateRoomFormState = {
   images: [],
 };
 const emptyBuildingForm = { name: "", code: "" };
+const emptyFloorForm = { name: "" };
 
 export default function RoomWorkspace() {
   const { t } = useTranslation();
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
-  const [activeTab, setActiveTab] = useState<"rooms" | "buildings">("rooms");
+  const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors">("rooms");
   const [buildings, setBuildings] = useState<Building[]>(() => {
     if (typeof window === "undefined") return initialBuildings;
     const stored = window.localStorage.getItem("staywise-buildings");
@@ -250,6 +253,17 @@ export default function RoomWorkspace() {
       return saved.length > 0 ? saved : initialBuildings;
     } catch {
       return initialBuildings;
+    }
+  });
+  const [floors, setFloors] = useState<string[]>(() => {
+    if (typeof window === "undefined") return initialFloors;
+    const stored = window.localStorage.getItem("staywise-floors");
+    if (!stored) return initialFloors;
+    try {
+      const saved = JSON.parse(stored) as string[];
+      return saved.length > 0 ? saved : initialFloors;
+    } catch {
+      return initialFloors;
     }
   });
   const [rooms, setRooms] = useState<Room[]>(() => {
@@ -278,6 +292,9 @@ export default function RoomWorkspace() {
   const [amenitySearch, setAmenitySearch] = useState("");
   const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
+  const [showCreateFloor, setShowCreateFloor] = useState(false);
+  const [editingFloor, setEditingFloor] = useState<string | null>(null);
+  const [floorForm, setFloorForm] = useState(emptyFloorForm);
   const generatedRoomCode = useMemo(() => {
     const prefix = `${createRoomForm.building}-${createRoomForm.floor}-`;
     const usedSequence = rooms
@@ -360,6 +377,30 @@ export default function RoomWorkspace() {
     setBuildings(nextBuildings);
     window.localStorage.setItem("staywise-buildings", JSON.stringify(nextBuildings));
     closeCreateBuildingModal();
+  };
+  const openCreateFloorModal = () => {
+    setEditingFloor(null);
+    setFloorForm(emptyFloorForm);
+    setShowCreateFloor(true);
+  };
+  const openEditFloorModal = (floor: string) => {
+    setEditingFloor(floor);
+    setFloorForm({ name: floor });
+    setShowCreateFloor(true);
+  };
+  const closeCreateFloorModal = () => {
+    setShowCreateFloor(false);
+    setEditingFloor(null);
+    setFloorForm(emptyFloorForm);
+  };
+  const saveFloor = () => {
+    const name = floorForm.name.trim();
+    if (!name || (!editingFloor && floors.includes(name))) return;
+    const nextFloors = editingFloor ? floors.map((floor) => floor === editingFloor ? name : floor) : [...floors, name];
+    setFloors(nextFloors);
+    setRooms((current) => editingFloor ? current.map((room) => room.floor === editingFloor ? { ...room, floor: name } : room) : current);
+    window.localStorage.setItem("staywise-floors", JSON.stringify(nextFloors));
+    closeCreateFloorModal();
   };
   const appendAmenity = (value?: string) => {
     const nextAmenity = (value ?? amenitySearch).trim();
@@ -469,10 +510,11 @@ export default function RoomWorkspace() {
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
     <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
       <div><h3 className="font-bold text-slate-900">{t("room.roomList")}</h3><p className="mt-1 text-sm text-slate-500">{filtered.length} {t("room.roomsAtBranch")} · {t("room.realTimeUpdate")}</p></div>
-      <div className="flex flex-wrap gap-2">{activeTab === "buildings" ? <button type="button" onClick={openCreateBuildingModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addBuilding")}</button> : <button type="button" onClick={() => setShowCreateRoom(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addRoom")}</button>}</div>
+      <div className="flex flex-wrap gap-2">{activeTab === "buildings" ? <button type="button" onClick={openCreateBuildingModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addBuilding")}</button> : activeTab === "floors" ? <button type="button" onClick={openCreateFloorModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addFloor")}</button> : activeTab === "rooms" ? <button type="button" onClick={() => setShowCreateRoom(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addRoom")}</button> : null}</div>
     </div>
-    <div className="flex border-b border-slate-100 bg-slate-50/60 p-2"><button type="button" onClick={() => setActiveTab("rooms")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button><button type="button" onClick={() => setActiveTab("buildings")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button></div>
-    {activeTab === "buildings" && <div className="border-b border-slate-100 p-4"><div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Danh sách tòa nhà</p><div className="relative w-full sm:w-64"><Search size={14} className="absolute left-3 top-2.5 text-slate-400" /><input value={buildingQuery} onChange={(event) => setBuildingQuery(event.target.value)} placeholder="Tìm tên hoặc mã tòa..." className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></div></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{filteredBuildings.map((item) => <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{item.name}</p><p className="mt-0.5 text-[10px] font-semibold tracking-wider text-slate-400">{item.id}</p></div><button type="button" onClick={() => openEditBuildingModal(item)} aria-label={`Sửa ${item.name}`} className="ml-2 rounded-lg p-2 text-slate-400 transition hover:bg-white hover:text-blue-600"><Pencil size={15} /></button></div>)}</div>{filteredBuildings.length === 0 && <p className="py-4 text-center text-xs text-slate-400">Không tìm thấy tòa nhà phù hợp.</p>}{!buildingQuery.trim() && buildings.length > 4 && <p className="mt-3 text-center text-[11px] text-slate-400">Đang hiển thị 4 tòa nhà gần nhất. Dùng ô tìm kiếm để xem thêm.</p>}</div>}
+    <div className="flex border-b border-slate-100 bg-slate-50/60 p-2"><button type="button" onClick={() => setActiveTab("rooms")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button><button type="button" onClick={() => setActiveTab("buildings")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button><button type="button" onClick={() => setActiveTab("floors")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button></div>
+    {activeTab === "buildings" && <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} />}
+    {activeTab === "floors" && <FloorManagementPanel floors={floors} rooms={rooms} onEdit={openEditFloorModal} />}
     {activeTab === "rooms" && <>
     <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row">
       <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></div>
@@ -501,10 +543,20 @@ export default function RoomWorkspace() {
           <button type="button" onClick={closeCreateBuildingModal} className="text-slate-400 hover:text-slate-700"><X size={19} /></button>
         </div>
         <div className="mt-5 space-y-4">
-          <label className="block text-sm font-semibold text-slate-700">Tên tòa nhà <span className="text-rose-500">*</span><input autoFocus value={buildingForm.name} onChange={(event) => setBuildingForm((current) => ({ ...current, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && buildingForm.name.trim()) createBuilding(); }} placeholder="Ví dụ: Tòa Sunrise" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+          <label className="block text-sm font-semibold text-slate-700">Tên tòa nhà <span className="text-rose-500">*</span><input autoFocus value={buildingForm.name} onChange={(event) => setBuildingForm((current) => ({ ...current, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && buildingForm.name.trim()) saveBuilding(); }} placeholder="Ví dụ: Tòa Sunrise" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
           <label className="block text-sm font-semibold text-slate-700">Mã tòa nhà<input value={buildingForm.code} readOnly className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>
         </div>
         <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateBuildingModal} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button><button type="button" onClick={saveBuilding} disabled={!buildingForm.name.trim()} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{editingBuildingId ? "Lưu thay đổi" : "Tạo tòa nhà"}</button></div>
+      </div>
+    </div>}
+    {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateFloorModal}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
+          <button type="button" onClick={closeCreateFloorModal} className="text-slate-400 hover:text-slate-700"><X size={19} /></button>
+        </div>
+        <label className="mt-5 block text-sm font-semibold text-slate-700">{t("room.floorName")} <span className="text-rose-500">*</span><input autoFocus value={floorForm.name} onChange={(event) => setFloorForm({ name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") saveFloor(); }} placeholder={t("room.floorNamePlaceholder")} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateFloorModal} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("common.cancel")}</button><button type="button" onClick={saveFloor} disabled={!floorForm.name.trim()} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{t("common.save")}</button></div>
       </div>
     </div>}
     {showCreateRoom && (
