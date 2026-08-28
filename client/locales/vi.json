@@ -212,6 +212,8 @@
     ,"nights": "đêm lưu trú"
     ,"noDateSelected": "Chưa chọn ngày"
     ,"searchRooms": "Tìm số hoặc loại phòng"
+    ,"searchCustomer": "Tìm khách hàng đã lưu"
+    ,"searchCustomerPlaceholder": "Tìm theo tên hoặc số điện thoại"
     ,"unavailable": "Đã đặt / không thể chọn"
     ,"dragToSelectRooms": "Kéo dọc để chọn nhiều phòng"
     ,"showFullRooms": "Hiện cả phòng đã kín"

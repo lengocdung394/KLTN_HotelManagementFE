@@ -1,21 +1,15 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Mail, Phone, Plus, Search, Star, UserRound, X } from "lucide-react";
+import { loadCustomers, saveCustomers, type Customer } from "../lib/customerStore";
 
-type Tier = "loyal" | "new" | "potential";
-type Customer = { id: string; name: string; phone: string; email: string; identityNumber: string; visits: number; lastStay: string; totalSpend: number; tier: Tier; note: string };
-const initialCustomers: Customer[] = [
-  { id: "CUS-001", name: "Nguyễn Minh Anh", phone: "090 123 4567", email: "minhanh@example.com", identityNumber: "", visits: 6, lastStay: "03/09/2026", totalSpend: 12800000, tier: "loyal", note: "Thường đặt phòng Deluxe." },
-  { id: "CUS-002", name: "Trần Thùy Dương", phone: "098 765 4321", email: "thuyduong@example.com", identityNumber: "", visits: 2, lastStay: "08/09/2026", totalSpend: 5000000, tier: "potential", note: "Ưu tiên phòng yên tĩnh." },
-  { id: "CUS-003", name: "Phạm Gia Huy", phone: "091 234 5678", email: "giahuy@example.com", identityNumber: "", visits: 1, lastStay: "06/09/2026", totalSpend: 5550000, tier: "new", note: "Khách công tác." },
-  { id: "CUS-004", name: "Đỗ Khánh Linh", phone: "093 456 7890", email: "khanhlinh@example.com", identityNumber: "", visits: 4, lastStay: "08/09/2026", totalSpend: 9800000, tier: "loyal", note: "Có yêu cầu check-in sớm." },
-];
+type Tier = Customer["tier"];
 const tierStyle: Record<Tier, string> = { loyal: "bg-amber-50 text-amber-700", potential: "bg-blue-50 text-blue-700", new: "bg-emerald-50 text-emerald-700" };
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 
 export default function CustomerWorkspace() {
   const { t } = useTranslation();
-  const [customers, setCustomers] = useState(initialCustomers);
+  const [customers, setCustomers] = useState(loadCustomers);
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
@@ -26,7 +20,11 @@ export default function CustomerWorkspace() {
   const requiredFieldsFilled = form.name.trim() && form.phone.trim() && form.email.trim() && form.identityNumber.trim();
   const createCustomer = () => {
     if (!requiredFieldsFilled) return;
-    setCustomers((current) => [{ id: `CUS-${String(current.length + 1).padStart(3, "0")}`, name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim(), identityNumber: form.identityNumber.trim(), visits: 0, lastStay: t("customer.noStay"), totalSpend: 0, tier: "new", note: form.note.trim() || t("customer.noNote") }, ...current]);
+    setCustomers((current) => {
+      const next = [{ id: `CUS-${String(current.length + 1).padStart(3, "0")}`, name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim(), identityNumber: form.identityNumber.trim(), visits: 0, lastStay: t("customer.noStay"), totalSpend: 0, tier: "new" as const, note: form.note.trim() || t("customer.noNote") }, ...current];
+      saveCustomers(next);
+      return next;
+    });
     setForm({ name: "", phone: "", email: "", identityNumber: "", note: "" });
     setShowCreate(false);
   };

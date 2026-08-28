@@ -212,6 +212,8 @@
     ,"nights": "nights"
     ,"noDateSelected": "No dates selected"
     ,"searchRooms": "Search room number or type"
+    ,"searchCustomer": "Find saved customer"
+    ,"searchCustomerPlaceholder": "Search by name or phone number"
     ,"unavailable": "Booked / unavailable"
     ,"dragToSelectRooms": "Drag vertically to select rooms"
     ,"showFullRooms": "Show fully booked rooms"
