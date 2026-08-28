@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronDown, ChevronUp, LogIn, LogOut } from "lucide-react";
+import CheckoutSummary, { type CheckoutSummaryRoom } from "./CheckoutSummary";
 
 type BatchStayItem = {
   id: string;
@@ -20,11 +21,12 @@ type BatchStayCardProps = {
   actionLabel: string;
   actionCount?: number;
   actionDisabled?: boolean;
+  checkoutSummaryRooms?: CheckoutSummaryRoom[];
   onAction: (selected: string[]) => void;
 };
 
-export default function BatchStayCard({ mode, title, description, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, onAction }: BatchStayCardProps) {
-  const [isOpen, setIsOpen] = useState(true);
+export default function BatchStayCard({ mode, title, description, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, checkoutSummaryRooms, onAction }: BatchStayCardProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const [draftSelected, setDraftSelected] = useState<string[]>(draftSelectedIds ?? selectedIds ?? []);
 
   useEffect(() => {
@@ -125,33 +127,35 @@ export default function BatchStayCard({ mode, title, description, items, selecte
             })}
           </div>
 
-        <div className="mt-4 border-t border-slate-200/80 pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">
-              {hasDraftSelection ? `${selectedCount} phòng đã chọn` : "Chưa chọn phòng nào"}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={!hasDraftSelection}
-                onClick={handleClearDraft}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Bỏ chọn
-              </button>
-              <button
-                type="button"
-                disabled={!hasDraftSelection}
-                onClick={handleConfirm}
-                className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                <Check size={14} />
-                Xác nhận ({selectedCount})
-              </button>
-            </div>
-          </div>
-        </div>
+        {mode === "check-out" && checkoutSummaryRooms && checkoutSummaryRooms.length > 0 && <div className="mt-4 border-t border-slate-200/80 pt-4"><CheckoutSummary rooms={checkoutSummaryRooms} compact /></div>}
+
       </>
     )}
+    <div className="mt-4 border-t border-slate-200/80 pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">
+          {hasDraftSelection ? `${selectedCount} phòng đã chọn` : "Chưa chọn phòng nào"}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={!hasDraftSelection}
+            onClick={handleClearDraft}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Bỏ chọn
+          </button>
+          <button
+            type="button"
+            disabled={!hasDraftSelection}
+            onClick={handleConfirm}
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            <Check size={14} />
+            {isCheckIn ? "Xác nhận" : "Thanh toán & Check-out"} ({selectedCount})
+          </button>
+        </div>
+      </div>
+    </div>
   </section>;
 }
