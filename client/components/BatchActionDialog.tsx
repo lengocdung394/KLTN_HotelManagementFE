@@ -1,4 +1,5 @@
 import { CreditCard } from "lucide-react";
+import CheckoutSummary, { type CheckoutSummaryRoom } from "./CheckoutSummary";
 
 type BatchActionRoom = {
   id: string;
@@ -16,6 +17,7 @@ type BatchActionDialogProps = {
   onToggle: (id: string) => void;
   onClose: () => void;
   onConfirm: () => void;
+  checkoutSummaryRooms?: CheckoutSummaryRoom[];
 };
 
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")}đ`;
@@ -28,6 +30,7 @@ export default function BatchActionDialog({
   onToggle,
   onClose,
   onConfirm,
+  checkoutSummaryRooms,
 }: BatchActionDialogProps) {
   if (!open) return null;
 
@@ -59,7 +62,7 @@ export default function BatchActionDialog({
         })}
       </div>
 
-      {!isCheckIn && <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4"><span className="font-bold text-slate-900">Tổng cần thanh toán</span><strong className="text-lg text-amber-700">{formatMoney(total)}</strong></div>}
+      {!isCheckIn && checkoutSummaryRooms ? <div className="mt-4 border-t border-slate-200 pt-4"><CheckoutSummary rooms={checkoutSummaryRooms} compact /></div> : !isCheckIn && <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4"><span className="font-bold text-slate-900">Tổng cần thanh toán</span><strong className="text-lg text-amber-700">{formatMoney(total)}</strong></div>}
       <div className="mt-6 flex justify-end gap-3">
         <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Hủy</button>
         {isCheckIn ? <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">Đóng</button> : <button type="button" disabled={selectedRooms.length === 0} onClick={onConfirm} className="flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><CreditCard size={16} />Thanh toán & Check-out</button>}

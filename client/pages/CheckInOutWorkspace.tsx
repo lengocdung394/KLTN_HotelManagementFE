@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
+import CheckoutSummary, { type CheckoutSummaryRoom } from "../components/CheckoutSummary";
 import DatePickerPopover from "../components/DatePickerPopover";
 import {
   CalendarCheck,
@@ -66,6 +67,7 @@ const groupDeparture = {
   time: "12:00",
   guests: 10,
   status: "Đang ở",
+  roomAmounts: [2000000, 2500000, 2500000, 3000000, 3000000],
   services: [80000, 0, 120000, 50000, 0],
 };
 
@@ -143,6 +145,7 @@ type DailyRecord = {
   flow: "check-in" | "check-out";
   guests?: number;
   roomPaid?: boolean;
+  roomAmount?: number;
   services?: ServiceCharge[];
   lateFee?: number;
 };
@@ -257,9 +260,6 @@ export default function CheckInOutWorkspace() {
   const [checkoutRecord, setCheckoutRecord] = useState<DailyRecord | null>(
     null,
   );
-  const [checkoutPaymentMode, setCheckoutPaymentMode] = useState<
-    "now" | "room"
-  >("now");
   const [selectingGroupRoom, setSelectingGroupRoom] = useState(false);
   const [selectedGroupRooms, setSelectedGroupRooms] = useState<string[]>([]);
   const [selectedDepartureIds, setSelectedDepartureIds] = useState<string[]>(
@@ -269,6 +269,7 @@ export default function CheckInOutWorkspace() {
   const [groupDepartureState, setGroupDepartureState] = useState(groupDeparture);
   const [selectedGroupDepartureRooms, setSelectedGroupDepartureRooms] = useState<string[]>([]);
   const [confirmedGroupDepartureRooms, setConfirmedGroupDepartureRooms] = useState<string[]>([]);
+  const [groupCheckoutOpen, setGroupCheckoutOpen] = useState(false);
   const dailyRecords = useMemo<DailyRecord[]>(() => {
     const checkInRecords = arrivalState.map((record) => ({
       ...record,
@@ -564,6 +565,34 @@ export default function CheckInOutWorkspace() {
     subtitle: `${groupDepartureState.id} · Dịch vụ/phụ thu: ${groupDepartureState.services[index].toLocaleString("vi-VN")}đ`,
     status: confirmedGroupDepartureRooms.includes(room) ? "complete" as const : selectedGroupDepartureRooms.includes(room) ? "pending" as const : "pending" as const,
   }));
+  const groupCheckoutSummaryRooms: CheckoutSummaryRoom[] = groupDepartureState.rooms
+    .filter((room) => selectedGroupDepartureRooms.includes(room))
+    .map((room) => {
+      const index = groupDepartureState.rooms.indexOf(room);
+      return {
+        id: room,
+        label: `Phòng ${room}`,
+        roomPaid: false,
+        roomAmount: groupDepartureState.roomAmounts[index],
+        services: groupDepartureState.services[index] > 0 ? [{ name: "Dịch vụ / phụ thu", quantity: 1, amount: groupDepartureState.services[index] }] : [],
+      };
+    });
+  const confirmGroupCheckout = (roomsToConfirm = selectedGroupDepartureRooms) => {
+    if (roomsToConfirm.length === 0) return;
+    const merged = Array.from(new Set([...confirmedGroupDepartureRooms, ...roomsToConfirm]));
+    setConfirmedGroupDepartureRooms(merged);
+    setSelectedGroupDepartureRooms([]);
+    setGroupCheckoutOpen(false);
+    if (merged.length === groupDepartureState.rooms.length) setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
+  };
+  const checkoutRoomsFromRecords = (records: Array<Pick<DailyRecord, "id" | "guest" | "room" | "roomAmount" | "roomPaid" | "services" | "lateFee">>): CheckoutSummaryRoom[] => records.map((record) => ({
+    id: record.id,
+    label: `Phòng ${record.room.split(" · ")[0]} · ${record.guest}`,
+    roomAmount: record.roomAmount,
+    roomPaid: record.roomPaid,
+    services: record.services,
+    lateFee: record.lateFee,
+  }));
 
   const confirmCheckout = () => {
     if (!checkoutRecord) return;
@@ -729,15 +758,15 @@ export default function CheckInOutWorkspace() {
               actionLabel="Check-out cả đoàn"
               actionCount={groupDepartureState.rooms.length}
               actionDisabled={false}
+              checkoutSummaryRooms={groupCheckoutSummaryRooms}
               onAction={(nextSelected) => {
-                if (nextSelected.length > 0) {
-                  const merged = Array.from(new Set([...confirmedGroupDepartureRooms, ...nextSelected]));
-                  setConfirmedGroupDepartureRooms(merged);
-                  setSelectedGroupDepartureRooms([]);
-                  if (merged.length === groupDepartureState.rooms.length) {
-                    setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
-                  }
-                }
+                if (nextSelected.length === 0) return;
+                setSelectedGroupDepartureRooms(nextSelected);
+                const selectedTotal = groupDepartureState.rooms
+                  .filter((room) => nextSelected.includes(room))
+                  .reduce((total, room) => { const index = groupDepartureState.rooms.indexOf(room); return total + groupDepartureState.roomAmounts[index] + groupDepartureState.services[index]; }, 0);
+                if (selectedTotal > 0) setGroupCheckoutOpen(true);
+                else confirmGroupCheckout(nextSelected);
               }}
             />
           )}
@@ -995,51 +1024,6 @@ export default function CheckInOutWorkspace() {
                     </strong>
                   </div>
                 </div>
-                <fieldset className="mt-5">
-                  <legend className="text-sm font-semibold text-slate-700">
-                    Phương án thu tiền
-                  </legend>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    <label
-                      className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 ${checkoutPaymentMode === "now" ? "border-blue-400 bg-blue-50" : "border-slate-200"}`}
-                    >
-                      <input
-                        type="radio"
-                        name="checkout-payment"
-                        checked={checkoutPaymentMode === "now"}
-                        onChange={() => setCheckoutPaymentMode("now")}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block text-sm font-semibold text-slate-800">
-                          Thanh toán ngay
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          Thu dịch vụ tại quầy
-                        </span>
-                      </span>
-                    </label>
-                    <label
-                      className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 ${checkoutPaymentMode === "room" ? "border-blue-400 bg-blue-50" : "border-slate-200"}`}
-                    >
-                      <input
-                        type="radio"
-                        name="checkout-payment"
-                        checked={checkoutPaymentMode === "room"}
-                        onChange={() => setCheckoutPaymentMode("room")}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block text-sm font-semibold text-slate-800">
-                          Tính vào tiền phòng
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          Ghi nhận công nợ khi check-out
-                        </span>
-                      </span>
-                    </label>
-                  </div>
-                </fieldset>
                 <div className="mt-6 flex justify-end gap-3">
                   <button
                     type="button"
@@ -1054,15 +1038,34 @@ export default function CheckInOutWorkspace() {
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                   >
                     <CreditCard size={16} />
-                    {checkoutPaymentMode === "now"
-                      ? "Thanh toán dịch vụ & Check-out"
-                      : "Ghi nhận & Check-out"}
+                    Xác nhận Check-out
                   </button>
                 </div>
               </div>
             </div>
           );
         })()}
+      {groupCheckoutOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setGroupCheckoutOpen(false)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Đối soát check-out cả đoàn</p>
+                <h3 className="mt-1 text-xl font-bold text-slate-900">{groupDepartureState.guest}</h3>
+                <p className="mt-1 text-sm text-slate-500">{selectedGroupDepartureRooms.length} phòng · Booking {groupDepartureState.id}</p>
+              </div>
+              <button type="button" onClick={() => setGroupCheckoutOpen(false)} className="text-2xl leading-none text-slate-400">×</button>
+            </div>
+            <div className="mt-5">
+              <CheckoutSummary rooms={groupCheckoutSummaryRooms} />
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setGroupCheckoutOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600">Hủy</button>
+              <button type="button" onClick={() => confirmGroupCheckout()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><CreditCard size={16} />Thanh toán & Check-out</button>
+            </div>
+          </div>
+        </div>
+      )}
       {roomPreview && (
         <div
           className="fixed inset-0 z-40 grid place-items-center bg-slate-950/35 p-4"
@@ -1169,7 +1172,7 @@ export default function CheckInOutWorkspace() {
                 onClick={() => setRoomPreview(null)}
                 className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
               >
-                Đóng
+                Xác nhận
               </button>
             </div>
           </div>
@@ -1383,106 +1386,6 @@ export default function CheckInOutWorkspace() {
           </div>
         </div>
       )}
-      {batchCheckoutOpen &&
-        (() => {
-          const selectedRecords = departureState.filter((record) =>
-            selectedDepartureIds.includes(record.id),
-          );
-          const total = selectedRecords.reduce(
-            (sum, record) =>
-              sum +
-              (record.services || []).reduce(
-                (serviceSum, service) => serviceSum + service.amount,
-                0,
-              ) +
-              (record.lateFee || 0),
-            0,
-          );
-          return (
-            <div
-              className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
-              onMouseDown={() => setBatchCheckoutOpen(false)}
-            >
-              <div
-                className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"
-                onMouseDown={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-600">
-                      Check-out hàng loạt
-                    </p>
-                    <h3 className="mt-1 text-xl font-bold text-slate-900">
-                      Xác nhận {selectedRecords.length} phòng
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Tiền phòng của các booking đã thanh toán trước.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setBatchCheckoutOpen(false)}
-                    className="text-2xl leading-none text-slate-400"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div className="mt-5 space-y-2">
-                  {selectedRecords.map((record) => {
-                    const amount =
-                      (record.services || []).reduce(
-                        (sum, service) => sum + service.amount,
-                        0,
-                      ) + (record.lateFee || 0);
-                    return (
-                      <div
-                        key={record.id}
-                        className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-sm"
-                      >
-                        <span>
-                          <span className="block font-semibold text-slate-700">
-                            Phòng {record.room.split(" · ")[0]} · {record.guest}
-                          </span>
-                          <span className="text-xs text-slate-500">
-                            {record.id}
-                          </span>
-                        </span>
-                        <strong className="text-slate-900">
-                          {amount.toLocaleString("vi-VN")}đ
-                        </strong>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4">
-                  <span className="font-bold text-slate-900">
-                    Tổng cần thanh toán
-                  </span>
-                  <strong className="text-lg text-amber-700">
-                    {total.toLocaleString("vi-VN")}đ
-                  </strong>
-                </div>
-                <div className="mt-6 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setBatchCheckoutOpen(false)}
-                    className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={confirmBatchCheckout}
-                    className="flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-700"
-                  >
-                    <CreditCard size={16} />
-                    Thanh toán & Check-out
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
       <BatchActionDialog
         open={selectingGroupRoom}
         mode="check-in"
@@ -1497,6 +1400,7 @@ export default function CheckInOutWorkspace() {
         mode="check-out"
         rooms={batchDialogRooms}
         selectedIds={selectedDepartureIds}
+        checkoutSummaryRooms={checkoutRoomsFromRecords(departureState.filter((record) => selectedDepartureIds.includes(record.id)))}
         onToggle={toggleDepartureSelection}
         onClose={() => setBatchCheckoutOpen(false)}
         onConfirm={confirmBatchCheckout}

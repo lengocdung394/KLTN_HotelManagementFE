@@ -33,7 +33,7 @@ const App = () => {
             <Route path="/" element={<Navigate to="/overview" replace />} />
             <Route path="/overview" element={<Index onLogout={handleLogout} />} />
             <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={handleLogout} />} />
-            <Route path="/customers" element={<CustomerPage />} />
+            <Route path="/customers" element={<CustomerPage onLogout={handleLogout} />} />
             <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={handleLogout} />} />
             <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={handleLogout} />} />
             <Route path="/rooms" element={<ModulePage path="/rooms" onLogout={handleLogout} />} />

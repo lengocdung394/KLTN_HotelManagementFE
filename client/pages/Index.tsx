@@ -21,6 +21,8 @@ import {
 import { useState } from "react";
 import OverviewCalendar from "../components/OverviewCalendarNew";
 import AppHeader from "../components/AppHeader";
+import UserProfileCard from "../components/UserProfileCard";
+import ScrollControls from "../components/ScrollControls";
 
 const navigation = [
   ["/overview", "overview", LayoutDashboard],
@@ -176,27 +178,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
             {t("navigation.settings")}
           </Link>
         </nav>
-        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center gap-2.5">
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-[#f6c8a4] text-xs font-bold text-[#6f3c25]">
-              LT
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-semibold">Linh Trần</p>
-              <p className="text-[10px] text-slate-400">
-                {t("common.branchManager")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onLogout}
-              aria-label={t("auth.logout")}
-              className="ml-auto text-slate-400"
-            >
-              <LogOut size={15} />
-            </button>
-          </div>
-        </div>
+        <UserProfileCard onLogout={onLogout} />
       </aside>
       {mobile && (
         <div
@@ -351,6 +333,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
       </main>
+      <ScrollControls />
     </div>
   );
 }

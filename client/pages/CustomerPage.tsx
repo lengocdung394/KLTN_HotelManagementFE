@@ -16,6 +16,8 @@ import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import CustomerWorkspace from "./CustomerWorkspace";
 import AppHeader from "../components/AppHeader";
+import UserProfileCard from "../components/UserProfileCard";
+import ScrollControls from "../components/ScrollControls";
 
 const navigation = [
   ["/overview", "overview", LayoutDashboard],
@@ -34,14 +36,14 @@ const adminNavigation = [
   ["/settings", "settings", Settings],
 ] as const;
 
-export default function CustomerPage() {
+export default function CustomerPage({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
   const location = useLocation();
   const [mobile, setMobile] = useState(false);
   return (
     <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[244px] flex-col bg-blue-950 px-4 py-5 text-white transition-transform duration-200 ease-out lg:translate-x-0 ${mobile ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-40 flex w-61 flex-col bg-blue-950 px-4 py-5 text-white transition-transform duration-200 ease-out lg:translate-x-0 ${mobile ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex items-center gap-3 px-3">
           <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-500 text-lg font-bold">
@@ -92,12 +94,7 @@ export default function CustomerPage() {
             </Link>
           ))}
         </nav>
-        <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
-          <p className="text-xs font-semibold">Linh Trần</p>
-          <p className="text-[10px] text-slate-400">
-            {t("common.branchManager")}
-          </p>
-        </div>
+        <UserProfileCard onLogout={onLogout} />
       </aside>
       {mobile && (
         <div
@@ -105,9 +102,9 @@ export default function CustomerPage() {
           onClick={() => setMobile(false)}
         />
       )}
-      <main className="min-w-0 lg:pl-[244px]">
+      <main className="min-w-0 lg:pl-61">
         <AppHeader onMenuClick={() => setMobile(true)} />
-        <div className="mx-auto min-w-0 max-w-[1280px] px-5 py-7 lg:px-9">
+        <div className="mx-auto min-w-0 max-w-7xl px-5 py-7 lg:px-9">
           <p className="mb-1 text-sm font-semibold text-blue-600">
             {t("pages.customers.eyebrow")}
           </p>
@@ -120,6 +117,7 @@ export default function CustomerPage() {
           <CustomerWorkspace />
         </div>
       </main>
+      <ScrollControls />
     </div>
   );
 }
