@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, QrCode, Search, Wallet } from "lucide-react";
 import GuestRoomForms from "./GuestRoomForms";
@@ -62,7 +62,6 @@ const shiftDay = (dateStr: string, delta: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-type DragPoint = { roomIndex: number; dayIndex: number };
 type RoomDateRange = { checkIn: string; checkOut: string };
 
 const formatDateLabel = (value: string, fallback: string, language: string) => value ? new Date(`${value}T00:00:00`).toLocaleDateString(language === "en" ? "en-US" : "vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }) : fallback;
@@ -84,7 +83,7 @@ function DatePicker({ label, value, min, onChange }: { label: string; value: str
     if (!min || next >= min) { onChange(next); setOpen(false); }
   };
   const selectToday = () => { const current = new Date(); const date = current.toISOString().slice(0, 10); if (!min || date >= min) { onChange(date); setViewDate(new Date(current.getFullYear(), current.getMonth(), 1)); setOpen(false); } };
-  return <div className="relative"><p className="text-xs font-bold text-slate-700">{label}</p><button type="button" onClick={() => setOpen((current) => !current)} className="mt-1.5 flex h-11 w-full items-center justify-between rounded-lg border border-violet-100 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none transition hover:border-violet-300 focus:border-violet-400"><span>{formatDateLabel(value, t("booking.noDateSelected"), i18n.language)}</span><CalendarDays size={16} className="text-violet-500" /></button>{open && <div className="absolute left-0 top-[4.5rem] z-30 w-[min(19rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"><div className="flex items-center justify-between"><button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-violet-50"><ChevronLeft size={16} /></button><p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p><button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-violet-50"><ChevronRight size={16} /></button></div><div className="mt-3 grid grid-cols-7 text-center text-[10px] font-bold uppercase text-slate-400">{["sunShort", "monShort", "tueShort", "wedShort", "thuShort", "friShort", "satShort"].map((day) => <span key={day} className="py-1">{t(`calendar.${day}`)}</span>)}</div><div className="grid grid-cols-7 gap-1">{Array.from({ length: firstDay }, (_, index) => <span key={`empty-${index}`} />)}{Array.from({ length: daysInMonth }, (_, index) => { const day = index + 1; const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; const disabled = Boolean(min && date < min); return <button type="button" key={date} disabled={disabled} onClick={() => selectDay(day)} className={`grid aspect-square place-items-center rounded-lg text-xs transition ${disabled ? "cursor-not-allowed text-slate-300" : date === value ? "bg-violet-600 font-bold text-white" : date === today ? "border border-violet-300 font-bold text-violet-700" : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"}`}>{day}</button>; })}</div><button type="button" onClick={selectToday} className="mt-3 w-full rounded-lg bg-slate-50 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50">{t("booking.today")}</button></div>}</div>;
+  return <div className="relative z-50"><p className="text-xs font-bold text-slate-700">{label}</p><button type="button" onClick={() => setOpen((current) => !current)} className="mt-1.5 flex h-11 w-full items-center justify-between rounded-lg border border-violet-100 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none transition hover:border-violet-300 focus:border-violet-400"><span>{formatDateLabel(value, t("booking.noDateSelected"), i18n.language)}</span><CalendarDays size={16} className="text-violet-500" /></button>{open && <div className="absolute left-0 top-[4.5rem] z-50 w-[min(19rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"><div className="flex items-center justify-between"><button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-violet-50"><ChevronLeft size={16} /></button><p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p><button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-violet-50"><ChevronRight size={16} /></button></div><div className="mt-3 grid grid-cols-7 text-center text-[10px] font-bold uppercase text-slate-400">{["sunShort", "monShort", "tueShort", "wedShort", "thuShort", "friShort", "satShort"].map((day) => <span key={day} className="py-1">{t(`calendar.${day}`)}</span>)}</div><div className="grid grid-cols-7 gap-1">{Array.from({ length: firstDay }, (_, index) => <span key={`empty-${index}`} />)}{Array.from({ length: daysInMonth }, (_, index) => { const day = index + 1; const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; const disabled = Boolean(min && date < min); return <button type="button" key={date} disabled={disabled} onClick={() => selectDay(day)} className={`grid aspect-square place-items-center rounded-lg text-xs transition ${disabled ? "cursor-not-allowed text-slate-300" : date === value ? "bg-violet-600 font-bold text-white" : date === today ? "border border-violet-300 font-bold text-violet-700" : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"}`}>{day}</button>; })}</div><button type="button" onClick={selectToday} className="mt-3 w-full rounded-lg bg-slate-50 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50">{t("booking.today")}</button></div>}</div>;
 }
 
 function DesktopCalendar({
@@ -99,8 +98,6 @@ function DesktopCalendar({
   setSelectedRanges,
   isAddingRoom,
   isAvailableForRange,
-  calendarOffset,
-  setCalendarOffset,
 }: {
   visibleRooms: BookingRoom[];
   selected: string[];
@@ -113,213 +110,299 @@ function DesktopCalendar({
   setSelectedRanges: React.Dispatch<React.SetStateAction<Record<string, RoomDateRange>>>;
   isAddingRoom: boolean;
   isAvailableForRange: (roomId: string, start: string, end: string) => boolean;
-  calendarOffset: number;
-  setCalendarOffset: (value: number) => void;
 }) {
   const { t } = useTranslation();
-  const dayAt = (index: number) => `2026-09-${String(6 + index + calendarOffset).padStart(2, "0")}`;
-  const visibleTimeline = timeline.map((_, index) => {
-    const date = new Date(2026, 8, 6 + index + calendarOffset);
-    return { label: `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`, day: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"][date.getDay()] };
-  });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const [dragAnchor, setDragAnchor] = useState<DragPoint | null>(null);
-  const [dragCurrent, setDragCurrent] = useState<DragPoint | null>(null);
-  const isDragging = dragAnchor !== null;
+  const totalDays = 120;
+  const stableTimeline = useMemo(() => {
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const start = new Date(todayDate);
+    start.setDate(todayDate.getDate() - 3); // Start 3 days before today
 
-  const isReservedCell = (room: BookingRoom, dayIndex: number) => {
-    const day = dayAt(dayIndex);
-    return (booked[room.id] || []).some((item) => day >= item.start && day < item.end);
+    return Array.from({ length: totalDays }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      return {
+        label: `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`,
+        day: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"][date.getDay()],
+        value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
+      };
+    });
+  }, []);
+
+  const [dragSelection, setDragSelection] = useState<{ roomId: string; startDayIndex: number; currentDayIndex: number } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync scroll position when checkIn is changed externally (via DatePicker)
+  useEffect(() => {
+    if (checkIn && scrollRef.current) {
+      const cellIndex = stableTimeline.findIndex(d => d.value === checkIn);
+      if (cellIndex >= 0) {
+        const offset = cellIndex * 96;
+        scrollRef.current.scrollTo({ left: offset, behavior: "smooth" });
+      }
+    }
+  }, [checkIn, stableTimeline]);
+
+  const scrollByDays = (days: number) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: days * 96, behavior: "smooth" });
+    }
   };
 
-  const dragDayRange = dragAnchor && dragCurrent ? [Math.min(dragAnchor.dayIndex, dragCurrent.dayIndex), Math.max(dragAnchor.dayIndex, dragCurrent.dayIndex)] : null;
-  const dragRoomRange = dragAnchor && dragCurrent ? [Math.min(dragAnchor.roomIndex, dragCurrent.roomIndex), Math.max(dragAnchor.roomIndex, dragCurrent.roomIndex)] : null;
-
-  const handlePointerDown = (roomIndex: number, dayIndex: number, room: BookingRoom) => (event: React.PointerEvent) => {
-    event.preventDefault();
-    if (isReservedCell(room, dayIndex)) return;
-    setDragAnchor({ roomIndex, dayIndex });
-    setDragCurrent({ roomIndex, dayIndex });
+  const scrollToToday = () => {
+    if (scrollRef.current) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const cellIndex = stableTimeline.findIndex(d => d.value === todayStr);
+      if (cellIndex >= 0) {
+        scrollRef.current.scrollTo({ left: cellIndex * 96, behavior: "smooth" });
+      } else {
+        scrollRef.current.scrollTo({ left: 0, behavior: "smooth" });
+      }
+    }
   };
 
-  const handlePointerEnter = (roomIndex: number, dayIndex: number, room: BookingRoom) => () => {
-    if (!isDragging) return;
-    if (isReservedCell(room, dayIndex)) return;
-    setDragCurrent({ roomIndex: dragAnchor?.roomIndex ?? roomIndex, dayIndex });
+  const isReservedCell = (roomId: string, dayValue: string) => {
+    return (booked[roomId] || []).some((item) => dayValue >= item.start && dayValue < item.end);
   };
 
-  const finishInteraction = () => {
-    if (!dragAnchor || !dragCurrent) {
-      setDragAnchor(null);
-      setDragCurrent(null);
-      return;
+  const isPastDate = (dayValue: string) => {
+    return new Date(`${dayValue}T00:00:00`) < today;
+  };
+
+  const handlePointerDown = (roomId: string, dayIndex: number) => (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const dayValue = stableTimeline[dayIndex].value;
+    if (isPastDate(dayValue) || isReservedCell(roomId, dayValue)) return;
+    
+    setDragSelection({ roomId, startDayIndex: dayIndex, currentDayIndex: dayIndex });
+  };
+
+  const handlePointerEnter = (roomId: string, dayIndex: number) => (e: React.PointerEvent) => {
+    if (!dragSelection || dragSelection.roomId !== roomId) return;
+    
+    // Check if moving over edges to auto-scroll
+    if (scrollRef.current) {
+      const rect = scrollRef.current.getBoundingClientRect();
+      const edgeThreshold = 80;
+      if (e.clientX - rect.left < 260 + edgeThreshold) { // 260px is the sticky column width
+        scrollRef.current.scrollBy({ left: -20, behavior: "auto" });
+      } else if (rect.right - e.clientX < edgeThreshold) {
+        scrollRef.current.scrollBy({ left: 20, behavior: "auto" });
+      }
     }
 
-    const isClick = dragAnchor.roomIndex === dragCurrent.roomIndex && dragAnchor.dayIndex === dragCurrent.dayIndex;
-    const room = visibleRooms[dragAnchor.roomIndex];
+    setDragSelection(prev => prev ? { ...prev, currentDayIndex: dayIndex } : null);
+  };
 
-    if (isClick) {
-      const day = dayAt(dragAnchor.dayIndex);
-
-      const roomRange = selectedRanges[room.id];
-      const newCheckOut = shiftDay(day, 1);
-
-      if (roomRange && (day === roomRange.checkIn || day === shiftDay(roomRange.checkOut, -1))) {
-        const isSingleNight = shiftDay(roomRange.checkIn, 1) === roomRange.checkOut;
-        const nextRange = day === roomRange.checkIn
-          ? { checkIn: shiftDay(roomRange.checkIn, 1), checkOut: roomRange.checkOut }
-          : { checkIn: roomRange.checkIn, checkOut: shiftDay(roomRange.checkOut, -1) };
-
+  const handlePointerUpContainer = () => {
+    if (!dragSelection) return;
+    
+    const { roomId, startDayIndex, currentDayIndex } = dragSelection;
+    const minDay = Math.min(startDayIndex, currentDayIndex);
+    const maxDay = Math.max(startDayIndex, currentDayIndex);
+    
+    const isSingleClick = startDayIndex === currentDayIndex;
+    const clickedDate = stableTimeline[startDayIndex].value;
+    const currentRange = selectedRanges[roomId];
+    
+    if (isSingleClick && currentRange) {
+      const checkInDate = currentRange.checkIn;
+      const lastNightDate = shiftDay(currentRange.checkOut, -1);
+      
+      if (clickedDate === checkInDate || clickedDate === lastNightDate) {
+        const isSingleNight = checkInDate === lastNightDate;
+        
         if (isSingleNight) {
-          setSelected((current) => current.filter((id) => id !== room.id));
-          setSelectedRanges((current) => {
-            const next = { ...current };
-            delete next[room.id];
+          setSelected(prev => prev.filter(id => id !== roomId));
+          setSelectedRanges(prev => {
+            const next = { ...prev };
+            delete next[roomId];
             return next;
           });
+          setDragSelection(null);
+          return;
         } else {
-          setCheckIn(nextRange.checkIn);
-          setCheckOut(nextRange.checkOut);
-          setSelectedRanges((current) => ({ ...current, [room.id]: nextRange }));
-        }
-      } else {
-        // Click ngày mới hoặc click lần đầu: chọn đúng một đêm cho phòng đó.
-        const newCheckIn = day;
-        if (isAvailableForRange(room.id, newCheckIn, newCheckOut)) {
+          let newCheckIn = currentRange.checkIn;
+          let newCheckOut = currentRange.checkOut;
+          
+          if (clickedDate === checkInDate) {
+            newCheckIn = shiftDay(checkInDate, 1);
+          } else if (clickedDate === lastNightDate) {
+            newCheckOut = lastNightDate; // Which is checkout minus 1
+          }
+          
           setCheckIn(newCheckIn);
           setCheckOut(newCheckOut);
-          setSelected((current) => (current.includes(room.id) ? current : [...current, room.id]));
-          setSelectedRanges((current) => ({ ...current, [room.id]: { checkIn: newCheckIn, checkOut: newCheckOut } }));
+          setSelectedRanges(prev => ({ ...prev, [roomId]: { checkIn: newCheckIn, checkOut: newCheckOut } }));
+          setDragSelection(null);
+          return;
         }
       }
-    } else {
-      // Kéo thật sự chỉ chọn các đêm trong hàng phòng đang kéo.
-      const dayStart = Math.min(dragAnchor.dayIndex, dragCurrent.dayIndex);
-      const dayEnd = Math.max(dragAnchor.dayIndex, dragCurrent.dayIndex) + 1;
-      const roomStart = dragAnchor.roomIndex;
-      const roomEnd = dragAnchor.roomIndex;
-      const hasExistingRange = Boolean(checkIn && checkOut) && dayStart === dayEnd;
-      const newCheckIn = hasExistingRange ? checkIn : dayAt(dayStart);
-      const newCheckOut = hasExistingRange ? checkOut : dayAt(dayEnd);
-
-      if (!hasExistingRange) {
-        setCheckIn(newCheckIn);
-        setCheckOut(newCheckOut);
-      }
-      setSelected((current) => {
-        const spanned = visibleRooms
-          .slice(roomStart, roomEnd + 1)
-          .filter((r) => isAvailableForRange(r.id, newCheckIn, newCheckOut))
-          .map((r) => r.id);
-        return Array.from(new Set([...current, ...spanned]));
-      });
-      setSelectedRanges((current) => {
-        const next = { ...current };
-        visibleRooms.slice(roomStart, roomEnd + 1)
-          .filter((candidate) => isAvailableForRange(candidate.id, newCheckIn, newCheckOut))
-          .forEach((candidate) => { next[candidate.id] = { checkIn: newCheckIn, checkOut: newCheckOut }; });
-        return next;
-      });
     }
 
-    setDragAnchor(null);
-    setDragCurrent(null);
+    const newCheckIn = stableTimeline[minDay].value;
+    const newCheckOut = stableTimeline[maxDay + 1]?.value || shiftDay(stableTimeline[maxDay].value, 1);
+    
+    let isValid = true;
+    for (let i = minDay; i <= maxDay; i++) {
+       if (isReservedCell(roomId, stableTimeline[i].value)) {
+         isValid = false;
+         break;
+       }
+    }
+    
+    if (isValid && isAvailableForRange(roomId, newCheckIn, newCheckOut)) {
+      setCheckIn(newCheckIn);
+      setCheckOut(newCheckOut);
+      setSelected(prev => prev.includes(roomId) ? prev : [...prev, roomId]);
+      setSelectedRanges(prev => ({ ...prev, [roomId]: { checkIn: newCheckIn, checkOut: newCheckOut } }));
+    }
+    
+    setDragSelection(null);
   };
 
+  useEffect(() => {
+    const handleGlobalUp = () => {
+       if (dragSelection) handlePointerUpContainer();
+    };
+    window.addEventListener("pointerup", handleGlobalUp);
+    return () => window.removeEventListener("pointerup", handleGlobalUp);
+  }, [dragSelection]);
+
   return (
-    <div
-      onPointerUp={finishInteraction}
-      onPointerCancel={() => { setDragAnchor(null); setDragCurrent(null); }}
-      className="mt-5 overflow-hidden rounded-xl border border-slate-200"
-    >
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-        <div>
-          <p className="text-xs font-bold text-slate-800">{t("booking.roomCalendar")}</p>
-          <p className="mt-0.5 text-[10px] text-slate-400">{t("booking.calendarInstruction")}</p>
+    <div className="relative z-0 mt-5 flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="relative z-20 flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-3">
+        <div className="text-[11px] font-semibold text-slate-500">
+          <span className="hidden sm:inline">{t("booking.calendarInstruction", "Kéo ngang trên các ô để chọn nhiều đêm · Kéo thanh cuộn để xem ngày")}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setCalendarOffset(calendarOffset - 7)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ChevronLeft size={15} /></button>
-          <button type="button" onClick={() => { setCalendarOffset(0); window.dispatchEvent(new Event("open-check-in")); }} aria-label="Chọn ngày" title="Chọn ngày" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600"><CalendarDays size={15} /></button>
-          <button type="button" onClick={() => setCalendarOffset(calendarOffset + 7)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ChevronRight size={15} /></button>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={() => scrollByDays(-7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+            <ChevronLeft size={14} /> 7 ngày
+          </button>
+          <button type="button" onClick={scrollToToday} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+            {t("booking.today", "Hôm nay")}
+          </button>
+          <button type="button" onClick={() => scrollByDays(7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+            7 ngày <ChevronRight size={14} />
+          </button>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <div className="min-w-[980px]">
-          <div className="grid grid-cols-[260px_repeat(7,minmax(100px,1fr))] border-b border-slate-200 bg-slate-50">
-            <div className="p-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">{t("booking.roomTypeLabel")}</div>
-            {visibleTimeline.map((date, index) => (
-              <div key={date.label} className={`border-l border-slate-200 p-3 text-center ${dayAt(index) === checkIn ? "bg-blue-50" : ""}`}>
+
+      <div 
+        ref={scrollRef}
+        className="relative z-10 w-full overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
+        onPointerLeave={handlePointerUpContainer}
+      >
+        <div className="min-w-fit" style={{ width: `${260 + totalDays * 96}px` }}>
+          <div className="grid border-b border-slate-200 bg-slate-50 relative" style={{ gridTemplateColumns: `260px repeat(${totalDays}, minmax(96px, 1fr))` }}>
+            <div className="sticky left-0 top-0 z-30 flex items-center border-r border-slate-200 bg-slate-50 p-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+              {t("booking.roomTypeLabel")}
+            </div>
+            {stableTimeline.map((date) => (
+              <div key={date.value} className={`border-l border-slate-200 p-3 text-center ${date.value === checkIn ? "bg-violet-50/50" : ""}`}>
                 <p className="text-[10px] font-bold uppercase text-slate-400">{date.day}</p>
-                <p className={`mt-1 text-sm font-bold ${dayAt(index) === checkIn ? "text-blue-600" : "text-slate-700"}`}>{date.label}</p>
+                <p className={`mt-1 text-sm font-bold ${date.value === checkIn ? "text-violet-700" : isPastDate(date.value) ? "text-slate-400" : "text-slate-700"}`}>{date.label}</p>
               </div>
             ))}
           </div>
-          {visibleRooms.map((room, roomIndex) => {
-            const roomAvailable = isAvailableForRange(room.id, checkIn || "0000-00-00", checkOut || "9999-99-99");
-            return (
-              <div key={room.id} className="grid min-h-[106px] grid-cols-[260px_repeat(7,minmax(100px,1fr))] border-b border-slate-100 last:border-0">
+
+          {visibleRooms.map((room) => (
+            <div key={room.id} className="grid min-h-[106px] border-b border-slate-100 last:border-0 relative hover:bg-slate-50/30 transition-colors" style={{ gridTemplateColumns: `260px repeat(${totalDays}, minmax(96px, 1fr))` }}>
+              <div className="sticky left-0 top-0 z-20 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
-                  disabled={!roomAvailable && Boolean(checkIn && checkOut)}
+                  disabled={Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, checkIn, checkOut)}
                   onClick={() => {
-                    setSelected((current) => (current.includes(room.id) ? current.filter((id) => id !== room.id) : [...current, room.id]));
-                    if (checkIn && checkOut && isAvailableForRange(room.id, checkIn, checkOut)) {
-                      setSelectedRanges((current) => {
-                        if (selected.includes(room.id)) {
-                          const next = { ...current };
-                          delete next[room.id];
-                          return next;
+                    if (selected.includes(room.id)) {
+                      setSelected((current) => {
+                        const newSelected = current.filter((id) => id !== room.id);
+                        if (newSelected.length === 0) {
+                          setCheckIn("");
+                          setCheckOut("");
                         }
-                        return { ...current, [room.id]: { checkIn, checkOut } };
+                        return newSelected;
                       });
+                      setSelectedRanges(prev => {
+                        const next = { ...prev };
+                        delete next[room.id];
+                        return next;
+                      });
+                      return;
+                    }
+
+                    setSelected((current) => [...current, room.id]);
+
+                    if (checkIn && checkOut && isAvailableForRange(room.id, checkIn, checkOut)) {
+                      setSelectedRanges(prev => ({ ...prev, [room.id]: { checkIn, checkOut } }));
                     }
                   }}
-                  className={`flex min-w-0 items-center gap-3 bg-white p-4 text-left hover:bg-slate-50 ${!roomAvailable && checkIn && checkOut ? "cursor-not-allowed opacity-60" : ""}`}
+                  className={`flex h-full w-full items-center gap-3 p-4 text-left transition-all duration-200 ${selected.includes(room.id) ? "bg-violet-50" : "bg-white hover:bg-slate-50"} ${Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, checkIn, checkOut) ? "cursor-not-allowed opacity-60" : ""}`}
                 >
-                  <span className={`grid h-11 min-w-[58px] shrink-0 place-items-center rounded-xl px-2 text-[11px] font-bold whitespace-nowrap ${selected.includes(room.id) ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"}`}>{room.id}</span>
-                  <span className="min-w-0">
-                    <strong className="block text-xs text-slate-800">{room.type}</strong>
-                    <small className="mt-1 block text-[10px] text-slate-400">{room.beds} · {room.size}</small>
-                    <em className="mt-1 block text-[10px] not-italic text-violet-600">{selected.includes(room.id) ? t("booking.selectedRemove") : t("booking.selectRoomHint")}</em>
+                  <span className={`grid h-11 min-w-[58px] shrink-0 place-items-center rounded-xl px-2 text-[11px] font-bold whitespace-nowrap transition-all ${selected.includes(room.id) ? "bg-violet-600 text-white shadow-sm shadow-violet-200" : "bg-slate-100 text-slate-600"}`}>{room.id}</span>
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-xs font-semibold text-slate-800">{room.type}</strong>
+                    <small className="mt-1 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
+                    <em className={`mt-1 block truncate text-[10px] not-italic transition-colors ${selected.includes(room.id) ? "font-medium text-violet-600" : "text-slate-400"}`}>{selected.includes(room.id) ? t("booking.selectedRemove") : t("booking.selectRoomHint")}</em>
                   </span>
                 </button>
-                {timeline.map((date, dayIndex) => {
-                  const day = dayAt(dayIndex);
-                  const reservation = (booked[room.id] || []).find((item) => day >= item.start && day < item.end);
-                  const roomRange = selectedRanges[room.id] || (selected.length === 0 && checkIn && checkOut ? { checkIn, checkOut } : undefined);
-                  const inRange = Boolean(roomRange) && day >= roomRange.checkIn && day < roomRange.checkOut;
-                  const dragging = Boolean(
-                    dragDayRange && dragRoomRange &&
-                    dayIndex >= dragDayRange[0] && dayIndex <= dragDayRange[1] &&
-                    roomIndex >= dragRoomRange[0] && roomIndex <= dragRoomRange[1]
-                  );
-                  return (
-                    <div
-                      key={date}
-                      onPointerDown={handlePointerDown(roomIndex, dayIndex, room)}
-                      onPointerEnter={handlePointerEnter(roomIndex, dayIndex, room)}
-                      title={reservation ? `${reservation.guest} · đã đặt` : "Kéo dọc để chọn nhiều phòng, bấm để chọn/bỏ"}
-                      className={`relative select-none touch-none border-l border-slate-100 p-1.5 ${reservation ? "cursor-not-allowed bg-gray-100" : "cursor-crosshair bg-white hover:bg-blue-50"}`}
-                    >
-                      <div className={`flex h-full min-h-[76px] flex-col justify-center rounded-lg px-2 transition ${reservation ? "bg-gray-300 text-gray-600" : dragging || inRange ? "bg-blue-500 text-white shadow-sm" : "bg-blue-50 text-blue-700"}`}>
-                        {reservation ? (
-                          <>
-                            <span className="truncate text-[10px] font-bold">{t("booking.booked")}</span>
-                            <span className="mt-1 truncate text-[9px]">{reservation.guest}</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-[10px] font-semibold">{inRange ? t("booking.selecting") : t("booking.available")}</span>
-                            <span className="mt-1 text-[9px] opacity-70">{t("booking.dragToSelect")}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
-            );
-          })}
+
+              {stableTimeline.map((date, dayIndex) => {
+                const day = date.value;
+                const reservation = (booked[room.id] || []).find((item) => day >= item.start && day < item.end);
+                const roomRange = selectedRanges[room.id];
+                const inRange = Boolean(roomRange) && day >= roomRange.checkIn && day < roomRange.checkOut;
+                const pastDay = isPastDate(day);
+                
+                let isDraggingCell = false;
+                if (dragSelection && dragSelection.roomId === room.id) {
+                  const minD = Math.min(dragSelection.startDayIndex, dragSelection.currentDayIndex);
+                  const maxD = Math.max(dragSelection.startDayIndex, dragSelection.currentDayIndex);
+                  isDraggingCell = dayIndex >= minD && dayIndex <= maxD;
+                }
+
+                return (
+                  <div
+                    key={`${room.id}-${day}`}
+                    onPointerDown={handlePointerDown(room.id, dayIndex)}
+                    onPointerEnter={handlePointerEnter(room.id, dayIndex)}
+                    title={reservation ? `${reservation.guest} · đã đặt` : t("booking.dragToSelect")}
+                    className={`relative select-none touch-none border-l border-slate-100 p-1.5 transition-colors duration-150 ${reservation ? "cursor-not-allowed bg-slate-50/50" : pastDay ? "cursor-not-allowed bg-slate-100/50" : "cursor-crosshair hover:bg-violet-50/50"}`}
+                  >
+                    <div className={`flex h-full min-h-[76px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-sm transition-all duration-200 ${
+                      pastDay
+                        ? "border-slate-200 bg-slate-200 text-slate-500"
+                        : reservation
+                          ? "border-emerald-300 bg-emerald-500 text-white shadow-emerald-100"
+                          : isDraggingCell
+                            ? "border-violet-300 bg-violet-500 text-white shadow-violet-200"
+                            : inRange && selected.includes(room.id)
+                              ? "border-violet-300 bg-violet-600 text-white shadow-violet-100"
+                              : inRange
+                                ? "border-violet-200 bg-violet-100 text-violet-700"
+                                : "border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:bg-sky-100"
+                    }`}>
+                      {reservation ? (
+                        <>
+                          <span className="truncate text-[10px] font-bold">{t("booking.booked")}</span>
+                          <span className="mt-1 truncate text-[9px] opacity-90">{reservation.guest}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[10px] font-semibold">{isDraggingCell || inRange ? t("booking.selecting") : pastDay ? "Quá khứ" : t("booking.available")}</span>
+                          <span className="mt-1 truncate text-[9px] opacity-80">{pastDay ? "Không khả dụng" : isDraggingCell || inRange ? day : t("booking.dragToSelect")}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -339,14 +422,6 @@ export default function BookingWorkspace() {
   const [floor, setFloor] = useState("Tất cả các tầng");
   const [showFull, setShowFull] = useState(false);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
-  const [calendarOffset, setCalendarOffset] = useState(0);
-
-  useEffect(() => {
-    if (!checkIn) return;
-    const picked = new Date(`${checkIn}T00:00:00`);
-    const calendarStart = new Date(2026, 8, 6);
-    setCalendarOffset(Math.floor((picked.getTime() - calendarStart.getTime()) / 86400000 / 7) * 7);
-  }, [checkIn]);
 
   const hasDates = Boolean(checkIn && checkOut);
   const nights = hasDates ? Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : 0;
@@ -426,7 +501,7 @@ export default function BookingWorkspace() {
 
       {step === "rooms" ? (
         <div className="p-5">
-          <div className="grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
+          <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
             <DatePicker label={t("booking.checkInDate")} value={checkIn} onChange={setCheckIn} />
             <DatePicker label={t("booking.checkOutDate")} value={checkOut} min={checkIn || undefined} onChange={setCheckOut} />
             <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{hasDates ? `${nights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
@@ -445,11 +520,13 @@ export default function BookingWorkspace() {
                 {buildingOptions.map((item) => <option key={item} value={item}>{item === "Tất cả các tòa" ? item : `Tòa ${item}`}</option>)}
               </select>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-              <span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-gray-400" />{t("booking.unavailable")}</span>
-              <span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-500" />{t("booking.available")}</span>
-              <span className="text-slate-400">{t("booking.dragToSelectRooms")}</span>
-              <label className="flex items-center gap-1.5"><input type="checkbox" checked={showFull} onChange={(event) => setShowFull(event.target.checked)} />{t("booking.showFullRooms")}</label>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300 ring-1 ring-slate-200" />{t("booking.unavailable")}</span>
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-sky-500" />{t("booking.available")}</span>
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-violet-500" />{t("booking.selecting")}</span>
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />{t("booking.booked")}</span>
+              
+              <label className="flex items-center gap-1.5 text-slate-600"><input type="checkbox" checked={showFull} onChange={(event) => setShowFull(event.target.checked)} />{t("booking.showFullRooms")}</label>
             </div>
           </div>
 
@@ -465,8 +542,6 @@ export default function BookingWorkspace() {
             setSelectedRanges={setSelectedRanges}
             isAddingRoom={isAddingRoom}
             isAvailableForRange={isAvailableForRange}
-            calendarOffset={calendarOffset}
-            setCalendarOffset={setCalendarOffset}
           />
 
           <div className="mt-5 flex flex-col items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
@@ -493,7 +568,7 @@ export default function BookingWorkspace() {
       ) : (
         <div className="grid gap-6 p-5 lg:grid-cols-[1fr_360px]">
           <div>
-            {step === "guest" ? <GuestRoomForms rooms={selectedRooms} /> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
+            {step === "guest" ? <GuestRoomForms rooms={selectedRooms} selectedRanges={selectedRanges} /> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.bookingSummary")}</p>

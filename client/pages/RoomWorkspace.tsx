@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Upload, Users, X } from "lucide-react";
+import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 
@@ -180,9 +180,12 @@ type CreateRoomFormState = {
   adults: string;
   children: string;
   infants: string;
+  bedType: string;
   description: string;
   amenities: string[];
   images: string[];
+  defaultImage: string | null;
+  status: string;
 };
 
 const amenityOptions = [
@@ -212,6 +215,12 @@ const roomTypeDetails: Record<string, { area: string; beds: string; capacity: nu
   "Deluxe Room": { area: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "Người lớn: 2 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 2000000, description: "Phòng hạng sang rộng rãi với giường King Size, TV màn hình lớn, minibar, khu vực tiếp khách và phòng tắm cao cấp." },
   "Suite Room": { area: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, guestPolicy: "Người lớn: 3 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 2500000, description: "Phòng Suite cao cấp gồm phòng khách riêng, phòng ngủ, khu vực làm việc và phòng tắm hiện đại; phù hợp cho gia đình, khách VIP hoặc doanh nhân." },
 };
+const bedTypeOptions = [
+  "1 giường đơn (1m x 1,2m)",
+  "2 giường đơn (1m x 1,2m)",
+  "1 giường King Size (1,8m x 2m)",
+  "1 giường King Size + 1 giường đơn",
+];
 initialRooms.forEach((room) => {
   const details = roomTypeDetails[room.name];
   if (details) Object.assign(room, { guestPolicy: details.guestPolicy, description: `Mô tả phòng:\n${details.description}\n\nQuy định sức chứa:\n• Người lớn: ${details.guestPolicy.match(/Người lớn:\s*(\d+)/)?.[1] ?? details.capacity}\n• Trẻ nhỏ dưới 11 tuổi: ${details.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? 0}\n• Em bé dưới 12 tháng: ${details.guestPolicy.match(/Em bé dưới 12 tháng:\s*(\d+)/)?.[1] ?? 0}\n\nPhụ thu:\n• 500.000đ mỗi người vượt quy định\n• Miễn phí cho em bé` });
@@ -225,6 +234,7 @@ const roomFormDefaults = (roomType: string) => {
     adults: String(details.capacity),
     children: details.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? "0",
     infants: details.guestPolicy.match(/Em bé dưới 12 tháng:\s*(\d+)/)?.[1] ?? "0",
+    bedType: details.beds,
   };
 };
 
@@ -236,6 +246,8 @@ const emptyCreateRoomForm: CreateRoomFormState = {
   description: "",
   amenities: [],
   images: [],
+  defaultImage: null,
+  status: "Sẵn sàng",
 };
 const emptyBuildingForm = { name: "", code: "" };
 const emptyFloorForm = { name: "" };
@@ -295,6 +307,30 @@ export default function RoomWorkspace() {
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
+  const isAnyModalOpen = showCreateRoom || Boolean(detailRoom) || Boolean(galleryRoom) || Boolean(assignmentRoom);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverscroll = document.body.style.overscrollBehaviorY;
+
+    if (isAnyModalOpen) {
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      document.body.style.overscrollBehaviorY = "none";
+      return () => {
+        document.body.style.overflow = previousBodyOverflow;
+        document.documentElement.style.overflow = previousHtmlOverflow;
+        document.body.style.overscrollBehaviorY = previousBodyOverscroll;
+      };
+    }
+
+    document.body.style.overflow = previousBodyOverflow;
+    document.documentElement.style.overflow = previousHtmlOverflow;
+    document.body.style.overscrollBehaviorY = previousBodyOverscroll;
+
+    return undefined;
+  }, [isAnyModalOpen]);
   const generatedRoomCode = useMemo(() => {
     const prefix = `${createRoomForm.building}-${createRoomForm.floor}-`;
     const usedSequence = rooms
@@ -350,7 +386,7 @@ export default function RoomWorkspace() {
     const children = room.guestPolicy.match(/Trẻ em:\s*(\d+)/)?.[1] ?? room.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? "0";
     const infants = room.guestPolicy.match(/Trẻ nhỏ:\s*(\d+)/)?.[1] ?? room.guestPolicy.match(/Em bé(?: dưới 12 tháng)?:\s*(\d+)/)?.[1] ?? "0";
     setEditingRoomId(room.id);
-    setCreateRoomForm({ roomType: room.name, building: room.id.split("-")[0], floor: room.id.split("-")[1] ?? "1", area, price: String(room.price), adults, children, infants, description: room.description ?? "", amenities: room.services, images: room.images });
+    setCreateRoomForm({ roomType: room.name, building: room.id.split("-")[0], floor: room.id.split("-")[1] ?? "1", area, price: String(room.price), adults, children, infants, bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" });
     setShowCreateRoom(true);
   };
   const openCreateBuildingModal = () => {
@@ -405,21 +441,35 @@ export default function RoomWorkspace() {
   const appendAmenity = (value?: string) => {
     const nextAmenity = (value ?? amenitySearch).trim();
     if (!nextAmenity) return;
-    const matchedAmenity = amenityOptions.find((item) => normalizeText(item) === normalizeText(nextAmenity)) ?? filteredAmenityOptions[0];
-    if (!matchedAmenity) return;
-    if (createRoomForm.amenities.some((item) => item.toLowerCase() === matchedAmenity.toLowerCase())) {
+    const normalized = normalizeText(nextAmenity);
+    const matchedAmenity = amenityOptions.find((item) => normalizeText(item) === normalized) ?? nextAmenity;
+
+    if (createRoomForm.amenities.some((item) => normalizeText(item) === normalized)) {
+      setAmenitySearch("");
+      setShowAmenityMenu(false);
       return;
     }
+
     setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, matchedAmenity] }));
     setAmenitySearch("");
+    setShowAmenityMenu(false);
   };
   const removeAmenity = (value: string) => setCreateRoomForm((current) => ({ ...current, amenities: current.amenities.filter((item) => item !== value) }));
+  const clearAllAmenities = () => setCreateRoomForm((current) => ({ ...current, amenities: [] }));
   const addImages = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const nextImages = Array.from(files).map((file) => URL.createObjectURL(file));
-    setCreateRoomForm((current) => ({ ...current, images: [...current.images, ...nextImages].slice(0, 8) }));
+    setCreateRoomForm((current) => {
+      const mergedImages = [...current.images, ...nextImages].slice(0, 8);
+      const nextDefault = current.defaultImage ?? mergedImages[0] ?? null;
+      return { ...current, images: mergedImages, defaultImage: nextDefault };
+    });
   };
-  const removeImage = (image: string) => setCreateRoomForm((current) => ({ ...current, images: current.images.filter((item) => item !== image) }));
+  const removeImage = (image: string) => setCreateRoomForm((current) => {
+    const remaining = current.images.filter((item) => item !== image);
+    const nextDefault = current.defaultImage === image ? (remaining[0] ?? null) : current.defaultImage;
+    return { ...current, images: remaining, defaultImage: nextDefault };
+  });
   const saveRoom = () => {
     const roomCode = editingRoomId ?? generatedRoomCode;
     const roomType = createRoomForm.roomType.trim();
@@ -431,6 +481,7 @@ export default function RoomWorkspace() {
     const adults = Number(createRoomForm.adults);
     const children = Number(createRoomForm.children);
     const infants = Number(createRoomForm.infants);
+    const bedType = createRoomForm.bedType || roomDetails.beds;
     if (!roomType || !area || !price || !adults || children < 0 || infants < 0) {
       window.alert("Vui lòng nhập đầy đủ các trường bắt buộc.");
       return;
@@ -439,17 +490,20 @@ export default function RoomWorkspace() {
       window.alert("Mã phòng tự tạo bị trùng, vui lòng thử lại.");
       return;
     }
+    const orderedImages = createRoomForm.defaultImage
+      ? [createRoomForm.defaultImage, ...createRoomForm.images.filter((image) => image !== createRoomForm.defaultImage)]
+      : createRoomForm.images;
     const room: Room = {
       id: roomCode,
       name: roomType,
-      images: createRoomForm.images.length > 0 ? createRoomForm.images : ["https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg"],
+      images: orderedImages.length > 0 ? orderedImages : ["https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg"],
       floor: location,
       size: `${area} m²`,
-      beds: roomDetails.beds,
+      beds: bedType,
       capacity: adults + children,
       guestPolicy: `Người lớn: ${adults} · Trẻ em: ${children} · Trẻ nhỏ: ${infants}`,
       price,
-      status: editingRoomId ? rooms.find((item) => item.id === editingRoomId)?.status ?? "Sẵn sàng" : "Sẵn sàng",
+      status: createRoomForm.status || "Sẵn sàng",
       cleaner: editingRoomId ? rooms.find((item) => item.id === editingRoomId)?.cleaner ?? "" : "",
       description,
       services: createRoomForm.amenities.length > 0 ? createRoomForm.amenities : ["Wifi tốc độ cao", ...(description ? [description] : [])],
@@ -561,102 +615,339 @@ export default function RoomWorkspace() {
     </div>}
     {showCreateRoom && (
       <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateRoomModal}>
-        <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-          <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+        <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[26px] border border-slate-200 bg-[#f3f4f6] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
             <div>
-              <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">{t(editingRoomId ? "room.editRoomBadge" : "room.createRoomBadge")}</span>
-              <h3 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{t(editingRoomId ? "room.editRoomTitle" : "room.createRoomTitle", { room: editingRoomId })}</h3>
-              <p className="mt-1 text-sm text-slate-500">{t(editingRoomId ? "room.editRoomDescription" : "room.createRoomDescription")}</p>
-              <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100">
-                <Upload size={15} />
-                {importingRooms ? t("room.readingFile") : t("room.importRooms")}
-                <input type="file" accept=".csv,.xlsx" disabled={importingRooms} onChange={(event) => { void importRoomsFromFile(event.target.files?.[0] ?? null); event.currentTarget.value = ""; }} className="hidden" />
-              </label>
+              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-600">
+                <span className="inline-flex h-2 w-2 rounded-full bg-blue-500" />
+                <span>{t(editingRoomId ? "room.editRoomBadge" : "room.createRoomBadge")}</span>
+              </div>
+              <h3 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">{editingRoomId ? "Sửa phòng" : "Tạo phòng mới"}</h3>
             </div>
-            <button type="button" onClick={closeCreateRoomModal} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
-              <X size={18} />
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Hủy</button>
+              <button type="button" onClick={saveRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700">{editingRoomId ? "Lưu thay đổi" : "Lưu phòng"}</button>
+            </div>
           </div>
 
-          <div className="grid gap-5 overflow-y-auto p-5 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300 lg:grid-cols-[1fr_1fr]">
-            <div className="space-y-4">
-              <label className="block text-sm font-semibold text-slate-700">
-                {t("room.generatedCode", "Generated room code")}
-                <input value={generatedRoomCode} readOnly className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none" />
-              </label>
+          <div className="grid gap-5 overflow-y-auto p-5 lg:grid-cols-[1.4fr_0.8fr]">
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">1</span>
+                  Thông tin cơ bản
+                </div>
 
-              <label className="block text-sm font-semibold text-slate-700">
-                <span>{t("room.roomType")} <span className="text-rose-500">*</span></span>
-                <select value={createRoomForm.roomType} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomType: event.target.value, ...roomFormDefaults(event.target.value) }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
-                  {roomTypeOptions.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
-                </select>
-              </label>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Tên phòng <span className="text-rose-500">*</span>
+                    <select value={createRoomForm.roomType} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomType: event.target.value, ...roomFormDefaults(event.target.value) }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      {roomTypeOptions.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+                    </select>
+                  </label>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-semibold text-slate-700">{t("room.area")} (m²) <span className="text-rose-500">*</span><input type="number" min="1" step="0.1" value={createRoomForm.area} onChange={(event) => setCreateRoomForm((current) => ({ ...current, area: event.target.value }))} placeholder="25" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-                <label className="block text-sm font-semibold text-slate-700">{t("room.pricePerNight")} <span className="text-rose-500">*</span><input type="number" min="1" step="1000" value={createRoomForm.price} onChange={(event) => setCreateRoomForm((current) => ({ ...current, price: event.target.value }))} placeholder="1000000" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Tòa nhà <span className="text-rose-500">*</span>
+                    <select value={createRoomForm.building} onChange={(event) => setCreateRoomForm((current) => ({ ...current, building: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Mã phòng
+                    <input value={generatedRoomCode} readOnly className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none" />
+                  </label>
+
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Tầng <span className="text-rose-500">*</span>
+                    <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                      {Array.from(new Set(["1", "2", "3", "4", ...floors.map((floor) => floor.match(/\d+/)?.[0] ?? "1")])).map((value) => (
+                        <option key={value} value={value}>{`Tầng ${value}`}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
 
-              <div><p className="text-sm font-semibold text-slate-700">{t("room.guestCapacity")} <span className="text-rose-500">*</span></p><div className="mt-2 grid gap-3 sm:grid-cols-3"><label className="text-xs font-semibold text-slate-600">{t("booking.adults")}<input type="number" min="1" value={createRoomForm.adults} onChange={(event) => setCreateRoomForm((current) => ({ ...current, adults: event.target.value }))} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label><label className="text-xs font-semibold text-slate-600">{t("booking.children")}<input type="number" min="0" value={createRoomForm.children} onChange={(event) => setCreateRoomForm((current) => ({ ...current, children: event.target.value }))} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label><label className="text-xs font-semibold text-slate-600">{t("booking.infants")}<input type="number" min="0" value={createRoomForm.infants} onChange={(event) => setCreateRoomForm((current) => ({ ...current, infants: event.target.value }))} className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label></div><p className="mt-2 text-xs text-slate-400">{t("booking.capacityDescription")}</p></div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">2</span>
+                  Chi tiết phòng
+                </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-semibold text-slate-700">
-                  <span>{t("room.buildingLabel", "Building")} <span className="text-rose-500">*</span></span>
-                  <select value={createRoomForm.building} onChange={(event) => setCreateRoomForm((current) => ({ ...current, building: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
-                    {buildings.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.id})</option>)}
-                  </select>
-                </label>
-                <label className="block text-sm font-semibold text-slate-700">
-                  <span>{t("frontDesk.floor")} <span className="text-rose-500">*</span></span>
-                  <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
-                    <option value="1">{t("room.floorOption", { floor: 1 })}</option>
-                    <option value="2">{t("room.floorOption", { floor: 2 })}</option>
-                    <option value="3">{t("room.floorOption", { floor: 3 })}</option>
-                    <option value="4">{t("room.floorOption", { floor: 4 })}</option>
-                  </select>
-                </label>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Diện tích <span className="text-rose-500">*</span>
+                    <input type="number" min="1" step="0.1" value={createRoomForm.area} onChange={(event) => setCreateRoomForm((current) => ({ ...current, area: event.target.value }))} placeholder="25" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </label>
+
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Giá phòng / đêm <span className="text-rose-500">*</span>
+                    <input type="number" min="1" step="1000" value={createRoomForm.price} onChange={(event) => setCreateRoomForm((current) => ({ ...current, price: event.target.value }))} placeholder="1000000" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </label>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Người lớn <span className="text-rose-500">*</span>
+                    <input type="number" min="1" value={createRoomForm.adults} onChange={(event) => setCreateRoomForm((current) => ({ ...current, adults: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Trẻ em <span className="text-rose-500">*</span>
+                    <input type="number" min="0" value={createRoomForm.children} onChange={(event) => setCreateRoomForm((current) => ({ ...current, children: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Em bé <span className="text-rose-500">*</span>
+                    <input type="number" min="0" value={createRoomForm.infants} onChange={(event) => setCreateRoomForm((current) => ({ ...current, infants: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </label>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold text-slate-700">
+                    Loại giường <span className="text-rose-500">*</span>
+                    <select
+                      value={createRoomForm.bedType}
+                      onChange={(event) => setCreateRoomForm((current) => ({ ...current, bedType: event.target.value }))}
+                      className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    >
+                      {bedTypeOptions.map((bedType) => (
+                        <option key={bedType} value={bedType}>{bedType}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-sm font-semibold text-slate-700">Trạng thái phòng <span className="text-rose-500">*</span></p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {statuses.map((status) => {
+                      const active = createRoomForm.status === status;
+                      const badge = status === "Sẵn sàng" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : status === "Đang dọn" ? "bg-amber-50 text-amber-700 border-amber-200" : status === "Đang ở" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-rose-50 text-rose-700 border-rose-200";
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => setCreateRoomForm((current) => ({ ...current, status }))}
+                          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${active ? badge : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
+                        >
+                          {status}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
-              <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Vị trí sẽ lưu: Tòa {createRoomForm.building} - Tầng {createRoomForm.floor}</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">3</span>
+                    Tiện nghi & dịch vụ <span className="text-rose-500">*</span>
+                  </div>
 
-              <div>
-                <p className="text-sm font-semibold text-slate-700">{t("frontDesk.amenities")}</p>
-                <div className="relative mt-2" onMouseEnter={() => setShowAmenityMenu(true)} onMouseLeave={() => setShowAmenityMenu(false)}>
-                  <input value={amenitySearch} onFocus={() => setShowAmenityMenu(true)} onChange={(event) => { setAmenitySearch(event.target.value); setShowAmenityMenu(true); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); appendAmenity(); } if (event.key === "Escape") setShowAmenityMenu(false); }} placeholder={t("room.searchAmenities", "Search and select amenities...")} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-                  {showAmenityMenu && (
-                    <div className="absolute left-0 right-0 top-12 z-20 max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300">
-                      {filteredAmenityOptions.length === 0 && <p className="px-2 py-1.5 text-xs text-slate-400">{t("room.noMatchingAmenities", "No matching amenities")}</p>}
-                      {filteredAmenityOptions.slice(0, 8).map((amenity) => <button type="button" key={amenity} onMouseDown={(event) => event.preventDefault()} onClick={() => appendAmenity(amenity)} className="block w-full rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 transition hover:bg-slate-100">{amenity}</button>)}
+                  <div className="flex items-center gap-2">
+
+                    
+                      <button
+                        type="button"
+                        onClick={clearAllAmenities}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+                      >
+                        Bỏ chọn tất cả
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAmenityMenu(false)}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+                      >
+                        Dùng Mặc định
+                      </button>
+                    
+  
+                    <button
+                      type="button"
+                      onClick={() => setShowAmenityMenu((current) => !current)}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+                    >
+                      + Thêm
+                    </button>
+                  </div>
+                </div>
+
+                {showAmenityMenu && (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <Search size={15} className="text-slate-400" />
+                      <input
+                        value={amenitySearch}
+                        onChange={(event) => setAmenitySearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            appendAmenity();
+                          }
+                        }}
+                        placeholder="Nhập tiện nghi mới hoặc tìm kiếm..."
+                        className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => appendAmenity()}
+                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+                      >
+                        Thêm
+                      </button>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {filteredAmenityOptions.slice(0, 8).map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => appendAmenity(item)}
+                          className="rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                          {item}
+                        </button>
+                      ))}
+                    </div>
+
+                    
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {amenityOptions.map((item) => {
+                    const checked = createRoomForm.amenities.includes(item);
+                    return (
+                      <label key={item} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:border-blue-200 hover:bg-blue-50/40">
+                        <input type="checkbox" checked={checked} onChange={() => (checked ? removeAmenity(item) : setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, item] }))) } className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                        <span>{item}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">4</span>
+                  Mô tả & hình ảnh <span className="text-rose-500">*</span>
+                </div>
+
+                <textarea value={createRoomForm.description} onChange={(event) => setCreateRoomForm((current) => ({ ...current, description: event.target.value }))} rows={4} placeholder="Nhập mô tả chi tiết phòng, phong cách, vị trí và trải nghiệm khách hàng..." className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                  <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
+                    <Upload size={18} />
+                    Tải ảnh lên
+                    <input type="file" multiple accept="image/*" onChange={(event) => addImages(event.target.files)} className="hidden" />
+                  </label>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {createRoomForm.images.length > 0 ? createRoomForm.images.slice(0, 6).map((image, index) => {
+                      const isDefault = createRoomForm.defaultImage ? image === createRoomForm.defaultImage : index === 0;
+                      return (
+                        <div key={`${image}-${index}`} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+                          <img src={image} alt="Ảnh phòng" className="h-24 w-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setCreateRoomForm((current) => ({ ...current, defaultImage: image }));
+                            }}
+                            className={`absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border transition ${
+                              isDefault ? "border-amber-300 bg-amber-400 text-white" : "border-white/80 bg-slate-900/65 text-slate-100"
+                            }`}
+                            aria-label="Đặt ảnh làm ảnh mặc định"
+                          >
+                            <Star size={13} fill={isDefault ? "currentColor" : "none"} />
+                          </button>
+                          <button type="button" onClick={(event) => { event.stopPropagation(); removeImage(image); }} className="absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-slate-900/70 text-white opacity-0 transition group-hover:opacity-100">
+                            <X size={12} />
+                          </button>
+                        </div>
+                      );
+                    }) : (
+                      <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-400">
+                        Chưa có ảnh nào được tải lên.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Xem trước</p>
+                    <h4 className="mt-2 text-xl font-bold text-slate-900">{createRoomForm.roomType}</h4>
+                  </div>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[createRoomForm.status] ?? "bg-emerald-50 text-emerald-700"}`}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {createRoomForm.status}
+                  </span>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                  {createRoomForm.images.length > 0 ? (
+                    <img src={createRoomForm.defaultImage ?? createRoomForm.images[0]} alt="Preview room" className="h-44 w-full object-cover" />
+                  ) : (
+                    <div className="grid h-44 place-items-center bg-slate-100 text-sm text-slate-400">
+                      Chưa có ảnh preview
                     </div>
                   )}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2">{createRoomForm.amenities.length === 0 ? <span className="text-xs text-slate-400">Chưa có tiện ích nào.</span> : createRoomForm.amenities.map((item) => <button type="button" key={item} onClick={() => removeAmenity(item)} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"><span>{item}</span><X size={12} /></button>)}</div>
+
+                <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span>Tòa</span>
+                    <strong className="font-semibold text-slate-800">{createRoomForm.building}</strong>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span>Tầng</span>
+                    <strong className="font-semibold text-slate-800">{createRoomForm.floor}</strong>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span>Diện tích</span>
+                    <strong className="font-semibold text-slate-800">{createRoomForm.area || 25} m²</strong>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span>Giá</span>
+                    <strong className="font-semibold text-slate-800">{Number(createRoomForm.price || 0).toLocaleString("vi-VN")}đ</strong>
+                  </div>
+                </div>
               </div>
 
-              <label className="block text-sm font-semibold text-slate-700">
-                {t("room.description")}
-                <textarea value={createRoomForm.description} onChange={(event) => setCreateRoomForm((current) => ({ ...current, description: event.target.value }))} rows={3} placeholder={t("room.descriptionPlaceholder")} className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-              </label>
-            </div>
-
-            <div>
-              <p className="text-sm font-semibold text-slate-700">{t("room.images")}</p>
-              <label className="mt-1.5 grid min-h-52 cursor-pointer place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center transition hover:border-blue-400 hover:bg-blue-50/60">
-                <input type="file" multiple accept="image/*" onChange={(event) => addImages(event.target.files)} className="hidden" />
-                <div>
-                  <ImagePlus size={28} className="mx-auto text-slate-500" />
-                  <p className="mt-3 text-sm font-semibold text-slate-700">{t("room.uploadImages")}</p>
-                  <p className="mt-1 text-xs text-slate-500">{t("room.imageLimit")}</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                    <ImagePlus size={16} />
+                  </span>
+                  Tính năng nổi bật
                 </div>
-              </label>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{createRoomForm.images.map((image) => <div key={image} className="group relative overflow-hidden rounded-xl"><img src={image} alt="Ảnh phòng mới" className="h-24 w-full object-cover" /><button type="button" onClick={() => removeImage(image)} className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-slate-900/70 text-white opacity-0 transition group-hover:opacity-100"><X size={13} /></button></div>)}</div>
-              <p className="mt-2 text-xs text-slate-400">{t("room.defaultImages")}</p>
-            </div>
-          </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 p-5">
-            <button type="button" onClick={closeCreateRoomModal} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">{t("common.cancel")}</button>
-            <button type="button" onClick={saveRoom} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700">{editingRoomId ? t("room.saveChanges") : t("room.createRoom")}</button>
+                <div className="mt-4 space-y-2 text-sm text-slate-600">
+                  {createRoomForm.amenities.slice(0, 5).map((item) => (
+                    <div key={item} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+                      <span>{item}</span>
+                      <Check size={15} className="text-emerald-600" />
+                    </div>
+                  ))}
+                  {createRoomForm.amenities.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-sm text-slate-400">Chưa có tiện nghi nào được chọn</p>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -2,9 +2,11 @@
   "name": "fusion-starter",
   "private": true,
   "type": "module",
-  
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "@swc/core"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@swc/core"
+    ]
   },
   "scripts": {
     "dev": "vite",
@@ -15,9 +17,13 @@
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc"
-    }
-  ,
+  },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.21",
+    "@fullcalendar/interaction": "^6.1.21",
+    "@fullcalendar/react": "^6.1.21",
+    "@fullcalendar/resource": "^6.1.21",
+    "@fullcalendar/resource-timeline": "^6.1.21",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "i18next": "^26.4.0",
