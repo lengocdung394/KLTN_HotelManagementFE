@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
+import { Label } from "@radix-ui/react-label";
 
 type ImportedRoomRow = Record<string, string>;
 
@@ -656,11 +657,6 @@ export default function RoomWorkspace() {
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Mã phòng
-                    <input value={generatedRoomCode} readOnly className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none" />
-                  </label>
-
                   <label className="block text-sm font-semibold text-slate-700">
                     Tầng <span className="text-rose-500">*</span>
                     <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">

@@ -1,25 +1,38 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { useLoginMutation } from "../services/authApi";
+import { useAppDispatch } from "../store/hooks";
+import { setCredentials } from "../store/authSlice";
+import { useNavigate } from "react-router-dom";
 
 type LoginPageProps = { onLogin: () => void };
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
+  const [login, { isLoading }] = useLoginMutation();
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      setError("Vui lòng nhập đầy đủ email và mật khẩu.");
-      return;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      const result = await login({ email, password }).unwrap();
+      dispatch(setCredentials(result)); // result: { token, email, fullName }
+      onLogin();
+      navigate("/overview", { replace: true });
+    } catch (err: any) {
+      // err.data là phần "data" mà axiosBaseQuery trả về khi lỗi
+      const message =
+        err?.data?.message ?? "Đăng nhập thất bại, vui lòng thử lại";
+      setError(message);
     }
-    window.localStorage.setItem("staywise-authenticated", "true");
-    onLogin();
-    navigate("/overview", { replace: true });
   };
 
   return (
