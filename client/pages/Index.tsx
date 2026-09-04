@@ -23,6 +23,7 @@ import OverviewCalendar from "../components/OverviewCalendarNew";
 import AppHeader from "../components/AppHeader";
 import UserProfileCard from "../components/UserProfileCard";
 import ScrollControls from "../components/ScrollControls";
+import { useAppSelector } from "../store/hooks";
 
 const navigation = [
   ["/overview", "overview", LayoutDashboard],
@@ -105,6 +106,8 @@ function DashboardCheckInOut() {
 
 export default function Index({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
+  
+    const { fullName, email, position } = useAppSelector((state) => state.auth);
   const location = useLocation();
   const [mobile, setMobile] = useState(false);
   const navItems = navigation.map(([path, key, Icon]) => ({
@@ -178,7 +181,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
             {t("navigation.settings")}
           </Link>
         </nav>
-        <UserProfileCard onLogout={onLogout} />
+        <UserProfileCard onLogout={onLogout} fullName={fullName || email} position={position} />
       </aside>
       {mobile && (
         <div
@@ -187,7 +190,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
         />
       )}
       <main className="min-w-0 lg:pl-[244px]">
-        <AppHeader onMenuClick={() => setMobile(true)} />
+        <AppHeader onMenuClick={() => setMobile(true)} fullName={fullName || email} />
         <div className="mx-auto min-w-0 max-w-[1280px] px-5 py-7 lg:px-9">
           <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
