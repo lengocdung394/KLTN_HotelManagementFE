@@ -36,6 +36,7 @@ const App = () => {
             <Route path="/customers" element={<CustomerPage onLogout={handleLogout} />} />
             <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={handleLogout} />} />
             <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={handleLogout} />} />
+             <Route path="/services" element={<ModulePage path="/services" onLogout={handleLogout} />} />
             <Route path="/rooms" element={<ModulePage path="/rooms" onLogout={handleLogout} />} />
             <Route path="/tasks" element={<ModulePage path="/tasks" onLogout={handleLogout} />} />
             <Route path="/invoices" element={<ModulePage path="/invoices" onLogout={handleLogout} />} />

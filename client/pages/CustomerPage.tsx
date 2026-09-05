@@ -2,12 +2,15 @@ import { Link, useLocation } from "react-router-dom";
 import {
   CalendarCheck,
   CalendarDays,
+  ChevronDown,
   ClipboardList,
+  ConciergeBell,
   DoorOpen,
   LayoutDashboard,
   Settings,
   ShieldCheck,
   Tag,
+  Sparkles,
   UserRound,
   Users,
   WalletCards,
@@ -28,6 +31,7 @@ const navigation = [
   ["/tasks", "tasks", ClipboardList],
   ["/invoices", "invoices", WalletCards],
   ["/promotions", "promotions", Tag],
+  ["/services", "services", ConciergeBell],
 ] as const;
 const adminNavigation = [
   ["/staff", "staff", Users],
@@ -43,29 +47,17 @@ export default function CustomerPage({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-61 flex-col bg-blue-950 px-4 py-5 text-white transition-transform duration-200 ease-out lg:translate-x-0 ${mobile ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-blue-950 px-4 py-5 text-white transition-transform duration-200 ease-out lg:translate-x-0 ${mobile ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="flex items-center gap-3 px-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-500 text-lg font-bold">
-            M
-          </div>
-          <div>
-            <p className="text-[15px] font-bold">Sen Việt</p>
-            <p className="text-[10px] font-medium uppercase tracking-[.18em] text-blue-300">
-              HOSPITALITY
-            </p>
-          </div>
-        </div>
-        <div className="mt-9 px-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">
-            {t("common.workspace")}
-          </p>
-          <div className="flex items-center gap-2.5 rounded-xl bg-white/10 px-3 py-2.5 text-sm font-medium">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-amber-400 text-[11px] font-bold">
-              M
+        <div className="h-5" />
+        <div className="mt-2 px-3">
+          <button type="button" className="flex h-11 w-full items-center justify-between rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-800/80">
+            <span className="flex items-center gap-2.5">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-amber-300 text-[11px] font-bold text-amber-950">M</span>
+              Sen Việt
             </span>
-            Sen Việt
-          </div>
+            <ChevronDown size={15} className="text-blue-200" />
+          </button>
         </div>
         <nav className="mt-8 min-h-0 flex-1 space-y-1 overflow-y-auto">
           {navigation.map(([href, key, Icon]) => (
@@ -102,7 +94,7 @@ export default function CustomerPage({ onLogout }: { onLogout: () => void }) {
           onClick={() => setMobile(false)}
         />
       )}
-      <main className="min-w-0 lg:pl-61">
+      <main className="min-w-0 lg:pl-64">
         <AppHeader onMenuClick={() => setMobile(true)} />
         <div className="mx-auto min-w-0 max-w-7xl px-5 py-7 lg:px-9">
           <p className="mb-1 text-sm font-semibold text-blue-600">

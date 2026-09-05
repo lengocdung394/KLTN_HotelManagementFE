@@ -22,10 +22,11 @@ type BatchStayCardProps = {
   actionCount?: number;
   actionDisabled?: boolean;
   checkoutSummaryRooms?: CheckoutSummaryRoom[];
+  onAddService?: () => void;
   onAction: (selected: string[]) => void;
 };
 
-export default function BatchStayCard({ mode, title, description, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, checkoutSummaryRooms, onAction }: BatchStayCardProps) {
+export default function BatchStayCard({ mode, title, description, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, checkoutSummaryRooms, onAddService, onAction }: BatchStayCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draftSelected, setDraftSelected] = useState<string[]>(draftSelectedIds ?? selectedIds ?? []);
 
@@ -88,15 +89,13 @@ export default function BatchStayCard({ mode, title, description, items, selecte
         <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${colors.icon}`}>{isCheckIn ? <LogIn size={17} /> : <LogOut size={17} />}</span>
         <div><h3 className="font-bold text-slate-900">{title}</h3><p className="mt-1 text-sm text-slate-600">{description}</p></div>
       </div>
-      <button
-        type="button"
-        disabled={actionDisabled ?? availableIds.length === 0}
-        onClick={toggleSelectAll}
-        className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
-      >
-        <Check size={14} />
-        {actionLabel} ({actionCount ?? availableIds.length})
-      </button>
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+        {onAddService && <button type="button" onClick={onAddService} className="w-56 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-50">Thêm dịch vụ</button>}
+        <button type="button" disabled={actionDisabled ?? availableIds.length === 0} onClick={toggleSelectAll} className={`flex w-56 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}>
+          <Check size={14} />
+          {actionLabel} ({actionCount ?? availableIds.length})
+        </button>
+      </div>
     </div>
     {isOpen && (
       <>
@@ -149,7 +148,7 @@ export default function BatchStayCard({ mode, title, description, items, selecte
             type="button"
             disabled={!hasDraftSelection}
             onClick={handleConfirm}
-            className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`flex w-56 shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <Check size={14} />
             {isCheckIn ? "Xác nhận" : "Thanh toán & Check-out"} ({selectedCount})
