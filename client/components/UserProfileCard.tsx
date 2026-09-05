@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useAppSelector } from "../store/hooks";
 
 type UserProfileCardProps = {
   onLogout: () => void;
@@ -9,7 +10,8 @@ type UserProfileCardProps = {
 
 export default function UserProfileCard({ onLogout, fullName, position }: UserProfileCardProps) {
   const { t } = useTranslation();
-  const displayName = fullName?.trim() || "Người dùng";
+  const auth = useAppSelector((state) => state.auth);
+  const displayName = fullName?.trim() || auth.fullName?.trim() || auth.email?.trim() || "Người dùng";
   const initials = displayName
     .split(/\s+/)
     .map((part) => part[0])
@@ -25,7 +27,7 @@ export default function UserProfileCard({ onLogout, fullName, position }: UserPr
         </div>
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold text-white">{displayName}</p>
-            <p className="text-[10px] text-slate-400">{position?.trim() || t("common.branchManager")}</p>
+            <p className="text-[10px] text-slate-400">{position?.trim() || auth.position?.trim() || t("common.branchManager")}</p>
         </div>
         <button
           type="button"

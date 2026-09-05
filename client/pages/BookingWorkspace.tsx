@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, QrCode, Search, Wallet } from "lucide-react";
-import GuestRoomForms from "./GuestRoomForms";
+import GuestRoomForms, { type BookingGuest } from "./GuestRoomForms";
 
 const legacyRooms = [
   { id: "A-1-1", type: "Standard Room", beds: "1 giường đơn", size: "25 m²", guests: 1, price: 1000000, amenity: "Điều hòa · TV · Phòng tắm riêng" },
@@ -115,12 +115,12 @@ function DesktopCalendar({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const totalDays = 120;
+  const totalDays = 14;
+  const todayValue = new Date().toISOString().slice(0, 10);
+  const [timelineStart, setTimelineStart] = useState(todayValue);
+  const [timelinePickerOpen, setTimelinePickerOpen] = useState(false);
   const stableTimeline = useMemo(() => {
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    const start = new Date(todayDate);
-    start.setDate(todayDate.getDate() - 3); // Start 3 days before today
+    const start = new Date(`${timelineStart}T00:00:00`);
 
     return Array.from({ length: totalDays }, (_, index) => {
       const date = new Date(start);
@@ -131,39 +131,37 @@ function DesktopCalendar({
         value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
       };
     });
-  }, []);
+  }, [timelineStart]);
 
   const [dragSelection, setDragSelection] = useState<{ roomId: string; startDayIndex: number; currentDayIndex: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Sync scroll position when checkIn is changed externally (via DatePicker)
   useEffect(() => {
-    if (checkIn && scrollRef.current) {
-      const cellIndex = stableTimeline.findIndex(d => d.value === checkIn);
-      if (cellIndex >= 0) {
-        const offset = cellIndex * 96;
-        scrollRef.current.scrollTo({ left: offset, behavior: "smooth" });
-      }
-    }
-  }, [checkIn, stableTimeline]);
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [timelineStart]);
+
+  // Move the rendered window to the selected date when it is chosen externally.
+  useEffect(() => {
+    if (checkIn) setTimelineStart((current) => {
+      const next = checkIn < todayValue ? todayValue : checkIn;
+      return current === next ? current : next;
+    });
+  }, [checkIn, todayValue]);
 
   const scrollByDays = (days: number) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollBy({ left: days * 96, behavior: "smooth" });
-    }
+    setTimelineStart((current) => {
+      const next = shiftDay(current, days);
+      return next < todayValue ? todayValue : next;
+    });
   };
 
   const scrollToToday = () => {
-    if (scrollRef.current) {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const cellIndex = stableTimeline.findIndex(d => d.value === todayStr);
-      if (cellIndex >= 0) {
-        scrollRef.current.scrollTo({ left: cellIndex * 96, behavior: "smooth" });
-      } else {
-        scrollRef.current.scrollTo({ left: 0, behavior: "smooth" });
-      }
-    }
+    setTimelinePickerOpen((current) => !current);
   };
+
+  const formatRange = (start: string) => `${start.slice(8, 10)}/${start.slice(5, 7)} - ${shiftDay(start, 6).slice(8, 10)}/${shiftDay(start, 6).slice(5, 7)}`;
+  const previousStart = shiftDay(timelineStart, -7) < todayValue ? todayValue : shiftDay(timelineStart, -7);
+  const canGoPrevious = previousStart !== timelineStart;
 
   const isReservedCell = (roomId: string, dayValue: string) => {
     return (booked[roomId] || []).some((item) => dayValue >= item.start && dayValue < item.end);
@@ -217,10 +215,17 @@ function DesktopCalendar({
         const isSingleNight = checkInDate === lastNightDate;
         
         if (isSingleNight) {
-          setSelected(prev => prev.filter(id => id !== roomId));
-          setSelectedRanges(prev => {
+          const remainingRooms = selected.filter((id) => id !== roomId);
+          setSelected(remainingRooms);
+          setSelectedRanges((prev) => {
             const next = { ...prev };
             delete next[roomId];
+
+            const remainingRange = remainingRooms
+              .map((id) => next[id])
+              .find((range): range is RoomDateRange => Boolean(range));
+            setCheckIn(remainingRange?.checkIn || "");
+            setCheckOut(remainingRange?.checkOut || "");
             return next;
           });
           setDragSelection(null);
@@ -279,22 +284,23 @@ function DesktopCalendar({
         <div className="text-[11px] font-semibold text-slate-500">
           <span className="hidden sm:inline">{t("booking.calendarInstruction", "Kéo ngang trên các ô để chọn nhiều đêm · Kéo thanh cuộn để xem ngày")}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button type="button" onClick={() => scrollByDays(-7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-            <ChevronLeft size={14} /> 7 ngày
+        <div className="relative flex items-center gap-1.5">
+          <button type="button" disabled={!canGoPrevious} onClick={() => scrollByDays(-7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40">
+            <ChevronLeft size={14} /> {formatRange(timelineStart)}
           </button>
-          <button type="button" onClick={scrollToToday} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-            {t("booking.today", "Hôm nay")}
+          <button type="button" onClick={scrollToToday} aria-label={t("booking.today", "Hôm nay")} title={t("booking.today", "Hôm nay")} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900">
+            <CalendarDays size={16} />
           </button>
-          <button type="button" onClick={() => scrollByDays(7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-            7 ngày <ChevronRight size={14} />
+          <button type="button" onClick={() => scrollByDays(7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900">
+            {formatRange(shiftDay(timelineStart, 7))} <ChevronRight size={14} />
           </button>
+          {timelinePickerOpen && <div className="absolute right-0 top-12 z-50 rounded-xl border border-slate-200 bg-white p-3 shadow-xl"><label className="block text-xs font-semibold text-slate-600">{t("booking.selectDate", "Chọn ngày")}</label><input type="date" min={todayValue} value={timelineStart} onChange={(event) => { setTimelineStart(event.target.value); setTimelinePickerOpen(false); }} className="mt-2 h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 outline-none focus:border-violet-400" /></div>}
         </div>
       </div>
 
       <div 
         ref={scrollRef}
-        className="relative z-10 w-full overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
+        className="relative z-10 w-full touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
         onPointerLeave={handlePointerUpContainer}
       >
         <div className="min-w-fit" style={{ width: `${260 + totalDays * 96}px` }}>
@@ -318,17 +324,17 @@ function DesktopCalendar({
                   disabled={Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, checkIn, checkOut)}
                   onClick={() => {
                     if (selected.includes(room.id)) {
-                      setSelected((current) => {
-                        const newSelected = current.filter((id) => id !== room.id);
-                        if (newSelected.length === 0) {
-                          setCheckIn("");
-                          setCheckOut("");
-                        }
-                        return newSelected;
-                      });
-                      setSelectedRanges(prev => {
+                      const remainingRooms = selected.filter((id) => id !== room.id);
+                      setSelected(remainingRooms);
+                      setSelectedRanges((prev) => {
                         const next = { ...prev };
                         delete next[room.id];
+
+                        const remainingRange = remainingRooms
+                          .map((id) => next[id])
+                          .find((range): range is RoomDateRange => Boolean(range));
+                        setCheckIn(remainingRange?.checkIn || "");
+                        setCheckOut(remainingRange?.checkOut || "");
                         return next;
                       });
                       return;
@@ -346,6 +352,7 @@ function DesktopCalendar({
                   <span className="min-w-0 flex-1">
                     <strong className="block truncate text-xs font-semibold text-slate-800">{room.type}</strong>
                     <small className="mt-1 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
+                    <small className="mt-1 block truncate text-[10px] font-semibold text-violet-600">{money(room.price)} / đêm</small>
                     <em className={`mt-1 block truncate text-[10px] not-italic transition-colors ${selected.includes(room.id) ? "font-medium text-violet-600" : "text-slate-400"}`}>{selected.includes(room.id) ? t("booking.selectedRemove") : t("booking.selectRoomHint")}</em>
                   </span>
                 </button>
@@ -371,7 +378,7 @@ function DesktopCalendar({
                     onPointerDown={handlePointerDown(room.id, dayIndex)}
                     onPointerEnter={handlePointerEnter(room.id, dayIndex)}
                     title={reservation ? `${reservation.guest} · đã đặt` : t("booking.dragToSelect")}
-                    className={`relative select-none touch-none border-l border-slate-100 p-1.5 transition-colors duration-150 ${reservation ? "cursor-not-allowed bg-slate-50/50" : pastDay ? "cursor-not-allowed bg-slate-100/50" : "cursor-crosshair hover:bg-violet-50/50"}`}
+                    className={`relative select-none touch-pan-x border-l border-slate-100 p-1.5 transition-colors duration-150 ${reservation ? "cursor-not-allowed bg-slate-50/50" : pastDay ? "cursor-not-allowed bg-slate-100/50" : "cursor-crosshair hover:bg-violet-50/50"}`}
                   >
                     <div className={`flex h-full min-h-[76px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-sm transition-all duration-200 ${
                       pastDay
@@ -415,13 +422,14 @@ export default function BookingWorkspace() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank" | "wallet" | "">("");
   const [selected, setSelected] = useState<string[]>([]);
   const [selectedRanges, setSelectedRanges] = useState<Record<string, RoomDateRange>>({});
-  const [checkIn, setCheckIn] = useState("");
-  const [checkOut, setCheckOut] = useState("");
+  const [checkIn, setCheckIn] = useState(() => new Date().toISOString().slice(0, 10));
+  const [checkOut, setCheckOut] = useState(() => shiftDay(new Date().toISOString().slice(0, 10), 1));
   const [query, setQuery] = useState("");
   const [building, setBuilding] = useState("Tất cả các tòa");
   const [floor, setFloor] = useState("Tất cả các tầng");
   const [showFull, setShowFull] = useState(false);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
+  const [bookingGuest, setBookingGuest] = useState<BookingGuest>({ name: "", phone: "", identityNumber: "" });
 
   const hasDates = Boolean(checkIn && checkOut);
   const nights = hasDates ? Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : 0;
@@ -568,17 +576,27 @@ export default function BookingWorkspace() {
       ) : (
         <div className="grid gap-6 p-5 lg:grid-cols-[1fr_360px]">
           <div>
-            {step === "guest" ? <GuestRoomForms rooms={selectedRooms} selectedRanges={selectedRanges} /> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
+            {step === "guest" ? <GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} /> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.bookingSummary")}</p>
+            <p className="text-center text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.bookingSummary")}</p>
+            <p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Thông tin người đặt</p>
+            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+              <p className="mt-1 text-sm font-bold text-slate-800">{bookingGuest.name || "Chưa nhập tên người đặt"}</p>
+              <p className="mt-0.5 text-xs text-slate-500">{bookingGuest.phone || "Chưa nhập số điện thoại"}</p>
+            </div>
+            <p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Thông tin phòng</p>
             <p className="mt-3 text-sm font-bold text-slate-800">{selected.length} {t("booking.rooms")} · {nights} {t("booking.nights")}</p>
             {!hasDifferentStayPeriods && summaryRanges[0] && <p className="mt-1 text-xs font-semibold text-violet-700 lg:whitespace-nowrap">{t("booking.stayPeriod", "Check-in / Check-out")}: {formatStayPeriod(summaryRanges[0].range)}</p>}
             <div className="mt-3 space-y-1">
               {summaryRanges.map(({ room, range }) => (
-                <div key={room.id} className="flex justify-between gap-2 text-xs text-slate-500">
-                  <span className="min-w-0">{t("room.roomLabel", "Room")} {room.id} · {room.type}{hasDifferentStayPeriods && <small className="mt-0.5 block text-[10px] text-slate-400">{t("booking.stayPeriod", "Check-in / Check-out")}: {formatStayPeriod(range)}</small>}</span>
-                  <span className="shrink-0">{money(room.price * nightsForRoom(room.id))}</span>
+                <div key={room.id} className="flex justify-between gap-3 rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-500">
+                  <span className="min-w-0">
+                    <strong className="block text-slate-800">Phòng {room.id}</strong>
+                    <span className="mt-0.5 block">{room.type} · {room.guests} người</span>
+                    {hasDifferentStayPeriods && <small className="mt-0.5 block text-[10px] text-slate-400">{t("booking.stayPeriod", "Check-in / Check-out")}: {formatStayPeriod(range)}</small>}
+                  </span>
+                  <span className="shrink-0 text-right"><strong className="block text-slate-800">{money(room.price * nightsForRoom(room.id))}</strong><small className="mt-0.5 block text-[10px] text-slate-400">{money(room.price)}/đêm</small></span>
                 </div>
               ))}
             </div>
@@ -587,6 +605,13 @@ export default function BookingWorkspace() {
               <span>{t("booking.total")}</span>
               <span className="text-violet-700">{money(total)}</span>
             </div>
+            {step === "payment" && <>
+              <p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-violet-500">Thông tin thanh toán</p>
+              <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
+              <p className="mt-1 text-sm font-bold text-violet-800">{paymentMethod === "cash" ? t("booking.cash") : paymentMethod === "bank" ? t("booking.bankQr") : paymentMethod === "wallet" ? t("booking.wallet") : "Chưa chọn phương thức"}</p>
+              <p className="mt-0.5 text-xs text-violet-600">Số tiền cần thanh toán: {money(total)}</p>
+              </div>
+            </>}
             {step === "guest" ? <button onClick={() => setStep("payment")} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">{t("booking.continuePayment")}</button> : <button disabled={!paymentMethod} onClick={() => setStep("success")} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{t("booking.confirmPayment")}</button>}
           </div>
         </div>

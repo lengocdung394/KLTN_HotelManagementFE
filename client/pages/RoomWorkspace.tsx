@@ -4,6 +4,7 @@ import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHor
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import { Label } from "@radix-ui/react-label";
+import { useGetRoomStatusesQuery, useGetRoomTypesQuery } from "../services/roomApi";
 
 type ImportedRoomRow = Record<string, string>;
 
@@ -209,7 +210,6 @@ const amenityOptions = [
   "Đồ phòng tắm",
 ];
 
-const roomTypeOptions = ["Standard Room", "Superior Room", "Deluxe Room", "Suite Room"];
 const roomTypeDetails: Record<string, { area: string; beds: string; capacity: number; guestPolicy: string; price: number; description: string }> = {
   "Standard Room": { area: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "Người lớn: 1 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 1000000, description: "Phòng tiêu chuẩn có giường ngủ, bàn làm việc, TV, điều hòa và phòng tắm riêng. Có thể trang bị thêm minibar và ấm đun nước." },
   "Superior Room": { area: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, guestPolicy: "Người lớn: 2 · Trẻ nhỏ dưới 11 tuổi: 2 · Em bé dưới 12 tháng: 1", price: 1500000, description: "Phòng cao cấp có không gian thoải mái, nội thất hiện đại, bàn làm việc rộng hơn, tầm nhìn đẹp và có thể có bồn tắm." },
@@ -255,6 +255,10 @@ const emptyFloorForm = { name: "" };
 
 export default function RoomWorkspace() {
   const { t } = useTranslation();
+  const { data: apiRoomTypes, isLoading: isRoomTypesLoading, isError: isRoomTypesError } = useGetRoomTypesQuery();
+  const { data: apiRoomStatuses, isLoading: isRoomStatusesLoading, isError: isRoomStatusesError } = useGetRoomStatusesQuery();
+  const availableRoomTypes = apiRoomTypes ?? [];
+  const availableRoomStatuses = apiRoomStatuses ?? [];
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors">("rooms");
   const [buildings, setBuildings] = useState<Building[]>(() => {
@@ -308,6 +312,13 @@ export default function RoomWorkspace() {
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
+  useEffect(() => {
+    setCreateRoomForm((current) => ({
+      ...current,
+      roomType: availableRoomTypes.some((type) => String(type) === current.roomType) ? current.roomType : (availableRoomTypes[0] ?? current.roomType),
+      status: availableRoomStatuses.some((status) => String(status) === current.status) ? current.status : (availableRoomStatuses[0] ?? current.status),
+    }));
+  }, [apiRoomTypes, apiRoomStatuses]);
   const isAnyModalOpen = showCreateRoom || Boolean(detailRoom) || Boolean(galleryRoom) || Boolean(assignmentRoom);
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -575,7 +586,7 @@ export default function RoomWorkspace() {
       <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></div>
       <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={building} onChange={(e) => setBuilding(e.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-44"><option value="Tất cả các tòa">{t("room.allBuildings")}</option>{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
       <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={floor} onChange={(e) => setFloor(e.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-44"><option value="Tất cả các tầng">{t("room.allFloors")}</option>{floors.map((item) => <option key={item}>{item}</option>)}</select></div>
-      <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-52"><option value="Tất cả trạng thái">{t("room.allStatuses")}</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></div>
+      <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-52"><option value="Tất cả trạng thái">{t("room.allStatuses")}</option>{availableRoomStatuses.map((item) => <option key={item}>{item}</option>)}</select></div>
     </div>
     <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
       {filtered.map((room) => <article key={room.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50">
@@ -642,9 +653,10 @@ export default function RoomWorkspace() {
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Tên phòng <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.roomType} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomType: event.target.value, ...roomFormDefaults(event.target.value) }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
-                      {roomTypeOptions.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+                    Loại phòng <span className="text-rose-500">*</span>
+                    {isRoomTypesError && <p className="mt-1 text-xs font-normal text-rose-600">Không tải được loại phòng từ API.</p>}
+                    <select disabled={isRoomTypesLoading || isRoomTypesError || availableRoomTypes.length === 0} value={createRoomForm.roomType} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomType: event.target.value, ...roomFormDefaults(event.target.value) }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
+                      {availableRoomTypes.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
                     </select>
                   </label>
 
@@ -719,9 +731,11 @@ export default function RoomWorkspace() {
                 <div className="mt-4">
                   <p className="text-sm font-semibold text-slate-700">Trạng thái phòng <span className="text-rose-500">*</span></p>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    {statuses.map((status) => {
+                    {isRoomStatusesLoading && <p className="col-span-2 text-xs font-normal text-slate-400">Đang tải trạng thái phòng...</p>}
+                    {isRoomStatusesError && <p className="col-span-2 text-xs font-normal text-rose-600">Không tải được trạng thái phòng từ API.</p>}
+                    {availableRoomStatuses.map((status) => {
                       const active = createRoomForm.status === status;
-                      const badge = status === "Sẵn sàng" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : status === "Đang dọn" ? "bg-amber-50 text-amber-700 border-amber-200" : status === "Đang ở" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-rose-50 text-rose-700 border-rose-200";
+                      const badge = "bg-blue-50 text-blue-700 border-blue-200";
                       return (
                         <button
                           key={status}
