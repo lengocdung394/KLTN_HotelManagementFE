@@ -16,7 +16,7 @@ import {
   LogIn,
   LogOut,
   Search,
-  Sparkles,
+  ClipboardCheck,
   UserRound,
 } from "lucide-react";
 
@@ -892,7 +892,7 @@ export default function CheckInOutWorkspace() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <Sparkles size={18} className="text-amber-500" />
+              <ClipboardCheck size={18} className="text-amber-500" />
               <h3 className="font-bold text-slate-900">
                 {t("frontDesk.cleaningAssignment")}
               </h3>
