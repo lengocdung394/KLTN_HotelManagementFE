@@ -5,6 +5,7 @@ import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "../components/CheckoutSummary";
 import DatePickerPopover from "../components/DatePickerPopover";
 import BookingServiceSelector, { bookingServices, type ServiceSelection } from "../components/BookingServiceSelector";
+import EarlyLateStayNotice from "../components/EarlyLateStayNotice";
 import {
   CalendarCheck,
   CalendarDays,
@@ -271,10 +272,13 @@ export default function CheckInOutWorkspace() {
   const [selectedGroupDepartureRooms, setSelectedGroupDepartureRooms] = useState<string[]>([]);
   const [confirmedGroupDepartureRooms, setConfirmedGroupDepartureRooms] = useState<string[]>([]);
   const [groupCheckoutOpen, setGroupCheckoutOpen] = useState(false);
-  const [warningAction, setWarningAction] = useState<{ id: string; flow: "check-in" | "check-out"; message: string } | null>(null);
+  const [warningAction, setWarningAction] = useState<{ id: string; flow: "check-in" | "check-out"; message: string; fee: number } | null>(null);
   const [serviceRecord, setServiceRecord] = useState<DailyRecord | null>(null);
   const [serviceSelections, setServiceSelections] = useState<ServiceSelection[]>([]);
   const [serviceRoomSelections, setServiceRoomSelections] = useState<Record<string, ServiceSelection[]>>({});
+  const [serviceSelectorRooms, setServiceSelectorRooms] = useState<Array<{ id: string; type: string; guests: number; price: number }>>([]);
+  const [serviceModalMode, setServiceModalMode] = useState<"all" | "per-room">("per-room");
+  const [serviceAllSelections, setServiceAllSelections] = useState<ServiceSelection[]>([]);
   const [recordServices, setRecordServices] = useState<Record<string, ServiceCharge[]>>({});
   const dailyRecords = useMemo<DailyRecord[]>(() => {
     const checkInRecords = arrivalState.map((record) => ({
@@ -399,7 +403,7 @@ export default function CheckInOutWorkspace() {
                 const isEarly = isCheckIn && now < scheduled;
                 const isLate = !isCheckIn && now > scheduled;
                 if (isLate || isEarly) {
-                  setWarningAction({ id: record.id, flow: record.flow, message: isEarly ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.` : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.` });
+                  setWarningAction({ id: record.id, flow: record.flow, fee: isEarly ? 150000 : 200000, message: isEarly ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.` : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.` });
                 } else if (isCheckIn) completeRecord(record.id, record.flow);
                 else setCheckoutRecord(record);
               }}
@@ -655,19 +659,38 @@ export default function CheckInOutWorkspace() {
       serviceId: bookingServices.find((item) => item.name === service.name)?.id ?? "",
       quantity: service.quantity,
     })).filter((selection) => selection.serviceId));
-    setServiceRoomSelections({ [record.room.split(" · ")[0]]: currentServices.map((service) => ({
+    const roomId = record.room.split(" · ")[0];
+    setServiceSelectorRooms([{ id: roomId, type: record.room.split(" · ")[1] ?? "Phòng", guests: record.guests ?? 1, price: 0 }]);
+    setServiceRoomSelections({ [roomId]: currentServices.map((service) => ({
       serviceId: bookingServices.find((item) => item.name === service.name)?.id ?? "",
       quantity: service.quantity,
     })).filter((selection) => selection.serviceId) });
+    setServiceAllSelections([]);
+    setServiceModalMode("per-room");
     setServiceRecord(record);
+  };
+
+  const openGroupServiceSelector = (id: string, guest: string, rooms: string[], guests: number) => {
+    setServiceRecord({ id, guest, room: `${rooms.join(", ")} · Đoàn`, guests, time: "", status: "Đang ở", flow: "check-out" });
+    const guestsPerRoom = Math.max(1, Math.ceil(guests / rooms.length));
+    setServiceSelectorRooms(rooms.map((room) => ({ id: room, type: "Phòng đoàn", guests: guestsPerRoom, price: 0 })));
+    setServiceRoomSelections({});
+    setServiceAllSelections([]);
+    setServiceModalMode("per-room");
   };
 
   const saveRecordServices = () => {
     if (!serviceRecord) return;
-    const selections = serviceRoomSelections[serviceRecord.room.split(" · ")[0]] ?? serviceSelections;
+    const selections = serviceModalMode === "all"
+      ? serviceSelectorRooms.flatMap((room) => serviceAllSelections.map((selection) => ({ ...selection, quantity: selection.quantity * room.guests })))
+      : Object.values(serviceRoomSelections).flat().length > 0 ? Object.values(serviceRoomSelections).flat() : serviceSelections;
+    const mergedSelections = selections.reduce<ServiceSelection[]>((current, selection) => {
+      const existing = current.find((item) => item.serviceId === selection.serviceId);
+      return existing ? current.map((item) => item.serviceId === selection.serviceId ? { ...item, quantity: item.quantity + selection.quantity } : item) : [...current, selection];
+    }, []);
     setRecordServices((current) => ({
       ...current,
-      [serviceRecord.id]: selections.map((selection) => ({
+      [serviceRecord.id]: mergedSelections.map((selection) => ({
         name: bookingServices.find((service) => service.id === selection.serviceId)?.name ?? "Dịch vụ",
         quantity: selection.quantity,
         amount: (bookingServices.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity,
@@ -800,6 +823,7 @@ export default function CheckInOutWorkspace() {
               actionLabel={`Check-in cả đoàn`}
               actionCount={groupArrivalState.rooms.length}
               actionDisabled={false}
+              onAddService={() => openGroupServiceSelector(groupArrivalState.id, groupArrivalState.guest, groupArrivalState.rooms, groupArrivalState.guests)}
               onAction={(nextSelected) => {
                 if (nextSelected.length > 0) {
                   const merged = Array.from(new Set([...checkedInGroupRooms, ...nextSelected]));
@@ -827,6 +851,7 @@ export default function CheckInOutWorkspace() {
               actionLabel="Check-out cả đoàn"
               actionCount={groupDepartureState.rooms.length}
               actionDisabled={false}
+              onAddService={() => openGroupServiceSelector(groupDepartureState.id, groupDepartureState.guest, groupDepartureState.rooms, groupDepartureState.guests)}
               checkoutSummaryRooms={groupCheckoutSummaryRooms}
               onAction={(nextSelected) => {
                 if (nextSelected.length === 0) return;
@@ -852,6 +877,15 @@ export default function CheckInOutWorkspace() {
           <p className="mt-1 text-xs text-slate-400">
             Thử đổi từ khoá tìm kiếm hoặc bộ lọc check-in/check-out.
           </p>
+        </div>
+      )}
+      {warningAction && <EarlyLateStayNotice action={warningAction.flow} message={warningAction.message} fee={warningAction.fee} onCancel={() => setWarningAction(null)} onConfirm={() => { const action = warningAction; setWarningAction(null); if (action.flow === "check-in") completeRecord(action.id, action.flow); else setCheckoutRecord(filtered.find((record) => record.id === action.id) ?? null); }} />}
+      {serviceRecord && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setServiceRecord(null)}>
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Dịch vụ cho khách</p><h3 className="mt-1 text-lg font-bold text-slate-900">{serviceRecord.guest} · {serviceRecord.room.split(" · ")[0]}</h3></div><button type="button" onClick={() => setServiceRecord(null)} className="text-2xl leading-none text-slate-400">×</button></div>
+            <BookingServiceSelector rooms={serviceSelectorRooms} serviceMode={serviceModalMode} setServiceMode={setServiceModalMode} allRoomServices={serviceAllSelections} setAllRoomServices={setServiceAllSelections} roomServices={serviceRoomSelections} setRoomServices={setServiceRoomSelections} roomRanges={{}} fallbackRange={{ checkIn: "2026-01-01", checkOut: "2026-01-02" }} language="vi" nightsForRoom={() => 1} onContinue={saveRecordServices} onSkip={() => setServiceRecord(null)} continueLabel="Xác nhận" skipLabel="Đóng" />
+          </div>
         </div>
       )}
       <div className="border-t border-slate-100 bg-slate-50/60 p-5">
@@ -1002,7 +1036,7 @@ export default function CheckInOutWorkspace() {
       )}
       {checkoutRecord &&
         (() => {
-          const services = checkoutRecord.services || [];
+          const services = recordServices[checkoutRecord.id] ?? checkoutRecord.services ?? [];
           const serviceTotal = services.reduce(
             (total, service) => total + service.amount,
             0,
