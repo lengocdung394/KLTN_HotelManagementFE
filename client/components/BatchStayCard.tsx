@@ -92,7 +92,7 @@ export default function BatchStayCard({ mode, title, description, items, selecte
         type="button"
         disabled={actionDisabled ?? availableIds.length === 0}
         onClick={toggleSelectAll}
-        className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
+        className={`flex w-56 shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
       >
         <Check size={14} />
         {actionLabel} ({actionCount ?? availableIds.length})
@@ -149,7 +149,7 @@ export default function BatchStayCard({ mode, title, description, items, selecte
             type="button"
             disabled={!hasDraftSelection}
             onClick={handleConfirm}
-            className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`flex w-56 shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <Check size={14} />
             {isCheckIn ? "Xác nhận" : "Thanh toán & Check-out"} ({selectedCount})

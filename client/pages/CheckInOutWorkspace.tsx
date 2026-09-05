@@ -4,6 +4,7 @@ import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "../components/CheckoutSummary";
 import DatePickerPopover from "../components/DatePickerPopover";
+import BookingServiceSelector, { bookingServices, type ServiceSelection } from "../components/BookingServiceSelector";
 import {
   CalendarCheck,
   CalendarDays,
@@ -270,6 +271,11 @@ export default function CheckInOutWorkspace() {
   const [selectedGroupDepartureRooms, setSelectedGroupDepartureRooms] = useState<string[]>([]);
   const [confirmedGroupDepartureRooms, setConfirmedGroupDepartureRooms] = useState<string[]>([]);
   const [groupCheckoutOpen, setGroupCheckoutOpen] = useState(false);
+  const [warningAction, setWarningAction] = useState<{ id: string; flow: "check-in" | "check-out"; message: string } | null>(null);
+  const [serviceRecord, setServiceRecord] = useState<DailyRecord | null>(null);
+  const [serviceSelections, setServiceSelections] = useState<ServiceSelection[]>([]);
+  const [serviceRoomSelections, setServiceRoomSelections] = useState<Record<string, ServiceSelection[]>>({});
+  const [recordServices, setRecordServices] = useState<Record<string, ServiceCharge[]>>({});
   const dailyRecords = useMemo<DailyRecord[]>(() => {
     const checkInRecords = arrivalState.map((record) => ({
       ...record,
@@ -306,8 +312,12 @@ export default function CheckInOutWorkspace() {
     const canComplete =
       (isCheckIn && record.status === "Chờ check-in") ||
       (!isCheckIn && record.status === "Đang ở");
+    const canUndo =
+      (isCheckIn && record.status === "Đã check-in") ||
+      (!isCheckIn && record.status === "Đã trả phòng");
+    const services = recordServices[record.id] ?? record.services ?? [];
     const serviceTotal =
-      (record.services || []).reduce(
+      services.reduce(
         (total, service) => total + service.amount,
         0,
       ) + (record.lateFee || 0);
@@ -315,15 +325,16 @@ export default function CheckInOutWorkspace() {
       record.status === "Chờ check-in"
         ? t("frontDesk.waitingCheckIn")
         : record.status === "Đang ở"
-          ? t("frontDesk.currentStay")
+          ? "Đang lưu trú"
           : record.status === "Đã check-in"
-            ? t("frontDesk.checkedIn")
-            : t("frontDesk.checkedOut");
+            ? "Đã check-in"
+            : "Đã check-out";
+        const addServiceButton = <button type="button" onClick={() => openServiceSelector(record)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50">Thêm dịch vụ</button>;
 
     return (
       <article
         key={record.id}
-        className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
+        className={`mx-4 my-3 flex flex-col gap-4 rounded-xl border bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${isCheckIn ? "border-blue-200" : "border-amber-200"}`}
       >
         <div className="flex items-center gap-3">
           <div
@@ -380,15 +391,46 @@ export default function CheckInOutWorkspace() {
           </span>
           {canComplete && (
             <button
-              onClick={() =>
-                isCheckIn
-                  ? completeRecord(record.id, record.flow)
-                  : setCheckoutRecord(record)
-              }
-              className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+              onClick={() => {
+                const now = new Date();
+                const [hours, minutes] = record.time.split(":").map(Number);
+                const scheduled = new Date(now);
+                scheduled.setHours(hours, minutes, 0, 0);
+                const isEarly = isCheckIn && now < scheduled;
+                const isLate = !isCheckIn && now > scheduled;
+                if (isLate || isEarly) {
+                  setWarningAction({ id: record.id, flow: record.flow, message: isEarly ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.` : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.` });
+                } else if (isCheckIn) completeRecord(record.id, record.flow);
+                else setCheckoutRecord(record);
+              }}
+              className={`flex w-36 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:shadow-md ${isCheckIn ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}
             >
-              <Check size={14} />
-              {t("frontDesk.complete")}
+              {isCheckIn ? "Check-in" : "Check-out"}
+            </button>
+          )}
+          {isCheckIn && record.status === "Chờ check-in" && addServiceButton}
+          {!isCheckIn && record.status === "Đang ở" && addServiceButton}
+          {canUndo && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isCheckIn) {
+                  setArrivalState((current) =>
+                    current.map((item) =>
+                      item.id === record.id ? { ...item, status: "Chờ check-in" } : item,
+                    ),
+                  );
+                } else {
+                  setDepartureState((current) =>
+                    current.map((item) =>
+                      item.id === record.id ? { ...item, status: "Đang ở" } : item,
+                    ),
+                  );
+                }
+              }}
+              className={`w-36 shrink-0 rounded-lg border px-4 py-2.5 text-xs font-bold transition ${isCheckIn ? "border-blue-200 text-blue-700 hover:bg-blue-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}
+            >
+              {isCheckIn ? "Bỏ check-in" : "Bỏ check-out"}
             </button>
           )}
         </div>
@@ -606,6 +648,33 @@ export default function CheckInOutWorkspace() {
   const pendingDepartures = departureState.filter(
     (item) => item.status === "Đang ở",
   ).length;
+
+  const openServiceSelector = (record: DailyRecord) => {
+    const currentServices = recordServices[record.id] ?? record.services ?? [];
+    setServiceSelections(currentServices.map((service) => ({
+      serviceId: bookingServices.find((item) => item.name === service.name)?.id ?? "",
+      quantity: service.quantity,
+    })).filter((selection) => selection.serviceId));
+    setServiceRoomSelections({ [record.room.split(" · ")[0]]: currentServices.map((service) => ({
+      serviceId: bookingServices.find((item) => item.name === service.name)?.id ?? "",
+      quantity: service.quantity,
+    })).filter((selection) => selection.serviceId) });
+    setServiceRecord(record);
+  };
+
+  const saveRecordServices = () => {
+    if (!serviceRecord) return;
+    const selections = serviceRoomSelections[serviceRecord.room.split(" · ")[0]] ?? serviceSelections;
+    setRecordServices((current) => ({
+      ...current,
+      [serviceRecord.id]: selections.map((selection) => ({
+        name: bookingServices.find((service) => service.id === selection.serviceId)?.name ?? "Dịch vụ",
+        quantity: selection.quantity,
+        amount: (bookingServices.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity,
+      })),
+    }));
+    setServiceRecord(null);
+  };
 
   const openRoomModal = (record: DailyRecord) => {
     const [roomId, roomType] = record.room.split(" · ");
@@ -1061,7 +1130,7 @@ export default function CheckInOutWorkspace() {
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" onClick={() => setGroupCheckoutOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600">Hủy</button>
-              <button type="button" onClick={() => confirmGroupCheckout()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><CreditCard size={16} />Thanh toán & Check-out</button>
+              <button type="button" onClick={() => confirmGroupCheckout()} className="flex w-56 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><CreditCard size={16} />Thanh toán & Check-out</button>
             </div>
           </div>
         </div>
