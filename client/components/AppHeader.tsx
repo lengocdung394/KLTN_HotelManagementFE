@@ -1,5 +1,6 @@
 import { Bell, Menu } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useAppSelector } from "../store/hooks";
 
 type AppHeaderProps = {
   onMenuClick?: () => void;
@@ -8,7 +9,8 @@ type AppHeaderProps = {
 
 export default function AppHeader({ onMenuClick, fullName }: AppHeaderProps) {
   const { t } = useTranslation();
-  const displayName = fullName?.trim() || "Người dùng";
+  const auth = useAppSelector((state) => state.auth);
+  const displayName = fullName?.trim() || auth.fullName?.trim() || auth.email?.trim() || "Người dùng";
   const initials = displayName
     .split(/\s+/)
     .map((part) => part[0])
