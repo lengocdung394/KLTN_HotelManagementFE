@@ -4,7 +4,10 @@ import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHor
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import { Label } from "@radix-ui/react-label";
-import { useGetRoomStatusesQuery, useGetRoomTypesQuery } from "../services/roomApi";
+import { useCreateRoomMutation, useGetRoomStatusesQuery, useGetRoomTypesQuery } from "../services/roomApi";
+import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
+import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
+import { useAppSelector } from "../store/hooks";
 
 type ImportedRoomRow = Record<string, string>;
 
@@ -255,8 +258,10 @@ const emptyFloorForm = { name: "" };
 
 export default function RoomWorkspace() {
   const { t } = useTranslation();
+  const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: apiRoomTypes, isLoading: isRoomTypesLoading, isError: isRoomTypesError } = useGetRoomTypesQuery();
   const { data: apiRoomStatuses, isLoading: isRoomStatusesLoading, isError: isRoomStatusesError } = useGetRoomStatusesQuery();
+  const [createRoom, { isLoading: isCreatingRoom }] = useCreateRoomMutation();
   const availableRoomTypes = apiRoomTypes ?? [];
   const availableRoomStatuses = apiRoomStatuses ?? [];
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
@@ -283,6 +288,9 @@ export default function RoomWorkspace() {
       return initialFloors;
     }
   });
+  const [selectedBuildingId, setSelectedBuildingId] = useState("");
+  const { data: apiBuildings } = useGetBuildingsByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { data: apiFloors, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(Number(selectedBuildingId), { skip: !selectedBuildingId || Number.isNaN(Number(selectedBuildingId)) });
   const [rooms, setRooms] = useState<Room[]>(() => {
     if (typeof window === "undefined") return initialRooms;
     const stored = window.localStorage.getItem("staywise-cleaning-rooms");
@@ -306,12 +314,46 @@ export default function RoomWorkspace() {
   const [importingRooms, setImportingRooms] = useState(false);
   const [detailRoom, setDetailRoom] = useState<Room | null>(null);
   const [createRoomForm, setCreateRoomForm] = useState<CreateRoomFormState>(emptyCreateRoomForm);
+  const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
   const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
+  const getApiValue = (item: Record<string, unknown>, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
+  const apiFloorOptions = (apiFloors ?? []).map((item) => {
+    const id = getApiValue(item, ["id", "floorId", "floorID"]);
+    const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
+    return { id: String(id ?? ""), name: String(name ?? id ?? "") };
+  }).filter((item) => item.id && item.name);
+  useEffect(() => {
+    if (!apiBuildings) return;
+    const nextBuildings = apiBuildings.map((item) => {
+      const id = getApiValue(item, ["id", "buildingId", "buildingID"]);
+      const name = getApiValue(item, ["name", "buildingName", "buildingCode", "code"]);
+      return { id: String(id ?? ""), name: String(name ?? id ?? "Tòa nhà") };
+    }).filter((item) => item.id);
+    setBuildings(nextBuildings);
+    setSelectedBuildingId((current) => nextBuildings.some((item) => item.id === current) ? current : (nextBuildings[0]?.id ?? ""));
+    setCreateRoomForm((current) => ({
+      ...current,
+      building: nextBuildings.some((item) => item.id === current.building) ? current.building : (nextBuildings[0]?.id ?? current.building),
+    }));
+  }, [apiBuildings]);
+  useEffect(() => {
+    if (!apiFloors) return;
+    const nextFloors = apiFloors.map((item) => {
+      const id = getApiValue(item, ["id", "floorId", "floorID"]);
+      const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
+      return String(name ?? id ?? "");
+    }).filter(Boolean);
+    setFloors(nextFloors);
+    setCreateRoomForm((current) => ({
+      ...current,
+      floor: apiFloorOptions.some((item) => item.id === current.floor) ? current.floor : (apiFloorOptions[0]?.id ?? current.floor),
+    }));
+  }, [apiFloors]);
   useEffect(() => {
     setCreateRoomForm((current) => ({
       ...current,
@@ -390,6 +432,7 @@ export default function RoomWorkspace() {
     setCreateRoomForm(emptyCreateRoomForm);
     setAmenitySearch("");
     setShowAmenityMenu(false);
+    setRoomImageFiles([]);
   };
   const openEditRoomModal = (room: Room) => {
     const details = roomFormDefaults(room.name);
@@ -470,7 +513,9 @@ export default function RoomWorkspace() {
   const clearAllAmenities = () => setCreateRoomForm((current) => ({ ...current, amenities: [] }));
   const addImages = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const nextImages = Array.from(files).map((file) => URL.createObjectURL(file));
+    const selectedFiles = Array.from(files);
+    const nextImages = selectedFiles.map((file) => URL.createObjectURL(file));
+    setRoomImageFiles((current) => [...current, ...selectedFiles].slice(0, 8));
     setCreateRoomForm((current) => {
       const mergedImages = [...current.images, ...nextImages].slice(0, 8);
       const nextDefault = current.defaultImage ?? mergedImages[0] ?? null;
@@ -478,11 +523,13 @@ export default function RoomWorkspace() {
     });
   };
   const removeImage = (image: string) => setCreateRoomForm((current) => {
+    const removedIndex = current.images.indexOf(image);
     const remaining = current.images.filter((item) => item !== image);
     const nextDefault = current.defaultImage === image ? (remaining[0] ?? null) : current.defaultImage;
+    setRoomImageFiles((files) => files.filter((_, index) => index !== removedIndex));
     return { ...current, images: remaining, defaultImage: nextDefault };
   });
-  const saveRoom = () => {
+  const saveRoom = async () => {
     const roomCode = editingRoomId ?? generatedRoomCode;
     const roomType = createRoomForm.roomType.trim();
     const roomDetails = roomTypeDetails[roomType] ?? roomTypeDetails["Standard Room"];
@@ -500,6 +547,34 @@ export default function RoomWorkspace() {
     }
     if (!editingRoomId && rooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase())) {
       window.alert("Mã phòng tự tạo bị trùng, vui lòng thử lại.");
+      return;
+    }
+    if (!editingRoomId) {
+      if (roomImageFiles.length === 0) {
+        window.alert("Vui lòng tải lên ít nhất một ảnh phòng.");
+        return;
+      }
+      const selectedFloor = apiFloors?.find((item) => {
+        const id = getApiValue(item, ["id", "floorId", "floorID"]);
+        const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
+        return String(id) === createRoomForm.floor || String(name) === createRoomForm.floor;
+      });
+      const floorId = Number(getApiValue(selectedFloor ?? {}, ["id", "floorId"]));
+      if (!Number.isInteger(floorId) || floorId <= 0) {
+        window.alert("Vui lòng chọn tầng hợp lệ.");
+        return;
+      }
+      const defaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
+      try {
+        await createRoom({
+          roomInfo: { floorId, roomStatus: createRoomForm.status || "Sẵn sàng", roomType, basePrice: price, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds: [] },
+          imageFiles: roomImageFiles,
+        }).unwrap();
+        closeCreateRoomModal();
+        window.alert("Thêm phòng mới thành công!");
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Không thể thêm phòng.");
+      }
       return;
     }
     const orderedImages = createRoomForm.defaultImage
@@ -580,7 +655,11 @@ export default function RoomWorkspace() {
     </div>
     <div className="flex border-b border-slate-100 bg-slate-50/60 p-2"><button type="button" onClick={() => setActiveTab("rooms")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button><button type="button" onClick={() => setActiveTab("buildings")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button><button type="button" onClick={() => setActiveTab("floors")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button></div>
     {activeTab === "buildings" && <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} />}
-    {activeTab === "floors" && <FloorManagementPanel floors={floors} rooms={rooms} onEdit={openEditFloorModal} />}
+    {activeTab === "floors" && <>
+      {isFloorsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tầng của tòa nhà này.</p>}
+      {(isFloorsLoading || isFloorsFetching) && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tầng...</p>}
+      <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} />
+    </>}
     {activeTab === "rooms" && <>
     <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row">
       <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></div>
@@ -639,7 +718,7 @@ export default function RoomWorkspace() {
 
             <div className="flex items-center gap-2">
               <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Hủy</button>
-              <button type="button" onClick={saveRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700">{editingRoomId ? "Lưu thay đổi" : "Lưu phòng"}</button>
+              <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom ? "Đang lưu..." : editingRoomId ? "Lưu thay đổi" : "Lưu phòng"}</button>
             </div>
           </div>
 
@@ -662,7 +741,7 @@ export default function RoomWorkspace() {
 
                   <label className="block text-sm font-semibold text-slate-700">
                     Tòa nhà <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.building} onChange={(event) => setCreateRoomForm((current) => ({ ...current, building: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                    <select value={createRoomForm.building} onChange={(event) => { const buildingId = event.target.value; setSelectedBuildingId(buildingId); setCreateRoomForm((current) => ({ ...current, building: buildingId, floor: "" })); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
                   </label>
@@ -671,9 +750,9 @@ export default function RoomWorkspace() {
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     Tầng <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
-                      {Array.from(new Set(["1", "2", "3", "4", ...floors.map((floor) => floor.match(/\d+/)?.[0] ?? "1")])).map((value) => (
-                        <option key={value} value={value}>{`Tầng ${value}`}</option>
+                    <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} disabled={isFloorsLoading || isFloorsFetching || apiFloorOptions.length === 0} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
+                      {isFloorsLoading || isFloorsFetching ? <option value="">Đang tải tầng...</option> : apiFloorOptions.length === 0 ? <option value="">Chưa có tầng</option> : apiFloorOptions.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name.startsWith("Tầng") ? item.name : `Tầng ${item.name}`}</option>
                       ))}
                     </select>
                   </label>

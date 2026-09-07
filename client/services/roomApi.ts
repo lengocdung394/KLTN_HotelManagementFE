@@ -6,8 +6,20 @@ interface ApiResponse<T> {
   result: T;
 }
 
+export type RoomResponse = Record<string, unknown>;
+
 export const roomApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    createRoom: builder.mutation<RoomResponse, { roomInfo: { floorId: number; roomStatus: string; roomType: string; basePrice: number; defaultImageIndex: number; amenityIds: number[] }; imageFiles: File[] }>({
+      query: ({ roomInfo, imageFiles }) => {
+        const formData = new FormData();
+        formData.append("roomInfo", new Blob([JSON.stringify(roomInfo)], { type: "application/json" }));
+        imageFiles.forEach((file) => formData.append("avatarUrl", file));
+        return { url: "/rooms/create", method: "POST", data: formData };
+      },
+      transformResponse: (response: ApiResponse<RoomResponse>) => response?.result ?? {},
+      invalidatesTags: ["Room"],
+    }),
     // Trả về mảng string[] từ Backend
     getRoomTypes: builder.query<string[], void>({
       query: () => ({
@@ -24,7 +36,16 @@ export const roomApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: ApiResponse<string[]>) => response?.result ?? [],
     }),
+
+    getRoomsByFloorId: builder.query<RoomResponse[], number>({
+      query: (floorId) => ({
+        url: "/room/getRoomsByFloorId",
+        method: "GET",
+        params: { floorId },
+      }),
+      transformResponse: (response: ApiResponse<RoomResponse[]>) => response?.result ?? [],
+    }),
   }),
 });
 
-export const { useGetRoomTypesQuery, useGetRoomStatusesQuery } = roomApi;
+export const { useCreateRoomMutation, useGetRoomTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery } = roomApi;

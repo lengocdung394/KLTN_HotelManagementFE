@@ -21,6 +21,7 @@ import CustomerWorkspace from "./CustomerWorkspace";
 import AppHeader from "../components/AppHeader";
 import UserProfileCard from "../components/UserProfileCard";
 import ScrollControls from "../components/ScrollControls";
+import { useAppSelector } from "../store/hooks";
 
 const navigation = [
   ["/overview", "overview", LayoutDashboard],
@@ -44,6 +45,8 @@ export default function CustomerPage({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
   const location = useLocation();
   const [mobile, setMobile] = useState(false);
+  const { hotelName } = useAppSelector((state) => state.auth);
+  const branchLabel = hotelName || "Tất cả chi nhánh";
   return (
     <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
       <aside
@@ -51,12 +54,12 @@ export default function CustomerPage({ onLogout }: { onLogout: () => void }) {
       >
         <div className="h-5" />
         <div className="mt-2 px-3">
-          <button type="button" className="flex h-11 w-full items-center justify-between rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-800/80">
-            <span className="flex items-center gap-2.5">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-amber-300 text-[11px] font-bold text-amber-950">M</span>
-              Sen Việt
+          <button type="button" className="flex h-11 min-h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-800/80">
+            <span className="flex w-0 min-w-0 flex-1 items-center gap-2.5">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-300 text-[11px] font-bold text-amber-950">M</span>
+              <span className="truncate">{branchLabel}</span>
             </span>
-            <ChevronDown size={15} className="text-blue-200" />
+            <ChevronDown size={15} className="ml-2 shrink-0 text-blue-200" />
           </button>
         </div>
         <nav className="mt-8 min-h-0 flex-1 space-y-1 overflow-y-auto">

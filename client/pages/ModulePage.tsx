@@ -17,6 +17,7 @@ import CustomerWorkspace from "./CustomerWorkspace";
 import AppHeader from "../components/AppHeader";
 import UserProfileCard from "../components/UserProfileCard";
 import ScrollControls from "../components/ScrollControls";
+import { useAppSelector } from "../store/hooks";
 
 const items = [
   ["/overview", "overview", LayoutDashboard],
@@ -39,7 +40,7 @@ const content: Record<string, { eyebrow: string; title: string; description: str
   "/bookings": { eyebrow: "Vận hành lưu trú", title: "Đặt phòng", description: "Quản lý lịch đặt phòng, khách lưu trú và lịch check-in / check-out.", stats: [["Đặt phòng hôm nay", "12"], ["Đang chờ xác nhận", "04"], ["Check-in hôm nay", "08"], ["Doanh thu dự kiến", "18.650.000đ"]] },
   "/customers": { eyebrow: "Quan hệ khách hàng", title: "Quản lý khách hàng", description: "Quản lý hồ sơ, lịch sử lưu trú và chăm sóc khách quay lại.", stats: [["Tổng khách hàng", "04"], ["Khách thân thiết", "02"], ["Khách quay lại tháng này", "12"], ["Chi tiêu trung bình", "5,8tr"]] },
   "/check-in-out": { eyebrow: "Vận hành lễ tân", title: "Check-in / Check-out", description: "Quản lý nhận phòng, trả phòng và trạng thái lưu trú của khách trong ngày.", stats: [["Chờ check-in", "02"], ["Đang lưu trú", "02"], ["Chờ check-out", "02"], ["Đã hoàn tất", "01"]] },
-  "/promotions": { eyebrow: "Kinh doanh & chăm sóc khách", title: "Khuyến mãi", description: "Tạo ưu đãi và quản lý mã giảm giá cho khách lưu trú tại Sen Việt.", stats: [["Đang hoạt động", "02"], ["Lượt sử dụng tháng này", "128"], ["Tiết kiệm cho khách", "18,6tr"], ["Sắp hết hạn", "01"]] },
+  "/promotions": { eyebrow: "Kinh doanh & chăm sóc khách", title: "Khuyến mãi", description: "Tạo ưu đãi và quản lý mã giảm giá cho khách lưu trú tại chi nhánh.", stats: [["Đang hoạt động", "02"], ["Lượt sử dụng tháng này", "128"], ["Tiết kiệm cho khách", "18,6tr"], ["Sắp hết hạn", "01"]] },
   "/services": { eyebrow: "Vận hành lưu trú", title: "Dịch vụ", description: "Quản lý các dịch vụ bổ sung dành cho khách lưu trú.", stats: [["Dịch vụ đang bán", "06"], ["Đã sử dụng hôm nay", "18"], ["Doanh thu dịch vụ", "4,8tr"]] },
   "/rooms": { eyebrow: "Quản lý tài sản", title: "Phòng", description: "Theo dõi tình trạng phòng, loại phòng và phân công dọn dẹp tại chi nhánh.", stats: [["Tổng số phòng", "24"], ["Sẵn sàng", "16"], ["Đang sử dụng", "05"], ["Bảo trì", "03"]] },
   "/tasks": { eyebrow: "Đội ngũ vận hành", title: "Công việc", description: "Phân công dọn phòng, xử lý yêu cầu và theo dõi tiến độ theo ca.", stats: [["Việc cần làm", "09"], ["Đang xử lý", "04"], ["Đã hoàn tất", "27"]] },
@@ -47,7 +48,7 @@ const content: Record<string, { eyebrow: string; title: string; description: str
   "/staff": { eyebrow: "Quản trị nhân sự", title: "Nhân viên & ca làm", description: "Quản lý nhân viên, chức vụ, lịch làm việc và phân công trong chi nhánh.", stats: [["Tổng nhân viên", "18"], ["Đang làm việc", "08"], ["Ca hôm nay", "03"], ["Nghỉ phép", "02"]] },
   "/permissions": { eyebrow: "Quản trị hệ thống", title: "Phân quyền", description: "Thiết lập vai trò và quyền truy cập cho từng nhóm nhân viên trong chi nhánh.", stats: [["Vai trò", "04"], ["Nhân viên", "18"], ["Quyền truy cập", "06"], ["Cập nhật gần nhất", "Hôm nay"]] },
   "/reports": { eyebrow: "Phân tích kinh doanh", title: "Báo cáo doanh thu", description: "Theo dõi công suất phòng, ADR, RevPAR và hiệu quả kinh doanh theo thời gian.", stats: [["Doanh thu tháng", "426,5tr"], ["Công suất phòng", "78%"], ["ADR", "1,42tr"], ["RevPAR", "1,11tr"]] },
-  "/settings": { eyebrow: "Thiết lập hệ thống", title: "Cài đặt", description: "Cấu hình chi nhánh, loại phòng, thông báo và quyền truy cập tài khoản.", stats: [["Chi nhánh", "Sen Việt"], ["Múi giờ", "GMT+7"], ["Ngôn ngữ", "Tiếng Việt"], ["Vai trò", "Quản lý"]] },
+  "/settings": { eyebrow: "Thiết lập hệ thống", title: "Cài đặt", description: "Cấu hình chi nhánh, loại phòng, thông báo và quyền truy cập tài khoản.", stats: [["Chi nhánh", ""], ["Múi giờ", "GMT+7"], ["Ngôn ngữ", "Tiếng Việt"], ["Vai trò", "Quản lý"]] },
 };
 
 const bookingRooms = [
@@ -83,6 +84,8 @@ function LanguageSettings() {
 
 export default function ModulePage({ path: routePath, onLogout }: { path: string; onLogout: () => void }) {
   const { t } = useTranslation();
+  const { hotelName } = useAppSelector((state) => state.auth);
+  const branchLabel = hotelName || "Tất cả chi nhánh";
   const [mobile, setMobile] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(true);
   const location = useLocation();
@@ -118,12 +121,12 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     eyebrow: t(`pages.${pageKey}.eyebrow`, basePage.eyebrow),
     title: t(`pages.${pageKey}.title`, basePage.title),
     description: t(`pages.${pageKey}.description`, basePage.description),
-    stats: basePage.stats.map(([label, value], index) => [t(`pages.${pageKey}.stats.${index}`, label), value] as [string, string]),
+    stats: basePage.stats.map(([label, value], index) => [t(`pages.${pageKey}.stats.${index}`, label), routePath === "/settings" && index === 0 ? branchLabel : value] as [string, string]),
   };
   return <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
     <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-blue-950 px-4 py-5 text-white transition-transform duration-200 ease-out lg:transition-none lg:translate-x-0 ${mobile ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="h-5" />
-      <div className="mt-2 px-3"><button type="button" className="flex h-11 w-full items-center justify-between rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-800/80"><span className="flex items-center gap-2.5"><span className="grid h-7 w-7 place-items-center rounded-lg bg-amber-300 text-[11px] font-bold text-amber-950">M</span>Sen Việt</span><ChevronDown size={15} className="text-blue-200" /></button></div>
+      <div className="mt-2 min-w-0 px-3"><button type="button" className="flex h-11 min-h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-800/80"><span className="flex w-0 min-w-0 flex-1 items-center gap-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-300 text-[11px] font-bold text-amber-950">M</span><span className="truncate">{branchLabel}</span></span><ChevronDown size={15} className="ml-2 shrink-0 text-blue-200" /></button></div>
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
         <nav className="mt-8 space-y-1">{items.map(([href, label, Icon]) => <Link key={href} to={href} onClick={() => setMobile(false)} className={`flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><span className="flex shrink-0 flex-nowrap items-center gap-3 whitespace-nowrap"><Icon size={17} />{t(`navigation.${label}`)}</span>{href === "/bookings" && <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px]">12</span>}</Link>)}</nav>
         <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">{t("common.administration")}</p><nav className="space-y-1">{adminItems.map(([href, label, Icon]) => <Link key={href} to={href} onClick={() => setMobile(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon size={17} />{t(`navigation.${label}`)}</Link>)}</nav>

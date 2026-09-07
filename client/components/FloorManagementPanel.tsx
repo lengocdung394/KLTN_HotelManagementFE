@@ -5,17 +5,23 @@ import { useTranslation } from "react-i18next";
 type FloorManagementPanelProps = {
   floors: string[];
   rooms: { floor: string }[];
+  buildings: { id: string; name: string }[];
+  selectedBuildingId: string;
+  onBuildingChange: (buildingId: string) => void;
   onEdit: (floor: string) => void;
 };
 
-export default function FloorManagementPanel({ floors, rooms, onEdit }: FloorManagementPanelProps) {
+export default function FloorManagementPanel({ floors, rooms, buildings, selectedBuildingId, onBuildingChange, onEdit }: FloorManagementPanelProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const filteredFloors = floors.filter((floor) => floor.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normalizedQuery));
 
   return <div className="border-b border-slate-100 p-4">
-    <div className="mb-3 flex justify-end">
+    <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row">
+      <select value={selectedBuildingId} onChange={(event) => onBuildingChange(event.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-64">
+        {buildings.map((building) => <option key={building.id} value={building.id}>{building.name}</option>)}
+      </select>
       <div className="relative w-full sm:w-64">
         <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("room.searchFloors", "Tìm tầng nhà...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
