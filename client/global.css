@@ -501,6 +501,7 @@
   .text-violet-500 { color: rgb(59 130 246) !important; }
   .text-violet-800 { color: rgb(30 64 175) !important; }
   .text-violet-200 { color: rgb(191 219 254) !important; }
+  .text-orange-500 { color: rgb(37 99 235) !important; }
   .border-violet-500 { border-color: rgb(59 130 246) !important; }
   .border-violet-200 { border-color: rgb(191 219 254) !important; }
   .border-violet-300 { border-color: rgb(147 197 253) !important; }
@@ -534,6 +535,31 @@
     color: rgb(51 65 85) !important;
     font-weight: 800 !important;
   }
+
+  .payment-column > .rounded-xl.border.border-slate-200.bg-white > p:first-child,
+  .payment-column > .rounded-xl.border.border-slate-200.bg-white > p:nth-child(2) {
+    display: none;
+  }
+
+  .payment-column > .payment-heading {
+    margin-bottom: 0 !important;
+    border-bottom: 0 !important;
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+  }
+
+  .payment-column > .rounded-xl.border.border-slate-200.bg-white {
+    border-top: 0 !important;
+    border-radius: 0 0 0.75rem 0.75rem !important;
+  }
+
+  .promotion-panel.border-blue-100,
+  .promotion-panel .border-blue-100 { border-color: rgb(167 243 208) !important; }
+  .promotion-panel.bg-blue-50\/40 { background-color: rgb(236 253 245) !important; }
+  .promotion-panel .focus\:border-blue-400:focus { border-color: rgb(52 211 153) !important; }
+  .promotion-panel .bg-blue-600 { background-color: rgb(5 150 105) !important; }
+  .promotion-panel .hover\:bg-blue-700:hover { background-color: rgb(4 120 87) !important; }
+  .promotion-panel .text-blue-700 { color: rgb(4 120 87) !important; }
+  .promotion-panel .hover\:bg-blue-50:hover { background-color: rgb(236 253 245) !important; }
 
   section.mt-7.overflow-hidden > div.border-b > div.flex.items-center.gap-2 {
     gap: 0.25rem;

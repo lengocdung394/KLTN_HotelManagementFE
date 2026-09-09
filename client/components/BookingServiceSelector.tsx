@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Search } from "lucide-react";
+import { Ban, Check, ChevronRight, CreditCard, DoorOpen, ListChecks, ReceiptText, Search } from "lucide-react";
 
 export const bookingServices = [
   { id: "breakfast", name: "Bữa sáng", price: 120000 },
@@ -65,11 +65,26 @@ export default function BookingServiceSelector({ rooms, serviceMode, setServiceM
     });
   };
 
+  const scrollToServiceSection = (childIndex: number) => {
+    const section = document.querySelector<HTMLElement>(".booking-service-selector")?.children[childIndex] as HTMLElement | undefined;
+    if (!section) return;
+    const headerOffset = 96;
+    const modalScroller = section.closest<HTMLElement>(".booking-service-modal-scroll");
+    if (modalScroller) {
+      const targetTop = section.offsetTop - headerOffset;
+      modalScroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+      return;
+    }
+    const targetTop = section.getBoundingClientRect().top + window.scrollY - headerOffset;
+    window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+  };
+
   return <div className="booking-service-selector p-5">
     <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
       <button type="button" onClick={() => setServiceMode("all")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "all" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>Chọn cho tất cả phòng</button>
       <button type="button" onClick={() => setServiceMode("per-room")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "per-room" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>Chọn riêng từng phòng</button>
     </div>
+    <nav className="mt-3 grid grid-cols-1 gap-1 rounded-lg border border-blue-100 bg-blue-50/50 p-1" aria-label="Điều hướng trang dịch vụ"><div className="grid grid-cols-1 gap-1 sm:grid-cols-3"><button type="button" onClick={() => scrollToServiceSection(3)} className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-white"><ListChecks size={14} />Chọn dịch vụ</button><button type="button" onClick={() => scrollToServiceSection(4)} className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white"><DoorOpen size={14} />Thông tin phòng</button><button type="button" onClick={() => scrollToServiceSection(6)} className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-white"><ReceiptText size={14} />Tóm tắt chi phí</button></div><div className="mt-1 grid grid-cols-1 gap-1 border-t border-blue-100 pt-1 sm:grid-cols-2"><button type="button" onClick={onSkip} className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-white"><Ban size={14} />Bỏ qua dịch vụ</button><button type="button" onClick={onContinue} className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"><CreditCard size={14} />{continueLabel === "Xác nhận" ? <><Check size={14} />Xác nhận</> : "Thanh toán"}</button></div></nav>
     <label className="relative mt-4 block"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="search" value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} placeholder="Tìm dịch vụ..." aria-label="Tìm dịch vụ" className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
     {serviceMode === "all" ? <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {visibleServices(serviceSearch).map((service) => { const selection = allRoomServices.find((item) => item.serviceId === service.id); return <div key={service.id} className={`rounded-xl border-2 p-4 transition-colors ${selection ? "border-blue-500 bg-blue-50" : "border-blue-200 bg-white hover:border-blue-400"}`}><label className="flex min-w-0 items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => updateAllRoomService(service.id, event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="min-w-0"><strong className="block truncate text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{money(service.price)} / người</small></span></label></div>; })}
