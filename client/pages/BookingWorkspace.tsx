@@ -149,14 +149,6 @@ function DesktopCalendar({
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [timelineStart]);
 
-  // Move the rendered window to the selected date when it is chosen externally.
-  useEffect(() => {
-    if (checkIn) setTimelineStart((current) => {
-      const next = checkIn < todayValue ? todayValue : checkIn;
-      return current === next ? current : next;
-    });
-  }, [checkIn, todayValue]);
-
   const scrollByDays = (days: number) => {
     setTimelineStart((current) => {
       const next = shiftDay(current, days);
@@ -335,7 +327,7 @@ function DesktopCalendar({
               <div className="sticky left-0 top-0 z-20 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
-                  disabled={Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, checkIn, checkOut)}
+                  disabled={Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, selectedRanges[room.id]?.checkIn ?? checkIn, selectedRanges[room.id]?.checkOut ?? checkOut)}
                   onClick={() => {
                     if (selected.includes(room.id)) {
                       const remainingRooms = selected.filter((id) => id !== room.id);

@@ -682,7 +682,7 @@ export default function CheckInOutWorkspace() {
   const saveRecordServices = () => {
     if (!serviceRecord) return;
     const selections = serviceModalMode === "all"
-      ? serviceSelectorRooms.flatMap((room) => serviceAllSelections.map((selection) => ({ ...selection, quantity: selection.quantity * room.guests })))
+      ? serviceSelectorRooms.flatMap((room) => serviceRoomSelections[room.id] ?? serviceAllSelections.map((selection) => ({ ...selection, quantity: room.guests })))
       : Object.values(serviceRoomSelections).flat().length > 0 ? Object.values(serviceRoomSelections).flat() : serviceSelections;
     const mergedSelections = selections.reduce<ServiceSelection[]>((current, selection) => {
       const existing = current.find((item) => item.serviceId === selection.serviceId);
