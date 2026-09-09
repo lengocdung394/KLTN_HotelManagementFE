@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, QrCode, Search, UsersRound, Wallet } from "lucide-react";
+import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
 import GuestRoomForms, { type BookingGuest } from "./GuestRoomForms";
 import BookingServiceSelector, { bookingServices, type ServiceSelection } from "../components/BookingServiceSelector";
+import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
 
 const legacyRooms = [
   { id: "A-1-1", type: "Standard Room", beds: "1 giường đơn", size: "25 m²", guests: 1, price: 1000000, amenity: "Điều hòa · TV · Phòng tắm riêng" },
@@ -148,14 +149,6 @@ function DesktopCalendar({
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
   }, [timelineStart]);
-
-  // Move the rendered window to the selected date when it is chosen externally.
-  useEffect(() => {
-    if (checkIn) setTimelineStart((current) => {
-      const next = checkIn < todayValue ? todayValue : checkIn;
-      return current === next ? current : next;
-    });
-  }, [checkIn, todayValue]);
 
   const scrollByDays = (days: number) => {
     setTimelineStart((current) => {
@@ -335,7 +328,7 @@ function DesktopCalendar({
               <div className="sticky left-0 top-0 z-20 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
-                  disabled={Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, checkIn, checkOut)}
+                  disabled={Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, selectedRanges[room.id]?.checkIn ?? checkIn, selectedRanges[room.id]?.checkOut ?? checkOut)}
                   onClick={() => {
                     if (selected.includes(room.id)) {
                       const remainingRooms = selected.filter((id) => id !== room.id);
@@ -446,6 +439,7 @@ export default function BookingWorkspace() {
   const [roomServices, setRoomServices] = useState<Record<string, ServiceSelection[]>>({});
   const [collapsedSummaryRooms, setCollapsedSummaryRooms] = useState<string[]>([]);
   const [expandedServiceRoom, setExpandedServiceRoom] = useState<string | null>(null);
+  const [appliedPromotion, setAppliedPromotion] = useState<SelectedPromotion | null>(null);
 
   const hasDates = Boolean(checkIn && checkOut);
   const nights = hasDates ? Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : 0;
@@ -487,7 +481,12 @@ export default function BookingWorkspace() {
   const serviceTotal = serviceMode === "all"
     ? selectedRooms.reduce((sum, room) => sum + getRoomServiceTotal(room, allRoomServices), 0)
     : selectedRooms.reduce((sum, room) => sum + getServiceTotal(roomServices[room.id] ?? []), 0);
-  const total = roomTotal + serviceTotal;
+  const subtotal = roomTotal + serviceTotal;
+  const discountAmount = appliedPromotion ? Math.round(subtotal * appliedPromotion.value / 100) : 0;
+  const total = subtotal - discountAmount;
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [step]);
   const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
   const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
   const canContinue = selected.length > 0 && selectedRooms.every((room) => {
@@ -664,25 +663,27 @@ export default function BookingWorkspace() {
         </div>
       ) : (
         <div className="grid gap-6 p-5 lg:grid-cols-[1fr_360px]">
-          <div>
+          <div className="payment-column">
+            {step === "payment" && <div className="payment-heading flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3"><CreditCard size={16} className="text-blue-600" /><div><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-0.5 text-xs text-slate-500">{t("booking.paymentRequired")}</p></div></div>}
             {step === "guest" ? <GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} /> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
+            {step === "payment" && <PromotionSelector onApply={setAppliedPromotion} />}
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
-            <p className="text-center text-xs font-bold uppercase tracking-wider text-amber-500">{t("booking.bookingSummary")}</p>
-            <p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-amber-500">Thông tin người đặt</p>
+            <p className="text-center text-xs font-bold uppercase tracking-wider text-blue-600">{t("booking.bookingSummary")}</p>
+            <p className="mt-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UserRound size={14} />Thông tin người đặt</p>
             <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
               <p className="mt-1 text-sm font-bold text-slate-800">{bookingGuest.name || "Chưa nhập tên người đặt"}</p>
               <p className="mt-0.5 text-xs text-slate-500">{bookingGuest.phone || "Chưa nhập số điện thoại"}</p>
             </div>
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Thông tin phòng</p>
-                <p className="mt-1 text-sm font-bold text-slate-800">{selected.length} {t("booking.rooms")} · {nights} {t("booking.nights")}</p>
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UsersRound size={14} />Thông tin phòng</p>
+                <p className="mt-2 text-sm font-bold text-slate-800">{selected.length} {t("booking.rooms")} · {nights} {t("booking.nights")}</p>
               </div>
               <span className="text-xs font-semibold text-slate-500">{hasDifferentStayPeriods ? "Nhiều lịch" : "Đã chọn"}</span>
             </div>
             {!hasDifferentStayPeriods && summaryRanges[0] && <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs font-semibold text-slate-600">
-              <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-amber-500" /><span>{t("booking.checkInDate", "Check-in")}: {formatDateLabel(summaryRanges[0].range.checkIn, "", i18n.language)}</span><span className="text-slate-300">→</span><span>{t("booking.checkOutDate", "Check-out")}: {formatDateLabel(summaryRanges[0].range.checkOut, "", i18n.language)}</span></div>
+              <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkInDate", "Check-in")}: {formatDateLabel(summaryRanges[0].range.checkIn, "", i18n.language)}</span><span className="text-slate-300">→</span><span>{t("booking.checkOutDate", "Check-out")}: {formatDateLabel(summaryRanges[0].range.checkOut, "", i18n.language)}</span></div>
             </div>}
             <div className="mt-3 space-y-3">
               {summaryRanges.map(({ room, range }) => {
@@ -693,15 +694,15 @@ export default function BookingWorkspace() {
                 return <div key={room.id} className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50/40 text-xs">
                   <button type="button" onClick={() => setCollapsedSummaryRooms((current) => isSummaryRoomCollapsed ? current.filter((id) => id !== room.id) : [...current, room.id])} aria-expanded={!isSummaryRoomCollapsed} className="flex w-full items-start justify-between gap-3 border-b border-blue-100 bg-white/70 px-3 py-3 text-left transition hover:bg-white">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500">{room.type}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600">{room.type}</p>
                       <strong className="mt-1 block text-base font-bold text-blue-700">{room.id}</strong>
                     </div>
                     <span className="flex shrink-0 items-center gap-2"><strong className="text-sm text-blue-700">{money(roomSubtotal)}</strong><ChevronDown size={16} className={`text-blue-500 transition-transform ${isSummaryRoomCollapsed ? "-rotate-90" : ""}`} /></span>
                   </button>
                   {!isSummaryRoomCollapsed && <div className="space-y-2 px-3 py-3 text-slate-600">
-                    <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-amber-500" /><span>{t("booking.checkInDate", "Nhận")}: {formatDateLabel(range.checkIn, "", i18n.language)}</span></div>
-                    <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-amber-500" /><span>{t("booking.checkOutDate", "Trả")}: {formatDateLabel(range.checkOut, "", i18n.language)}</span></div>
-                    <div className="flex items-center gap-2"><UsersRound size={14} className="shrink-0 text-amber-500" /><span>{room.guests} người · {nightsForRoom(room.id)} đêm</span></div>
+                    <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkInDate", "Nhận")}: {formatDateLabel(range.checkIn, "", i18n.language)}</span></div>
+                    <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkOutDate", "Trả")}: {formatDateLabel(range.checkOut, "", i18n.language)}</span></div>
+                    <div className="flex items-center gap-2"><UsersRound size={14} className="shrink-0 text-blue-600" /><span>{room.guests} người · {nightsForRoom(room.id)} đêm</span></div>
                     <div className="my-2 border-t border-blue-100" />
                     <div className="flex justify-between gap-3"><span>Tiền phòng</span><span className="font-medium text-slate-800">{money(room.price * nightsForRoom(room.id))}</span></div>
                     <div className="flex justify-between gap-3"><span>Dịch vụ</span><span className="text-right font-medium text-slate-800">{roomServiceTotal ? money(roomServiceTotal) : "Chưa chọn"}</span></div>
@@ -711,10 +712,12 @@ export default function BookingWorkspace() {
               })}
             </div>
             <div className="my-4 border-t border-slate-200" />
+            {appliedPromotion && <div className="mb-2 flex justify-between text-sm text-emerald-600"><span>Khuyến mãi ({appliedPromotion.code})</span><span>-{money(discountAmount)}</span></div>}
             <div className="flex justify-between text-sm font-bold text-slate-900">
               <span>{t("booking.total")}</span>
               <span className="text-violet-700">{money(total)}</span>
             </div>
+            {appliedPromotion && <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold text-emerald-700">Khuyến mãi đã chọn: {appliedPromotion.code}</span><span className="font-bold text-emerald-700">-{money(discountAmount)}</span></div>}
             {step === "payment" && <>
               <p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-violet-500">Thông tin thanh toán</p>
               <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
