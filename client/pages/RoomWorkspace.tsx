@@ -4,7 +4,8 @@ import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHor
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import { Label } from "@radix-ui/react-label";
-import { useCreateRoomMutation, useGetRoomStatusesQuery, useGetRoomTypesQuery } from "../services/roomApi";
+import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
+import { useGetAllAmenitiesQuery } from "../services/amenityApi.ts";
 import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useAppSelector } from "../store/hooks";
@@ -90,42 +91,6 @@ const parseXlsx = async (data: ArrayBuffer): Promise<ImportedRoomRow[]> => {
   return rows.map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])));
 };
 
-const roomImages = [
-  "https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg",
-  "https://images.pexels.com/photos/20666872/pexels-photo-20666872.jpeg",
-  "https://images.pexels.com/photos/5774037/pexels-photo-5774037.jpeg",
-  "https://images.pexels.com/photos/6394574/pexels-photo-6394574.jpeg",
-];
-const legacyRooms = [
-  { id: "A-1-1", name: "Standard Room", images: roomImages, floor: "Tầng 1", size: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "1 người lớn + 1 trẻ nhỏ + 1 em bé", price: 1000000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV", "Phòng tắm riêng", "Wifi"] },
-  { id: "A-1-2", name: "Standard Room", images: roomImages, floor: "Tầng 1", size: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "1 người lớn + 1 trẻ nhỏ + 1 em bé", price: 1000000, status: "Đang dọn", cleaner: "Nguyễn Thị Mai", services: ["Điều hòa", "TV", "Minibar", "Baby Cot"] },
-  { id: "A-1-3", name: "Standard Room", images: roomImages, floor: "Tầng 1", size: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "1 người lớn + 1 trẻ nhỏ + 1 em bé", price: 1000000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV", "Phòng tắm riêng", "Ấm đun nước"] },
-  { id: "A-1-4", name: "Standard Room", images: roomImages, floor: "Tầng 1", size: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "1 người lớn + 1 trẻ nhỏ + 1 em bé", price: 1000000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV", "Phòng tắm riêng", "Wifi"] },
-  { id: "A-1-5", name: "Standard Room", images: roomImages, floor: "Tầng 1", size: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "1 người lớn + 1 trẻ nhỏ + 1 em bé", price: 1000000, status: "Bảo trì", cleaner: "", services: ["Điều hòa", "TV", "Ấm đun nước", "Baby Cot"] },
-  { id: "A-2-1", name: "Superior Room", images: [roomImages[1], roomImages[0], roomImages[2], roomImages[3]], floor: "Tầng 2", size: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, guestPolicy: "2 người lớn + 2 trẻ nhỏ + 1 em bé", price: 1500000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV", "Bồn tắm", "Wifi"] },
-  { id: "A-2-2", name: "Superior Room", images: [roomImages[1], roomImages[0], roomImages[2], roomImages[3]], floor: "Tầng 2", size: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, guestPolicy: "2 người lớn + 2 trẻ nhỏ + 1 em bé", price: 1500000, status: "Đang ở", cleaner: "", services: ["Điều hòa", "TV", "Minibar", "Baby Cot"] },
-  { id: "A-2-3", name: "Superior Room", images: [roomImages[1], roomImages[0], roomImages[2], roomImages[3]], floor: "Tầng 2", size: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, guestPolicy: "2 người lớn + 2 trẻ nhỏ + 1 em bé", price: 1500000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV", "Bàn làm việc", "Wifi"] },
-  { id: "A-2-4", name: "Superior Room", images: [roomImages[1], roomImages[0], roomImages[2], roomImages[3]], floor: "Tầng 2", size: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, guestPolicy: "2 người lớn + 2 trẻ nhỏ + 1 em bé", price: 1500000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV", "Bồn tắm", "Wifi"] },
-  { id: "A-2-5", name: "Superior Room", images: [roomImages[1], roomImages[0], roomImages[2], roomImages[3]], floor: "Tầng 2", size: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, guestPolicy: "2 người lớn + 2 trẻ nhỏ + 1 em bé", price: 1500000, status: "Đang dọn", cleaner: "", services: ["Điều hòa", "TV", "Minibar", "Baby Cot"] },
-  { id: "B-3-1", name: "Deluxe Room", images: [roomImages[2], roomImages[3], roomImages[0], roomImages[1]], floor: "Tầng 3", size: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "2 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2000000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV màn hình lớn", "Minibar", "Vòi sen massage"] },
-  { id: "B-3-2", name: "Deluxe Room", images: [roomImages[2], roomImages[3], roomImages[0], roomImages[1]], floor: "Tầng 3", size: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "2 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2000000, status: "Đang dọn", cleaner: "Lê Thị Hương", services: ["Điều hòa", "Khu vực tiếp khách", "Bồn tắm", "Wifi"] },
-  { id: "B-3-3", name: "Deluxe Room", images: [roomImages[2], roomImages[3], roomImages[0], roomImages[1]], floor: "Tầng 3", size: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "2 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2000000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV màn hình lớn", "Minibar", "Phòng tắm cao cấp"] },
-  { id: "B-3-4", name: "Deluxe Room", images: [roomImages[2], roomImages[3], roomImages[0], roomImages[1]], floor: "Tầng 3", size: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "2 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2000000, status: "Sẵn sàng", cleaner: "", services: ["Điều hòa", "TV màn hình lớn", "Minibar", "Vòi sen massage"] },
-  { id: "B-3-5", name: "Deluxe Room", images: [roomImages[2], roomImages[3], roomImages[0], roomImages[1]], floor: "Tầng 3", size: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "2 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2000000, status: "Bảo trì", cleaner: "", services: ["Điều hòa", "Khu vực tiếp khách", "Bồn tắm", "Wifi"] },
-  { id: "C-4-1", name: "Suite Room", images: [roomImages[3], roomImages[2], roomImages[1], roomImages[0]], floor: "Tầng 4", size: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, guestPolicy: "3 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2500000, status: "Sẵn sàng", cleaner: "", services: ["Phòng khách riêng", "Khu vực làm việc", "Bồn tắm", "Baby Cot"] },
-  { id: "C-4-2", name: "Suite Room", images: [roomImages[3], roomImages[2], roomImages[1], roomImages[0]], floor: "Tầng 4", size: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, guestPolicy: "3 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2500000, status: "Đang ở", cleaner: "", services: ["Phòng khách riêng", "Ban công riêng", "Bồn tắm", "Wifi"] },
-  { id: "C-4-3", name: "Suite Room", images: [roomImages[3], roomImages[2], roomImages[1], roomImages[0]], floor: "Tầng 4", size: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, guestPolicy: "3 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2500000, status: "Sẵn sàng", cleaner: "", services: ["Phòng khách riêng", "Khu vực làm việc", "Minibar", "Baby Cot"] },
-  { id: "C-4-4", name: "Suite Room", images: [roomImages[3], roomImages[2], roomImages[1], roomImages[0]], floor: "Tầng 4", size: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, guestPolicy: "3 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2500000, status: "Sẵn sàng", cleaner: "", services: ["Phòng khách riêng", "Khu vực làm việc", "Bồn tắm", "Baby Cot"] },
-  { id: "C-4-5", name: "Suite Room", images: [roomImages[3], roomImages[2], roomImages[1], roomImages[0]], floor: "Tầng 4", size: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, guestPolicy: "3 người lớn + 1 trẻ nhỏ + 1 em bé", price: 2500000, status: "Đang ở", cleaner: "", services: ["Phòng khách riêng", "Ban công riêng", "Minibar", "Wifi"] },
-];
-
-type RoomDefinition = { name: string; size: string; beds: string; capacity: number; price: number; services: string[] };
-const roomDefinitions: Record<1 | 2 | 3 | 4, RoomDefinition> = {
-  1: { name: "Standard Room", size: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, price: 1000000, services: ["Điều hòa", "TV", "Phòng tắm riêng", "Wifi"] },
-  2: { name: "Superior Room", size: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, price: 1500000, services: ["Điều hòa", "TV", "Bồn tắm", "Wifi"] },
-  3: { name: "Deluxe Room", size: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, price: 2000000, services: ["Điều hòa", "TV màn hình lớn", "Minibar", "Vòi sen massage"] },
-  4: { name: "Suite Room", size: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, price: 2500000, services: ["Phòng khách riêng", "Khu vực làm việc", "Bồn tắm", "Baby Cot"] },
-};
 const buildingCodes = ["A", "B", "C", "D"] as const;
 type Building = { id: string; name: string };
 const initialBuildings: Building[] = buildingCodes.map((id) => ({ id, name: `Tòa ${id}` }));
@@ -138,6 +103,7 @@ const createBuildingCode = (currentBuildings: Building[]) => {
 };
 type RoomRecord = {
   id: string;
+  buildingName?: string;
   name: string;
   images: string[];
   floor: string;
@@ -150,29 +116,16 @@ type RoomRecord = {
   cleaner: string;
   services: string[];
 };
-const initialRooms: RoomRecord[] = buildingCodes.flatMap((building, buildingIndex) => [1, 2, 3, 4].flatMap((floor) => Array.from({ length: 5 }, (_, index) => {
-  const details = roomDefinitions[floor as keyof typeof roomDefinitions];
-  const roomNumber = index + 1;
-  return {
-    id: `${building}-${floor}-${roomNumber}`,
-    name: details.name,
-    images: roomImages.map((_, imageIndex) => roomImages[(imageIndex + floor + buildingIndex) % roomImages.length]),
-    floor: `Tầng ${floor}`,
-    size: details.size,
-    beds: details.beds,
-    capacity: details.capacity,
-    guestPolicy: `${details.capacity} người lớn + ${floor === 1 ? 1 : floor === 2 ? 2 : 1} trẻ nhỏ + 1 em bé`,
-    price: details.price,
-    status: building === "A" && floor === 1 && roomNumber === 2 ? "Đang dọn" : building === "B" && floor === 3 && roomNumber === 2 ? "Đang ở" : "Sẵn sàng",
-    cleaner: building === "A" && floor === 1 && roomNumber === 2 ? "Nguyễn Thị Mai" : "",
-    services: details.services,
-  };
-})));
-
 const employees = ["Nguyễn Thị Mai", "Lê Thị Hương", "Phạm Ngọc Anh", "Trần Minh Tú"];
 const statuses = ["Sẵn sàng", "Đang dọn", "Đang ở", "Bảo trì"];
 const initialFloors = ["Tầng 1", "Tầng 2", "Tầng 3", "Tầng 4"];
 const statusStyle: Record<string, string> = { "Sẵn sàng": "bg-emerald-50 text-emerald-700", "Đang dọn": "bg-amber-50 text-amber-700", "Đang ở": "bg-blue-50 text-blue-700", "Bảo trì": "bg-rose-50 text-rose-700" };
+const roomTypeLabels: Record<string, string> = { STANDARD: "Standard Room", DELUXE: "Deluxe Room", SUITE: "Suite Room", FAMILY: "Family Room" };
+const roomTypeValues: Record<string, string> = Object.fromEntries(Object.entries(roomTypeLabels).map(([value, label]) => [label, value]));
+const statusLabels: Record<string, string> = { READY: "Sẵn sàng", MAINTENANCE: "Bảo trì", IN_USE: "Đang ở", CLEANING: "Đang dọn" };
+const statusValues: Record<string, string> = Object.fromEntries(Object.entries(statusLabels).map(([value, label]) => [label, value]));
+const roomTypeLabel = (value: string) => roomTypeLabels[value] ?? value;
+const statusLabel = (value: string) => statusLabels[value] ?? value;
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 type Room = RoomRecord & { description?: string };
 
@@ -185,6 +138,8 @@ type CreateRoomFormState = {
   adults: string;
   children: string;
   infants: string;
+  extraAdultFee: string;
+  extraChildFee: string;
   bedType: string;
   description: string;
   amenities: string[];
@@ -193,42 +148,12 @@ type CreateRoomFormState = {
   status: string;
 };
 
-const amenityOptions = [
-  "Điều hòa",
-  "Két an toàn",
-  "Tủ lạnh nhỏ",
-  "Truyền hình cáp/Vệ tinh",
-  "Khăn tắm",
-  "Phòng tắm - vòi sen",
-  "Truy cập Internet qua WiFi",
-  "Không có cửa sổ",
-  "Đèn bàn",
-  "Dụng cụ pha cafe/trà",
-  "Bàn là/ủi",
-  "Phòng không hút thuốc",
-  "Điện thoại",
-  "Máy sấy tóc",
-  "Ra trải giường, gối",
-  "Cho phép vật nuôi",
-  "Đồ phòng tắm",
-];
-
 const roomTypeDetails: Record<string, { area: string; beds: string; capacity: number; guestPolicy: string; price: number; description: string }> = {
   "Standard Room": { area: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "Người lớn: 1 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 1000000, description: "Phòng tiêu chuẩn có giường ngủ, bàn làm việc, TV, điều hòa và phòng tắm riêng. Có thể trang bị thêm minibar và ấm đun nước." },
-  "Superior Room": { area: "30 m²", beds: "2 giường đơn (1m x 1,2m)", capacity: 2, guestPolicy: "Người lớn: 2 · Trẻ nhỏ dưới 11 tuổi: 2 · Em bé dưới 12 tháng: 1", price: 1500000, description: "Phòng cao cấp có không gian thoải mái, nội thất hiện đại, bàn làm việc rộng hơn, tầm nhìn đẹp và có thể có bồn tắm." },
   "Deluxe Room": { area: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "Người lớn: 2 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 2000000, description: "Phòng hạng sang rộng rãi với giường King Size, TV màn hình lớn, minibar, khu vực tiếp khách và phòng tắm cao cấp." },
   "Suite Room": { area: "60 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 3, guestPolicy: "Người lớn: 3 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 2500000, description: "Phòng Suite cao cấp gồm phòng khách riêng, phòng ngủ, khu vực làm việc và phòng tắm hiện đại; phù hợp cho gia đình, khách VIP hoặc doanh nhân." },
+  "Family Room": { area: "45 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 4, guestPolicy: "Người lớn: 4 · Trẻ nhỏ dưới 11 tuổi: 2 · Em bé dưới 12 tháng: 1", price: 2200000, description: "Phòng gia đình rộng rãi, phù hợp cho nhóm khách hoặc gia đình." },
 };
-const bedTypeOptions = [
-  "1 giường đơn (1m x 1,2m)",
-  "2 giường đơn (1m x 1,2m)",
-  "1 giường King Size (1,8m x 2m)",
-  "1 giường King Size + 1 giường đơn",
-];
-initialRooms.forEach((room) => {
-  const details = roomTypeDetails[room.name];
-  if (details) Object.assign(room, { guestPolicy: details.guestPolicy, description: `Mô tả phòng:\n${details.description}\n\nQuy định sức chứa:\n• Người lớn: ${details.guestPolicy.match(/Người lớn:\s*(\d+)/)?.[1] ?? details.capacity}\n• Trẻ nhỏ dưới 11 tuổi: ${details.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? 0}\n• Em bé dưới 12 tháng: ${details.guestPolicy.match(/Em bé dưới 12 tháng:\s*(\d+)/)?.[1] ?? 0}\n\nPhụ thu:\n• 500.000đ mỗi người vượt quy định\n• Miễn phí cho em bé` });
-});
 const normalizeText = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 const roomFormDefaults = (roomType: string) => {
   const details = roomTypeDetails[roomType] ?? roomTypeDetails["Standard Room"];
@@ -238,6 +163,8 @@ const roomFormDefaults = (roomType: string) => {
     adults: String(details.capacity),
     children: details.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? "0",
     infants: details.guestPolicy.match(/Em bé dưới 12 tháng:\s*(\d+)/)?.[1] ?? "0",
+    extraAdultFee: "",
+    extraChildFee: "",
     bedType: details.beds,
   };
 };
@@ -260,10 +187,14 @@ export default function RoomWorkspace() {
   const { t } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: apiRoomTypes, isLoading: isRoomTypesLoading, isError: isRoomTypesError } = useGetRoomTypesQuery();
+  const { data: apiBedTypes, isLoading: isBedTypesLoading, isError: isBedTypesError } = useGetAllBedTypesQuery();
   const { data: apiRoomStatuses, isLoading: isRoomStatusesLoading, isError: isRoomStatusesError } = useGetRoomStatusesQuery();
+  const { data: apiAmenities, isLoading: isAmenitiesLoading, isError: isAmenitiesError } = useGetAllAmenitiesQuery();
   const [createRoom, { isLoading: isCreatingRoom }] = useCreateRoomMutation();
-  const availableRoomTypes = apiRoomTypes ?? [];
-  const availableRoomStatuses = apiRoomStatuses ?? [];
+  const availableRoomTypes = (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value)));
+  const availableRoomStatuses = (apiRoomStatuses ?? []).map((value) => statusLabel(String(value)));
+  const amenityOptions = useMemo(() => (apiAmenities ?? []).map((amenity) => amenity.name).filter(Boolean), [apiAmenities]);
+  const bedTypeOptions = useMemo(() => (apiBedTypes ?? []).map((item) => String(item.bedTypeName ?? item.name ?? item.description ?? "")).filter(Boolean), [apiBedTypes]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors">("rooms");
   const [buildings, setBuildings] = useState<Building[]>(() => {
@@ -291,13 +222,7 @@ export default function RoomWorkspace() {
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
   const { data: apiBuildings } = useGetBuildingsByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const { data: apiFloors, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(Number(selectedBuildingId), { skip: !selectedBuildingId || Number.isNaN(Number(selectedBuildingId)) });
-  const [rooms, setRooms] = useState<Room[]>(() => {
-    if (typeof window === "undefined") return initialRooms;
-    const stored = window.localStorage.getItem("staywise-cleaning-rooms");
-    if (!stored) return initialRooms;
-    const assignments = JSON.parse(stored) as Record<string, { status: string; cleaner: string }>;
-    return initialRooms.map((room) => assignments[room.id] ? { ...room, ...assignments[room.id] } : room);
-  });
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [query, setQuery] = useState("");
   const [building, setBuilding] = useState("Tất cả các tòa");
   const [floor, setFloor] = useState("Tất cả các tầng");
@@ -316,17 +241,92 @@ export default function RoomWorkspace() {
   const [createRoomForm, setCreateRoomForm] = useState<CreateRoomFormState>(emptyCreateRoomForm);
   const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
+  const [newAmenityName, setNewAmenityName] = useState("");
+  const [amenityPrice, setAmenityPrice] = useState("");
+  const [customAmenityPrices, setCustomAmenityPrices] = useState<Record<string, number>>({});
   const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
+  const selectedRoomTypeValue = roomTypeValues[createRoomForm.roomType] ?? createRoomForm.roomType;
+  const { data: roomTypeDetail, isLoading: isRoomTypeDetailLoading, isError: isRoomTypeDetailError } = useGetRoomTypeDetailQuery(
+    { hotelId: Number(hotelId), roomType: selectedRoomTypeValue },
+    { skip: !hotelId || !createRoomForm.roomType || editingRoomId !== null },
+  );
   const getApiValue = (item: Record<string, unknown>, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
+  const { data: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError } = useGetRoomsByCurrentHotelQuery();
   const apiFloorOptions = (apiFloors ?? []).map((item) => {
     const id = getApiValue(item, ["id", "floorId", "floorID"]);
     const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
-    return { id: String(id ?? ""), name: String(name ?? id ?? "") };
+    const displayName = String(name ?? id ?? "");
+    return { id: String(id ?? ""), name: displayName.toLowerCase().startsWith("tầng") ? displayName : `Tầng ${displayName}` };
   }).filter((item) => item.id && item.name);
+  useEffect(() => {
+    console.log("[RoomWorkspace] rooms by current hotel", { rooms: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError });
+  }, [apiRooms, roomsError, isRoomsLoading, isRoomsFetching, isRoomsError]);
+  useEffect(() => {
+    if (!apiRooms) return;
+
+    const nextRooms: Room[] = apiRooms.map((item, index) => {
+      const roomType = roomTypeLabel(String(getApiValue(item, ["roomType", "roomName", "type", "name"]) ?? "STANDARD"));
+      const details = roomTypeDetails[roomType] ?? roomTypeDetails["Standard Room"];
+      const roomId = String(getApiValue(item, ["roomNumber", "roomCode", "code", "id"]) ?? `room-${index + 1}`);
+      const floorId = getApiValue(item, ["floorId", "floorID"]);
+      const floorNumber = getApiValue(item, ["floorNumber", "floorLevel"]);
+      const buildingName = String(getApiValue(item, ["nameBuilding", "buildingName"]) ?? "").trim();
+      const avatarValue = getApiValue(item, ["avatarUrl", "imageUrls", "images"]);
+      const avatarUrls = Array.isArray(avatarValue)
+        ? avatarValue.map((image) => typeof image === "string" ? image : String((image as Record<string, unknown>)?.url ?? "")).filter(Boolean)
+        : [];
+      const defaultImageUrl = getApiValue(item, ["defaultImageUrl", "imageUrl"]);
+      const images = [
+        ...(typeof defaultImageUrl === "string" ? [defaultImageUrl] : []),
+        ...avatarUrls,
+      ].filter((image, imageIndex, values) => values.indexOf(image) === imageIndex);
+      const amenities = getApiValue(item, ["amenities"]);
+      const services = Array.isArray(amenities)
+        ? amenities.map((amenity) => typeof amenity === "string" ? amenity : String((amenity as Record<string, unknown>)?.name ?? "")).filter(Boolean)
+        : [];
+      const rawBeds = getApiValue(item, ["beds", "bedTypes"]);
+      const bedItems = Array.isArray(rawBeds) ? rawBeds : rawBeds && typeof rawBeds === "object" ? [rawBeds] : [];
+      const bedNames = bedItems.map((bed) => {
+        const bedRecord = bed as Record<string, unknown>;
+        const name = String(bedRecord.bedTypeName ?? bedRecord.name ?? "").trim();
+        const quantity = Number(bedRecord.quantity ?? 1);
+        return name ? `${quantity > 1 ? `${quantity} ` : ""}${name}` : "";
+      }).filter(Boolean);
+      const bedCapacity = bedItems.reduce((total, bed) => {
+        const bedRecord = bed as Record<string, unknown>;
+        const capacity = Number(bedRecord.capacity ?? 0);
+        const quantity = Number(bedRecord.quantity ?? 1);
+        return total + (Number.isFinite(capacity) ? capacity : 0) * (Number.isFinite(quantity) ? quantity : 1);
+      }, 0);
+      const status = statusLabel(String(getApiValue(item, ["roomStatus", "status"]) ?? "READY"));
+      const price = Number(getApiValue(item, ["basePrice", "price"]) ?? details.price);
+
+      return {
+        id: roomId,
+        buildingName: buildingName || undefined,
+        name: roomType,
+        images,
+        floor: `Tầng ${floorNumber ?? floorId ?? ""}`,
+        size: String(getApiValue(item, ["roomSize", "size", "area", "roomArea", "acreage"]) ?? "Chưa cập nhật"),
+        beds: bedNames.join(" · ") || String(getApiValue(item, ["bedType", "bedTypeName"]) ?? details.beds),
+        capacity: bedCapacity || Number(getApiValue(item, ["capacity", "maxGuests", "guestCapacity"]) ?? details.capacity),
+        guestPolicy: String(getApiValue(item, ["guestPolicy", "policy"]) ?? details.guestPolicy),
+        price: Number.isFinite(price) ? price : details.price,
+        status,
+        cleaner: "",
+        services,
+      };
+    });
+
+    setRooms((current) => nextRooms.map((room) => {
+      const previous = current.find((item) => item.id === room.id);
+      return previous ? { ...room, status: previous.status, cleaner: previous.cleaner } : room;
+    }));
+  }, [apiRooms]);
   useEffect(() => {
     if (!apiBuildings) return;
     const nextBuildings = apiBuildings.map((item) => {
@@ -346,7 +346,8 @@ export default function RoomWorkspace() {
     const nextFloors = apiFloors.map((item) => {
       const id = getApiValue(item, ["id", "floorId", "floorID"]);
       const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
-      return String(name ?? id ?? "");
+      const displayName = String(name ?? id ?? "");
+      return displayName.toLowerCase().startsWith("tầng") ? displayName : `Tầng ${displayName}`;
     }).filter(Boolean);
     setFloors(nextFloors);
     setCreateRoomForm((current) => ({
@@ -361,6 +362,33 @@ export default function RoomWorkspace() {
       status: availableRoomStatuses.some((status) => String(status) === current.status) ? current.status : (availableRoomStatuses[0] ?? current.status),
     }));
   }, [apiRoomTypes, apiRoomStatuses]);
+  useEffect(() => {
+    if (!roomTypeDetail || editingRoomId !== null) return;
+
+    const getDetailValue = (keys: string[]) => keys.map((key) => roomTypeDetail[key]).find((value) => value !== undefined && value !== null && value !== "");
+    const rawBeds = getDetailValue(["beds", "bedTypes", "roomBeds"]);
+    const bedItems = Array.isArray(rawBeds) ? rawBeds : rawBeds && typeof rawBeds === "object" ? [rawBeds] : [];
+    const bedNames = bedItems.map((bed) => {
+      const bedRecord = bed as Record<string, unknown>;
+      const name = String(bedRecord.bedTypeName ?? bedRecord.name ?? bedRecord.description ?? "").trim();
+      const quantity = Number(bedRecord.quantity ?? 1);
+      return name ? `${quantity > 1 ? `${quantity} ` : ""}${name}` : "";
+    }).filter(Boolean);
+    const adults = getDetailValue(["standardAdults", "maxAdults", "adults", "adultCapacity", "numberOfAdults"]);
+    const children = getDetailValue(["maxChildren", "children", "childCapacity", "numberOfChildren"]);
+    const infants = getDetailValue(["maxInfants", "infants", "infantCapacity", "numberOfInfants"]);
+    const extraAdultFee = getDetailValue(["extraAdultFee"]);
+    const extraChildFee = getDetailValue(["extraChildFee"]);
+    setCreateRoomForm((current) => ({
+      ...current,
+      adults: adults !== undefined ? String(adults) : current.adults,
+      children: children !== undefined ? String(children) : current.children,
+      infants: infants !== undefined ? String(infants) : current.infants,
+      extraAdultFee: extraAdultFee !== undefined ? String(extraAdultFee) : current.extraAdultFee,
+      extraChildFee: extraChildFee !== undefined ? String(extraChildFee) : current.extraChildFee,
+      bedType: bedNames.length > 0 ? bedNames.join(" · ") : current.bedType,
+    }));
+  }, [roomTypeDetail, editingRoomId]);
   const isAnyModalOpen = showCreateRoom || Boolean(detailRoom) || Boolean(galleryRoom) || Boolean(assignmentRoom);
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -399,18 +427,14 @@ export default function RoomWorkspace() {
   }, [rooms, createRoomForm.building, createRoomForm.floor]);
   const filtered = useMemo(() => rooms
     .filter((room) => `${room.id} ${room.name}`.toLowerCase().includes(query.toLowerCase()))
-    .filter((room) => building === "Tất cả các tòa" || room.id.startsWith(`${building}-`))
+    .filter((room) => building === "Tất cả các tòa" || room.id.startsWith(`${building}-`) || room.buildingName?.includes(building))
     .filter((room) => floor === "Tất cả các tầng" || room.floor === floor)
     .filter((room) => status === "Tất cả trạng thái" || room.status === status), [rooms, query, building, floor, status]);
   const filteredAmenityOptions = useMemo(() => {
     const normalizedQuery = normalizeText(amenitySearch);
 
-    return amenityOptions.filter((amenity) => {
-      if (createRoomForm.amenities.includes(amenity)) return false;
-      if (!normalizedQuery) return true;
-      return normalizeText(amenity).includes(normalizedQuery);
-    });
-  }, [amenitySearch, createRoomForm.amenities]);
+    return (apiAmenities ?? []).filter((amenity) => !normalizedQuery || normalizeText(amenity.name).includes(normalizedQuery));
+  }, [apiAmenities, amenitySearch]);
   const filteredBuildings = useMemo(() => {
     const normalizedQuery = normalizeText(buildingQuery);
     const matchingBuildings = buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
@@ -441,7 +465,7 @@ export default function RoomWorkspace() {
     const children = room.guestPolicy.match(/Trẻ em:\s*(\d+)/)?.[1] ?? room.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? "0";
     const infants = room.guestPolicy.match(/Trẻ nhỏ:\s*(\d+)/)?.[1] ?? room.guestPolicy.match(/Em bé(?: dưới 12 tháng)?:\s*(\d+)/)?.[1] ?? "0";
     setEditingRoomId(room.id);
-    setCreateRoomForm({ roomType: room.name, building: room.id.split("-")[0], floor: room.id.split("-")[1] ?? "1", area, price: String(room.price), adults, children, infants, bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" });
+    setCreateRoomForm({ roomType: room.name, building: room.id.split("-")[0], floor: room.id.split("-")[1] ?? "1", area, price: String(room.price), adults, children, infants, extraAdultFee: "", extraChildFee: "", bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" });
     setShowCreateRoom(true);
   };
   const openCreateBuildingModal = () => {
@@ -494,7 +518,7 @@ export default function RoomWorkspace() {
     closeCreateFloorModal();
   };
   const appendAmenity = (value?: string) => {
-    const nextAmenity = (value ?? amenitySearch).trim();
+    const nextAmenity = (value ?? newAmenityName).trim();
     if (!nextAmenity) return;
     const normalized = normalizeText(nextAmenity);
     const matchedAmenity = amenityOptions.find((item) => normalizeText(item) === normalized) ?? nextAmenity;
@@ -505,8 +529,15 @@ export default function RoomWorkspace() {
       return;
     }
 
+    if (!apiAmenities?.some((amenity) => amenity.name === matchedAmenity)) {
+      const price = Number(amenityPrice);
+      if (!Number.isFinite(price) || price < 0) return;
+      setCustomAmenityPrices((current) => ({ ...current, [matchedAmenity]: price }));
+    }
+
     setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, matchedAmenity] }));
-    setAmenitySearch("");
+    setNewAmenityName("");
+    setAmenityPrice("");
     setShowAmenityMenu(false);
   };
   const removeAmenity = (value: string) => setCreateRoomForm((current) => ({ ...current, amenities: current.amenities.filter((item) => item !== value) }));
@@ -565,9 +596,12 @@ export default function RoomWorkspace() {
         return;
       }
       const defaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
+      const amenityIds = createRoomForm.amenities
+        .map((name) => apiAmenities?.find((amenity) => amenity.name === name)?.id)
+        .filter((id): id is number => id !== undefined);
       try {
         await createRoom({
-          roomInfo: { floorId, roomStatus: createRoomForm.status || "Sẵn sàng", roomType, basePrice: price, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds: [] },
+            roomInfo: { floorId, roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status, roomType: roomTypeValues[roomType] ?? roomType, basePrice: price, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds },
           imageFiles: roomImageFiles,
         }).unwrap();
         closeCreateRoomModal();
@@ -626,7 +660,7 @@ export default function RoomWorkspace() {
         nextRooms.unshift({
           id: roomCode,
           name: roomType,
-          images: roomImages,
+          images: [],
           floor: `Tầng ${floorNumber}`,
           size: area.toLowerCase().includes("m") ? area : `${area} m²`,
           beds: getValue(row, ["giường", "giuong", "beds"]) || "1 giường",
@@ -670,7 +704,7 @@ export default function RoomWorkspace() {
     <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
       {filtered.map((room) => <article key={room.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50">
         <button type="button" onClick={() => { setGalleryRoom(room); setGalleryIndex(0); }} className="group relative block h-36 w-full overflow-hidden text-left"><img src={room.images[0]} alt={`${room.name} · ${t("room.roomLabel", "Room")} ${room.id}`} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950/55 via-transparent to-transparent" /><span className="absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-800 shadow-sm">{t("room.roomLabel", "Room")} {room.id}</span><span className="absolute bottom-3 right-3 rounded-md bg-slate-950/60 px-2 py-1 text-[10px] font-semibold text-white">{t("room.photoCount", "{{count}} photos", { count: room.images.length })}</span></button>
-        <div className="flex items-start justify-between bg-gradient-to-br from-blue-50 to-slate-50 p-4"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-950 text-sm font-bold text-white shadow-sm">{room.id}</div><div><p className="font-bold text-slate-900">{room.name}</p><p className="mt-0.5 text-xs text-slate-500">{t("room.floorLabel", "Floor {{floor}}", { floor: room.floor.match(/\d+/)?.[0] ?? room.floor })} · {room.size}</p></div></div><div className="relative"><button type="button" onClick={() => setStatusMenuRoom((current) => current === room.id ? null : room.id)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"><MoreHorizontal size={18} /></button>{statusMenuRoom === room.id && <div className="absolute right-0 top-9 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"><p className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{t("room.roomStatus")}</p>{statuses.map((nextStatus) => <button type="button" key={nextStatus} onClick={() => { updateRoom(room.id, { status: nextStatus, cleaner: nextStatus === "Đang dọn" ? room.cleaner : "" }); setStatusMenuRoom(null); }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition hover:bg-slate-50 ${room.status === nextStatus ? "text-blue-700" : "text-slate-600"}`}><span>{nextStatus === "Sẵn sàng" ? t("room.ready") : nextStatus === "Đang dọn" ? t("room.cleaning") : nextStatus === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span>{room.status === nextStatus && <Check size={14} />}</button>)}</div>}</div></div>
+        <div className="flex items-start justify-between bg-gradient-to-br from-blue-50 to-slate-50 p-4"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-950 text-sm font-bold text-white shadow-sm">{room.id}</div><div><p className="font-bold text-slate-900">{room.name}</p><p className="mt-0.5 text-xs text-slate-500">{room.buildingName ?? "Chưa cập nhật tòa"} · {t("room.floorLabel", "Floor {{floor}}", { floor: room.floor.match(/\d+/)?.[0] ?? room.floor })} · {room.size}</p></div></div><div className="relative"><button type="button" onClick={() => setStatusMenuRoom((current) => current === room.id ? null : room.id)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"><MoreHorizontal size={18} /></button>{statusMenuRoom === room.id && <div className="absolute right-0 top-9 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"><p className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{t("room.roomStatus")}</p>{statuses.map((nextStatus) => <button type="button" key={nextStatus} onClick={() => { updateRoom(room.id, { status: nextStatus, cleaner: nextStatus === "Đang dọn" ? room.cleaner : "" }); setStatusMenuRoom(null); }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition hover:bg-slate-50 ${room.status === nextStatus ? "text-blue-700" : "text-slate-600"}`}><span>{nextStatus === "Sẵn sàng" ? t("room.ready") : nextStatus === "Đang dọn" ? t("room.cleaning") : nextStatus === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span>{room.status === nextStatus && <Check size={14} />}</button>)}</div>}</div></div>
         <div className="p-4"><div className="flex items-start justify-between gap-2"><div><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[room.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status === "Sẵn sàng" ? t("room.ready") : room.status === "Đang dọn" ? t("room.cleaning") : room.status === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span></div><p className="text-sm font-bold text-slate-900">{money(room.price)}<span className="text-xs font-normal text-slate-400"> {t("room.perNight")}</span></p></div>
           <div className="mt-4 grid grid-cols-2 gap-2 border-y border-slate-100 py-3"><p className="flex items-center gap-2 text-xs text-slate-600"><BedDouble size={15} className="text-slate-400" />{translateBed(room.beds)}</p><p className="flex items-center gap-2 text-xs text-slate-600"><Users size={15} className="text-slate-400" />{t("room.maxGuestsLabel", "Up to {{count}} guests", { count: room.capacity })}</p></div>
           <div className="mt-3 flex flex-wrap gap-1.5">{room.services.map((service) => <span key={service} className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-600"><Check size={11} className="text-emerald-500" />{service === "Điều hòa" ? t("room.airConditioning") : service === "Phòng tắm riêng" ? t("room.privateBathroom") : service === "Wifi" ? t("room.wifi") : service}</span>)}</div>
@@ -734,6 +768,8 @@ export default function RoomWorkspace() {
                   <label className="block text-sm font-semibold text-slate-700">
                     Loại phòng <span className="text-rose-500">*</span>
                     {isRoomTypesError && <p className="mt-1 text-xs font-normal text-rose-600">Không tải được loại phòng từ API.</p>}
+                    {isRoomTypeDetailLoading && <p className="mt-1 text-xs font-normal text-blue-600">Đang tải thông tin chi tiết loại phòng...</p>}
+                    {isRoomTypeDetailError && <p className="mt-1 text-xs font-normal text-rose-600">Không tải được chi tiết loại phòng.</p>}
                     <select disabled={isRoomTypesLoading || isRoomTypesError || availableRoomTypes.length === 0} value={createRoomForm.roomType} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomType: event.target.value, ...roomFormDefaults(event.target.value) }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
                       {availableRoomTypes.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
                     </select>
@@ -792,15 +828,30 @@ export default function RoomWorkspace() {
                   </label>
                 </div>
 
+                {(createRoomForm.extraAdultFee || createRoomForm.extraChildFee) && (
+                  <div className="mt-4 grid gap-3 rounded-xl border border-amber-100 bg-amber-50/60 p-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold text-amber-800">Phụ thu người lớn</p>
+                      <p className="mt-1 text-sm font-bold text-amber-900">{money(Number(createRoomForm.extraAdultFee) || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-800">Phụ thu trẻ em</p>
+                      <p className="mt-1 text-sm font-bold text-amber-900">{money(Number(createRoomForm.extraChildFee) || 0)}</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-4">
                   <label className="block text-sm font-semibold text-slate-700">
                     Loại giường <span className="text-rose-500">*</span>
+                    {isBedTypesLoading && <span className="ml-2 text-xs font-normal text-blue-600">Đang tải...</span>}
+                    {isBedTypesError && <p className="mt-1 text-xs font-normal text-rose-600">Không tải được danh sách loại giường.</p>}
                     <select
                       value={createRoomForm.bedType}
                       onChange={(event) => setCreateRoomForm((current) => ({ ...current, bedType: event.target.value }))}
                       className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     >
-                      {bedTypeOptions.map((bedType) => (
+                      {[createRoomForm.bedType, ...bedTypeOptions].filter((bedType, index, options) => bedType && options.indexOf(bedType) === index).map((bedType) => (
                         <option key={bedType} value={bedType}>{bedType}</option>
                       ))}
                     </select>
@@ -866,58 +917,62 @@ export default function RoomWorkspace() {
                   </div>
                 </div>
 
+                <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <Search size={15} className="text-slate-400" />
+                  <input
+                    value={amenitySearch}
+                    onChange={(event) => setAmenitySearch(event.target.value)}
+                    placeholder="Tìm kiếm tiện nghi..."
+                    className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                  />
+                </div>
+
                 {showAmenityMenu && (
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-                      <Search size={15} className="text-slate-400" />
+                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
                       <input
-                        value={amenitySearch}
-                        onChange={(event) => setAmenitySearch(event.target.value)}
+                        value={newAmenityName}
+                        onChange={(event) => setNewAmenityName(event.target.value)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
                             appendAmenity();
                           }
                         }}
-                        placeholder="Nhập tiện nghi mới hoặc tìm kiếm..."
-                        className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                        placeholder="Tên tiện nghi mới"
+                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={amenityPrice}
+                        onChange={(event) => setAmenityPrice(event.target.value)}
+                        placeholder="Giá tiện nghi"
+                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       />
                     </div>
 
                     <div className="mt-3 flex items-center justify-end">
                       <button
                         type="button"
-                        onClick={() => appendAmenity()}
+                        onClick={() => appendAmenity(newAmenityName)}
                         className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
                       >
                         Thêm
                       </button>
                     </div>
 
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {filteredAmenityOptions.slice(0, 8).map((item) => (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => appendAmenity(item)}
-                          className="rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-                        >
-                          {item}
-                        </button>
-                      ))}
-                    </div>
-
-                    
                   </div>
                 )}
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {amenityOptions.map((item) => {
-                    const checked = createRoomForm.amenities.includes(item);
+                  {filteredAmenityOptions.map((item) => {
+                    const checked = createRoomForm.amenities.includes(item.name);
                     return (
-                      <label key={item} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:border-blue-200 hover:bg-blue-50/40">
-                        <input type="checkbox" checked={checked} onChange={() => (checked ? removeAmenity(item) : setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, item] }))) } className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                        <span>{item}</span>
+                      <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:border-blue-200 hover:bg-blue-50/40">
+                        <input type="checkbox" checked={checked} onChange={() => (checked ? removeAmenity(item.name) : setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, item.name] }))) } className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                        <span className="shrink-0 text-xs font-semibold text-blue-600">{money(item.price)}</span>
                       </label>
                     );
                   })}
@@ -1027,8 +1082,8 @@ export default function RoomWorkspace() {
                 <div className="mt-4 space-y-2 text-sm text-slate-600">
                   {createRoomForm.amenities.slice(0, 5).map((item) => (
                     <div key={item} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
-                      <span>{item}</span>
-                      <Check size={15} className="text-emerald-600" />
+                      <span className="min-w-0 truncate">{item}</span>
+                      <span className="ml-3 flex shrink-0 items-center gap-2"><span className="text-xs font-semibold text-blue-600">{money(apiAmenities?.find((amenity) => amenity.name === item)?.price ?? customAmenityPrices[item] ?? 0)}</span><Check size={15} className="text-emerald-600" /></span>
                     </div>
                   ))}
                   {createRoomForm.amenities.length === 0 && (
