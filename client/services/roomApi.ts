@@ -45,7 +45,16 @@ export const roomApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: ApiResponse<RoomResponse[]>) => response?.result ?? [],
     }),
+
+    getRoomsByCurrentHotel: builder.query<RoomResponse[], void>({
+      query: () => ({
+        url: "/room/hotel",
+        method: "GET",
+      }),
+      transformResponse: (response: ApiResponse<RoomResponse[]>) => response?.result ?? [],
+      providesTags: ["Room"],
+    }),
   }),
 });
 
-export const { useCreateRoomMutation, useGetRoomTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery } = roomApi;
+export const { useCreateRoomMutation, useGetRoomTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery } = roomApi;
