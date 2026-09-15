@@ -12,7 +12,7 @@ export type BedTypeResponse = Record<string, unknown>;
 
 export const roomApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    createRoom: builder.mutation<RoomResponse, { roomInfo: { floorId: number; roomStatus: string; roomType: string; basePrice: number; defaultImageIndex: number; amenityIds: number[] }; imageFiles: File[] }>({
+    createRoom: builder.mutation<RoomResponse, { roomInfo: { floorId: number; roomStatus: string; roomType: string; basePrice: number; standardCapacity: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; defaultImageIndex: number; amenityIds: number[] }; imageFiles: File[] }>({
       query: ({ roomInfo, imageFiles }) => {
         const formData = new FormData();
         formData.append("roomInfo", new Blob([JSON.stringify(roomInfo)], { type: "application/json" }));

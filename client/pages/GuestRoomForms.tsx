@@ -12,16 +12,30 @@ type GuestRoom = {
   maxAdults?: number;
   maxChildren?: number;
   maxInfants?: number;
+  maxExtraGuests?: number;
+  extraAdultFee?: number;
+  extraChildFee?: number;
 };
 export type BookingGuest = { name: string; phone: string; identityNumber: string };
+export type RoomGuestCounts = { adults: number; children: number; infants: number };
 
 const countOptions = (max: number, value: number) => Array.from({ length: Math.max(max, value) + 1 }, (_, index) => index);
+const roomGuestCache: Record<string, RoomGuestCounts> = {};
+export const clearRoomGuestCache = () => {
+  Object.keys(roomGuestCache).forEach((roomId) => { delete roomGuestCache[roomId]; });
+};
 
-export default function GuestRoomForms({ rooms, guest, onGuestChange }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void }) {
+export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void }) {
   const { t } = useTranslation();
   const [customerQuery, setCustomerQuery] = useState("");
   const [customers, setCustomers] = useState<Customer[]>(loadCustomers);
-  const [roomGuests, setRoomGuests] = useState<Record<string, { adults: number; children: number; infants: number }>>({});
+  const [localRoomGuests, setLocalRoomGuests] = useState<Record<string, RoomGuestCounts>>({});
+
+  useEffect(() => {
+    const clearCache = () => clearRoomGuestCache();
+    window.addEventListener("booking-workspace-left", clearCache);
+    return () => window.removeEventListener("booking-workspace-left", clearCache);
+  }, []);
 
   useEffect(() => {
     if (guest.name.trim() && guest.phone.trim()) {
@@ -34,18 +48,34 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange }: { rooms:
   const matches = search ? customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email} ${customer.identityNumber}`.toLowerCase().includes(search)).slice(0, 5) : [];
   const updateGuest = (field: keyof BookingGuest, value: string) => onGuestChange({ ...guest, [field]: value });
   const chooseCustomer = (customer: Customer) => { onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber }); setCustomerQuery(""); };
+  const totalCapacityFor = (room: GuestRoom) => Math.max(0, Number(room.guests ?? 0) + Number(room.maxExtraGuests ?? 0));
   const getRoomLimits = (room: GuestRoom) => ({
-    adults: Math.max(0, room.maxAdults ?? room.guests ?? 0),
-    children: Math.max(0, room.maxChildren ?? 0),
+    adults: totalCapacityFor(room),
+    children: totalCapacityFor(room),
     infants: Math.max(0, room.maxInfants ?? 0),
   });
   const getRoomGuests = (room: GuestRoom) => {
     const limits = getRoomLimits(room);
     const standardAdults = Math.max(0, Number(room.standardAdults ?? room.guests ?? 0));
-    return roomGuests[room.id] ?? { adults: Math.min(standardAdults, limits.adults), children: limits.children, infants: limits.infants };
+    return roomGuestValues?.[room.id] ?? localRoomGuests[room.id] ?? roomGuestCache[room.id] ?? { adults: Math.min(standardAdults, limits.adults), children: 0, infants: 0 };
   };
   const updateRoomGuest = (room: GuestRoom, field: "adults" | "children" | "infants", value: number) => {
-    setRoomGuests((current) => ({ ...current, [room.id]: { ...getRoomGuests(room), [field]: value } }));
+    const totalCapacity = totalCapacityFor(room);
+    const currentGuests = getRoomGuests(room);
+    const nextValue = field === "infants" ? Math.max(0, Math.min(value, getRoomLimits(room).infants)) : Math.max(0, Math.min(value, totalCapacity));
+    const nextGuests = { ...currentGuests, [field]: nextValue };
+    if (field === "adults") nextGuests.children = Math.min(nextGuests.children, Math.max(0, totalCapacity - nextGuests.adults));
+    if (field === "children") nextGuests.adults = Math.min(nextGuests.adults, Math.max(0, totalCapacity - nextGuests.children));
+    setLocalRoomGuests((current) => ({ ...current, [room.id]: nextGuests }));
+    roomGuestCache[room.id] = nextGuests;
+    onRoomGuestChange?.(room.id, nextGuests);
+    const standardCapacity = Math.max(0, room.guests ?? 0);
+    const extraGuests = Math.max(0, nextGuests.adults + nextGuests.children - standardCapacity);
+    const extraAdults = Math.min(extraGuests, Math.max(0, nextGuests.adults - standardCapacity));
+    const extraChildren = extraGuests - extraAdults;
+    const surcharge = extraAdults * (room.extraAdultFee ?? 0) + extraChildren * (room.extraChildFee ?? 0);
+    onRoomGuestsChange?.(room.id, surcharge);
+    window.dispatchEvent(new CustomEvent("room-guest-surcharge", { detail: { roomId: room.id, counts: nextGuests, surcharge, adultSurcharge: extraAdults * (room.extraAdultFee ?? 0), childSurcharge: extraChildren * (room.extraChildFee ?? 0) } }));
   };
 
   return <div className="space-y-4">
@@ -55,9 +85,10 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange }: { rooms:
       <div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-slate-700">{t("customer.fullName")}<input value={guest.name} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder", "Nguyễn Văn A")} className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400" /></label><label className="text-sm font-semibold text-slate-700">{t("customer.phone")}<input value={guest.phone} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400" /></label><label className="text-sm font-semibold text-slate-700">{t("customer.identityNumber", "Số CCCD")}<input value={guest.identityNumber} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-violet-400" /></label></div>
     </div>
     {rooms.map((room, index) => {
-      const limits = getRoomLimits(room);
       const selected = getRoomGuests(room);
-      return <div key={room.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-100 text-blue-700"><UserRound size={17} /></div><div className="min-w-0"><p className="text-sm font-bold text-slate-900">Khách lưu trú phòng {room.id}</p><p className="mt-0.5 truncate text-xs text-slate-500">{room.type} · {room.beds} · Tối đa {limits.adults} người lớn, {limits.children} trẻ em, {limits.infants} em bé</p></div><span className="ml-auto shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">Khách {index + 1}</span></div><div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-slate-700">Người lớn<select value={selected.adults} onChange={(event) => updateRoomGuest(room, "adults", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.adults, selected.adults).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Trẻ em<select value={selected.children} onChange={(event) => updateRoomGuest(room, "children", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.children, selected.children).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Em bé<select value={selected.infants} onChange={(event) => updateRoomGuest(room, "infants", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.infants, selected.infants).map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div><label className="mt-4 block text-sm font-semibold text-slate-700">Ghi chú riêng cho phòng {room.id}<textarea placeholder="Special guest requests..." className="mt-1.5 min-h-20 w-full resize-none rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none focus:border-violet-400" /></label></div>;
+      const roomLimits = getRoomLimits(room);
+      const limits = { ...roomLimits, adults: Math.max(0, totalCapacityFor(room) - selected.children), children: Math.max(0, totalCapacityFor(room) - selected.adults) };
+      return <div key={room.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-100 text-blue-700"><UserRound size={17} /></div><div className="min-w-0"><p className="text-sm font-bold text-slate-900">Khách lưu trú phòng {room.id}</p><p className="mt-0.5 truncate text-xs text-slate-500">{room.type} · {room.beds}</p></div><span className="ml-auto shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">Khách {index + 1}</span></div><div className="mb-4 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-3 text-xs"><p className="font-bold text-blue-700">Quy định khách và phụ thu</p><div className="mt-2 grid gap-2 sm:grid-cols-2"><p className="text-slate-600">Tiêu chuẩn: <strong className="text-slate-800">{room.guests} người</strong></p><p className="text-slate-600">Ghép thêm tối đa: <strong className="text-slate-800">{room.maxExtraGuests ?? 0} người</strong></p><p className="text-slate-600">Người lớn từ 12 tuổi: <strong className="text-amber-800">{(room.extraAdultFee ?? 0).toLocaleString("vi-VN")}đ/người</strong></p><p className="text-slate-600">Trẻ em 2 - dưới 12 tuổi: <strong className="text-amber-800">{(room.extraChildFee ?? 0).toLocaleString("vi-VN")}đ/người</strong></p></div><p className="mt-2 border-t border-blue-100 pt-2 text-slate-500">Em bé dưới 2 tuổi: <strong className="text-emerald-700">miễn phí</strong></p></div><div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-slate-700">Người lớn (từ 12 tuổi)<select value={selected.adults} onChange={(event) => updateRoomGuest(room, "adults", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.adults, selected.adults).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Trẻ em (2 - dưới 12 tuổi)<select value={selected.children} onChange={(event) => updateRoomGuest(room, "children", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.children, selected.children).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Em bé (dưới 2 tuổi)<select value={selected.infants} onChange={(event) => updateRoomGuest(room, "infants", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.infants, selected.infants).map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div><label className="mt-4 block text-sm font-semibold text-slate-700">Ghi chú riêng cho phòng {room.id}<textarea placeholder="Special guest requests..." className="mt-1.5 min-h-20 w-full resize-none rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none focus:border-violet-400" /></label></div>;
     })}
   </div>;
 }

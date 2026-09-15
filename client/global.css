@@ -589,6 +589,79 @@
     color: rgb(37 99 235);
   }
 
+  .payment-column > div.mb-4.grid {
+    display: none !important;
+  }
+
+  .booking-service-selector > nav > div:first-child > div {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .booking-service-selector > nav > div:last-child {
+    display: none !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:nth-child(2) {
+    display: none !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:first-child > div {
+    display: contents !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:first-child,
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:last-child,
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:last-child > div {
+    display: contents !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:last-child > div > button:first-child {
+    display: none !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:nth-of-type(2) button:first-child {
+    display: none !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] button {
+    background-color: transparent !important;
+    color: rgb(71 85 105) !important;
+    box-shadow: none;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] button:focus-visible {
+    outline: 2px solid rgb(37 99 235);
+    outline-offset: -2px;
+    background-color: white;
+    box-shadow: inset 0 -2px 0 rgb(37 99 235);
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] button:focus {
+    background-color: rgb(219 234 254) !important;
+    color: rgb(29 78 216) !important;
+    box-shadow: inset 0 -2px 0 rgb(37 99 235);
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:nth-of-type(2) button:last-child {
+    background-color: transparent !important;
+    color: rgb(29 78 216) !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:nth-of-type(2) button:last-child:hover {
+    background-color: rgb(239 246 255) !important;
+    color: rgb(29 78 216) !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] > div:nth-of-type(2) button:last-child:not(:focus) {
+    background-color: transparent !important;
+    color: rgb(71 85 105) !important;
+  }
+
 
   pre,
   code {

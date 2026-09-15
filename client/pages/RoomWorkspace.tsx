@@ -110,6 +110,10 @@ type RoomRecord = {
   size: string;
   beds: string;
   capacity: number;
+  standardCapacity: number;
+  maxExtraGuests: number;
+  extraAdultFee: number;
+  extraChildFee: number;
   guestPolicy: string;
   price: number;
   status: string;
@@ -129,15 +133,42 @@ const statusLabel = (value: string) => statusLabels[value] ?? value;
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 type Room = RoomRecord & { description?: string };
 
+function RoomDetailModal({ room, onClose }: { room: Room; onClose: () => void }) {
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [showGallery, setShowGallery] = useState(false);
+  const galleryImages = room.images.length > 0 ? room.images : ["https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg"];
+
+  return <div className="fixed inset-0 z-60 grid place-items-center bg-slate-950/50 p-4" onMouseDown={onClose}>
+    <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+        <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Thông tin phòng</p><h3 className="mt-1 text-2xl font-bold text-slate-900">Phòng {room.id} · {room.name}</h3><p className="mt-1 text-sm text-slate-500">{room.floor} · {room.size} · {room.beds}</p></div>
+        <button type="button" onClick={onClose} className="text-2xl leading-none text-slate-400 hover:text-slate-700" aria-label="Đóng">×</button>
+      </div>
+      <div className="space-y-5 overflow-y-auto p-6">
+          <div className="space-y-5">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"><img src={galleryImages[0]} alt={`${room.name} · phòng ${room.id}`} className="h-80 w-full object-cover" /></div>
+          <div className="rounded-2xl border border-slate-200 p-5"><h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Thông tin phòng</h4><div className="mt-4 grid gap-3 sm:grid-cols-2"><div><p className="text-xs text-slate-400">Loại phòng</p><p className="mt-1 font-semibold text-slate-800">{room.name}</p></div><div><p className="text-xs text-slate-400">Loại giường</p><p className="mt-1 font-semibold text-slate-800">{room.beds}</p></div><div><p className="text-xs text-slate-400">Diện tích</p><p className="mt-1 font-semibold text-slate-800">{room.size}</p></div><div><p className="text-xs text-slate-400">Vị trí</p><p className="mt-1 font-semibold text-slate-800">{room.floor}</p></div></div></div>
+        </div>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="rounded-2xl bg-slate-50 p-5"><div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-slate-700">Trạng thái</p><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[room.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status}</span></div><div className="mt-4 flex items-end justify-between border-t border-slate-200 pt-4"><span className="text-sm text-slate-500">Giá phòng / đêm</span><strong className="text-xl text-slate-900">{money(room.price)}</strong></div></div>
+          <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-5"><h4 className="text-sm font-bold uppercase tracking-wide text-amber-800">Quy định số lượng người - Quy định giá tiền</h4><div className="mt-4 space-y-3 text-sm"><div className="flex justify-between gap-3"><span className="text-slate-600">Sức chứa tiêu chuẩn</span><strong className="text-slate-900">{room.standardCapacity} người</strong></div><div className="flex justify-between gap-3"><span className="text-slate-600">Người ghép tối đa</span><strong className="text-slate-900">{room.maxExtraGuests} người</strong></div><div className="flex justify-between gap-3 border-t border-amber-200 pt-3"><span className="text-slate-600">Phụ thu người lớn</span><strong className="text-amber-800">{money(room.extraAdultFee)} / người</strong></div><div className="flex justify-between gap-3"><span className="text-slate-600">Phụ thu trẻ em</span><strong className="text-amber-800">{money(room.extraChildFee)} / người</strong></div><p className="border-t border-amber-200 pt-3 text-xs text-slate-500">Em bé dưới 2 tuổi được miễn phí.</p></div></div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 p-5"><h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Tiện nghi mỗi phòng</h4><div className="mt-4 flex flex-wrap gap-2">{room.services.length > 0 ? room.services.map((service) => <span key={service} className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"><Check size={13} />{service}</span>) : <p className="text-sm text-slate-400">Chưa cập nhật tiện nghi.</p>}</div></div>
+      </div>
+      <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4"><button type="button" onClick={() => setShowGallery(true)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Xem toàn bộ ảnh</button><button type="button" onClick={onClose} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Đóng</button></div>
+      {showGallery && <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/80 p-5" onMouseDown={() => setShowGallery(false)}><div className="w-full max-w-5xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between text-white"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Thư viện ảnh</p><h4 className="mt-1 text-xl font-bold">Phòng {room.id} · {room.name}</h4></div><button type="button" onClick={() => setShowGallery(false)} className="text-3xl leading-none text-white/70 hover:text-white" aria-label="Đóng thư viện ảnh">×</button></div><div className="relative mt-4 overflow-hidden rounded-2xl bg-black"><img src={galleryImages[galleryIndex]} alt={`Ảnh phòng ${galleryIndex + 1}`} className="h-[min(65vh,620px)] w-full object-contain" /><button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryImages.length) % galleryImages.length)} className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-slate-700">‹</button><button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryImages.length)} className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-slate-700">›</button></div><div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-8">{galleryImages.map((image, index) => <button type="button" key={`${image}-full-${index}`} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-400" : "border-transparent"}`}><img src={image} alt={`Ảnh thu nhỏ ${index + 1}`} className="h-16 w-full object-cover" /></button>)}</div></div></div>}
+    </div>
+  </div>;
+}
+
 type CreateRoomFormState = {
   roomType: string;
   building: string;
   floor: string;
   area: string;
   price: string;
-  adults: string;
-  children: string;
-  infants: string;
+  standardCapacity: string;
+  maxExtraGuests: string;
   extraAdultFee: string;
   extraChildFee: string;
   bedType: string;
@@ -160,9 +191,8 @@ const roomFormDefaults = (roomType: string) => {
   return {
     area: details.area.replace(/[^\d.,]/g, ""),
     price: String(details.price),
-    adults: String(details.capacity),
-    children: details.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? "0",
-    infants: details.guestPolicy.match(/Em bé dưới 12 tháng:\s*(\d+)/)?.[1] ?? "0",
+    standardCapacity: String(details.capacity),
+    maxExtraGuests: "0",
     extraAdultFee: "",
     extraChildFee: "",
     bedType: details.beds,
@@ -277,12 +307,16 @@ export default function RoomWorkspace() {
       const buildingName = String(getApiValue(item, ["nameBuilding", "buildingName"]) ?? "").trim();
       const avatarValue = getApiValue(item, ["avatarUrl", "imageUrls", "images"]);
       const avatarUrls = Array.isArray(avatarValue)
-        ? avatarValue.map((image) => typeof image === "string" ? image : String((image as Record<string, unknown>)?.url ?? "")).filter(Boolean)
+        ? avatarValue.map((image, imageIndex) => {
+          if (typeof image === "string") return { url: image, isDefault: false, imageIndex };
+          const imageRecord = image as Record<string, unknown>;
+          return { url: String(imageRecord.url ?? ""), isDefault: imageRecord.isDefault === true, imageIndex };
+        }).filter((image) => image.url).sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.imageIndex - right.imageIndex)
         : [];
       const defaultImageUrl = getApiValue(item, ["defaultImageUrl", "imageUrl"]);
       const images = [
         ...(typeof defaultImageUrl === "string" ? [defaultImageUrl] : []),
-        ...avatarUrls,
+        ...avatarUrls.map((image) => image.url),
       ].filter((image, imageIndex, values) => values.indexOf(image) === imageIndex);
       const amenities = getApiValue(item, ["amenities"]);
       const services = Array.isArray(amenities)
@@ -303,7 +337,11 @@ export default function RoomWorkspace() {
         return total + (Number.isFinite(capacity) ? capacity : 0) * (Number.isFinite(quantity) ? quantity : 1);
       }, 0);
       const status = statusLabel(String(getApiValue(item, ["roomStatus", "status"]) ?? "READY"));
-      const price = Number(getApiValue(item, ["basePrice", "price"]) ?? details.price);
+      const standardCapacity = Number(getApiValue(item, ["standardCapacity", "capacity", "maxGuests", "guestCapacity"]) ?? details.capacity);
+      const maxExtraGuests = Number(getApiValue(item, ["maxExtraGuests"]) ?? 0);
+      const extraAdultFee = Number(getApiValue(item, ["extraAdultFee"]) ?? 0);
+      const extraChildFee = Number(getApiValue(item, ["extraChildFee"]) ?? 0);
+      const price = Number(getApiValue(item, ["totalPrice", "basePrice", "price"]) ?? details.price);
 
       return {
         id: roomId,
@@ -313,8 +351,12 @@ export default function RoomWorkspace() {
         floor: `Tầng ${floorNumber ?? floorId ?? ""}`,
         size: String(getApiValue(item, ["roomSize", "size", "area", "roomArea", "acreage"]) ?? "Chưa cập nhật"),
         beds: bedNames.join(" · ") || String(getApiValue(item, ["bedType", "bedTypeName"]) ?? details.beds),
-        capacity: bedCapacity || Number(getApiValue(item, ["capacity", "maxGuests", "guestCapacity"]) ?? details.capacity),
-        guestPolicy: String(getApiValue(item, ["guestPolicy", "policy"]) ?? details.guestPolicy),
+        capacity: Number.isFinite(standardCapacity) ? standardCapacity : details.capacity,
+        standardCapacity: Number.isFinite(standardCapacity) ? standardCapacity : details.capacity,
+        maxExtraGuests: Number.isFinite(maxExtraGuests) ? maxExtraGuests : 0,
+        extraAdultFee: Number.isFinite(extraAdultFee) ? extraAdultFee : 0,
+        extraChildFee: Number.isFinite(extraChildFee) ? extraChildFee : 0,
+        guestPolicy: String(getApiValue(item, ["guestPolicy", "policy"]) ?? `Tiêu chuẩn ${standardCapacity} người · Ghép thêm tối đa ${maxExtraGuests} người`),
         price: Number.isFinite(price) ? price : details.price,
         status,
         cleaner: "",
@@ -374,16 +416,14 @@ export default function RoomWorkspace() {
       const quantity = Number(bedRecord.quantity ?? 1);
       return name ? `${quantity > 1 ? `${quantity} ` : ""}${name}` : "";
     }).filter(Boolean);
-    const adults = getDetailValue(["standardAdults", "maxAdults", "adults", "adultCapacity", "numberOfAdults"]);
-    const children = getDetailValue(["maxChildren", "children", "childCapacity", "numberOfChildren"]);
-    const infants = getDetailValue(["maxInfants", "infants", "infantCapacity", "numberOfInfants"]);
+    const standardCapacity = getDetailValue(["standardCapacity", "standardAdults", "capacity", "maxAdults", "adults", "adultCapacity", "numberOfAdults"]);
+    const maxExtraGuests = getDetailValue(["maxExtraGuests"]);
     const extraAdultFee = getDetailValue(["extraAdultFee"]);
     const extraChildFee = getDetailValue(["extraChildFee"]);
     setCreateRoomForm((current) => ({
       ...current,
-      adults: adults !== undefined ? String(adults) : current.adults,
-      children: children !== undefined ? String(children) : current.children,
-      infants: infants !== undefined ? String(infants) : current.infants,
+      standardCapacity: standardCapacity !== undefined ? String(standardCapacity) : current.standardCapacity,
+      maxExtraGuests: maxExtraGuests !== undefined ? String(maxExtraGuests) : current.maxExtraGuests,
       extraAdultFee: extraAdultFee !== undefined ? String(extraAdultFee) : current.extraAdultFee,
       extraChildFee: extraChildFee !== undefined ? String(extraChildFee) : current.extraChildFee,
       bedType: bedNames.length > 0 ? bedNames.join(" · ") : current.bedType,
@@ -461,11 +501,8 @@ export default function RoomWorkspace() {
   const openEditRoomModal = (room: Room) => {
     const details = roomFormDefaults(room.name);
     const area = room.size.match(/[\d.,]+/)?.[0] ?? details.area;
-    const adults = room.guestPolicy.match(/Người lớn:\s*(\d+)/)?.[1] ?? room.guestPolicy.match(/(\d+)\s*người lớn/)?.[1] ?? String(room.capacity);
-    const children = room.guestPolicy.match(/Trẻ em:\s*(\d+)/)?.[1] ?? room.guestPolicy.match(/Trẻ nhỏ dưới 11 tuổi:\s*(\d+)/)?.[1] ?? "0";
-    const infants = room.guestPolicy.match(/Trẻ nhỏ:\s*(\d+)/)?.[1] ?? room.guestPolicy.match(/Em bé(?: dưới 12 tháng)?:\s*(\d+)/)?.[1] ?? "0";
     setEditingRoomId(room.id);
-    setCreateRoomForm({ roomType: room.name, building: room.id.split("-")[0], floor: room.id.split("-")[1] ?? "1", area, price: String(room.price), adults, children, infants, extraAdultFee: "", extraChildFee: "", bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" });
+    setCreateRoomForm({ roomType: room.name, building: room.id.split("-")[0], floor: room.id.split("-")[1] ?? "1", area, price: String(room.price), standardCapacity: String(room.standardCapacity || room.capacity), maxExtraGuests: String(room.maxExtraGuests), extraAdultFee: String(room.extraAdultFee || ""), extraChildFee: String(room.extraChildFee || ""), bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" });
     setShowCreateRoom(true);
   };
   const openCreateBuildingModal = () => {
@@ -568,11 +605,12 @@ export default function RoomWorkspace() {
     const description = createRoomForm.description.trim();
     const area = Number(createRoomForm.area.replace(/,/g, "."));
     const price = Number(createRoomForm.price.replace(/[^\d]/g, ""));
-    const adults = Number(createRoomForm.adults);
-    const children = Number(createRoomForm.children);
-    const infants = Number(createRoomForm.infants);
+    const standardCapacity = Number(createRoomForm.standardCapacity);
+    const maxExtraGuests = Number(createRoomForm.maxExtraGuests);
+    const extraAdultFee = Number(createRoomForm.extraAdultFee || 0);
+    const extraChildFee = Number(createRoomForm.extraChildFee || 0);
     const bedType = createRoomForm.bedType || roomDetails.beds;
-    if (!roomType || !area || !price || !adults || children < 0 || infants < 0) {
+    if (!roomType || !area || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
       window.alert("Vui lòng nhập đầy đủ các trường bắt buộc.");
       return;
     }
@@ -601,7 +639,7 @@ export default function RoomWorkspace() {
         .filter((id): id is number => id !== undefined);
       try {
         await createRoom({
-            roomInfo: { floorId, roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status, roomType: roomTypeValues[roomType] ?? roomType, basePrice: price, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds },
+            roomInfo: { floorId, roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status, roomType: roomTypeValues[roomType] ?? roomType, basePrice: price, standardCapacity, maxExtraGuests, extraAdultFee, extraChildFee, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds },
           imageFiles: roomImageFiles,
         }).unwrap();
         closeCreateRoomModal();
@@ -621,8 +659,12 @@ export default function RoomWorkspace() {
       floor: location,
       size: `${area} m²`,
       beds: bedType,
-      capacity: adults + children,
-      guestPolicy: `Người lớn: ${adults} · Trẻ em: ${children} · Trẻ nhỏ: ${infants}`,
+      capacity: standardCapacity,
+      standardCapacity,
+      maxExtraGuests,
+      extraAdultFee,
+      extraChildFee,
+      guestPolicy: `Tiêu chuẩn: ${standardCapacity} người · Ghép thêm tối đa: ${maxExtraGuests} người`,
       price,
       status: createRoomForm.status || "Sẵn sàng",
       cleaner: editingRoomId ? rooms.find((item) => item.id === editingRoomId)?.cleaner ?? "" : "",
@@ -665,6 +707,10 @@ export default function RoomWorkspace() {
           size: area.toLowerCase().includes("m") ? area : `${area} m²`,
           beds: getValue(row, ["giường", "giuong", "beds"]) || "1 giường",
           capacity,
+          standardCapacity: capacity,
+          maxExtraGuests: 0,
+          extraAdultFee: 0,
+          extraChildFee: 0,
           guestPolicy: getValue(row, ["số người tối đa", "so nguoi toi da", "guest policy"]) || `Tối đa ${capacity} khách`,
           price,
           status: statuses.includes(getValue(row, ["trạng thái", "trang thai", "status"])) ? getValue(row, ["trạng thái", "trang thai", "status"]) : "Sẵn sàng",
@@ -683,6 +729,7 @@ export default function RoomWorkspace() {
   };
 
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+    {detailRoom && <RoomDetailModal room={detailRoom} onClose={() => setDetailRoom(null)} />}
     <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
       <div><h3 className="font-bold text-slate-900">{t("room.roomList")}</h3><p className="mt-1 text-sm text-slate-500">{filtered.length} {t("room.roomsAtBranch")} · {t("room.realTimeUpdate")}</p></div>
       <div className="flex flex-wrap gap-2">{activeTab === "buildings" ? <button type="button" onClick={openCreateBuildingModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addBuilding")}</button> : activeTab === "floors" ? <button type="button" onClick={openCreateFloorModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addFloor")}</button> : activeTab === "rooms" ? <button type="button" onClick={() => setShowCreateRoom(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addRoom")}</button> : null}</div>
@@ -706,8 +753,9 @@ export default function RoomWorkspace() {
         <button type="button" onClick={() => { setGalleryRoom(room); setGalleryIndex(0); }} className="group relative block h-36 w-full overflow-hidden text-left"><img src={room.images[0]} alt={`${room.name} · ${t("room.roomLabel", "Room")} ${room.id}`} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950/55 via-transparent to-transparent" /><span className="absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-800 shadow-sm">{t("room.roomLabel", "Room")} {room.id}</span><span className="absolute bottom-3 right-3 rounded-md bg-slate-950/60 px-2 py-1 text-[10px] font-semibold text-white">{t("room.photoCount", "{{count}} photos", { count: room.images.length })}</span></button>
         <div className="flex items-start justify-between bg-gradient-to-br from-blue-50 to-slate-50 p-4"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-950 text-sm font-bold text-white shadow-sm">{room.id}</div><div><p className="font-bold text-slate-900">{room.name}</p><p className="mt-0.5 text-xs text-slate-500">{room.buildingName ?? "Chưa cập nhật tòa"} · {t("room.floorLabel", "Floor {{floor}}", { floor: room.floor.match(/\d+/)?.[0] ?? room.floor })} · {room.size}</p></div></div><div className="relative"><button type="button" onClick={() => setStatusMenuRoom((current) => current === room.id ? null : room.id)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"><MoreHorizontal size={18} /></button>{statusMenuRoom === room.id && <div className="absolute right-0 top-9 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"><p className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{t("room.roomStatus")}</p>{statuses.map((nextStatus) => <button type="button" key={nextStatus} onClick={() => { updateRoom(room.id, { status: nextStatus, cleaner: nextStatus === "Đang dọn" ? room.cleaner : "" }); setStatusMenuRoom(null); }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition hover:bg-slate-50 ${room.status === nextStatus ? "text-blue-700" : "text-slate-600"}`}><span>{nextStatus === "Sẵn sàng" ? t("room.ready") : nextStatus === "Đang dọn" ? t("room.cleaning") : nextStatus === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span>{room.status === nextStatus && <Check size={14} />}</button>)}</div>}</div></div>
         <div className="p-4"><div className="flex items-start justify-between gap-2"><div><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[room.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status === "Sẵn sàng" ? t("room.ready") : room.status === "Đang dọn" ? t("room.cleaning") : room.status === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span></div><p className="text-sm font-bold text-slate-900">{money(room.price)}<span className="text-xs font-normal text-slate-400"> {t("room.perNight")}</span></p></div>
-          <div className="mt-4 grid grid-cols-2 gap-2 border-y border-slate-100 py-3"><p className="flex items-center gap-2 text-xs text-slate-600"><BedDouble size={15} className="text-slate-400" />{translateBed(room.beds)}</p><p className="flex items-center gap-2 text-xs text-slate-600"><Users size={15} className="text-slate-400" />{t("room.maxGuestsLabel", "Up to {{count}} guests", { count: room.capacity })}</p></div>
+          <div className="mt-4 grid grid-cols-2 gap-2 border-y border-slate-100 py-3"><p className="flex min-w-0 items-center gap-2 text-xs text-slate-600"><BedDouble size={15} className="shrink-0 text-slate-400" /><span className="truncate">{translateBed(room.beds)}</span></p><p className="flex min-w-0 items-center justify-end gap-2 text-right text-xs text-slate-600"><Users size={15} className="shrink-0 text-slate-400" /><span className="truncate">Tiêu chuẩn {room.standardCapacity} người</span></p></div>
           <div className="mt-3 flex flex-wrap gap-1.5">{room.services.map((service) => <span key={service} className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-600"><Check size={11} className="text-emerald-500" />{service === "Điều hòa" ? t("room.airConditioning") : service === "Phòng tắm riêng" ? t("room.privateBathroom") : service === "Wifi" ? t("room.wifi") : service}</span>)}</div>
+          <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2.5"><div className="grid grid-cols-2 gap-2 text-[11px]"><p className="text-slate-600">Phụ thu người lớn: <strong className="text-amber-800">{money(room.extraAdultFee)}/người</strong></p><p className="text-slate-600">Phụ thu trẻ em: <strong className="text-amber-800">{money(room.extraChildFee)}/người</strong></p></div><p className="mt-1 text-[10px] text-slate-500">Em bé dưới 2 tuổi: miễn phí</p></div>
           {room.status === "Đang dọn" && <button type="button" onClick={() => completeCleaning(room)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700"><Check size={14} />{t("room.confirmCleaning")}</button>}
           <div className="mt-4 border-t border-slate-100 pt-3"><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0">{room.cleaner ? <p className="truncate text-[11px] text-slate-500"><Sparkles size={13} className="mr-1 inline text-amber-500" />{room.cleaner}</p> : <p className="text-[11px] text-slate-400">{t("room.unassignedCleaning")}</p>}</div><div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => openEditRoomModal(room)} className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Pencil size={12} />{t("room.edit")}</button><button type="button" onClick={() => setDetailRoom(room)} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50">{t("room.details")}</button>{!room.cleaner && <button type="button" onClick={() => setAssignmentRoom(room)} className="rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100">{t("room.assign")}</button>}</div></div></div>
         </div>
@@ -815,31 +863,27 @@ export default function RoomWorkspace() {
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-3">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Người lớn <span className="text-rose-500">*</span>
-                    <input type="number" min="1" value={createRoomForm.adults} onChange={(event) => setCreateRoomForm((current) => ({ ...current, adults: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    Sức chứa tiêu chuẩn <span className="text-rose-500">*</span>
+                    <input type="number" min="1" value={createRoomForm.standardCapacity} onChange={(event) => setCreateRoomForm((current) => ({ ...current, standardCapacity: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    <span className="mt-1 block text-xs font-normal text-slate-400">Số khách đã bao gồm trong giá phòng</span>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    Trẻ em <span className="text-rose-500">*</span>
-                    <input type="number" min="0" value={createRoomForm.children} onChange={(event) => setCreateRoomForm((current) => ({ ...current, children: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-                  </label>
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Em bé <span className="text-rose-500">*</span>
-                    <input type="number" min="0" value={createRoomForm.infants} onChange={(event) => setCreateRoomForm((current) => ({ ...current, infants: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    Số người ghép tối đa
+                    <input type="number" min="0" value={createRoomForm.maxExtraGuests} onChange={(event) => setCreateRoomForm((current) => ({ ...current, maxExtraGuests: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    <span className="mt-1 block text-xs font-normal text-slate-400">Số khách thêm ngoài tiêu chuẩn</span>
                   </label>
                 </div>
 
-                {(createRoomForm.extraAdultFee || createRoomForm.extraChildFee) && (
-                  <div className="mt-4 grid gap-3 rounded-xl border border-amber-100 bg-amber-50/60 p-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-semibold text-amber-800">Phụ thu người lớn</p>
-                      <p className="mt-1 text-sm font-bold text-amber-900">{money(Number(createRoomForm.extraAdultFee) || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-amber-800">Phụ thu trẻ em</p>
-                      <p className="mt-1 text-sm font-bold text-amber-900">{money(Number(createRoomForm.extraChildFee) || 0)}</p>
-                    </div>
-                  </div>
-                )}
+                <div className="mt-4 grid gap-4 rounded-xl border border-amber-100 bg-amber-50/60 p-3 sm:grid-cols-2">
+                  <label className="block text-sm font-semibold text-amber-900">
+                    Phụ thu người lớn / người
+                    <input type="number" min="0" step="1000" value={createRoomForm.extraAdultFee} onChange={(event) => setCreateRoomForm((current) => ({ ...current, extraAdultFee: event.target.value }))} placeholder="0" className="mt-1.5 h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100" />
+                  </label>
+                  <label className="block text-sm font-semibold text-amber-900">
+                    Phụ thu trẻ em / người
+                    <input type="number" min="0" step="1000" value={createRoomForm.extraChildFee} onChange={(event) => setCreateRoomForm((current) => ({ ...current, extraChildFee: event.target.value }))} placeholder="0" className="mt-1.5 h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100" />
+                  </label>
+                </div>
 
                 <div className="mt-4">
                   <label className="block text-sm font-semibold text-slate-700">

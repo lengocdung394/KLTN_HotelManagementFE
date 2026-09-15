@@ -39,7 +39,7 @@ export default function BookingServiceSelector({ rooms, serviceMode, setServiceM
   const [serviceSearch, setServiceSearch] = useState("");
   const [roomServiceSearch, setRoomServiceSearch] = useState<Record<string, string>>({});
   const visibleServices = (search: string) => bookingServices.filter((service) => service.name.toLowerCase().includes(search.trim().toLowerCase()));
-  const getSelectionQuantity = (_room: ServiceRoom, selection: ServiceSelection) => selection.quantity;
+  const getSelectionQuantity = (room: ServiceRoom, selection: ServiceSelection) => selection.applyToRoom !== false ? room.guests : selection.quantity;
   const roomServiceTotal = (room: ServiceRoom, selections: ServiceSelection[]) => selections.reduce((sum, selection) => sum + (bookingServices.find((service) => service.id === selection.serviceId)?.price ?? 0) * getSelectionQuantity(room, selection), 0);
   const formatServices = (room: ServiceRoom, selections: ServiceSelection[]) => selections.map((selection) => `${bookingServices.find((service) => service.id === selection.serviceId)?.name} x${getSelectionQuantity(room, selection)}`).join(", ");
 

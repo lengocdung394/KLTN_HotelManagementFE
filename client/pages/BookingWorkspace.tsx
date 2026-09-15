@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
-import GuestRoomForms, { type BookingGuest } from "./GuestRoomForms.tsx";
+import GuestRoomForms, { clearRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
 import BookingServiceSelector, { bookingServices, type ServiceSelection } from "../components/BookingServiceSelector";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
 import { useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
@@ -9,7 +9,7 @@ import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useAppSelector } from "../store/hooks";
 
-type BookingRoom = { id: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; buildingId?: string; buildingName?: string; floor?: string };
+type BookingRoom = { id: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
 
 const roomTypes = {
   1: { type: "Standard Room", beds: "1 giường đơn", size: "25 m²", guests: 1, price: 1000000, amenity: "Điều hòa · TV · Phòng tắm riêng" },
@@ -57,12 +57,15 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
   const floorValue = String(getApiValue(item, ["floorNumber", "floorLevel", "floorName", "floorId", "floorID"]) ?? "");
   const rawSize = getApiValue(item, ["roomSize", "size", "area", "roomArea", "acreage"]);
   const size = rawSize === undefined ? fallback.size : `${rawSize}`.includes("m²") ? String(rawSize) : `${rawSize} m²`;
-  const price = Number(getApiValue(item, ["basePrice", "price"]) ?? fallback.price);
-  const guests = Number(getApiValue(item, ["capacity", "maxGuests", "guestCapacity"]) ?? fallback.guests);
-  const maxAdults = Number(getApiValue(item, ["maxAdults", "standardAdults", "adults", "adultCapacity"]) ?? guests);
-  const standardAdults = Number(getApiValue(item, ["standardAdults", "defaultAdults", "adults"]) ?? Math.min(guests, maxAdults));
+  const price = Number(getApiValue(item, ["totalPrice", "basePrice", "price"]) ?? fallback.price);
+  const guests = Number(getApiValue(item, ["standardCapacity", "capacity", "maxGuests", "guestCapacity"]) ?? fallback.guests);
+  const maxExtraGuests = Number(getApiValue(item, ["maxExtraGuests"]) ?? 0);
+  const maxAdults = Number(getApiValue(item, ["maxAdults", "standardAdults", "adults", "adultCapacity"]) ?? guests + maxExtraGuests);
+  const standardAdults = Number(getApiValue(item, ["standardAdults", "defaultAdults", "adults", "standardCapacity"]) ?? Math.min(guests, maxAdults));
   const maxChildren = Number(getApiValue(item, ["maxChildren", "children", "childCapacity"]) ?? 0);
   const maxInfants = Number(getApiValue(item, ["maxInfants", "infants", "infantCapacity"]) ?? 0);
+  const extraAdultFee = Number(getApiValue(item, ["extraAdultFee"]) ?? 0);
+  const extraChildFee = Number(getApiValue(item, ["extraChildFee"]) ?? 0);
 
   return {
     id: roomId,
@@ -75,6 +78,9 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
     maxAdults: Number.isFinite(maxAdults) ? maxAdults : fallback.guests,
     maxChildren: Number.isFinite(maxChildren) ? maxChildren : 0,
     maxInfants: Number.isFinite(maxInfants) ? maxInfants : 0,
+    maxExtraGuests: Number.isFinite(maxExtraGuests) ? maxExtraGuests : 0,
+    extraAdultFee: Number.isFinite(extraAdultFee) ? extraAdultFee : 0,
+    extraChildFee: Number.isFinite(extraChildFee) ? extraChildFee : 0,
     buildingId: buildingId === undefined ? undefined : String(buildingId),
     buildingName: buildingName || undefined,
     floor: floorValue.toLowerCase().startsWith("tầng") ? floorValue : floorValue ? `Tầng ${floorValue}` : undefined,
@@ -455,6 +461,25 @@ export default function BookingWorkspace() {
   const [serviceMode, setServiceMode] = useState<"all" | "per-room">("all");
   const [allRoomServices, setAllRoomServices] = useState<ServiceSelection[]>([]);
   const [roomServices, setRoomServices] = useState<Record<string, ServiceSelection[]>>({});
+  const [roomGuestSurcharges, setRoomGuestSurcharges] = useState<Record<string, number>>({});
+  const [roomGuestSurchargeDetails, setRoomGuestSurchargeDetails] = useState<Record<string, { adult: number; child: number }>>({});
+  const [roomGuestCounts, setRoomGuestCounts] = useState<Record<string, RoomGuestCounts>>({});
+  useEffect(() => {
+    const handleRoomGuestSurcharge = (event: Event) => {
+      const detail = (event as CustomEvent<{ roomId?: string; counts?: RoomGuestCounts; surcharge?: number; adultSurcharge?: number; childSurcharge?: number }>).detail;
+      if (detail.roomId) {
+        if (detail.counts) setRoomGuestCounts((current) => ({ ...current, [detail.roomId as string]: detail.counts as RoomGuestCounts }));
+        if (detail.counts) {
+          const selectedGuestCount = detail.counts.adults + detail.counts.children + detail.counts.infants;
+          setRoomServices((current) => ({ ...current, [detail.roomId as string]: (current[detail.roomId as string] ?? []).map((selection) => selection.applyToRoom !== false ? { ...selection, quantity: selectedGuestCount } : selection) }));
+        }
+        setRoomGuestSurcharges((current) => ({ ...current, [detail.roomId as string]: detail.surcharge ?? 0 }));
+        setRoomGuestSurchargeDetails((current) => ({ ...current, [detail.roomId as string]: { adult: detail.adultSurcharge ?? 0, child: detail.childSurcharge ?? 0 } }));
+      }
+    };
+    window.addEventListener("room-guest-surcharge", handleRoomGuestSurcharge);
+    return () => window.removeEventListener("room-guest-surcharge", handleRoomGuestSurcharge);
+  }, []);
   const [collapsedSummaryRooms, setCollapsedSummaryRooms] = useState<string[]>([]);
   const [expandedServiceRoom, setExpandedServiceRoom] = useState<string | null>(null);
   const [appliedPromotion, setAppliedPromotion] = useState<SelectedPromotion | null>(null);
@@ -504,12 +529,8 @@ export default function BookingWorkspace() {
 
   const hasRoomFilter = Boolean(query.trim() || roomType !== allRoomTypesLabel || building !== allBuildingsLabel || floor !== allFloorsLabel);
   const visibleRooms = useMemo(
-    () => filteredRooms.filter((room) => {
-      if (isAddingRoom) return selected.includes(room.id) || showFull || !hasDates || isAvailable(room.id);
-      if (hasRoomFilter) return selected.includes(room.id) || showFull || !hasDates || isAvailable(room.id);
-      return selected.length > 0 ? selected.includes(room.id) : showFull || !hasDates || isAvailable(room.id);
-    }),
-    [filteredRooms, hasRoomFilter, showFull, checkIn, checkOut, hasDates, selected, isAddingRoom]
+    () => filteredRooms.filter((room) => selected.includes(room.id) || showFull || !hasDates || isAvailable(room.id)),
+    [filteredRooms, showFull, checkIn, checkOut, hasDates, selected]
   );
 
   const selectedRooms = rooms.filter((room) => selected.includes(room.id));
@@ -517,19 +538,22 @@ export default function BookingWorkspace() {
     const range = selectedRanges[roomId];
     return range ? Math.max(1, Math.round((new Date(range.checkOut).getTime() - new Date(range.checkIn).getTime()) / 86400000)) : nights;
   };
-  const roomTotal = selectedRooms.reduce((sum, room) => sum + room.price * nightsForRoom(room.id), 0);
+  const roomTotal = selectedRooms.reduce((sum, room) => sum + (room.price + (roomGuestSurcharges[room.id] ?? 0)) * nightsForRoom(room.id), 0);
   const getServiceTotal = (selections: ServiceSelection[]) => selections.reduce((sum, selection) => sum + (bookingServices.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity, 0);
-  const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections) * (serviceMode === "all" ? room.guests : 1);
-  const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => `${bookingServices.find((service) => service.id === selection.serviceId)?.name} x${selection.quantity * (serviceMode === "all" ? room.guests : 1)}`).join(", ");
+  const selectedGuestsForRoom = (room: BookingRoom) => roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
+  const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections) * (serviceMode === "all" ? selectedGuestsForRoom(room) : 1);
+  const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => `${bookingServices.find((service) => service.id === selection.serviceId)?.name} x${selection.quantity * (serviceMode === "all" ? selectedGuestsForRoom(room) : 1)}`).join(", ");
   const serviceTotal = serviceMode === "all"
     ? selectedRooms.reduce((sum, room) => sum + getRoomServiceTotal(room, allRoomServices), 0)
     : selectedRooms.reduce((sum, room) => sum + getServiceTotal(roomServices[room.id] ?? []), 0);
   const subtotal = roomTotal + serviceTotal;
   const discountAmount = appliedPromotion ? Math.round(subtotal * appliedPromotion.value / 100) : 0;
   const total = subtotal - discountAmount;
+  const bookingEstimate = useMemo(() => ({ roomTotal, serviceTotal, subtotal, discountAmount, total }), [roomTotal, serviceTotal, subtotal, discountAmount, total]);
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [step]);
+  useEffect(() => () => clearRoomGuestCache(), []);
   const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
   const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
   const canContinue = selected.length > 0 && selectedRooms.every((room) => {
@@ -631,7 +655,7 @@ export default function BookingWorkspace() {
             <div>
               <p className="text-sm text-slate-500">
               {t("booking.selectedRooms")} <strong className="text-slate-900">{selected.length} {t("booking.rooms")}</strong>
-              {selected.length > 0 && <span> · {t("booking.estimatedTotal")} <strong className="text-violet-700">{money(total)}</strong></span>}
+              {selected.length > 0 && <span> · {t("booking.estimatedTotal")} <strong className="text-violet-700">{money(bookingEstimate.total)}</strong></span>}
               </p>
               {isAddingRoom && <p className="mt-1 text-xs text-blue-600">{t("booking.selectDateToAddRoom")}</p>}
             </div>
@@ -653,7 +677,7 @@ export default function BookingWorkspace() {
           </div>
         </div>
       ) : step === "services" ? (<BookingServiceSelector
-        rooms={selectedRooms}
+        rooms={selectedRooms.map((room) => ({ ...room, guests: roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests, price: room.price + (roomGuestSurcharges[room.id] ?? 0) }))}
         serviceMode={serviceMode}
         setServiceMode={setServiceMode}
         allRoomServices={allRoomServices}
@@ -701,7 +725,7 @@ export default function BookingWorkspace() {
                 const selections = serviceMode === "all" ? allRoomServices : roomServices[room.id] ?? [];
                 return <div key={room.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 text-xs">
                   <span className="min-w-0"><strong className="block text-slate-800">Phòng {room.id} · {room.type}</strong><span className="mt-1 block text-slate-500">Check-in: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkIn, "", i18n.language)}</span><span className="block text-slate-500">Check-out: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkOut, "", i18n.language)}</span><span className="mt-1 block text-blue-700">{selections.length > 0 ? formatRoomServices(room, selections) : "Chưa chọn dịch vụ"}</span></span>
-                  <span className="shrink-0 text-right font-bold text-slate-800">{money(room.price * nightsForRoom(room.id) + getRoomServiceTotal(room, selections))}</span>
+                  <span className="shrink-0 text-right font-bold text-slate-800">{money((room.price + (roomGuestSurcharges[room.id] ?? 0)) * nightsForRoom(room.id) + getRoomServiceTotal(room, selections))}</span>
                 </div>;
               })}
             </div>
@@ -725,7 +749,6 @@ export default function BookingWorkspace() {
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UsersRound size={14} />Thông tin phòng</p>
-                <p className="mt-2 text-sm font-bold text-slate-800">{selected.length} {t("booking.rooms")} · {nights} {t("booking.nights")}</p>
               </div>
               <span className="text-xs font-semibold text-slate-500">{hasDifferentStayPeriods ? "Nhiều lịch" : "Đã chọn"}</span>
             </div>
@@ -736,7 +759,8 @@ export default function BookingWorkspace() {
               {summaryRanges.map(({ room, range }) => {
                 const selections = serviceMode === "all" ? allRoomServices : roomServices[room.id] ?? [];
                 const roomServiceTotal = getRoomServiceTotal(room, selections);
-                const roomSubtotal = room.price * nightsForRoom(room.id) + roomServiceTotal;
+                const roomSubtotal = (room.price + (roomGuestSurcharges[room.id] ?? 0)) * nightsForRoom(room.id) + roomServiceTotal;
+                const selectedGuestCount = roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
                 const isSummaryRoomCollapsed = collapsedSummaryRooms.includes(room.id);
                 return <div key={room.id} className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50/40 text-xs">
                   <button type="button" onClick={() => setCollapsedSummaryRooms((current) => isSummaryRoomCollapsed ? current.filter((id) => id !== room.id) : [...current, room.id])} aria-expanded={!isSummaryRoomCollapsed} className="flex w-full items-start justify-between gap-3 border-b border-blue-100 bg-white/70 px-3 py-3 text-left transition hover:bg-white">
@@ -749,9 +773,10 @@ export default function BookingWorkspace() {
                   {!isSummaryRoomCollapsed && <div className="space-y-2 px-3 py-3 text-slate-600">
                     <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkInDate", "Nhận")}: {formatDateLabel(range.checkIn, "", i18n.language)}</span></div>
                     <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkOutDate", "Trả")}: {formatDateLabel(range.checkOut, "", i18n.language)}</span></div>
-                    <div className="flex items-center gap-2"><UsersRound size={14} className="shrink-0 text-blue-600" /><span>{room.guests} người · {nightsForRoom(room.id)} đêm</span></div>
+                    <div className="flex items-center gap-2"><UsersRound size={14} className="shrink-0 text-blue-600" /><span>{selectedGuestCount} người · {nightsForRoom(room.id)} đêm</span></div>
                     <div className="my-2 border-t border-blue-100" />
                     <div className="flex justify-between gap-3"><span>Tiền phòng</span><span className="font-medium text-slate-800">{money(room.price * nightsForRoom(room.id))}</span></div>
+                    {(roomGuestSurcharges[room.id] ?? 0) > 0 && <><div className="flex justify-between gap-3"><span>Phụ thu người lớn</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.adult ?? 0) * nightsForRoom(room.id))}</span></div><div className="flex justify-between gap-3"><span>Phụ thu trẻ em</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.child ?? 0) * nightsForRoom(room.id))}</span></div></>}
                     <div className="flex justify-between gap-3"><span>Dịch vụ</span><span className="text-right font-medium text-slate-800">{roomServiceTotal ? money(roomServiceTotal) : "Chưa chọn"}</span></div>
                     <div className="mt-2 flex items-center justify-between gap-3 border-t border-blue-100 pt-2 font-bold text-blue-700"><span>Tạm tính phòng</span><span>{money(roomSubtotal)}</span></div>
                   </div>}
@@ -762,14 +787,14 @@ export default function BookingWorkspace() {
             {appliedPromotion && <div className="mb-2 flex justify-between text-sm text-emerald-600"><span>Khuyến mãi ({appliedPromotion.code})</span><span>-{money(discountAmount)}</span></div>}
             <div className="flex justify-between text-sm font-bold text-slate-900">
               <span>{t("booking.total")}</span>
-              <span className="text-violet-700">{money(total)}</span>
+              <span className="text-violet-700">{money(bookingEstimate.total)}</span>
             </div>
             {appliedPromotion && <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold text-emerald-700">Khuyến mãi đã chọn: {appliedPromotion.code}</span><span className="font-bold text-emerald-700">-{money(discountAmount)}</span></div>}
             {step === "payment" && <>
               <p className="mt-4 text-[10px] font-bold uppercase tracking-wider text-violet-500">Thông tin thanh toán</p>
               <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
               <p className="mt-1 text-sm font-bold text-violet-800">{paymentMethod === "cash" ? t("booking.cash") : paymentMethod === "bank" ? t("booking.bankQr") : paymentMethod === "wallet" ? t("booking.wallet") : "Chưa chọn phương thức"}</p>
-              <p className="mt-0.5 text-xs text-violet-600">Số tiền cần thanh toán: {money(total)}</p>
+              <p className="mt-0.5 text-xs text-violet-600">Số tiền cần thanh toán: {money(bookingEstimate.total)}</p>
               </div>
             </>}
             {step === "guest" ? <button onClick={() => setStep("services")} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">Tiếp tục chọn dịch vụ</button> : <button disabled={!paymentMethod} onClick={() => setStep("success")} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{t("booking.confirmPayment")}</button>}
