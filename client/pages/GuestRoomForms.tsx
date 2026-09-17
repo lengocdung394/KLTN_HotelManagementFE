@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, UserRound } from "lucide-react";
-import { loadCustomers, upsertCustomer, type Customer } from "../lib/customerStore";
+import { useGetCustomersByHotelIdQuery, type CustomerResponse } from "../services/customerApi";
+import { useAppSelector } from "../store/hooks";
 
 type GuestRoom = {
   id: string;
@@ -16,8 +17,9 @@ type GuestRoom = {
   extraAdultFee?: number;
   extraChildFee?: number;
 };
-export type BookingGuest = { name: string; phone: string; identityNumber: string };
+export type BookingGuest = { name: string; phone: string; identityNumber: string; customerId?: string };
 export type RoomGuestCounts = { adults: number; children: number; infants: number };
+type Customer = CustomerResponse;
 
 const countOptions = (max: number, value: number) => Array.from({ length: Math.max(max, value) + 1 }, (_, index) => index);
 const roomGuestCache: Record<string, RoomGuestCounts> = {};
@@ -27,8 +29,9 @@ export const clearRoomGuestCache = () => {
 
 export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void }) {
   const { t } = useTranslation();
+  const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const { data: customers = [] } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const [customerQuery, setCustomerQuery] = useState("");
-  const [customers, setCustomers] = useState<Customer[]>(loadCustomers);
   const [localRoomGuests, setLocalRoomGuests] = useState<Record<string, RoomGuestCounts>>({});
 
   useEffect(() => {
@@ -37,17 +40,10 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     return () => window.removeEventListener("booking-workspace-left", clearCache);
   }, []);
 
-  useEffect(() => {
-    if (guest.name.trim() && guest.phone.trim()) {
-      const next = upsertCustomer(guest.name, guest.phone, guest.identityNumber);
-      if (next) setCustomers(next);
-    }
-  }, [guest]);
-
   const search = customerQuery.trim().toLowerCase();
   const matches = search ? customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email} ${customer.identityNumber}`.toLowerCase().includes(search)).slice(0, 5) : [];
   const updateGuest = (field: keyof BookingGuest, value: string) => onGuestChange({ ...guest, [field]: value });
-  const chooseCustomer = (customer: Customer) => { onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber }); setCustomerQuery(""); };
+  const chooseCustomer = (customer: Customer) => { onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, customerId: customer.id }); setCustomerQuery(""); };
   const totalCapacityFor = (room: GuestRoom) => Math.max(0, Number(room.guests ?? 0) + Number(room.maxExtraGuests ?? 0));
   const getRoomLimits = (room: GuestRoom) => ({
     adults: totalCapacityFor(room),
