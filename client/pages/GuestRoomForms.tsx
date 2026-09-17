@@ -52,7 +52,7 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   const getRoomLimits = (room: GuestRoom) => ({
     adults: totalCapacityFor(room),
     children: totalCapacityFor(room),
-    infants: Math.max(0, room.maxInfants ?? 0),
+    infants: Math.max(2, room.maxInfants ?? 0),
   });
   const getRoomGuests = (room: GuestRoom) => {
     const limits = getRoomLimits(room);

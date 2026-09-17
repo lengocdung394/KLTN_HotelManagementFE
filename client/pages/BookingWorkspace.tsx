@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
 import GuestRoomForms, { clearRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
-import BookingServiceSelector, { bookingServices, type ServiceSelection } from "../components/BookingServiceSelector";
+import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
 import { useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
 import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
+import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useAppSelector } from "../store/hooks";
 
 type BookingRoom = { id: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
@@ -442,6 +443,7 @@ function DesktopCalendar({
 export default function BookingWorkspace() {
   const { t, i18n } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
   const { data: apiBuildings } = useGetBuildingsByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const { data: apiRoomTypes } = useGetRoomTypesQuery();
   const { data: apiRooms, isLoading: isRoomsLoading, isError: isRoomsError } = useGetRoomsByCurrentHotelQuery();
@@ -539,10 +541,10 @@ export default function BookingWorkspace() {
     return range ? Math.max(1, Math.round((new Date(range.checkOut).getTime() - new Date(range.checkIn).getTime()) / 86400000)) : nights;
   };
   const roomTotal = selectedRooms.reduce((sum, room) => sum + (room.price + (roomGuestSurcharges[room.id] ?? 0)) * nightsForRoom(room.id), 0);
-  const getServiceTotal = (selections: ServiceSelection[]) => selections.reduce((sum, selection) => sum + (bookingServices.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity, 0);
+  const getServiceTotal = (selections: ServiceSelection[]) => selections.reduce((sum, selection) => sum + (services.find((service) => String(service.id) === selection.serviceId)?.price ?? 0) * selection.quantity, 0);
   const selectedGuestsForRoom = (room: BookingRoom) => roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
   const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections) * (serviceMode === "all" ? selectedGuestsForRoom(room) : 1);
-  const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => `${bookingServices.find((service) => service.id === selection.serviceId)?.name} x${selection.quantity * (serviceMode === "all" ? selectedGuestsForRoom(room) : 1)}`).join(", ");
+  const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => `${services.find((service) => String(service.id) === selection.serviceId)?.name ?? "Dịch vụ"} x${selection.quantity * (serviceMode === "all" ? selectedGuestsForRoom(room) : 1)}`).join(", ");
   const serviceTotal = serviceMode === "all"
     ? selectedRooms.reduce((sum, room) => sum + getRoomServiceTotal(room, allRoomServices), 0)
     : selectedRooms.reduce((sum, room) => sum + getServiceTotal(roomServices[room.id] ?? []), 0);
@@ -678,6 +680,9 @@ export default function BookingWorkspace() {
         </div>
       ) : step === "services" ? (<BookingServiceSelector
         rooms={selectedRooms.map((room) => ({ ...room, guests: roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests, price: room.price + (roomGuestSurcharges[room.id] ?? 0) }))}
+        services={services}
+        servicesLoading={isServicesLoading}
+        servicesError={isServicesError}
         serviceMode={serviceMode}
         setServiceMode={setServiceMode}
         allRoomServices={allRoomServices}
@@ -697,7 +702,7 @@ export default function BookingWorkspace() {
             <button type="button" onClick={() => setServiceMode("per-room")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "per-room" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>Chọn riêng từng phòng</button>
           </div>
           {serviceMode === "all" ? <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {bookingServices.map((service) => {
+            {services.map((service) => {
               const selection = allRoomServices.find((item) => item.serviceId === service.id);
               return <div key={service.id} className={`rounded-xl border p-4 ${selection ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}>
                 <label className="flex items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setAllRoomServices((current) => event.target.checked ? [...current, { serviceId: service.id, quantity: 1 }] : current.filter((item) => item.serviceId !== service.id))} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span><strong className="block text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{service.price.toLocaleString("vi-VN")}đ / người</small></span></label>
@@ -713,7 +718,7 @@ export default function BookingWorkspace() {
                   <span className="flex shrink-0 items-center gap-3"><strong className="text-xs text-blue-700">{money(getServiceTotal(selections))}</strong><ChevronRight size={16} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} /></span>
                 </button>
                 {isExpanded && <div className="border-t border-slate-100 bg-slate-50 p-3"><p className="mb-2 text-xs font-semibold text-slate-500">Chọn dịch vụ và số lượng</p><div className="grid gap-2 sm:grid-cols-2">
-                  {bookingServices.map((service) => { const selection = selections.find((item) => item.serviceId === service.id); return <div key={service.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: event.target.checked ? [...(current[room.id] ?? []), { serviceId: service.id, quantity: room.guests }] : (current[room.id] ?? []).filter((item) => item.serviceId !== service.id) }))} className="h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="truncate text-xs font-semibold text-slate-700">{service.name} · {service.price.toLocaleString("vi-VN")}đ/người</span></label>{selection && <input type="number" min="1" value={selection.quantity} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: (current[room.id] ?? []).map((item) => item.serviceId === service.id ? { ...item, quantity: Math.max(1, Number(event.target.value) || 1) } : item) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" />}</div>; })}
+                  {services.map((service) => { const selection = selections.find((item) => item.serviceId === String(service.id)); return <div key={service.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: event.target.checked ? [...(current[room.id] ?? []), { serviceId: String(service.id), quantity: room.guests }] : (current[room.id] ?? []).filter((item) => item.serviceId !== String(service.id)) }))} className="h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="truncate text-xs font-semibold text-slate-700">{service.name} · {service.price.toLocaleString("vi-VN")}đ/người</span></label>{selection && <input type="number" min="1" value={selection.quantity} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: (current[room.id] ?? []).map((item) => item.serviceId === String(service.id) ? { ...item, quantity: Math.max(1, Number(event.target.value) || 1) } : item) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" />}</div>; })}
                 </div></div>}
               </div>;
             })}
@@ -752,9 +757,6 @@ export default function BookingWorkspace() {
               </div>
               <span className="text-xs font-semibold text-slate-500">{hasDifferentStayPeriods ? "Nhiều lịch" : "Đã chọn"}</span>
             </div>
-            {!hasDifferentStayPeriods && summaryRanges[0] && <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs font-semibold text-slate-600">
-              <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkInDate", "Check-in")}: {formatDateLabel(summaryRanges[0].range.checkIn, "", i18n.language)}</span><span className="text-slate-300">→</span><span>{t("booking.checkOutDate", "Check-out")}: {formatDateLabel(summaryRanges[0].range.checkOut, "", i18n.language)}</span></div>
-            </div>}
             <div className="mt-3 space-y-3">
               {summaryRanges.map(({ room, range }) => {
                 const selections = serviceMode === "all" ? allRoomServices : roomServices[room.id] ?? [];

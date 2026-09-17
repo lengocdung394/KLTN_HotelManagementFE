@@ -634,6 +634,12 @@
     box-shadow: none;
   }
 
+  nav[aria-label="Điều hướng trang dịch vụ"] button[aria-current="page"] {
+    background-color: rgb(37 99 235) !important;
+    color: white !important;
+    box-shadow: none !important;
+  }
+
   nav[aria-label="Điều hướng trang dịch vụ"] button:focus-visible {
     outline: 2px solid rgb(37 99 235);
     outline-offset: -2px;
@@ -660,6 +666,14 @@
   nav[aria-label="Điều hướng trang dịch vụ"] > div:nth-of-type(2) button:last-child:not(:focus) {
     background-color: transparent !important;
     color: rgb(71 85 105) !important;
+  }
+
+  nav[aria-label="Điều hướng trang dịch vụ"] button[aria-current="page"],
+  nav[aria-label="Điều hướng trang dịch vụ"] button[aria-current="page"]:focus,
+  nav[aria-label="Điều hướng trang dịch vụ"] button[aria-current="page"]:focus-visible {
+    background-color: rgb(37 99 235) !important;
+    color: white !important;
+    box-shadow: none !important;
   }
 
 

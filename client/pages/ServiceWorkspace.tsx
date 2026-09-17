@@ -1,17 +1,12 @@
 import { useState } from "react";
 import { Check, ConciergeBell, Plus } from "lucide-react";
-
-const services = [
-  { name: "Minibar", detail: "Nước uống và đồ ăn nhẹ trong phòng", price: 80000, category: "Trong phòng" },
-  { name: "Giặt ủi", detail: "Giặt và ủi quần áo trong ngày", price: 50000, category: "Tiện ích" },
-  { name: "Bữa sáng", detail: "Suất ăn sáng tại nhà hàng", price: 120000, category: "Ẩm thực" },
-  { name: "Đưa đón sân bay", detail: "Xe riêng một chiều đến sân bay", price: 350000, category: "Di chuyển" },
-  { name: "Massage thư giãn", detail: "Liệu trình thư giãn 60 phút", price: 450000, category: "Chăm sóc" },
-  { name: "Late check-out", detail: "Gia hạn thời gian trả phòng", price: 300000, category: "Lưu trú" },
-];
+import { useGetAllServicesQuery } from "../services/serviceApi";
+import { useAppSelector } from "../store/hooks";
 
 export default function ServiceWorkspace() {
   const [selected, setSelected] = useState<string[]>([]);
+  const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
   const total = services.filter((service) => selected.includes(service.name)).reduce((sum, service) => sum + service.price, 0);
 
   return (
@@ -27,6 +22,8 @@ export default function ServiceWorkspace() {
           <p className="mt-1 text-lg font-bold text-blue-800">{selected.length} dịch vụ · {total.toLocaleString("vi-VN")}đ</p>
         </div>
       </div>
+      {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách dịch vụ...</p>}
+      {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách dịch vụ.</p>}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {services.map((service) => {
           const isSelected = selected.includes(service.name);
