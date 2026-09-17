@@ -1,15 +1,26 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Mail, Phone, Plus, Search, Star, UserRound, X } from "lucide-react";
-import { loadCustomers, saveCustomers, type Customer } from "../lib/customerStore";
+import { useGetCustomersByHotelIdQuery, type CustomerResponse } from "../services/customerApi";
+import { useAppSelector } from "../store/hooks";
 
+type Customer = CustomerResponse;
 type Tier = Customer["tier"];
 const tierStyle: Record<Tier, string> = { loyal: "bg-amber-50 text-amber-700", potential: "bg-blue-50 text-blue-700", new: "bg-emerald-50 text-emerald-700" };
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 
 export default function CustomerWorkspace() {
   const { t } = useTranslation();
-  const [customers, setCustomers] = useState(loadCustomers);
+  const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const { data: apiCustomers = [], isLoading, isError } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const [createdCustomers, setCreatedCustomers] = useState<Customer[]>([]);
+  const customers = useMemo(() => [...createdCustomers, ...apiCustomers], [createdCustomers, apiCustomers]);
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log("[customers] hotelId:", hotelId);
+    console.log("[customers] loading:", isLoading, "error:", isError);
+    console.log("[customers] data:", apiCustomers);
+  }, [hotelId, apiCustomers, isLoading, isError]);
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
@@ -20,11 +31,7 @@ export default function CustomerWorkspace() {
   const requiredFieldsFilled = form.name.trim() && form.phone.trim() && form.email.trim() && form.identityNumber.trim();
   const createCustomer = () => {
     if (!requiredFieldsFilled) return;
-    setCustomers((current) => {
-      const next = [{ id: `CUS-${String(current.length + 1).padStart(3, "0")}`, name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim(), identityNumber: form.identityNumber.trim(), visits: 0, lastStay: t("customer.noStay"), totalSpend: 0, tier: "new" as const, note: form.note.trim() || t("customer.noNote") }, ...current];
-      saveCustomers(next);
-      return next;
-    });
+    setCreatedCustomers((current) => [{ id: `local-${Date.now()}`, name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim(), identityNumber: form.identityNumber.trim(), visits: 0, lastStay: t("customer.noStay"), totalSpend: 0, tier: "new" as const, note: form.note.trim() || t("customer.noNote") }, ...current]);
     setForm({ name: "", phone: "", email: "", identityNumber: "", note: "" });
     setShowCreate(false);
   };

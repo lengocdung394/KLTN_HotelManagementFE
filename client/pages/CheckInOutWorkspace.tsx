@@ -4,8 +4,10 @@ import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "../components/CheckoutSummary";
 import DatePickerPopover from "../components/DatePickerPopover";
-import BookingServiceSelector, { bookingServices, type ServiceSelection } from "../components/BookingServiceSelector";
+import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import EarlyLateStayNotice from "../components/EarlyLateStayNotice";
+import { useGetAllServicesQuery } from "../services/serviceApi";
+import { useAppSelector } from "../store/hooks";
 import {
   CalendarCheck,
   CalendarDays,
@@ -241,6 +243,8 @@ const roomDetailsById: Record<string, RoomDetail> = {
 };
 
 export default function CheckInOutWorkspace() {
+  const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
   const { t } = useTranslation();
   const [flowFilter, setFlowFilter] = useState<FlowFilter>("all");
   const [query, setQuery] = useState("");
@@ -656,13 +660,13 @@ export default function CheckInOutWorkspace() {
   const openServiceSelector = (record: DailyRecord) => {
     const currentServices = recordServices[record.id] ?? record.services ?? [];
     setServiceSelections(currentServices.map((service) => ({
-      serviceId: bookingServices.find((item) => item.name === service.name)?.id ?? "",
+      serviceId: services.find((item) => item.name === service.name)?.id ?? "",
       quantity: service.quantity,
     })).filter((selection) => selection.serviceId));
     const roomId = record.room.split(" · ")[0];
     setServiceSelectorRooms([{ id: roomId, type: record.room.split(" · ")[1] ?? "Phòng", guests: record.guests ?? 1, price: 0 }]);
     setServiceRoomSelections({ [roomId]: currentServices.map((service) => ({
-      serviceId: bookingServices.find((item) => item.name === service.name)?.id ?? "",
+      serviceId: services.find((item) => item.name === service.name)?.id ?? "",
       quantity: service.quantity,
     })).filter((selection) => selection.serviceId) });
     setServiceAllSelections([]);
@@ -691,9 +695,9 @@ export default function CheckInOutWorkspace() {
     setRecordServices((current) => ({
       ...current,
       [serviceRecord.id]: mergedSelections.map((selection) => ({
-        name: bookingServices.find((service) => service.id === selection.serviceId)?.name ?? "Dịch vụ",
+        name: services.find((service) => service.id === selection.serviceId)?.name ?? "Dịch vụ",
         quantity: selection.quantity,
-        amount: (bookingServices.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity,
+        amount: (services.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity,
       })),
     }));
     setServiceRecord(null);
@@ -884,7 +888,7 @@ export default function CheckInOutWorkspace() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setServiceRecord(null)}>
           <div className="booking-service-modal-scroll max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Dịch vụ cho khách</p><h3 className="mt-1 text-lg font-bold text-slate-900">{serviceRecord.guest} · {serviceRecord.room.split(" · ")[0]}</h3></div><button type="button" onClick={() => setServiceRecord(null)} className="text-2xl leading-none text-slate-400">×</button></div>
-            <BookingServiceSelector rooms={serviceSelectorRooms} serviceMode={serviceModalMode} setServiceMode={setServiceModalMode} allRoomServices={serviceAllSelections} setAllRoomServices={setServiceAllSelections} roomServices={serviceRoomSelections} setRoomServices={setServiceRoomSelections} roomRanges={{}} fallbackRange={{ checkIn: "2026-01-01", checkOut: "2026-01-02" }} language="vi" nightsForRoom={() => 1} onContinue={saveRecordServices} onSkip={() => setServiceRecord(null)} continueLabel="Xác nhận" skipLabel="Đóng" />
+            <BookingServiceSelector rooms={serviceSelectorRooms} services={services} servicesLoading={isServicesLoading} servicesError={isServicesError} serviceMode={serviceModalMode} setServiceMode={setServiceModalMode} allRoomServices={serviceAllSelections} setAllRoomServices={setServiceAllSelections} roomServices={serviceRoomSelections} setRoomServices={setServiceRoomSelections} roomRanges={{}} fallbackRange={{ checkIn: "2026-01-01", checkOut: "2026-01-02" }} language="vi" nightsForRoom={() => 1} onContinue={saveRecordServices} onSkip={() => setServiceRecord(null)} continueLabel="Xác nhận" skipLabel="Đóng" />
           </div>
         </div>
       )}
