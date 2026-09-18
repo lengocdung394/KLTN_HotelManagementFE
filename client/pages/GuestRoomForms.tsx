@@ -23,8 +23,19 @@ type Customer = CustomerResponse;
 
 const countOptions = (max: number, value: number) => Array.from({ length: Math.max(max, value) + 1 }, (_, index) => index);
 const roomGuestCache: Record<string, RoomGuestCounts> = {};
+export const bookingCache = { roomTotal: 0 };
+export const setBookingRoomTotalCache = (roomTotal: number) => {
+  bookingCache.roomTotal = Number.isFinite(roomTotal) ? roomTotal : 0;
+  if (import.meta.env.DEV) {
+    console.log("[booking] room total cache updated:\n" + JSON.stringify(bookingCache, null, 2));
+  }
+};
 export const clearRoomGuestCache = () => {
   Object.keys(roomGuestCache).forEach((roomId) => { delete roomGuestCache[roomId]; });
+  bookingCache.roomTotal = 0;
+  if (import.meta.env.DEV) {
+    console.log("[booking] booking cache cleared:\n" + JSON.stringify(bookingCache, null, 2));
+  }
 };
 
 export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void }) {

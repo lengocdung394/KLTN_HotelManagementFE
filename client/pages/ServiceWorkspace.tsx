@@ -6,7 +6,8 @@ import { useAppSelector } from "../store/hooks";
 export default function ServiceWorkspace() {
   const [selected, setSelected] = useState<string[]>([]);
   const hotelId = useAppSelector((state) => state.auth.hotelId);
-  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
+  const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
+  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(hasHotelId ? { hotelId: Number(hotelId), activeOnly: true } : undefined, { skip: !hasHotelId });
   const total = services.filter((service) => selected.includes(service.name)).reduce((sum, service) => sum + service.price, 0);
 
   return (
@@ -24,6 +25,8 @@ export default function ServiceWorkspace() {
       </div>
       {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách dịch vụ...</p>}
       {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách dịch vụ.</p>}
+      {!isLoading && !isError && !hasHotelId && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Chưa xác định được chi nhánh hiện tại.</p>}
+      {!isLoading && !isError && hasHotelId && services.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chi nhánh chưa có dịch vụ khả dụng.</p>}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {services.map((service) => {
           const isSelected = selected.includes(service.name);

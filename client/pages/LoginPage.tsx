@@ -24,6 +24,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError(null);
     try {
       const result = await login({ email, password }).unwrap();
+      localStorage.setItem("id", String(result.id));
       dispatch(setCredentials(result)); // result: { token, email, fullName }
       onLogin();
       navigate("/overview", { replace: true });

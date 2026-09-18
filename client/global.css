@@ -552,6 +552,10 @@
     border-radius: 0 0 0.75rem 0.75rem !important;
   }
 
+  .payment-column > div.mb-4.grid {
+    display: none !important;
+  }
+
   .promotion-panel.border-blue-100,
   .promotion-panel .border-blue-100 { border-color: rgb(167 243 208) !important; }
   .promotion-panel.bg-blue-50\/40 { background-color: rgb(236 253 245) !important; }
@@ -587,10 +591,6 @@
   section.mt-7.overflow-hidden > div.border-b > div.flex.items-center.gap-2 > button:hover {
     background: white;
     color: rgb(37 99 235);
-  }
-
-  .payment-column > div.mb-4.grid {
-    display: none !important;
   }
 
   .booking-service-selector > nav > div:first-child > div {
@@ -675,7 +675,6 @@
     color: white !important;
     box-shadow: none !important;
   }
-
 
   pre,
   code {

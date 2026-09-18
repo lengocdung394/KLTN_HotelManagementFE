@@ -2,42 +2,20 @@ import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   CalendarDays,
-  ChevronDown,
-  ClipboardList,
-  ConciergeBell,
-  DoorOpen,
   Download,
-  FileText,
-  LayoutDashboard,
   LogIn,
   LogOut,
   Plus,
-  Settings,
-  ShieldCheck,
   Sparkles,
-  Tag,
   UserRound,
-  Users,
-  WalletCards,
 } from "lucide-react";
 import { useState } from "react";
 import OverviewCalendar from "../components/OverviewCalendarNew";
 import AppHeader from "../components/AppHeader";
-import UserProfileCard from "../components/UserProfileCard";
+import AppSidebar from "../components/AppSidebar";
 import ScrollControls from "../components/ScrollControls";
 import { useAppSelector } from "../store/hooks";
 
-const navigation = [
-  ["/overview", "overview", LayoutDashboard],
-  ["/check-in-out", "checkInOut", LogIn],
-  ["/bookings", "bookings", CalendarDays],
-  ["/customers", "customers", UserRound],
-  ["/rooms", "rooms", DoorOpen],
-  ["/tasks", "tasks", ClipboardList],
-  ["/invoices", "invoices", WalletCards],
-  ["/promotions", "promotions", Tag],
-  ["/services", "services", ConciergeBell],
-] as const;
 const rooms = ["101", "102", "103", "104"];
 
 function DashboardCheckInOut() {
@@ -112,81 +90,10 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   
     const { fullName, email, position, hotelName } = useAppSelector((state) => state.auth);
   const branchLabel = hotelName || "Tất cả chi nhánh";
-  const location = useLocation();
   const [mobile, setMobile] = useState(false);
-  const navItems = navigation.map(([path, key, Icon]) => ({
-    path,
-    label: t(`navigation.${key}`),
-    Icon,
-  }));
   return (
     <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-blue-950 px-4 py-5 text-white transition-transform lg:translate-x-0 ${mobile ? "translate-x-0" : "-translate-x-full"}`}
-      >
-        <div className="h-5" />
-        <div className="mt-2 px-3">
-          <button type="button" className="flex h-11 min-h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-800/80">
-            <span className="flex w-0 min-w-0 flex-1 items-center gap-2.5">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-300 text-[11px] font-bold text-amber-950">
-              M
-            </span>
-            <span className="truncate">{branchLabel}</span>
-            </span>
-            <ChevronDown size={15} className="ml-2 shrink-0 text-blue-200" />
-          </button>
-        </div>
-        <nav className="mt-8 flex-1 space-y-1 overflow-y-auto">
-          {navItems.map(({ path, label, Icon }) => (
-            <Link
-              key={path}
-              to={path}
-              onClick={() => setMobile(false)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${location.pathname === path ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
-            >
-              <Icon size={17} />
-              {label}
-              {path === "/bookings" && (
-                <span className="ml-auto rounded-md bg-white/10 px-1.5 py-0.5 text-[10px]">
-                  12
-                </span>
-              )}
-            </Link>
-          ))}
-          <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">
-            {t("common.administration")}
-          </p>
-          <Link
-            to="/staff"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400"
-          >
-            <Users size={17} />
-            {t("navigation.staff")}
-          </Link>
-          <Link
-            to="/permissions"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400"
-          >
-            <ShieldCheck size={17} />
-            {t("navigation.permissions")}
-          </Link>
-          <Link
-            to="/reports"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400"
-          >
-            <FileText size={17} />
-            {t("navigation.reports")}
-          </Link>
-          <Link
-            to="/settings"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400"
-          >
-            <Settings size={17} />
-            {t("navigation.settings")}
-          </Link>
-        </nav>
-        <UserProfileCard onLogout={onLogout} fullName={fullName || email} position={position} />
-      </aside>
+      <AppSidebar mobile={mobile} onCloseMobile={() => setMobile(false)} onLogout={onLogout} fullName={fullName || email} position={position} />
       {mobile && (
         <div
           className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden"
@@ -195,7 +102,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
       )}
       <main className="min-w-0 lg:pl-64">
         <AppHeader onMenuClick={() => setMobile(true)} fullName={fullName || email} />
-        <div className="mx-auto min-w-0 max-w-[1280px] px-5 py-7 lg:px-9">
+        <div className="mx-auto min-w-0 max-w-7xl px-5 py-7 lg:px-9">
           <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <p className="mb-1 text-sm font-semibold text-blue-600">
