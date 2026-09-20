@@ -23,6 +23,7 @@ import {
   type BookingUpdateRequest,
 } from "../services/bookingApi";
 import { useCreatePaymentQrMutation } from "../services/paymentApi";
+import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useAppSelector } from "../store/hooks";
 
 const valueOf = (item: BookingListItem, keys: string[]) =>
@@ -44,10 +45,29 @@ const formatDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("vi-VN");
 };
 
+const bookingServices = (detail: Record<string, unknown>) => {
+  const serviceFields = [
+    detail.bookingServiceResponsesForHotels,
+    detail.bookingServiceResponseForHotels,
+    detail.serviceRequests,
+    detail.serviceResponses,
+    detail.services,
+  ];
+  const namedServices = serviceFields.find(Array.isArray);
+  const detectedServices = Object.entries(detail).find(([key, value]) =>
+    Array.isArray(value) && key.toLowerCase().includes("service"),
+  )?.[1];
+  const services = namedServices ?? detectedServices;
+  return (services ?? []) as Record<string, unknown>[];
+};
+
 export default function BookingListWorkspace() {
   const navigate = useNavigate();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [dateSort, setDateSort] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -93,6 +113,9 @@ export default function BookingListWorkspace() {
     isError,
     refetch,
   } = useGetBookingsByHotelQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { data: hotelServices = [] } = useGetAllServicesQuery(
+    hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true },
+  );
 
   // Merge API bookings with local overrides
   const bookings = fetchedBookings.map((b) => {
@@ -101,17 +124,28 @@ export default function BookingListWorkspace() {
   });
 
   const normalizedSearch = search.trim().toLowerCase();
-  const filteredBookings = bookings.filter((booking) =>
-    JSON.stringify(booking).toLowerCase().includes(normalizedSearch)
-  );
+  const filteredBookings = bookings.filter((booking) => {
+    const matchesSearch = JSON.stringify(booking).toLowerCase().includes(normalizedSearch);
+    const bookingDate = booking.createdAt ? new Date(String(booking.createdAt)) : null;
+    if (!matchesSearch || !bookingDate || Number.isNaN(bookingDate.getTime())) return matchesSearch && !dateFrom && !dateTo;
+    const day = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
+    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
+    return (!from || day >= from) && (!to || day <= to);
+  });
+  const sortedBookings = [...filteredBookings].sort((first, second) => {
+    const firstTime = first.createdAt ? new Date(String(first.createdAt)).getTime() : 0;
+    const secondTime = second.createdAt ? new Date(String(second.createdAt)).getTime() : 0;
+    return dateSort === "asc" ? firstTime - secondTime : secondTime - firstTime;
+  });
 
-  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(sortedBookings.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const paginatedBookings = filteredBookings.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paginatedBookings = sortedBookings.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   useEffect(() => {
     setPage(1);
-  }, [search, pageSize]);
+  }, [search, dateFrom, dateTo, dateSort, pageSize]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -268,7 +302,8 @@ export default function BookingListWorkspace() {
 
       {/* Search Bar */}
       <div className="border-b border-slate-100 p-5">
-        <div className="relative max-w-md">
+        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_180px_190px_auto] lg:items-end">
+          <label className="relative block">
           <Search size={15} className="absolute left-3 top-3 text-slate-400" />
           <input
             value={search}
@@ -276,6 +311,11 @@ export default function BookingListWorkspace() {
             placeholder="Tìm mã booking, tên khách hàng..."
             className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400 transition-colors"
           />
+          </label>
+          <label className="block text-xs font-semibold text-slate-500">Từ ngày<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
+          <label className="block text-xs font-semibold text-slate-500">Đến ngày<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
+          <label className="block text-xs font-semibold text-slate-500">Sắp xếp<select value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">Mới nhất trước</option><option value="asc">Cũ nhất trước</option></select></label>
+          {(dateFrom || dateTo) && <button type="button" onClick={() => { setDateFrom(""); setDateTo(""); }} className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">Xóa lọc</button>}
         </div>
       </div>
 
@@ -431,13 +471,13 @@ export default function BookingListWorkspace() {
               </button>
             </div>
 
-            {/* Modal Body: 2 Columns */}
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
-              {/* Left Column: Details & Pricing */}
-              <div className="space-y-4">
-                <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+            {/* Modal Body: Single Column */}
+            <div className="mt-6 grid gap-6 grid-cols-1">
+              {/* Booking Details */}
+              <div className="flex flex-col gap-4">
+                <div className="booking-general-info rounded-xl border border-slate-100 bg-slate-50/70 p-4">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Thông tin chung</h4>
-                  <div className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                     <div>
                       <p className="text-xs text-slate-500">Khách hàng</p>
                       <p className="font-semibold text-slate-900">{textOf(selectedBooking, ["customerName"])}</p>
@@ -458,7 +498,7 @@ export default function BookingListWorkspace() {
                 </div>
 
                 {/* Pricing Summary */}
-                <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+                <div className="booking-pricing-summary rounded-xl border border-blue-100 bg-blue-50/40 p-4 order-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-blue-700 mb-3">Chi tiết thanh toán</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-slate-600">
@@ -482,25 +522,63 @@ export default function BookingListWorkspace() {
 
                 {/* Booking Room Details */}
                 {selectedBooking.bookingDetails && selectedBooking.bookingDetails.length > 0 && (
-                  <div>
+                  <div className="booking-room-details order-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Chi tiết phòng lưu trú</h4>
-                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                      {selectedBooking.bookingDetails.map((detail, idx) => (
-                        <div key={idx} className="rounded-lg border border-slate-200 p-3 text-xs text-slate-700 bg-white">
-                          <p className="font-bold text-slate-800">Phòng ID: {String(detail.roomId ?? "-")}</p>
+                    <div className="space-y-2">
+                      {selectedBooking.bookingDetails.map((detail, idx) => {
+                        const serviceRequests = bookingServices(detail);
+                        const roomName = String(detail.roomName ?? detail.roomTypeName ?? detail.roomType ?? "");
+                        const roomSubtotal = detail.roomSubTotal ?? detail.roomSubtotal;
+                        const roomPricePerNight = detail.baseRoomPricePerNight ?? detail.roomPrice;
+                        return <div key={idx} className="rounded-lg border border-slate-200 p-3 text-xs text-slate-700 bg-white">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-bold text-slate-800">Phòng ID: {String(detail.roomId ?? "-")}</p>
+                              {roomName && <p className="mt-0.5 text-slate-500">Loại phòng: {roomName}</p>}
+                            </div>
+                            {roomSubtotal !== undefined && <strong className="shrink-0 text-blue-700">Tạm tính: {money(roomSubtotal)}</strong>}
+                          </div>
                           <div className="mt-1 flex justify-between text-slate-500">
                             <span>Nhận: {formatDate(detail.checkInTime)}</span>
                             <span>Trả: {formatDate(detail.checkOutTime)}</span>
                           </div>
-                        </div>
-                      ))}
+                          {roomPricePerNight !== undefined && <p className="mt-1 text-slate-500">Giá phòng/đêm: {money(roomPricePerNight)}</p>}
+                          <div className="mt-3 border-t border-slate-100 pt-2">
+                            <p className="font-semibold text-slate-600">Dịch vụ ({serviceRequests.length})</p>
+                            {serviceRequests.length > 0 ? (
+                              <div className="mt-1">
+                                <div className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] gap-3 border-b border-slate-100 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                                  <span>Tên dịch vụ</span>
+                                  <span className="text-right">Số lượng</span>
+                                  <span className="text-right">Đơn giá</span>
+                                </div>
+                                <div className="space-y-1">
+                                {serviceRequests.map((serviceRequest, serviceIndex) => {
+                                  const serviceId = String(serviceRequest.serviceId ?? serviceRequest.id ?? "");
+                                  const service = hotelServices.find((item) => String(item.id) === serviceId);
+                                  const serviceName = String(serviceRequest.serviceName ?? serviceRequest.name ?? service?.name ?? `Dịch vụ #${serviceId || serviceIndex + 1}`);
+                                  const quantity = Number(serviceRequest.quantity ?? 1);
+                                  const price = serviceRequest.price ?? service?.price;
+                                  const usedAt = serviceRequest.usedAt;
+                                  return <div key={`${serviceId}-${serviceIndex}`} className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] items-center gap-3 border-b border-slate-50 py-1 last:border-0 text-slate-500">
+                                    <span className="min-w-0 truncate" title={usedAt ? `Dùng: ${formatDate(usedAt)}` : undefined}>{serviceName}</span>
+                                    <span className="whitespace-nowrap text-right tabular-nums">{quantity}</span>
+                                    <strong className="whitespace-nowrap text-right tabular-nums text-blue-700">{price !== undefined ? money(Number(price)) : "-"}</strong>
+                                  </div>;
+                                })}
+                                </div>
+                              </div>
+                            ) : <p className="mt-1 text-slate-400">Không sử dụng dịch vụ</p>}
+                          </div>
+                        </div>;
+                      })}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Right Column: Payment Section */}
-              <div className="flex flex-col justify-between rounded-xl border border-slate-200 p-5 bg-white">
+              {/* Payment Section */}
+              <div className="booking-payment-section flex flex-col justify-between rounded-xl border border-slate-200 p-5 bg-white">
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <CreditCard size={18} className="text-blue-600" />

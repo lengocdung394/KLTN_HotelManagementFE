@@ -1,0 +1,98 @@
+import { baseApi } from "./baseApi";
+
+export type CheckInOutService = {
+  serviceId?: number;
+  price?: number;
+  quantity?: number;
+  usedAt?: string;
+  name?: string;
+  serviceName?: string;
+  nameService?: string;
+};
+
+export type CheckInOutBookingDetail = {
+  bookingId?: number;
+  bookingDetailId?: number;
+  roomId?: number;
+  roomName?: string;
+  roomTypeName?: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  numAdults?: number;
+  numChildren?: number;
+  numInfants?: number;
+  baseRoomPricePerNight?: number;
+  extraAdultFeePerNight?: number;
+  extraChildFeePerNight?: number;
+  roomSubTotal?: number;
+  serviceSubTotal?: number;
+  totalPrice?: number;
+  nameCustomer?: string;
+  cccd?: string;
+  customerName?: string;
+  identityNumber?: string;
+  bookingServiceResponseForHotel?: CheckInOutService[];
+  bookingServiceResponsesForHotels?: CheckInOutService[];
+  bookingServiceDetails?: CheckInOutService[];
+  services?: CheckInOutService[];
+  bookingDetails?: CheckInOutBookingDetail[];
+  details?: CheckInOutBookingDetail[];
+  bookingDetailResponses?: CheckInOutBookingDetail[];
+  [key: string]: unknown;
+};
+
+export type CheckInOutQuery = {
+  hotelId: number;
+  date?: string;
+  status?: string;
+  bookingStatus?: string;
+};
+
+const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => {
+  const values = Array.isArray(response)
+    ? response
+    : response && typeof response === "object" && Array.isArray((response as { result?: unknown }).result)
+      ? (response as { result: unknown[] }).result
+      : [];
+
+  return values.flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const booking = value as CheckInOutBookingDetail;
+    const details = booking.bookingDetails ?? booking.details ?? booking.bookingDetailResponses;
+    if (!Array.isArray(details)) return [booking];
+    return details.map((detail) => ({
+      ...booking,
+      ...detail,
+      bookingId: detail.bookingId ?? booking.bookingId,
+      nameCustomer: detail.nameCustomer ?? booking.nameCustomer,
+      customerName: detail.customerName ?? booking.customerName,
+      cccd: detail.cccd ?? booking.cccd,
+      identityNumber: detail.identityNumber ?? booking.identityNumber,
+    }));
+  });
+};
+
+export const checkInOutApi = baseApi.injectEndpoints({
+  endpoints: (builder) => ({
+    getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
+      query: ({ hotelId, date, status, bookingStatus }) => ({
+        url: "/hotels/today-checkins",
+        method: "GET",
+        params: { hotelId, date, status, bookingStatus },
+      }),
+      transformResponse: extractCheckInOutList,
+      providesTags: ["Booking"],
+    }),
+    getTodayCheckOuts: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
+      query: ({ hotelId, date, status, bookingStatus }) => ({
+        url: "/hotels/today-checkouts",
+        method: "GET",
+        params: { hotelId, date, status, bookingStatus },
+      }),
+      transformResponse: extractCheckInOutList,
+      providesTags: ["Booking"],
+    }),
+  }),
+});
+
+export const { useGetTodayCheckInsQuery, useGetTodayCheckOutsQuery } = checkInOutApi;

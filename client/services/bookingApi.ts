@@ -3,6 +3,7 @@ import { baseApi } from "./baseApi";
 export type BookingServiceRequest = {
   serviceId: number;
   quantity: number;
+  name?: string;
   price?: number;
   usedAt?: string;
 };
@@ -97,4 +98,8 @@ export const bookingApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useGetBookingsByHotelQuery, useCreateCounterBookingMutation, useUpdateBookingMutation } = bookingApi;
+export const {
+  useGetBookingsByHotelQuery,
+  useCreateCounterBookingMutation,
+  useUpdateBookingMutation,
+} = bookingApi;
