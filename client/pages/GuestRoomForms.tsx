@@ -38,6 +38,12 @@ export const clearRoomGuestCache = () => {
   }
 };
 
+export const setRoomGuestCache = (values: Record<string, RoomGuestCounts>) => {
+  Object.entries(values).forEach(([roomId, counts]) => {
+    roomGuestCache[roomId] = counts;
+  });
+};
+
 export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void }) {
   const { t } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);

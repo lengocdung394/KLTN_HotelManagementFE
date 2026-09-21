@@ -35,14 +35,25 @@ export type ManagementBookingRoomToAdd = {
   }[];
 };
 
+export type ManagementBookingServiceQuantityItem = {
+  serviceId: number;
+  quantity: number;
+};
+
+export type ManagementBookingUpdateServiceQuantityRequest = {
+  bookingDetailId: number;
+  services: ManagementBookingServiceQuantityItem[];
+};
+
 export type ManagementBookingModificationRequest = {
   employeeId: number;
   bookingDetailIdsToCancel: number[];
   servicesToCancel: ManagementBookingServiceCancellation[];
   roomsToAdd: ManagementBookingRoomToAdd[];
   roomsToChange: { bookingDetailId: number; newRoomId: number }[];
-  roomsToUpdateDates: { bookingDetailId: number; newCheckInTime: string; newCheckoutTime: string }[];
+  roomsToUpdateDates: { bookingDetailId: number; newCheckInTime: string; newCheckoutTime?: string; newCheckOutTime?: string }[];
   servicesToAddForExistingRooms: ManagementBookingRoomServiceAddition[];
+  serviceQuantityUpdates: ManagementBookingUpdateServiceQuantityRequest[];
 };
 
 export const managementBookingApi = baseApi.injectEndpoints({
