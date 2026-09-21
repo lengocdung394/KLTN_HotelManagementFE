@@ -45,10 +45,34 @@ const formatDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("vi-VN");
 };
 
+const isCancelledService = (service: Record<string, unknown>) => {
+  const status = String(
+    service.status
+    ?? service.serviceStatus
+    ?? service.bookingServiceStatus
+    ?? service.state
+    ?? "",
+  ).trim().toUpperCase();
+  const statusIsCancelled = status.includes("CANCEL") || status.includes("HỦY") || status.includes("HUY");
+  const cancellationFlag = [
+    service.isCancelled,
+    service.isCanceled,
+    service.cancelled,
+    service.canceled,
+    service.isDeleted,
+    service.deleted,
+  ].some((value) => value === true || String(value).toLowerCase() === "true");
+  const hasCancellationDate = Boolean(service.cancelledAt ?? service.canceledAt ?? service.cancellationDate);
+  const quantity = Number(service.quantity ?? service.amount);
+
+  return statusIsCancelled || cancellationFlag || hasCancellationDate || (Number.isFinite(quantity) && quantity <= 0);
+};
+
 const bookingServices = (detail: Record<string, unknown>) => {
   const serviceFields = [
     detail.bookingServiceResponsesForHotels,
     detail.bookingServiceResponseForHotels,
+    detail.bookingServiceDetails,
     detail.serviceRequests,
     detail.serviceResponses,
     detail.services,
@@ -58,7 +82,7 @@ const bookingServices = (detail: Record<string, unknown>) => {
     Array.isArray(value) && key.toLowerCase().includes("service"),
   )?.[1];
   const services = namedServices ?? detectedServices;
-  return (services ?? []) as Record<string, unknown>[];
+  return ((services ?? []) as Record<string, unknown>[]).filter((service) => !isCancelledService(service));
 };
 
 export default function BookingListWorkspace() {

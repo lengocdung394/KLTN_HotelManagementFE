@@ -34,14 +34,66 @@ const booked: Record<string, { start: string; end: string; guest: string }[]> = 
 const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"];
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 const serviceDetailIdOf = (service: Record<string, unknown>) => Number(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? service.serviceId);
+const serviceIdOf = (service: Record<string, unknown>) => {
+  const serviceObj = service.service && typeof service.service === "object" ? service.service as Record<string, unknown> : null;
+  const detailId = service.bookingServiceDetailId
+    ?? service.serviceDetailId
+    ?? service.bookingServiceDetailID
+    ?? service.serviceDetailID;
+  const rawId = (
+    service.serviceId
+    ?? service.serviceID
+    ?? serviceObj?.id
+    ?? serviceObj?.serviceId
+    ?? serviceObj?.serviceID
+    ?? (service.id !== undefined && service.id !== detailId ? service.id : undefined)
+  );
+  return rawId == null ? "" : String(rawId);
+};
+
+const isCancelledService = (service: Record<string, unknown>) => {
+  const status = String(
+    service.status
+    ?? service.serviceStatus
+    ?? service.bookingServiceStatus
+    ?? service.serviceDetailStatus
+    ?? service.bookingServiceDetailStatus
+    ?? service.state
+    ?? "",
+  ).trim().toUpperCase();
+  const cancellationFlag = [
+    service.isCancelled,
+    service.isCanceled,
+    service.isCancel,
+    service.cancelled,
+    service.canceled,
+    service.isDeleted,
+    service.deleted,
+  ].some((value) => value === true || String(value).toLowerCase() === "true");
+  const hasCancellationDate = Boolean(service.cancelledAt ?? service.canceledAt ?? service.cancellationDate);
+  const quantity = Number(service.quantity ?? service.amount);
+
+  return status.includes("CANCEL")
+    || status.includes("HỦY")
+    || status.includes("HUY")
+    || cancellationFlag
+    || hasCancellationDate
+    || (Number.isFinite(quantity) && quantity <= 0);
+};
+
 const servicesOf = (detail: Record<string, unknown>) => ([
   detail.bookingServiceResponsesForHotels,
+  detail.bookingServiceResponseForHotel,
   detail.bookingServiceResponseForHotels,
   detail.bookingServiceDetails,
   detail.serviceRequests,
   detail.serviceResponses,
   detail.services,
-].find(Array.isArray) ?? []) as Record<string, unknown>[];
+].find(Array.isArray) ?? Object.entries(detail).find(([key, value]) =>
+  Array.isArray(value) && key.toLowerCase().includes("service"),
+)?.[1] ?? []) as Record<string, unknown>[];
+
+const activeServicesOf = (detail: Record<string, unknown>) => servicesOf(detail).filter((service) => !isCancelledService(service));
 
 const allFloorsLabel = "Tất cả các tầng";
 const allBuildingsLabel = "Tất cả các tòa";
@@ -588,19 +640,12 @@ export default function BookingWorkspace() {
       });
     });
     const nextServices = Object.fromEntries(details.flatMap((detail) => {
-      const serviceRequests = ([
-        detail.bookingServiceResponsesForHotels,
-        detail.bookingServiceResponseForHotels,
-        detail.bookingServiceDetails,
-        detail.serviceRequests,
-        detail.serviceResponses,
-        detail.services,
-      ].find(Array.isArray) ?? Object.entries(detail).find(([key, value]) => Array.isArray(value) && key.toLowerCase().includes("service"))?.[1] ?? []) as Record<string, unknown>[];
+      const serviceRequests = activeServicesOf(detail);
       const detailRoomKey = roomKey(detail);
       const matchedRoom = matchedRooms.find((room) => String(room.databaseId ?? room.id) === detailRoomKey || room.id === detailRoomKey);
       const groupedMap = new Map<string, ServiceSelection>();
       serviceRequests.forEach((service) => {
-        const sId = String(service.serviceId ?? service.serviceID ?? service.id ?? "");
+        const sId = serviceIdOf(service);
         if (!sId) return;
         const qty = Number(service.quantity ?? service.amount ?? 1);
         const price = service.price === undefined || service.price === null
@@ -810,74 +855,180 @@ export default function BookingWorkspace() {
       );
       const servicesToAddForExistingRooms: { bookingDetailId: number; services: any[] }[] = [];
       const serviceQuantityUpdates: { bookingDetailId: number; services: { serviceId: number; quantity: number }[] }[] = [];
+      const roomsToUpdateDates: {
+        bookingDetailId: number;
+        newCheckInTime: string;
+        newCheckoutTime: string;
+        newCheckOutTime: string;
+        numAdults: number;
+        numChildren: number;
+        numInfants: number;
+      }[] = [];
       const servicesToCancelMap: Record<number, number[]> = {};
 
-      selectedRooms.forEach((room) => {
+      selectedRooms.forEach((room, roomIdx) => {
         const roomKeyValue = String(room.databaseId ?? Number(room.id));
-        const initialDetail = initialDetails.find((detail) => {
-          const detailRoomId = roomKey(detail);
-          return detailRoomId === roomKeyValue || detailRoomId === room.id;
+        const initialDetail = initialDetails.find((detail, idx) => {
+          const dId = detailIdOf(detail);
+          const rId = roomKey(detail);
+          const targetDbId = Number(room.databaseId ?? room.id);
+          const targetIdStr = String(room.id);
+          return (
+            dId === targetDbId ||
+            rId === roomKeyValue ||
+            rId === targetIdStr ||
+            dId === Number(targetIdStr) ||
+            (selectedRooms.length === initialDetails.length && idx === roomIdx)
+          );
         });
         const bookingDetailId = initialDetail ? detailIdOf(initialDetail) : NaN;
         if (!Number.isFinite(bookingDetailId)) return;
 
-        const roomSelections = getRoomServiceSelections(room);
-        const selections = serviceMode === "all"
-          ? roomSelections.length > 0 ? roomSelections : allRoomServices.map((selection) => ({ ...selection, quantity: selectedGuestsForRoom(room) }))
-          : roomSelections;
+        const currentRange = selectedRanges[room.id] ?? selectedRanges[String(room.databaseId)] ?? {
+          checkIn: String(initialDetail?.checkInTime ?? "").slice(0, 10),
+          checkOut: String(initialDetail?.checkOutTime ?? "").slice(0, 10),
+        };
+        const originalCheckIn = String(initialDetail?.checkInTime ?? "").slice(0, 10);
+        const originalCheckOut = String(initialDetail?.checkOutTime ?? "").slice(0, 10);
+        const originalCounts = {
+          adults: Number(initialDetail?.numAdults ?? initialDetail?.adults ?? room.guests),
+          children: Number(initialDetail?.numChildren ?? initialDetail?.children ?? 0),
+          infants: Number(initialDetail?.numInfants ?? initialDetail?.infants ?? 0),
+        };
+        const counts = roomGuestCounts[room.id] ?? originalCounts;
+        const datesChanged = currentRange.checkIn !== originalCheckIn || currentRange.checkOut !== originalCheckOut;
+        const guestsChanged = counts.adults !== originalCounts.adults
+          || counts.children !== originalCounts.children
+          || counts.infants !== originalCounts.infants;
+        if (datesChanged || guestsChanged) {
+          roomsToUpdateDates.push({
+            bookingDetailId,
+            newCheckInTime: `${currentRange.checkIn}T14:00:00`,
+            newCheckoutTime: `${currentRange.checkOut}T12:00:00`,
+            newCheckOutTime: `${currentRange.checkOut}T12:00:00`,
+            numAdults: counts.adults,
+            numChildren: counts.children,
+            numInfants: counts.infants,
+          });
+        }
+
+        const currentSelections = getRoomServiceSelections(room);
+        const origServicesMap = new Map<string, { serviceId: string; originalQuantity: number; quantity: number }>();
+        activeServicesOf(initialDetail).forEach((srv) => {
+          const sId = serviceIdOf(srv);
+          if (!sId) return;
+          const qty = Number(srv.quantity ?? srv.amount ?? 1);
+          console.debug("[booking-edit] raw original service", {
+            bookingDetailId,
+            roomId: room.id,
+            raw: srv,
+            normalizedServiceId: sId,
+            originalQuantity: qty,
+          });
+          const existing = origServicesMap.get(sId);
+          if (existing) {
+            existing.originalQuantity += qty;
+            existing.quantity += qty;
+          } else {
+            origServicesMap.set(sId, { serviceId: sId, originalQuantity: qty, quantity: qty });
+          }
+        });
+        const origSelections = [
+          ...Array.from(origServicesMap.values()),
+          ...currentSelections
+            .filter((selection) => selection.isExisting && Number(selection.originalQuantity) > 0)
+            .filter((selection) => !origServicesMap.has(String(selection.serviceId)))
+            .map((selection) => ({
+              serviceId: selection.serviceId,
+              originalQuantity: Number(selection.originalQuantity),
+              quantity: Number(selection.originalQuantity),
+            })),
+        ];
+
+        console.groupCollapsed(`[booking-edit] compare services | detail ${bookingDetailId} | room ${room.id}`);
+        console.table({
+          original: origSelections.map((service) => ({ serviceId: service.serviceId, quantity: service.originalQuantity })),
+          current: currentSelections.map((service) => ({ serviceId: service.serviceId, quantity: Number(service.quantity) || 0 })),
+        });
+        console.groupEnd();
 
         const additionsForRoom: any[] = [];
         const quantityUpdatesForRoom: { serviceId: number; quantity: number }[] = [];
 
-        selections.forEach((selection) => {
-          const serviceIdNum = Number(selection.serviceId);
-          if (!Number.isFinite(serviceIdNum)) return;
-          const currentQty = selection.quantity;
-          const origQty = selection.isExisting ? Number(selection.originalQuantity ?? selection.quantity) : 0;
+        currentSelections.forEach((curr) => {
+          const sIdNum = Number(curr.serviceId);
+          const currentQty = Number(curr.quantity) || 0;
+          if (!Number.isFinite(sIdNum) || currentQty <= 0) return;
 
-          if (!selection.isExisting) {
-            if (currentQty > 0) {
-              const serviceObj = services.find((item) => String(item.id) === selection.serviceId);
-              additionsForRoom.push({
-                serviceId: serviceIdNum,
-                quantity: currentQty,
-                name: selection.name ?? serviceObj?.name,
-                price: selection.price ?? serviceObj?.price,
-                usedAt: selection.usedAt ?? new Date().toISOString().slice(0, 19),
-              });
-            }
-          } else {
-            if (currentQty < origQty) {
-              quantityUpdatesForRoom.push({
-                serviceId: serviceIdNum,
-                quantity: currentQty,
-              });
-            } else if (currentQty > origQty) {
-              const extraQty = currentQty - origQty;
-              const serviceObj = services.find((item) => String(item.id) === selection.serviceId);
-              additionsForRoom.push({
-                serviceId: serviceIdNum,
-                quantity: extraQty,
-                name: selection.name ?? serviceObj?.name,
-                price: selection.price ?? serviceObj?.price,
-                usedAt: selection.usedAt ?? new Date().toISOString().slice(0, 19),
-              });
-            }
+          const orig = origSelections.find((o) => String(o.serviceId) === String(curr.serviceId))
+            ?? (curr.isExisting && Number(curr.originalQuantity) > 0 ? curr : undefined);
+          const origQty = orig ? Number(orig.originalQuantity ?? orig.quantity ?? 0) : 0;
+          const delta = currentQty - origQty;
+          const decision = origQty === 0 ? "ADD_NEW" : delta > 0 ? "ADD_EXTRA" : delta < 0 ? "UPDATE_QUANTITY" : "UNCHANGED";
+
+          console.debug("[booking-edit] service decision", {
+            bookingDetailId,
+            roomId: room.id,
+            serviceId: curr.serviceId,
+            originalQuantity: origQty,
+            currentQuantity: currentQty,
+            delta,
+            decision,
+          });
+
+          if (origQty === 0) {
+            const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
+            additionsForRoom.push({
+              serviceId: sIdNum,
+              quantity: currentQty,
+              name: curr.name ?? serviceObj?.name,
+              price: curr.price ?? serviceObj?.price,
+              usedAt: curr.usedAt ?? new Date().toISOString().slice(0, 19),
+            });
+          } else if (currentQty > origQty) {
+            const extraQty = currentQty - origQty;
+            const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
+            additionsForRoom.push({
+              serviceId: sIdNum,
+              quantity: extraQty,
+              name: curr.name ?? serviceObj?.name,
+              price: curr.price ?? serviceObj?.price,
+              usedAt: curr.usedAt ?? new Date().toISOString().slice(0, 19),
+            });
+          } else if (currentQty < origQty) {
+            quantityUpdatesForRoom.push({
+              serviceId: sIdNum,
+              quantity: currentQty,
+            });
           }
         });
 
-        const existingServicesInDetail = servicesOf(initialDetail);
-        existingServicesInDetail.forEach((srv) => {
-          const sId = Number(srv.serviceId ?? srv.id);
-          if (Number.isFinite(sId)) {
-            const matchedSelection = selections.find((sel) => sel.isExisting && Number(sel.serviceId) === sId);
-            if (!matchedSelection) {
-              if (!quantityUpdatesForRoom.some((item) => item.serviceId === sId)) {
-                quantityUpdatesForRoom.push({
-                  serviceId: sId,
-                  quantity: 0,
-                });
-              }
+        origSelections.forEach((orig) => {
+          const sIdNum = Number(orig.serviceId);
+          if (!Number.isFinite(sIdNum)) return;
+          const origQty = Number(orig.originalQuantity ?? orig.quantity ?? 0);
+          if (origQty <= 0) return;
+
+          const curr = currentSelections.find((c) => String(c.serviceId) === String(orig.serviceId));
+          const currentQty = curr ? Number(curr.quantity) || 0 : 0;
+
+          if (currentQty === 0) {
+            console.debug("[booking-edit] service removed or quantity is zero", {
+              bookingDetailId,
+              roomId: room.id,
+              serviceId: orig.serviceId,
+              originalQuantity: origQty,
+              currentQuantity: currentQty,
+              decision: "UPDATE_QUANTITY_TO_ZERO",
+            });
+          }
+
+          if (currentQty === 0) {
+            if (!quantityUpdatesForRoom.some((q) => q.serviceId === sIdNum)) {
+              quantityUpdatesForRoom.push({
+                serviceId: sIdNum,
+                quantity: 0,
+              });
             }
           }
         });
@@ -900,13 +1051,17 @@ export default function BookingWorkspace() {
         servicesToCancel,
         roomsToAdd: [],
         roomsToChange: [],
-        roomsToUpdateDates: [],
+        roomsToUpdateDates,
         servicesToAddForExistingRooms,
         serviceQuantityUpdates,
       };
 
       console.log("===> [BOOKING WORKSPACE MODIFY PAYLOAD SENT TO BE]:");
       console.log(JSON.stringify(modificationRequest, null, 2));
+      console.table({
+        additions: servicesToAddForExistingRooms.flatMap((item) => item.services.map((service) => ({ bookingDetailId: item.bookingDetailId, serviceId: service.serviceId, quantity: service.quantity }))),
+        quantityUpdates: serviceQuantityUpdates.flatMap((item) => item.services.map((service) => ({ bookingDetailId: item.bookingDetailId, serviceId: service.serviceId, quantity: service.quantity }))),
+      });
       console.log("==========================================");
 
       try {
@@ -941,12 +1096,25 @@ export default function BookingWorkspace() {
       return;
     }
     try {
-      await createCounterBooking({ employeeId: counterEmployeeId, request }).unwrap();
+      const res = await createCounterBooking({ employeeId: counterEmployeeId, request }).unwrap();
+      const newBookingId = (res as any)?.bookingId ?? (res as any)?.id;
+      toast({
+        variant: "booking",
+        title: "Đặt phòng thành công!",
+        description: newBookingId ? `Đã hoàn tất tạo đơn đặt phòng #${newBookingId}.` : "Đã hoàn tất tạo đơn đặt phòng cho khách hàng.",
+      });
       clearRoomGuestCache();
       setStep("success");
     } catch (error) {
       console.error("[booking] create counter booking failed", error);
-      setPaymentError(error instanceof Error ? error.message : "Không thể tạo QR/thanh toán. Vui lòng thử lại.");
+      const responseError = error as { data?: { message?: string; error?: string }; error?: string };
+      const errorMessage = responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? (error instanceof Error ? error.message : "Không thể tạo QR/thanh toán. Vui lòng thử lại.");
+      toast({
+        variant: "destructive",
+        title: "Đặt phòng thất bại",
+        description: errorMessage,
+      });
+      setPaymentError(errorMessage);
     }
   };
   const storedEmployeeId = localStorage.getItem("id");

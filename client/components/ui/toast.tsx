@@ -31,6 +31,8 @@ const toastVariants = cva(
           "border-emerald-400/50 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 border-l-4 border-l-emerald-300",
         success:
           "border-emerald-400/50 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 border-l-4 border-l-emerald-300",
+        booking:
+          "border-sky-300/80 bg-gradient-to-r from-blue-500 via-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-500/25 border-l-4 border-l-sky-200",
         destructive:
           "destructive group border-rose-400/50 bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 text-white shadow-lg shadow-rose-600/25 border-l-4 border-l-rose-300",
       },

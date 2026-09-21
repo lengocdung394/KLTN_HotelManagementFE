@@ -51,7 +51,15 @@ export type ManagementBookingModificationRequest = {
   servicesToCancel: ManagementBookingServiceCancellation[];
   roomsToAdd: ManagementBookingRoomToAdd[];
   roomsToChange: { bookingDetailId: number; newRoomId: number }[];
-  roomsToUpdateDates: { bookingDetailId: number; newCheckInTime: string; newCheckoutTime?: string; newCheckOutTime?: string }[];
+  roomsToUpdateDates: {
+    bookingDetailId: number;
+    newCheckInTime: string;
+    newCheckoutTime?: string;
+    newCheckOutTime?: string;
+    numAdults: number;
+    numChildren: number;
+    numInfants: number;
+  }[];
   servicesToAddForExistingRooms: ManagementBookingRoomServiceAddition[];
   serviceQuantityUpdates: ManagementBookingUpdateServiceQuantityRequest[];
 };
