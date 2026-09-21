@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Ban, Check, ChevronRight, CreditCard, DoorOpen, ListChecks, ReceiptText, Search } from "lucide-react";
 import type { HotelService } from "../services/serviceApi";
 
-export type ServiceSelection = { serviceId: string; quantity: number; price?: number; name?: string; usedAt?: string; applyToRoom?: boolean };
+export type ServiceSelection = { serviceId: string; quantity: number; price?: number; name?: string; usedAt?: string; isExisting?: boolean; applyToRoom?: boolean };
 export type ServiceRoom = { id: string; databaseId?: number; type: string; guests: number; price: number };
 
 export type BookingServiceSelectorProps = {

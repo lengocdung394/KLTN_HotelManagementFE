@@ -9,7 +9,8 @@ import { useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery } from "../service
 import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
-import { useCreateCounterBookingMutation, useUpdateBookingMutation, type BookingListItem } from "../services/bookingApi";
+import { useCreateCounterBookingMutation, type BookingListItem } from "../services/bookingApi";
+import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppSelector } from "../store/hooks";
 
 type BookingRoom = { id: string; databaseId?: number; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
@@ -455,7 +456,7 @@ export default function BookingWorkspace() {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
   const [createCounterBooking, { isLoading: isCreatingBooking, error: bookingError }] = useCreateCounterBookingMutation();
-  const [updateBooking, { isLoading: isUpdatingBooking }] = useUpdateBookingMutation();
+  const [modifyBooking, { isLoading: isModifyingBooking }] = useModifyBookingMutation();
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
   const { data: apiBuildings } = useGetBuildingsByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const { data: apiRoomTypes } = useGetRoomTypesQuery();
@@ -567,6 +568,7 @@ export default function BookingWorkspace() {
         quantity: Number(service.quantity ?? 1),
         price: service.price === undefined || service.price === null ? undefined : Number(service.price),
         usedAt: service.usedAt === undefined ? undefined : String(service.usedAt),
+        isExisting: true,
         applyToRoom: false,
       }));
       const keys = matchedRoom && matchedRoom.id !== detailRoomKey ? [detailRoomKey, matchedRoom.id] : [detailRoomKey];
@@ -714,26 +716,62 @@ export default function BookingWorkspace() {
         setPaymentError("Không tìm thấy mã booking để cập nhật.");
         return;
       }
+      if (!Number.isFinite(counterEmployeeId)) {
+        setPaymentError("Không tìm thấy mã nhân viên để cập nhật booking.");
+        return;
+      }
+      const initialDetails = Array.isArray(initialBooking.bookingDetails) ? initialBooking.bookingDetails : [];
+      const roomKey = (detail: Record<string, unknown>) => String(detail.roomId ?? detail.roomID ?? "");
+      const detailIdOf = (detail: Record<string, unknown>) => Number(
+        detail.bookingDetailId
+        ?? detail.bookingDetailsId
+        ?? detail.bookingDetailID
+        ?? detail.detailId
+        ?? detail.detailID
+        ?? detail.id,
+      );
+      const servicesToAddForExistingRooms = selectedRooms.flatMap((room) => {
+        const roomKeyValue = String(room.databaseId ?? Number(room.id));
+        const initialDetail = initialDetails.find((detail) => {
+          const detailRoomId = roomKey(detail);
+          return detailRoomId === roomKeyValue || detailRoomId === room.id;
+        });
+        const bookingDetailId = initialDetail ? detailIdOf(initialDetail) : NaN;
+        if (!Number.isFinite(bookingDetailId)) return [];
+        const roomSelections = getRoomServiceSelections(room);
+        const selections = serviceMode === "all"
+          ? roomSelections.length > 0 ? roomSelections : allRoomServices.map((selection) => ({ ...selection, quantity: selectedGuestsForRoom(room) }))
+          : roomSelections;
+        const addedServices = selections
+          .filter((selection) => Number.isFinite(Number(selection.serviceId)) && selection.quantity > 0 && !selection.isExisting)
+          .map((selection) => {
+            const service = services.find((item) => String(item.id) === selection.serviceId);
+            return {
+              serviceId: Number(selection.serviceId),
+              quantity: selection.quantity,
+              name: selection.name ?? service?.name,
+              price: selection.price ?? service?.price,
+              usedAt: selection.usedAt ?? new Date().toISOString().slice(0, 19),
+            };
+          });
+        return addedServices.length > 0 ? [{ bookingDetailId, services: addedServices }] : [];
+      });
+      const modificationRequest: ManagementBookingModificationRequest = {
+        employeeId: counterEmployeeId,
+        bookingDetailIdsToCancel: [],
+        servicesToCancel: [],
+        roomsToAdd: [],
+        roomsToChange: [],
+        roomsToUpdateDates: [],
+        servicesToAddForExistingRooms,
+      };
       try {
-        await updateBooking({
-          id,
-          request: {
-            bookingId: id,
-            customerId,
-            bookingStatus: String(initialBooking.bookingStatus ?? "PENDING"),
-            bookingChannel: String(initialBooking.bookingChannel ?? "OFFLINE"),
-            roomTotal,
-            serviceTotal,
-            discountTotal: discountAmount,
-            finalAmount: total,
-            notes: String(initialBooking.notes ?? initialBooking.note ?? ""),
-            bookingDetails,
-          },
-        }).unwrap();
+        await modifyBooking({ bookingId: id, request: modificationRequest }).unwrap();
         clearRoomGuestCache();
         setStep("success");
       } catch (error) {
-        setPaymentError(error instanceof Error ? error.message : "Không thể cập nhật booking. Vui lòng thử lại.");
+        const responseError = error as { data?: { message?: string; error?: string }; error?: string };
+        setPaymentError(responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? (error instanceof Error ? error.message : "Không thể cập nhật booking. Vui lòng thử lại."));
       }
       return;
     }
@@ -756,7 +794,7 @@ export default function BookingWorkspace() {
   };
   const storedEmployeeId = localStorage.getItem("id");
   const bookingEmployeeId = storedEmployeeId ?? employeeId;
-  const canSubmitBooking = !promotionBlocked && Number.isFinite(Number(bookingGuest.customerId)) && (Boolean(initialBooking) || Number.isFinite(Number(bookingEmployeeId))) && !isCreatingBooking && !isUpdatingBooking;
+  const canSubmitBooking = !promotionBlocked && Number.isFinite(Number(bookingGuest.customerId)) && (Boolean(initialBooking) || Number.isFinite(Number(bookingEmployeeId))) && !isCreatingBooking && !isModifyingBooking;
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [step]);
@@ -1014,7 +1052,7 @@ export default function BookingWorkspace() {
               {step === "promotion" && !Number.isFinite(Number(bookingEmployeeId)) && <p className="mt-1 text-xs text-amber-600">Không tìm thấy ID admin/nhân viên dạng số trong phiên đăng nhập.</p>}
               {bookingError && <p className="mt-3 text-xs text-rose-600">Không thể tạo đặt phòng. Vui lòng kiểm tra dữ liệu và thử lại.</p>}
               {paymentError && <p className="mt-3 text-xs text-rose-600">{paymentError}</p>}
-              <button disabled={!canSubmitBooking} onClick={submitBooking} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingBooking || isUpdatingBooking ? (initialBooking ? "Đang cập nhật..." : "Đang tạo đặt phòng...") : initialBooking ? "Cập nhật" : "Xác nhận đặt phòng"}</button>
+              <button disabled={!canSubmitBooking} onClick={submitBooking} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingBooking || isModifyingBooking ? (initialBooking ? "Đang cập nhật..." : "Đang tạo đặt phòng...") : initialBooking ? "Cập nhật" : "Xác nhận đặt phòng"}</button>
             </>}
           </div>
         </div>
