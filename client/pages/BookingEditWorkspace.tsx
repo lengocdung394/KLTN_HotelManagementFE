@@ -107,18 +107,37 @@ export default function BookingEditWorkspace() {
 
   const initialServices = useMemo(() => Object.fromEntries(details.map((detail) => {
     const roomId = roomIdOf(detail);
-    const selections = servicesOf(detail).map((service) => ({
-      serviceId: String(service.serviceId ?? service.id ?? ""),
-      quantity: Number(service.quantity ?? 1),
-      originalQuantity: Number(service.quantity ?? 1),
-      detailId: serviceDetailIdOf(service),
-      name: String(service.name ?? service.serviceName ?? service.nameService ?? ""),
-      price: service.price == null ? undefined : Number(service.price),
-      usedAt: service.usedAt == null ? undefined : String(service.usedAt),
-      isExisting: true,
-      applyToRoom: false,
-    }));
-    return [String(roomId), selections];
+    const rawServices = servicesOf(detail);
+    const groupedMap = new Map<string, ServiceSelection>();
+
+    rawServices.forEach((service) => {
+      const sId = String(service.serviceId ?? service.id ?? "");
+      if (!sId) return;
+      const qty = Number(service.quantity ?? 1);
+      const dId = serviceDetailIdOf(service);
+      const price = service.price == null ? undefined : Number(service.price);
+      const name = String(service.name ?? service.serviceName ?? service.nameService ?? "");
+
+      const existing = groupedMap.get(sId);
+      if (existing) {
+        existing.quantity += qty;
+        existing.originalQuantity = (existing.originalQuantity ?? 0) + qty;
+      } else {
+        groupedMap.set(sId, {
+          serviceId: sId,
+          quantity: qty,
+          originalQuantity: qty,
+          detailId: dId,
+          name,
+          price,
+          usedAt: service.usedAt == null ? undefined : String(service.usedAt),
+          isExisting: true,
+          applyToRoom: false,
+        });
+      }
+    });
+
+    return [String(roomId), Array.from(groupedMap.values())];
   })), [details]);
 
   const ranges = useMemo(() => Object.fromEntries(details.map((detail) => {

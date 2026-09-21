@@ -598,19 +598,36 @@ export default function BookingWorkspace() {
       ].find(Array.isArray) ?? Object.entries(detail).find(([key, value]) => Array.isArray(value) && key.toLowerCase().includes("service"))?.[1] ?? []) as Record<string, unknown>[];
       const detailRoomKey = roomKey(detail);
       const matchedRoom = matchedRooms.find((room) => String(room.databaseId ?? room.id) === detailRoomKey || room.id === detailRoomKey);
-      const selections = serviceRequests.map((service) => ({
-        serviceId: String(service.serviceId ?? service.serviceID ?? service.id ?? ""),
-        name: String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? ""),
-        quantity: Number(service.quantity ?? service.amount ?? 1),
-        originalQuantity: Number(service.quantity ?? service.amount ?? 1),
-        detailId: serviceDetailIdOf(service),
-        price: service.price === undefined || service.price === null
+      const groupedMap = new Map<string, ServiceSelection>();
+      serviceRequests.forEach((service) => {
+        const sId = String(service.serviceId ?? service.serviceID ?? service.id ?? "");
+        if (!sId) return;
+        const qty = Number(service.quantity ?? service.amount ?? 1);
+        const price = service.price === undefined || service.price === null
           ? service.unitPrice === undefined || service.unitPrice === null ? undefined : Number(service.unitPrice)
-          : Number(service.price),
-        usedAt: service.usedAt === undefined && service.usedAtTime === undefined ? undefined : String(service.usedAt ?? service.usedAtTime),
-        isExisting: true,
-        applyToRoom: false,
-      }));
+          : Number(service.price);
+        const dId = serviceDetailIdOf(service);
+
+        const existing = groupedMap.get(sId);
+        if (existing) {
+          existing.quantity += qty;
+          existing.originalQuantity = (existing.originalQuantity ?? 0) + qty;
+        } else {
+          groupedMap.set(sId, {
+            serviceId: sId,
+            name: String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? ""),
+            quantity: qty,
+            originalQuantity: qty,
+            detailId: dId,
+            price,
+            usedAt: service.usedAt === undefined && service.usedAtTime === undefined ? undefined : String(service.usedAt ?? service.usedAtTime),
+            isExisting: true,
+            applyToRoom: false,
+          });
+        }
+      });
+
+      const selections = Array.from(groupedMap.values());
       const keys = matchedRoom && matchedRoom.id !== detailRoomKey ? [detailRoomKey, matchedRoom.id] : [detailRoomKey];
       return keys.map((key) => [key, selections]);
     }));
@@ -700,14 +717,20 @@ export default function BookingWorkspace() {
   const persistedServiceTotal = Number(initialBooking?.serviceTotal ?? initialBooking?.totalServiceAmount ?? initialBooking?.serviceAmount);
   const calculatedRoomTotal = selectedRooms.reduce((sum, room) => sum + (getRoomPrice(room) + (roomGuestSurcharges[room.id] ?? 0)) * nightsForRoom(room.id), 0);
   const roomTotal = initialBooking && selectedRooms.length === 0 && Number.isFinite(persistedRoomTotal) ? persistedRoomTotal : calculatedRoomTotal;
-  const getServiceTotal = (selections: ServiceSelection[]) => selections.reduce((sum, selection) => sum + (selection.price ?? services.find((service) => String(service.id) === selection.serviceId)?.price ?? 0) * selection.quantity, 0);
+  const getServiceTotal = (selections: ServiceSelection[], room?: BookingRoom) => selections.reduce((sum, selection) => {
+    const qty = selection.applyToRoom !== false && room ? selectedGuestsForRoom(room) : selection.quantity;
+    return sum + (selection.price ?? services.find((service) => String(service.id) === selection.serviceId)?.price ?? 0) * qty;
+  }, 0);
   const selectedGuestsForRoom = (room: BookingRoom) => roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
-  const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections) * (serviceMode === "all" ? selectedGuestsForRoom(room) : 1);
-  const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => `${services.find((service) => String(service.id) === selection.serviceId)?.name ?? "Dịch vụ"} x${selection.quantity * (serviceMode === "all" ? selectedGuestsForRoom(room) : 1)}`).join(", ");
+  const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections, room);
+  const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => {
+    const qty = selection.applyToRoom !== false ? selectedGuestsForRoom(room) : selection.quantity;
+    return `${services.find((service) => String(service.id) === selection.serviceId)?.name ?? "Dịch vụ"} x${qty}`;
+  }).join(", ");
   const calculatedServiceTotal = selectedRooms.reduce((sum, room) => {
     const roomSelections = getRoomServiceSelections(room);
     const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
-    return sum + getServiceTotal(selections) * (roomSelections.length > 0 || serviceMode !== "all" ? 1 : selectedGuestsForRoom(room));
+    return sum + getServiceTotal(selections, room);
   }, 0);
   const serviceTotal = initialBooking && calculatedServiceTotal === 0 && Number.isFinite(persistedServiceTotal) ? persistedServiceTotal : calculatedServiceTotal;
   const subtotal = roomTotal + serviceTotal;
