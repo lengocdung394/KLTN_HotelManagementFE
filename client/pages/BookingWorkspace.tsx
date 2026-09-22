@@ -11,10 +11,12 @@ import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCreateCounterBookingMutation, type BookingListItem } from "../services/bookingApi";
+import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppSelector } from "../store/hooks";
+import { sumRoomPriceForRange } from "../lib/bookingPricing";
 
-type BookingRoom = { id: string; databaseId?: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
+type BookingRoom = { id: string; databaseId?: string; roomNumber?: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
 
 const roomTypes = {
   1: { type: "Standard Room", beds: "1 giường đơn", size: "25 m²", guests: 1, price: 1000000, amenity: "Điều hòa · TV · Phòng tắm riêng" },
@@ -34,14 +36,28 @@ const booked: Record<string, { start: string; end: string; guest: string }[]> = 
 const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"];
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 const serviceDetailIdOf = (service: Record<string, unknown>) => Number(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? service.serviceId);
-const servicesOf = (detail: Record<string, unknown>) => ([
-  detail.bookingServiceResponsesForHotels,
-  detail.bookingServiceResponseForHotels,
-  detail.bookingServiceDetails,
-  detail.serviceRequests,
-  detail.serviceResponses,
-  detail.services,
-].find(Array.isArray) ?? []) as Record<string, unknown>[];
+const isCancelledBookingDetail = (detail: Record<string, unknown>) => String(detail.bookingStatusType ?? "").toUpperCase() === "CANCELLED";
+const isCancelledService = (service: Record<string, unknown>) => {
+  const status = String(service.status ?? service.serviceStatus ?? service.bookingServiceStatus ?? service.state ?? "").trim().toUpperCase();
+  const cancelled = [service.isCancelled, service.isCanceled, service.cancelled, service.canceled, service.isDeleted, service.deleted]
+    .some((value) => value === true || String(value).toLowerCase() === "true");
+  const hasCancellationDate = Boolean(service.cancelledAt ?? service.canceledAt ?? service.cancellationDate);
+  const quantity = Number(service.quantity ?? service.serviceQuantity ?? service.quantityService ?? service.amount);
+  return status.includes("CANCEL") || status.includes("HỦY") || status.includes("HUY") || cancelled || hasCancellationDate || (Number.isFinite(quantity) && quantity <= 0);
+};
+const servicesOf = (detail: Record<string, unknown>) => {
+  const serviceValues = Object.entries(detail)
+    .filter(([key]) => key.toLowerCase().includes("service"))
+    .map(([, value]) => value);
+  const collect = (value: unknown): Record<string, unknown>[] => {
+    if (Array.isArray(value)) return value.flatMap(collect);
+    if (!value || typeof value !== "object") return [];
+    const item = value as Record<string, unknown>;
+    if (item.serviceId !== undefined || item.serviceID !== undefined || item.service_id !== undefined) return [item];
+    return Object.values(item).flatMap(collect);
+  };
+  return serviceValues.flatMap(collect).filter((service) => !isCancelledService(service));
+};
 
 const allFloorsLabel = "Tất cả các tầng";
 const allBuildingsLabel = "Tất cả các tòa";
@@ -89,6 +105,7 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
   return {
     id: roomId,
     databaseId: databaseId == null ? undefined : String(databaseId),
+    roomNumber: String(getApiValue(item, ["roomNumber", "roomNo", "number"]) ?? roomId),
     type: rawType,
     beds: String(getApiValue(item, ["bedType", "bedTypeName"]) ?? fallback.beds),
     size,
@@ -462,6 +479,8 @@ function DesktopCalendar({
 export default function BookingWorkspace() {
   const location = useLocation();
   const initialBooking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
+  const initialCustomerId = String(initialBooking?.customerId ?? initialBooking?.customerID ?? "");
+  const { data: customerById } = useGetCustomerByIdQuery(initialCustomerId, { skip: !initialCustomerId });
   const { t, i18n } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
@@ -485,6 +504,9 @@ export default function BookingWorkspace() {
   const [showFull, setShowFull] = useState(false);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [bookingGuest, setBookingGuest] = useState<BookingGuest>({ name: "", phone: "", identityNumber: "" });
+  const createCustomerFromGuest = () => undefined;
+  const isCreatingCustomer = false;
+  const attemptedCustomerKey = useRef("");
   const [serviceMode, setServiceMode] = useState<"all" | "per-room">("all");
   const [allRoomServices, setAllRoomServices] = useState<ServiceSelection[]>([]);
   const [roomServices, setRoomServices] = useState<Record<string, ServiceSelection[]>>({});
@@ -517,7 +539,8 @@ export default function BookingWorkspace() {
   const [dailyRoomPrices, setDailyRoomPrices] = useState<RoomDailyPricesResponse>({});
   useEffect(() => {
     if (!initialBooking) return;
-    const details = Array.isArray(initialBooking.bookingDetails) ? initialBooking.bookingDetails : [];
+    const details = (Array.isArray(initialBooking.bookingDetails) ? initialBooking.bookingDetails : [])
+      .filter((detail) => !isCancelledBookingDetail(detail));
     const roomKey = (detail: Record<string, unknown>) => String(detail.roomId ?? detail.roomID ?? "");
     const selectedRoomKeys = details.map(roomKey);
     const matchedRooms = rooms.filter((room) => selectedRoomKeys.includes(String(room.databaseId ?? room.id)) || selectedRoomKeys.includes(room.id));
@@ -528,6 +551,7 @@ export default function BookingWorkspace() {
         return {
           id: key,
           databaseId: key || undefined,
+          roomNumber: String(detail.roomNumber ?? key),
           type: String(detail.roomType ?? detail.roomName ?? "Phòng booking"),
           beds: String(detail.bedType ?? ""),
           size: "",
@@ -591,21 +615,17 @@ export default function BookingWorkspace() {
       });
     });
     const nextServices = Object.fromEntries(details.flatMap((detail) => {
-      const serviceRequests = ([
-        detail.bookingServiceResponsesForHotels,
-        detail.bookingServiceResponseForHotels,
-        detail.bookingServiceDetails,
-        detail.serviceRequests,
-        detail.serviceResponses,
-        detail.services,
-      ].find(Array.isArray) ?? Object.entries(detail).find(([key, value]) => Array.isArray(value) && key.toLowerCase().includes("service"))?.[1] ?? []) as Record<string, unknown>[];
+      const serviceRequests = servicesOf(detail);
       const detailRoomKey = roomKey(detail);
       const matchedRoom = matchedRooms.find((room) => String(room.databaseId ?? room.id) === detailRoomKey || room.id === detailRoomKey);
       const groupedMap = new Map<string, ServiceSelection>();
       serviceRequests.forEach((service) => {
-        const sId = String(service.serviceId ?? service.serviceID ?? service.id ?? "");
+        const nestedService = service.service && typeof service.service === "object" ? service.service as Record<string, unknown> : undefined;
+        const rawServiceName = String(service.name ?? service.serviceName ?? service.nameService ?? nestedService?.name ?? nestedService?.serviceName ?? "").trim().toLowerCase();
+        const catalogService = services.find((item) => rawServiceName && item.name.trim().toLowerCase() === rawServiceName);
+        const sId = String(catalogService?.id ?? service.serviceId ?? service.serviceID ?? service.service_id ?? nestedService?.serviceId ?? nestedService?.id ?? service.id ?? "");
         if (!sId) return;
-        const qty = Number(service.quantity ?? service.amount ?? 1);
+          const qty = Number(service.quantity ?? service.serviceQuantity ?? service.quantityService ?? service.amount ?? 0);
         const price = service.price === undefined || service.price === null
           ? service.unitPrice === undefined || service.unitPrice === null ? undefined : Number(service.unitPrice)
           : Number(service.price);
@@ -648,18 +668,18 @@ export default function BookingWorkspace() {
     const customerValue = (initialBooking as Record<string, unknown>).customer;
     const customer = customerValue && typeof customerValue === "object" ? customerValue as Record<string, unknown> : {};
     setBookingGuest({
-      name: String(initialBooking.customerName ?? initialBooking.nameCustomer ?? customer.name ?? initialBooking.guestName ?? ""),
-      phone: String(initialBooking.customerPhone ?? initialBooking.phone ?? initialBooking.phoneNumber ?? customer.phone ?? ""),
-      identityNumber: String(initialBooking.identityNumber ?? initialBooking.customerIdentityNumber ?? initialBooking.identityCard ?? customer.identityNumber ?? ""),
-      customerId: (initialBooking.customerId ?? initialBooking.customerID ?? customer.id) === undefined
+      name: String(customerById?.name ?? initialBooking.customerName ?? initialBooking.nameCustomer ?? customer.name ?? initialBooking.guestName ?? ""),
+      phone: String(customerById?.phone ?? initialBooking.customerPhone ?? initialBooking.phone ?? initialBooking.phoneNumber ?? customer.phone ?? ""),
+      identityNumber: String(customerById?.identityNumber ?? initialBooking.identityNumber ?? initialBooking.customerIdentityNumber ?? initialBooking.identityCard ?? customer.identityNumber ?? ""),
+      customerId: (customerById?.id ?? initialBooking.customerId ?? initialBooking.customerID ?? customer.id) === undefined
         ? undefined
-        : String(initialBooking.customerId ?? initialBooking.customerID ?? customer.id),
+        : String(customerById?.id ?? initialBooking.customerId ?? initialBooking.customerID ?? customer.id),
     });
     const firstRange = Object.values(nextRanges)[0] as { checkIn: string; checkOut: string } | undefined;
     setCheckIn(firstRange?.checkIn ?? todayLocal());
     setCheckOut(firstRange?.checkOut ?? shiftDay(todayLocal(), 1));
     setStep("guest");
-  }, [initialBooking, rooms]);
+  }, [initialBooking, rooms, customerById]);
   const buildings = useMemo(() => (apiBuildings ?? []).map((item) => {
     const id = getApiValue(item, ["id", "buildingId", "buildingID"]);
     const name = getApiValue(item, ["name", "buildingName", "buildingCode", "code"]);
@@ -721,15 +741,12 @@ export default function BookingWorkspace() {
     return range ? Math.max(1, Math.round((new Date(range.checkOut).getTime() - new Date(range.checkIn).getTime()) / 86400000)) : nights;
   };
   const persistedRoomTotal = Number(initialBooking?.roomTotal ?? initialBooking?.totalRoomAmount ?? initialBooking?.roomAmount);
-  const persistedServiceTotal = Number(initialBooking?.serviceTotal ?? initialBooking?.totalServiceAmount ?? initialBooking?.serviceAmount);
-  const calculatedRoomTotal = selectedRooms.reduce((sum, room) => {
-    const range = selectedRanges[room.id] ?? { checkIn, checkOut };
-    let roomTotal = 0;
-    for (let date = range.checkIn; date < range.checkOut; date = shiftDay(date, 1)) {
-      roomTotal += getRoomPriceForDate(room, date) + (roomGuestSurcharges[room.id] ?? 0);
-    }
-    return sum + roomTotal;
-  }, 0);
+  const getRoomBaseRangeTotal = (room: BookingRoom, range: RoomDateRange = selectedRanges[room.id] ?? { checkIn, checkOut }) =>
+    sumRoomPriceForRange(room, range, getRoomPriceForDate);
+  const getRoomRangeTotal = (room: BookingRoom, range: RoomDateRange = selectedRanges[room.id] ?? { checkIn, checkOut }) =>
+    getRoomBaseRangeTotal(room, range) + (roomGuestSurcharges[room.id] ?? 0) * nightsForRoom(room.id);
+
+  const calculatedRoomTotal = selectedRooms.reduce((sum, room) => sum + getRoomRangeTotal(room), 0);
   const roomTotal = initialBooking && selectedRooms.length === 0 && Number.isFinite(persistedRoomTotal) ? persistedRoomTotal : calculatedRoomTotal;
   const getServiceTotal = (selections: ServiceSelection[], room?: BookingRoom) => selections.reduce((sum, selection) => {
     const qty = selection.applyToRoom !== false && room ? selectedGuestsForRoom(room) : selection.quantity;
@@ -746,7 +763,7 @@ export default function BookingWorkspace() {
     const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
     return sum + getServiceTotal(selections, room);
   }, 0);
-  const serviceTotal = initialBooking && calculatedServiceTotal === 0 && Number.isFinite(persistedServiceTotal) ? persistedServiceTotal : calculatedServiceTotal;
+  const serviceTotal = calculatedServiceTotal;
   const subtotal = roomTotal + serviceTotal;
   const discountAmount = appliedPromotion ? Math.round(subtotal * appliedPromotion.value / 100) : 0;
   const total = subtotal - discountAmount;
@@ -758,7 +775,7 @@ export default function BookingWorkspace() {
     setPaymentError("");
     const customerId = bookingGuest.customerId ?? "";
     const storedEmployeeId = localStorage.getItem("id");
-    const counterEmployeeId = storedEmployeeId ?? employeeId ?? "1";
+    const counterEmployeeId = storedEmployeeId ?? employeeId ?? "";
 
     console.log("==========================================");
     console.log("===> [BOOKING WORKSPACE - submitBooking TRIGGERED]");
@@ -771,13 +788,14 @@ export default function BookingWorkspace() {
       const counts = roomGuestCounts[room.id] ?? { adults: room.guests, children: 0, infants: 0 };
       return {
         roomId: String(room.databaseId ?? room.id),
+        roomNumber: String(room.roomNumber ?? room.id),
         checkInTime: `${range.checkIn}T14:00:00`,
         checkOutTime: `${range.checkOut}T12:00:00`,
         numAdults: counts.adults,
         numChildren: counts.children,
         numInfants: counts.infants,
         serviceRequests: selections
-          .filter((selection) => Number.isFinite(Number(selection.serviceId)) && selection.quantity > 0)
+          .filter((selection) => selection.serviceId.trim() !== "" && selection.quantity > 0)
           .map((selection) => {
             const service = services.find((item) => String(item.id) === selection.serviceId);
             return {
@@ -796,7 +814,10 @@ export default function BookingWorkspace() {
     const isCustomerPromotion = Boolean((appliedPromotion as SelectedPromotion & { customerId?: string } | null)?.customerId);
 
     const request = {
-      customerId,
+      customerId: customerId || undefined,
+      customerName: bookingGuest.name.trim(),
+      customerPhone: bookingGuest.phone.trim(),
+      customerIdentityNumber: bookingGuest.identityNumber.trim(),
       employeeId: counterEmployeeId,
       bookingChannel: "OFFLINE" as const,
       customerPromotionId: promotionEligible && isCustomerPromotion ? appliedPromotion?.id ?? null : null,
@@ -811,7 +832,8 @@ export default function BookingWorkspace() {
         setPaymentError("Không tìm thấy mã booking để cập nhật.");
         return;
       }
-      const initialDetails = Array.isArray(initialBooking.bookingDetails) ? initialBooking.bookingDetails : [];
+      const initialDetails = (Array.isArray(initialBooking.bookingDetails) ? initialBooking.bookingDetails : [])
+        .filter((detail) => !isCancelledBookingDetail(detail));
       const roomKey = (detail: Record<string, unknown>) => String(detail.roomId ?? detail.roomID ?? "");
       const detailIdOf = (detail: Record<string, unknown>) => Number(
         detail.bookingDetailId
@@ -823,32 +845,114 @@ export default function BookingWorkspace() {
       );
       const servicesToAddForExistingRooms: { bookingDetailId: number; services: any[] }[] = [];
       const serviceQuantityUpdates: { bookingDetailId: number; services: { serviceId: string; quantity: number }[] }[] = [];
+      const roomsToUpdateDates: ManagementBookingModificationRequest["roomsToUpdateDates"] = [];
+      const roomsToAdd: ManagementBookingModificationRequest["roomsToAdd"] = [];
       const servicesToCancelMap: Record<number, number[]> = {};
+      const selectedRoomKeys = new Set(selectedRooms.flatMap((room) => [String(room.id), room.databaseId ? String(room.databaseId) : ""]));
+      const bookingDetailIdsToCancel = initialDetails
+        .filter((detail) => {
+          const detailRoomId = String(detail.roomId ?? detail.roomID ?? "");
+          return detailRoomId && !selectedRoomKeys.has(detailRoomId);
+        })
+        .map((detail) => detailIdOf(detail))
+        .filter((detailId) => Number.isFinite(detailId));
+
+      selectedRooms.forEach((room) => {
+        const roomKeyValue = String(room.databaseId ?? room.id);
+        const isExistingRoom = initialDetails.some((detail) => {
+          const detailRoomId = String(detail.roomId ?? detail.roomID ?? "");
+          return detailRoomId === roomKeyValue || detailRoomId === room.id;
+        });
+        if (isExistingRoom) return;
+
+        const range = selectedRanges[room.id] ?? (room.databaseId ? selectedRanges[String(room.databaseId)] : undefined) ?? { checkIn, checkOut };
+        const counts = roomGuestCounts[room.id] ?? { adults: room.guests, children: 0, infants: 0 };
+        const selections = getRoomServiceSelections(room).filter((selection) => selection.serviceId.trim() && selection.quantity > 0);
+        roomsToAdd.push({
+          roomId: roomKeyValue,
+          checkInTime: `${range.checkIn}T14:00:00`,
+          checkOutTime: `${range.checkOut}T12:00:00`,
+          numAdults: counts.adults,
+          numChildren: counts.children,
+          numInfants: counts.infants,
+          serviceRequests: selections.map((selection) => ({
+            serviceId: selection.serviceId,
+            quantity: selection.quantity,
+            name: selection.name ?? services.find((service) => String(service.id) === selection.serviceId)?.name,
+            price: selection.price ?? services.find((service) => String(service.id) === selection.serviceId)?.price,
+            usedAt: selection.usedAt ?? new Date().toISOString().slice(0, 19),
+          })),
+        });
+      });
 
       selectedRooms.forEach((room, roomIdx) => {
-        const roomKeyValue = String(room.databaseId ?? Number(room.id));
+        const roomKeyValue = String(room.databaseId ?? room.id);
         const initialDetail = initialDetails.find((detail, idx) => {
           const dId = detailIdOf(detail);
           const rId = roomKey(detail);
-          const targetDbId = Number(room.databaseId ?? room.id);
+          const targetDbId = String(room.databaseId ?? room.id);
           const targetIdStr = String(room.id);
           return (
-            dId === targetDbId ||
             rId === roomKeyValue ||
             rId === targetIdStr ||
-            dId === Number(targetIdStr) ||
+            String(dId) === targetDbId ||
             (selectedRooms.length === initialDetails.length && idx === roomIdx)
           );
         });
         const bookingDetailId = initialDetail ? detailIdOf(initialDetail) : NaN;
         if (!Number.isFinite(bookingDetailId)) return;
 
+        const currentRange = selectedRanges[room.id] ?? (room.databaseId ? selectedRanges[String(room.databaseId)] : undefined) ?? { checkIn, checkOut };
+        const originalCheckIn = String(initialDetail?.checkInTime ?? initialDetail?.checkInDate ?? "").slice(0, 10);
+        const originalCheckOut = String(initialDetail?.checkOutTime ?? initialDetail?.checkOutDate ?? "").slice(0, 10);
+        const currentCounts = roomGuestCounts[room.id] ?? { adults: room.guests, children: 0, infants: 0 };
+        const originalCounts = {
+          adults: Number(initialDetail?.numAdults ?? initialDetail?.adults ?? 1),
+          children: Number(initialDetail?.numChildren ?? initialDetail?.children ?? 0),
+          infants: Number(initialDetail?.numInfants ?? initialDetail?.infants ?? 0),
+        };
+        if (
+          currentRange.checkIn !== originalCheckIn
+          || currentRange.checkOut !== originalCheckOut
+          || currentCounts.adults !== originalCounts.adults
+          || currentCounts.children !== originalCounts.children
+          || currentCounts.infants !== originalCounts.infants
+        ) {
+          roomsToUpdateDates.push({
+            bookingDetailId,
+            newCheckInTime: `${currentRange.checkIn}T14:00:00`,
+            newCheckoutTime: `${currentRange.checkOut}T12:00:00`,
+            newCheckOutTime: `${currentRange.checkOut}T12:00:00`,
+            numAdults: currentCounts.adults,
+            numChildren: currentCounts.children,
+            numInfants: currentCounts.infants,
+          });
+        }
+
+        if (import.meta.env.DEV) {
+          const rawServiceFields = initialDetail ? Object.entries(initialDetail)
+            .filter(([key, value]) => key.toLowerCase().includes("service") && Array.isArray(value))
+            .map(([key, value]) => ({ key, count: (value as unknown[]).length, value })) : [];
+          console.log("[booking-edit] raw initial service fields:", Object.keys(initialDetail ?? {}).filter((key) => key.toLowerCase().includes("service")));
+          console.log("[booking-edit] raw initial service JSON:", JSON.stringify(rawServiceFields, null, 2));
+          console.log("[booking-edit] raw service id/quantity candidates:", JSON.stringify(
+            servicesOf(initialDetail ?? {}).map((service) => Object.fromEntries(
+              Object.entries(service).filter(([key]) => /service|quantity|amount|number|people|guest/i.test(key)),
+            )),
+            null,
+            2,
+          ));
+        }
+
         const currentSelections = getRoomServiceSelections(room);
         const origServicesMap = new Map<string, { serviceId: string; originalQuantity: number; quantity: number }>();
         (servicesOf(initialDetail) ?? []).forEach((srv) => {
-          const sId = String(srv.serviceId ?? srv.serviceID ?? srv.id ?? "");
+          const nestedService = srv.service && typeof srv.service === "object" ? srv.service as Record<string, unknown> : undefined;
+          const rawServiceName = String(srv.name ?? srv.serviceName ?? srv.nameService ?? nestedService?.name ?? nestedService?.serviceName ?? "").trim().toLowerCase();
+          const catalogService = services.find((item) => rawServiceName && item.name.trim().toLowerCase() === rawServiceName);
+          const sId = String(catalogService?.id ?? srv.serviceId ?? srv.serviceID ?? srv.service_id ?? nestedService?.serviceId ?? nestedService?.id ?? srv.id ?? "");
           if (!sId) return;
-          const qty = Number(srv.quantity ?? srv.amount ?? 1);
+          const qty = Number(srv.quantity ?? srv.serviceQuantity ?? srv.quantityService ?? srv.amount ?? 0);
           const existing = origServicesMap.get(sId);
           if (existing) {
             existing.originalQuantity += qty;
@@ -859,60 +963,34 @@ export default function BookingWorkspace() {
         });
         const origSelections = Array.from(origServicesMap.values());
 
-        const additionsForRoom: any[] = [];
-        const quantityUpdatesForRoom: { serviceId: number; quantity: number }[] = [];
+        const additionsForRoom: { serviceId: string; quantity: number; name?: string; price?: number; usedAt?: string }[] = [];
+        const quantityUpdatesForRoom: { serviceId: string; quantity: number }[] = [];
+        const serviceIds = new Set([
+          ...origSelections.map((service) => service.serviceId),
+          ...currentSelections.map((service) => service.serviceId.trim()).filter(Boolean),
+        ]);
 
-        currentSelections.forEach((curr) => {
-          const sIdNum = Number(curr.serviceId);
-          if (!Number.isFinite(sIdNum) || curr.quantity <= 0) return;
+        serviceIds.forEach((serviceId) => {
+          const original = origSelections.find((service) => service.serviceId === serviceId);
+          const current = currentSelections.find((service) => service.serviceId === serviceId);
+          const originalQuantity = Number(original?.originalQuantity ?? 0);
+          const currentQuantity = Number(current?.quantity ?? 0);
+          console.log("[booking-edit] service compare:", { bookingDetailId, serviceId, originalQuantity, currentQuantity });
+          if (currentQuantity === originalQuantity) return;
 
-          const orig = origSelections.find((o) => String(o.serviceId) === String(curr.serviceId));
-          const origQty = orig ? Number(orig.originalQuantity ?? orig.quantity ?? 0) : 0;
-
-          if (origQty === 0) {
-            const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
+          if (currentQuantity > originalQuantity) {
+            const serviceObj = services.find((item) => String(item.id) === serviceId);
             additionsForRoom.push({
-              serviceId: sIdNum,
-              quantity: curr.quantity,
-              name: curr.name ?? serviceObj?.name,
-              price: curr.price ?? serviceObj?.price,
-              usedAt: curr.usedAt ?? new Date().toISOString().slice(0, 19),
+              serviceId,
+              quantity: currentQuantity - originalQuantity,
+              name: current?.name ?? serviceObj?.name,
+              price: current?.price ?? serviceObj?.price,
+              usedAt: current?.usedAt ?? new Date().toISOString().slice(0, 19),
             });
-          } else if (curr.quantity > origQty) {
-            const extraQty = curr.quantity - origQty;
-            const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
-            additionsForRoom.push({
-              serviceId: sIdNum,
-              quantity: extraQty,
-              name: curr.name ?? serviceObj?.name,
-              price: curr.price ?? serviceObj?.price,
-              usedAt: curr.usedAt ?? new Date().toISOString().slice(0, 19),
-            });
-          } else if (curr.quantity < origQty) {
-            quantityUpdatesForRoom.push({
-              serviceId: sIdNum,
-              quantity: curr.quantity,
-            });
+            return;
           }
-        });
 
-        origSelections.forEach((orig) => {
-          const sIdNum = Number(orig.serviceId);
-          if (!Number.isFinite(sIdNum)) return;
-          const origQty = Number(orig.originalQuantity ?? orig.quantity ?? 0);
-          if (origQty <= 0) return;
-
-          const curr = currentSelections.find((c) => String(c.serviceId) === String(orig.serviceId));
-          const currentQty = curr ? curr.quantity : 0;
-
-          if (currentQty === 0) {
-            if (!quantityUpdatesForRoom.some((q) => q.serviceId === sIdNum)) {
-              quantityUpdatesForRoom.push({
-                serviceId: String(sIdNum),
-                quantity: 0,
-              });
-            }
-          }
+          quantityUpdatesForRoom.push({ serviceId, quantity: currentQuantity });
         });
 
         if (additionsForRoom.length > 0) {
@@ -929,11 +1007,11 @@ export default function BookingWorkspace() {
       }));
       const modificationRequest: ManagementBookingModificationRequest = {
         employeeId: counterEmployeeId,
-        bookingDetailIdsToCancel: [],
+        bookingDetailIdsToCancel,
         servicesToCancel,
-        roomsToAdd: [],
+        roomsToAdd,
         roomsToChange: [],
-        roomsToUpdateDates: [],
+        roomsToUpdateDates,
         servicesToAddForExistingRooms,
         serviceQuantityUpdates,
       };
@@ -965,12 +1043,13 @@ export default function BookingWorkspace() {
       }
       return;
     }
-    if (!Number.isFinite(customerId) || !Number.isFinite(counterEmployeeId)) {
-      console.warn("[booking] blocked: customerId or employeeId is not numeric", { customerId, employeeId: storedEmployeeId ?? employeeId, request });
+    const hasGuestDetails = Boolean(bookingGuest.name.trim() && bookingGuest.phone.trim() && bookingGuest.identityNumber.trim());
+    if (!hasGuestDetails || (!initialBooking && !customerId) || !counterEmployeeId.trim()) {
+      console.warn("[booking] blocked: guest details, customer id, or employeeId are incomplete", { guest: bookingGuest, employeeId: counterEmployeeId });
       return;
     }
-    if (bookingDetails.some((detail) => !Number.isFinite(detail.roomId))) {
-      console.warn("[booking] blocked: roomId is not numeric", request);
+    if (bookingDetails.some((detail) => !String(detail.roomId).trim())) {
+      console.warn("[booking] blocked: roomId is empty", request);
       return;
     }
     try {
@@ -996,8 +1075,10 @@ export default function BookingWorkspace() {
     }
   };
   const storedEmployeeId = localStorage.getItem("id");
-  const bookingEmployeeId = storedEmployeeId ?? employeeId;
-  const canSubmitBooking = !promotionBlocked && Number.isFinite(Number(bookingGuest.customerId)) && (Boolean(initialBooking) || Number.isFinite(Number(bookingEmployeeId))) && !isCreatingBooking && !isModifyingBooking;
+  const bookingEmployeeId = storedEmployeeId ?? employeeId ?? "";
+  const hasGuestDetails = Boolean(bookingGuest.name.trim() && bookingGuest.phone.trim() && bookingGuest.identityNumber.trim());
+  const customerReady = Boolean(initialBooking || bookingGuest.customerId);
+  const canSubmitBooking = !promotionBlocked && hasGuestDetails && customerReady && (Boolean(initialBooking) || Boolean(String(bookingEmployeeId).trim())) && !isCreatingBooking && !isModifyingBooking;
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [step]);
@@ -1128,7 +1209,7 @@ export default function BookingWorkspace() {
         </div>
       ) : step === "services" ? (<div className="space-y-5 p-5">
         <BookingServiceSelector
-          rooms={selectedRooms.map((room) => ({ ...room, databaseId: room.databaseId, guests: roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests, price: getRoomPrice(room) + (roomGuestSurcharges[room.id] ?? 0) }))}
+          rooms={selectedRooms.map((room) => ({ ...room, databaseId: room.databaseId, guests: roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests, price: getRoomPrice(room) + (roomGuestSurcharges[room.id] ?? 0), dailyPrices: dailyRoomPrices[room.id] ?? (room.databaseId ? dailyRoomPrices[String(room.databaseId)] : undefined), nightlySurcharge: roomGuestSurcharges[room.id] ?? 0 }))}
           services={services}
           servicesLoading={isServicesLoading}
           servicesError={isServicesError}
@@ -1183,7 +1264,7 @@ export default function BookingWorkspace() {
                 const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
                 return <div key={room.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 text-xs">
                   <span className="min-w-0"><strong className="block text-slate-800">Phòng {room.id} · {room.type}</strong><span className="mt-1 block text-slate-500">Check-in: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkIn, "", i18n.language)}</span><span className="block text-slate-500">Check-out: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkOut, "", i18n.language)}</span><span className="mt-1 block text-blue-700">{selections.length > 0 ? formatRoomServices(room, selections) : "Chưa chọn dịch vụ"}</span></span>
-                  <span className="shrink-0 text-right font-bold text-slate-800">{money((getRoomPrice(room) + (roomGuestSurcharges[room.id] ?? 0)) * nightsForRoom(room.id) + getRoomServiceTotal(room, selections))}</span>
+                  <span className="shrink-0 text-right font-bold text-slate-800">{money(getRoomRangeTotal(room, selectedRanges[room.id] ?? { checkIn, checkOut }) + getRoomServiceTotal(room, selections))}</span>
                 </div>;
               })}
             </div>
@@ -1215,7 +1296,10 @@ export default function BookingWorkspace() {
                 const roomSelections = getRoomServiceSelections(room);
                 const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
                 const roomServiceTotal = getServiceTotal(selections) * (roomSelections.length > 0 || serviceMode !== "all" ? 1 : selectedGuestsForRoom(room));
-                const roomSubtotal = (getRoomPrice(room) + (roomGuestSurcharges[room.id] ?? 0)) * nightsForRoom(room.id) + roomServiceTotal;
+                const roomRange = selectedRanges[room.id] ?? { checkIn, checkOut };
+                const roomBaseTotal = getRoomBaseRangeTotal(room, roomRange);
+                const roomSurchargeTotal = (roomGuestSurcharges[room.id] ?? 0) * (nightsForRoom(room.id) || 1);
+                const roomSubtotal = roomBaseTotal + roomSurchargeTotal + roomServiceTotal;
                 const selectedGuestCount = roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
                 const isSummaryRoomCollapsed = collapsedSummaryRooms.includes(room.id);
                 return <div key={room.id} className="overflow-hidden rounded-xl border border-blue-100 bg-blue-50/40 text-xs">
@@ -1231,8 +1315,8 @@ export default function BookingWorkspace() {
                     <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkOutDate", "Trả")}: {formatDateLabel(range.checkOut, "", i18n.language)}</span></div>
                     <div className="flex items-center gap-2"><UsersRound size={14} className="shrink-0 text-blue-600" /><span>{selectedGuestCount} người · {nightsForRoom(room.id)} đêm</span></div>
                     <div className="my-2 border-t border-blue-100" />
-                    <div className="flex justify-between gap-3"><span>Tiền phòng</span><span className="font-medium text-slate-800">{money(getRoomPrice(room) * nightsForRoom(room.id))}</span></div>
-                    {(roomGuestSurcharges[room.id] ?? 0) > 0 && <><div className="flex justify-between gap-3"><span>Phụ thu người lớn</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.adult ?? 0) * nightsForRoom(room.id))}</span></div><div className="flex justify-between gap-3"><span>Phụ thu trẻ em</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.child ?? 0) * nightsForRoom(room.id))}</span></div></>}
+                    <div className="flex justify-between gap-3"><span>Tiền phòng</span><span className="font-medium text-slate-800">{money(roomBaseTotal)}</span></div>
+                    {(roomGuestSurcharges[room.id] ?? 0) > 0 && <><div className="flex justify-between gap-3"><span>Phụ thu người lớn</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.adult ?? 0) * (nightsForRoom(room.id) || 1))}</span></div><div className="flex justify-between gap-3"><span>Phụ thu trẻ em</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.child ?? 0) * (nightsForRoom(room.id) || 1))}</span></div></>}
                     <div className="flex justify-between gap-3"><span>Dịch vụ</span><span className="text-right font-medium text-slate-800">{roomServiceTotal ? money(roomServiceTotal) : "Chưa chọn"}</span></div>
                     <div className="mt-2 flex items-center justify-between gap-3 border-t border-blue-100 pt-2 font-bold text-blue-700"><span>Tạm tính phòng</span><span>{money(roomSubtotal)}</span></div>
                   </div>}
@@ -1253,8 +1337,9 @@ export default function BookingWorkspace() {
               </div>
             </>}
             {step === "guest" ? <button onClick={() => setStep("services")} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">Tiếp tục chọn dịch vụ</button> : <>
-              {step === "promotion" && !bookingGuest.customerId && <p className="mt-3 text-xs text-amber-600">Vui lòng chọn khách hàng đã lưu để tạo đơn đặt phòng.</p>}
-              {step === "promotion" && !Number.isFinite(Number(bookingEmployeeId)) && <p className="mt-1 text-xs text-amber-600">Không tìm thấy ID admin/nhân viên dạng số trong phiên đăng nhập.</p>}
+              {step === "promotion" && !hasGuestDetails && <p className="mt-3 text-xs text-amber-600">Vui lòng nhập đủ tên, số điện thoại và CCCD của khách hàng.</p>}
+              {step === "promotion" && hasGuestDetails && !customerReady && <p className="mt-3 text-xs text-amber-600">Đang tạo hồ sơ khách hàng, vui lòng chờ trong giây lát.</p>}
+              {step === "promotion" && !String(bookingEmployeeId).trim() && <p className="mt-1 text-xs text-amber-600">Không tìm thấy mã admin/nhân viên trong phiên đăng nhập.</p>}
               {bookingError && <p className="mt-3 text-xs text-rose-600">Không thể tạo đặt phòng. Vui lòng kiểm tra dữ liệu và thử lại.</p>}
               {paymentError && <p className="mt-3 text-xs text-rose-600">{paymentError}</p>}
               <button disabled={!canSubmitBooking} onClick={submitBooking} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingBooking || isModifyingBooking ? (initialBooking ? "Đang cập nhật..." : "Đang tạo đặt phòng...") : initialBooking ? "Cập nhật" : "Xác nhận đặt phòng"}</button>

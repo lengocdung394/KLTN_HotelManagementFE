@@ -10,6 +10,7 @@ export type BookingServiceRequest = {
 
 export type BookingDetailCreateRequest = {
   roomId: string;
+  roomNumber: string;
   checkInTime: string;
   checkOutTime: string;
   numAdults: number;
@@ -19,7 +20,10 @@ export type BookingDetailCreateRequest = {
 };
 
 export type BookingCreateRequest = {
-  customerId: string;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerIdentityNumber?: string;
   employeeId?: string;
   bookingChannel: "ONLINE" | "OFFLINE";
   customerPromotionId: string | null;

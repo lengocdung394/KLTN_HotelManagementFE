@@ -164,7 +164,7 @@ const toDateParam = (value?: Date) => value
   : undefined;
 
 const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord["flow"]): DailyRecord => {
-  const roomId = String(detail.roomId ?? "-");
+  const roomNumber = String(detail.roomNumber ?? detail.roomId ?? "-");
   const customerName = String(detail.nameCustomer ?? detail.customerName ?? "Chưa cập nhật");
   const identityNumber = String(detail.cccd ?? detail.identityNumber ?? "");
   const timestamp = flow === "check-in" ? detail.checkInTime : detail.checkOutTime;
@@ -193,10 +193,10 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     ? paidValue
     : ["PAID", "PAYMENT_COMPLETED", "COMPLETED", "DA_THANH_TOAN"].includes(paymentStatus);
   return {
-    id: String(detail.bookingDetailId ?? `${detail.bookingId ?? "booking"}-${roomId}`),
+    id: String(detail.bookingDetailId ?? `${detail.bookingId ?? "booking"}-${roomNumber}`),
     bookingId: detail.bookingId,
     guest: customerName,
-    room: `${roomId} · ${detail.roomName ?? detail.roomTypeName ?? "Phòng"}`,
+    room: `${roomNumber} · ${detail.roomName ?? detail.roomTypeName ?? "Phòng"}`,
     time,
     status: flow === "check-in" ? "Chờ check-in" : "Đang ở",
     flow,
@@ -303,8 +303,8 @@ export default function CheckInOutWorkspace() {
   const { t } = useTranslation();
   const [flowFilter, setFlowFilter] = useState<FlowFilter>("all");
   const [query, setQuery] = useState("");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const date = toDateParam(selectedDate) ?? toDateParam(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
+  const date = toDateParam(selectedDate);
   const checkInQuery = useGetTodayCheckInsQuery(
     { hotelId: Number(hotelId), date, status: "PENDING", bookingStatus: "CONFIRMED" },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
@@ -434,43 +434,27 @@ export default function CheckInOutWorkspace() {
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h4 className="font-bold text-slate-900">{record.guest}</h4>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isCheckIn ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}
-              >
-                {isCheckIn ? "Check-in" : "Check-out"}
-              </span>
+              <span className="text-sm font-medium text-slate-500">Tên:</span>
+              <h4 className="text-sm font-bold text-slate-900">{record.guest}</h4>
+              <span className="text-sm text-slate-500">CCCD: <strong className="text-slate-700">{record.identityNumber || "Chưa cập nhật"}</strong></span>
               {record.roomPaid && (
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                   Đã thanh toán tiền phòng
                 </span>
               )}
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              CCCD: <span className="font-semibold text-slate-700">{record.identityNumber || "Chưa cập nhật"}</span>
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-              <span>Mã booking: <strong className="text-slate-700">#{record.bookingId ?? record.id}</strong></span>
-              <span>Số phòng: <strong className="text-blue-700">{record.room.split(" · ")[0]}</strong></span>
-              <span>Tổng tiền: <strong className="text-slate-900">{(Number(record.roomAmount ?? 0) + serviceTotal).toLocaleString("vi-VN")}đ</strong></span>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Thông tin phòng</p>
+              <div className="mt-2 grid gap-1.5 text-xs text-slate-500 sm:grid-cols-3">
+                <span>Mã booking: <strong className="text-slate-700">#{record.bookingId ?? record.id}</strong></span>
+                <span>Số phòng: <strong className="text-blue-700">{record.room.split(" · ")[0]}</strong></span>
+                <span>Tổng tiền: <strong className="text-slate-900">{(Number(record.roomAmount ?? 0) + serviceTotal).toLocaleString("vi-VN")}đ</strong></span>
+              </div>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              <button
-                type="button"
-                onClick={() => openRoomModal(record)}
-                className="rounded px-1 font-semibold text-blue-700 underline-offset-2 hover:bg-blue-50 hover:underline"
-              >
-                {record.room}
-              </button>{" "}
-              ·{" "}
-              {record.guests
-                ? `${record.guests} ${t("common.guestCount")}`
-                : t("frontDesk.stay")}
-            </p>
             {services.length > 0 && (
-              <div className="mt-3 max-w-xl rounded-xl border border-sky-100 bg-linear-to-r from-sky-50 to-white px-3.5 py-3 shadow-sm">
+              <div className="mt-3 max-w-xl rounded-xl border border-sky-100 bg-sky-50/60 px-3.5 py-3 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-sky-700">Dịch vụ phòng</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-sky-700">Thông tin dịch vụ</p>
                   <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-600 shadow-sm">
                     {services.length} dịch vụ
                   </span>
@@ -498,12 +482,6 @@ export default function CheckInOutWorkspace() {
           </div>
         </div>
         <div className="flex items-center justify-between gap-4 sm:justify-end">
-          <div className="text-left sm:text-right">
-            <p className="text-xs font-semibold text-slate-500">
-              {isCheckIn ? t("frontDesk.checkInTime") : t("frontDesk.checkOutTime")}
-            </p>
-            <p className="mt-1 font-bold text-slate-800">{record.time}</p>
-          </div>
           {!isCheckIn && (
             <span
               className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === "Đã check-in" || record.status === "Đã trả phòng" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
@@ -949,7 +927,7 @@ export default function CheckInOutWorkspace() {
               items={records.map((record) => ({
                 id: record.id,
                 title: record.room,
-                subtitle: `Booking #${record.bookingId ?? record.id}`,
+                subtitle: `Booking detail #${record.id}`,
                 status: record.status === "Đã check-in" ? "complete" as const : "pending" as const,
               }))}
               selectedIds={completedIds}

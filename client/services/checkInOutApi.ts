@@ -14,6 +14,7 @@ export type CheckInOutBookingDetail = {
   bookingId?: string;
   bookingDetailId?: number;
   roomId?: string;
+  roomNumber?: string;
   roomName?: string;
   roomTypeName?: string;
   checkInTime?: string;

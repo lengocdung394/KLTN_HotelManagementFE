@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
+import { useGetCustomerByIdQuery } from "../services/customerApi";
 import {
   useModifyBookingMutation,
   type ManagementBookingModificationRequest,
@@ -15,7 +16,7 @@ import { useAppSelector } from "../store/hooks";
 
 type BookingDetail = Record<string, unknown>;
 
-const roomIdOf = (detail: BookingDetail) => Number(detail.roomId ?? detail.roomID ?? detail.id);
+const roomIdOf = (detail: BookingDetail) => String(detail.roomId ?? detail.roomID ?? detail.id ?? "");
 const detailIdOf = (detail: BookingDetail) => Number(
   detail.bookingDetailId
   ?? detail.bookingDetailsId
@@ -49,6 +50,15 @@ export default function BookingEditWorkspace() {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
   const booking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
+  const rawBookingCustomer = booking?.customer ?? booking?.customerInfo ?? booking?.guest;
+  const bookingCustomer = rawBookingCustomer && typeof rawBookingCustomer === "object" ? rawBookingCustomer as Record<string, unknown> : {};
+  const customerId = String(booking?.customerId ?? booking?.customerID ?? booking?.customer_id ?? booking?.idCustomer ?? bookingCustomer.id ?? bookingCustomer.customerId ?? bookingCustomer.customerID ?? bookingCustomer.idCustomer ?? "");
+  const { data: customerById, isLoading: isCustomerLoading, isError: isCustomerError } = useGetCustomerByIdQuery(customerId, { skip: !customerId });
+  useEffect(() => {
+    console.log("[booking-edit] customerId:", customerId);
+    console.log("[booking-edit] customer loading:", isCustomerLoading, "error:", isCustomerError);
+    console.log("[booking-edit] customer data:", customerById);
+  }, [customerId, customerById, isCustomerLoading, isCustomerError]);
 
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(
     hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true },
@@ -66,7 +76,7 @@ export default function BookingEditWorkspace() {
   const [cancelledServiceDetailIds, setCancelledServiceDetailIds] = useState<Record<number, number[]>>({});
 
   // 3. Phục vụ ĐỔI PHÒNG (roomsToChange: { bookingDetailId, newRoomId })
-  const [roomChanges, setRoomChanges] = useState<Record<number, number>>({});
+  const [roomChanges, setRoomChanges] = useState<Record<number, string>>({});
 
   // 4. Phục vụ CẬP NHẬT NGÀY LƯU TRÚ (roomsToUpdateDates: { bookingDetailId, newCheckInTime, newCheckoutTime })
   const [dateUpdates, setDateUpdates] = useState<Record<number, { checkIn: string; checkOut: string }>>({});
@@ -77,7 +87,7 @@ export default function BookingEditWorkspace() {
   // 6. Phục vụ THÊM PHÒNG MỚI VÀO BOOKING (roomsToAdd)
   const [newRoomsToAdd, setNewRoomsToAdd] = useState<ManagementBookingRoomToAdd[]>([]);
   const [isAddingNewRoom, setIsAddingNewRoom] = useState(false);
-  const [selectedNewRoomId, setSelectedNewRoomId] = useState<number | "">("");
+  const [selectedNewRoomId, setSelectedNewRoomId] = useState<string>("");
   const [newRoomCheckIn, setNewRoomCheckIn] = useState("");
   const [newRoomCheckOut, setNewRoomCheckOut] = useState("");
   const [newRoomAdults, setNewRoomAdults] = useState(1);
@@ -178,7 +188,7 @@ export default function BookingEditWorkspace() {
     });
   };
 
-  const handleRoomChange = (bookingDetailId: number, newRoomId: number) => {
+  const handleRoomChange = (bookingDetailId: number, newRoomId: string) => {
     setRoomChanges((prev) => ({ ...prev, [bookingDetailId]: newRoomId }));
   };
 
@@ -201,7 +211,7 @@ export default function BookingEditWorkspace() {
       return;
     }
     const newRoom: ManagementBookingRoomToAdd = {
-      roomId: Number(selectedNewRoomId),
+      roomId: selectedNewRoomId,
       checkInTime: `${newRoomCheckIn}T14:00:00`,
       checkOutTime: `${newRoomCheckOut}T12:00:00`,
       numAdults: newRoomAdults,
@@ -222,8 +232,7 @@ export default function BookingEditWorkspace() {
   const [showDebugJson, setShowDebugJson] = useState(false);
 
   const currentPayload = useMemo<ManagementBookingModificationRequest>(() => {
-    const rawEmployeeId = Number(employeeId ?? localStorage.getItem("id") ?? localStorage.getItem("employeeId") ?? 1);
-    const numericEmployeeId = Number.isFinite(rawEmployeeId) && rawEmployeeId > 0 ? rawEmployeeId : 1;
+    const currentEmployeeId = String(employeeId ?? localStorage.getItem("id") ?? localStorage.getItem("employeeId") ?? "");
 
     const roomsToChangeFormatted = Object.entries(roomChanges)
       .filter(([detailIdStr, newRoomId]) => Boolean(newRoomId) && !cancelledDetailIds.includes(Number(detailIdStr)))
@@ -334,7 +343,7 @@ export default function BookingEditWorkspace() {
       }));
 
     return {
-      employeeId: numericEmployeeId,
+      employeeId: currentEmployeeId,
       bookingDetailIdsToCancel: cancelledDetailIds,
       servicesToCancel: servicesToCancelFormatted,
       roomsToAdd: newRoomsToAdd,
@@ -414,6 +423,10 @@ export default function BookingEditWorkspace() {
     );
   }
 
+  const displayCustomerName = customerById?.name ?? String(booking.customerName ?? booking.nameCustomer ?? bookingCustomer.name ?? bookingCustomer.fullName ?? "");
+  const displayCustomerPhone = customerById?.phone ?? String(booking.customerPhone ?? booking.phone ?? booking.phoneNumber ?? bookingCustomer.phone ?? bookingCustomer.phoneNumber ?? bookingCustomer.customerPhone ?? "");
+  const displayCustomerIdentity = customerById?.identityNumber ?? String(booking.customerIdentityNumber ?? booking.identityNumber ?? booking.identityCard ?? bookingCustomer.identityNumber ?? bookingCustomer.identityCard ?? bookingCustomer.identityCardNumber ?? bookingCustomer.citizenId ?? bookingCustomer.cccd ?? "");
+
   return (
     <section className="mt-6 space-y-6">
       {/* Header */}
@@ -432,6 +445,26 @@ export default function BookingEditWorkspace() {
           >
             <ArrowLeft size={16} /> Quay lại
           </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+        <h3 className="text-base font-bold text-slate-900">Thông tin khách hàng</h3>
+        <p className="mt-1 text-xs text-slate-500">Mã khách hàng: {customerId || "Chưa có"}</p>
+        {isCustomerError && <p className="mt-2 text-xs text-rose-600">Không lấy được thông tin khách hàng từ hệ thống.</p>}
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <label className="text-sm font-semibold text-slate-700">
+            Họ và tên
+            <input readOnly value={isCustomerLoading ? "Đang tải..." : displayCustomerName} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Số điện thoại
+            <input readOnly value={isCustomerLoading ? "Đang tải..." : displayCustomerPhone} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Căn cước công dân
+            <input readOnly value={isCustomerLoading ? "Đang tải..." : displayCustomerIdentity} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
+          </label>
         </div>
       </div>
 
@@ -520,14 +553,14 @@ export default function BookingEditWorkspace() {
                       </label>
                       <select
                         value={roomChanges[detailId] ?? rId}
-                        onChange={(e) => handleRoomChange(detailId, Number(e.target.value))}
+                        onChange={(e) => handleRoomChange(detailId, String(e.target.value))}
                         className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
                       >
                         <option value={rId}>Giữ phòng hiện tại (#{rId})</option>
                         {hotelRooms
-                          .filter((hr) => Number(hr.id ?? hr.roomId) !== rId)
+                          .filter((hr) => String(hr.id ?? hr.roomId) !== String(rId))
                           .map((hr) => {
-                            const hrId = Number(hr.id ?? hr.roomId);
+                            const hrId = String(hr.id ?? hr.roomId ?? "");
                             return (
                               <option key={hrId} value={hrId}>
                                 Phòng #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? "Phòng")} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString("vi-VN")}đ)
@@ -603,12 +636,12 @@ export default function BookingEditWorkspace() {
                 <label className="text-xs font-semibold text-slate-700">Chọn phòng:</label>
                 <select
                   value={selectedNewRoomId}
-                  onChange={(e) => setSelectedNewRoomId(Number(e.target.value))}
+                  onChange={(e) => setSelectedNewRoomId(String(e.target.value))}
                   className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
                 >
                   <option value="">-- Chọn phòng --</option>
                   {hotelRooms.map((hr) => {
-                    const hrId = Number(hr.id ?? hr.roomId);
+                    const hrId = String(hr.id ?? hr.roomId ?? "");
                     return (
                       <option key={hrId} value={hrId}>
                         Phòng #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? "Phòng")} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString("vi-VN")}đ)

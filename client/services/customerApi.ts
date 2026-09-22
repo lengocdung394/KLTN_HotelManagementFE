@@ -13,6 +13,12 @@ export type CustomerResponse = {
 	note: string;
 };
 
+export type WalkInCustomerRequest = {
+	fullName: string;
+	phone: string;
+	cccd: string;
+};
+
 type ApiCustomer = Record<string, unknown>;
 
 const valueOf = (item: ApiCustomer, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
@@ -35,9 +41,9 @@ const normalizeCustomer = (item: ApiCustomer, index: number): CustomerResponse =
 	return {
 		id: String(valueOf(item, ["id", "customerId", "customerID", "userId"]) ?? `customer-${index + 1}`),
 		name: String(valueOf(item, ["name", "fullName", "customerName"]) ?? "Chưa cập nhật"),
-		phone: String(valueOf(item, ["phone", "phoneNumber", "mobile"]) ?? ""),
+		phone: String(valueOf(item, ["phone", "phoneNumber", "customerPhone", "mobile", "mobileNumber"]) ?? ""),
 		email: String(valueOf(item, ["email", "emailAddress"]) ?? ""),
-		identityNumber: String(valueOf(item, ["identityNumber", "identityCard", "citizenId", "cccd"]) ?? ""),
+		identityNumber: String(valueOf(item, ["identityNumber", "identityCard", "identityCardNumber", "citizenId", "citizenNumber", "cccd"]) ?? ""),
 		visits,
 		lastStay: String(valueOf(item, ["lastStay", "lastBookingDate", "lastCheckOut", "updatedAt"]) ?? "Chưa lưu trú"),
 		totalSpend,
@@ -57,8 +63,35 @@ export const customerApi = baseApi.injectEndpoints({
 		getCustomersByHotelId: builder.query<CustomerResponse[], number>({
 			query: (hotelId) => ({ url: `/hotels/hotel/${hotelId}`, method: "GET" }),
 			transformResponse: (response: unknown) => getResult(response).map(normalizeCustomer),
+			providesTags: ["Customer"],
+		}),
+		getCustomerById: builder.query<CustomerResponse, string>({
+			query: (id) => {
+				console.log("[customerApi] request customer id:", id);
+				return { url: `/customer/findByIdCustomer/${encodeURIComponent(id)}`, method: "GET" };
+			},
+			transformResponse: (response: unknown) => {
+				console.log("[customerApi] customer response:", response);
+				const value = response && typeof response === "object" && "result" in response ? (response as { result?: unknown }).result : response;
+				const customer = (value ?? {}) as ApiCustomer;
+				return normalizeCustomer({
+					...customer,
+					name: customer.name,
+					phone: customer.phone,
+					identityNumber: customer.cccd,
+				}, 0);
+			},
+			providesTags: ["Customer"],
+		}),
+		createWalkInCustomer: builder.mutation<CustomerResponse, WalkInCustomerRequest>({
+			query: (request) => ({ url: "/customer/walk-in", method: "POST", data: request }),
+			transformResponse: (response: unknown) => {
+				const value = response && typeof response === "object" && "result" in response ? (response as { result?: unknown }).result : response;
+				return normalizeCustomer((value ?? {}) as ApiCustomer, 0);
+			},
+			invalidatesTags: ["Customer"],
 		}),
 	}),
 });
 
-export const { useGetCustomersByHotelIdQuery } = customerApi;
+export const { useGetCustomersByHotelIdQuery, useGetCustomerByIdQuery, useLazyGetCustomerByIdQuery, useCreateWalkInCustomerMutation } = customerApi;

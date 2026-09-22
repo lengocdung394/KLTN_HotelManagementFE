@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ban, Check, ChevronRight, CreditCard, DoorOpen, ListChecks, ReceiptText, Search } from "lucide-react";
 import type { HotelService } from "../services/serviceApi";
 
 export type ServiceSelection = { serviceId: string; quantity: number; originalQuantity?: number; price?: number; name?: string; usedAt?: string; detailId?: number; isExisting?: boolean; applyToRoom?: boolean };
-export type ServiceRoom = { id: string; databaseId?: string; type: string; guests: number; price: number };
+export type ServiceRoom = { id: string; databaseId?: string; type: string; guests: number; price: number; dailyPrices?: Record<string, number>; nightlySurcharge?: number };
 
 export type BookingServiceSelectorProps = {
   rooms: ServiceRoom[];
@@ -28,12 +28,28 @@ export type BookingServiceSelectorProps = {
 
 const formatDate = (value: string, language: string) => new Date(`${value}T00:00:00`).toLocaleDateString(language === "en" ? "en-US" : "vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 const money = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
+const shiftDay = (dateStr: string, delta: number) => {
+  const date = new Date(`${dateStr}T00:00:00`);
+  date.setDate(date.getDate() + delta);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
 
-export default function BookingServiceSelector({ rooms, services, servicesLoading = false, servicesError = false, serviceMode, setServiceMode, allRoomServices: selectedAllRoomServices, setAllRoomServices, roomServices, setRoomServices, roomRanges, fallbackRange, language, nightsForRoom, onContinue, onSkip, continueLabel = "Tiếp tục thanh toán", skipLabel = "Bỏ qua dịch vụ" }: BookingServiceSelectorProps) {
+export default function BookingServiceSelector({ rooms, services, servicesLoading = false, servicesError = false, serviceMode, setServiceMode, allRoomServices: selectedAllRoomServices, setAllRoomServices, roomServices, setRoomServices, roomRanges, fallbackRange, language, nightsForRoom: getNightsForRoom, onContinue, onSkip, continueLabel = "Tiếp tục thanh toán", skipLabel = "Bỏ qua dịch vụ" }: BookingServiceSelectorProps) {
   const [expandedRoom, setExpandedRoom] = useState<string | null>(null);
   const [serviceSearch, setServiceSearch] = useState("");
   const [roomServiceSearch, setRoomServiceSearch] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<"services" | "rooms" | "summary">("services");
+  useEffect(() => {
+    setRoomServices((current) => {
+      let changed = false;
+      const next = Object.fromEntries(Object.entries(current).map(([roomId, selections]) => {
+        const filtered = selections.filter((selection) => !(selection.isExisting && selection.quantity === 0));
+        if (filtered.length !== selections.length) changed = true;
+        return [roomId, filtered];
+      }));
+      return changed ? next : current;
+    });
+  }, [roomServices, setRoomServices]);
   const allRoomServices = selectedAllRoomServices.filter((selection, index, source) => source.findIndex((item) => item.serviceId === selection.serviceId) === index);
   const uniqueServices = services.filter((service, index, source) => source.findIndex((candidate) => candidate.id === service.id) === index);
   const visibleServices = (search: string) => uniqueServices.filter((service) => service.name.toLowerCase().includes(search.trim().toLowerCase()));
@@ -41,9 +57,28 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
   const servicePrice = (selection: ServiceSelection) => selection.price ?? services.find((service) => String(service.id) === selection.serviceId)?.price ?? 0;
   const serviceName = (selection: ServiceSelection) => selection.name ?? services.find((service) => String(service.id) === selection.serviceId)?.name ?? "Dịch vụ";
   const roomServiceTotal = (room: ServiceRoom, selections: ServiceSelection[]) => selections.reduce((sum, selection) => sum + servicePrice(selection) * getSelectionQuantity(room, selection), 0);
+  const roomRangeTotal = (room: ServiceRoom) => {
+    const range = roomRanges[room.id] ?? fallbackRange;
+    if (!range.checkIn || !range.checkOut || range.checkIn >= range.checkOut) return 0;
+    let total = 0;
+    for (let date = range.checkIn; date < range.checkOut; date = shiftDay(date, 1)) total += (room.dailyPrices?.[date] ?? room.price - (room.nightlySurcharge ?? 0)) + (room.nightlySurcharge ?? 0);
+    return total;
+  };
+  const nightsForRoom = (roomId: string) => {
+    const room = rooms.find((item) => item.id === roomId);
+    if (!room || room.price === 0) return getNightsForRoom(roomId);
+    return roomRangeTotal(room) / room.price;
+  };
   const serviceUnit = (selection: ServiceSelection) => services.find((service) => String(service.id) === selection.serviceId)?.unit ?? "dịch vụ";
   const formatServices = (room: ServiceRoom, selections: ServiceSelection[]) => selections.map((selection) => `Tên: ${serviceName(selection)} · ${money(servicePrice(selection))}/${serviceUnit(selection)} × ${getSelectionQuantity(room, selection)}`).join(", ");
-  const getRoomSelections = (room: ServiceRoom) => roomServices[room.id] ?? (room.databaseId === undefined ? undefined : roomServices[String(room.databaseId)]) ?? [];
+  const getRoomSelections = (room: ServiceRoom) => {
+    const selections = roomServices[room.id] ?? (room.databaseId === undefined ? undefined : roomServices[String(room.databaseId)]) ?? [];
+    return selections.map((selection) => {
+      if (selection.quantity !== 0 || !selection.isExisting) return selection;
+      const { quantity: _zeroQuantity, ...selectionWithoutQuantity } = selection;
+      return selectionWithoutQuantity as ServiceSelection;
+    });
+  };
 
   const updateAllRoomService = (serviceId: string, checked: boolean) => {
     setAllRoomServices((current) => {
@@ -73,9 +108,9 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
       const selections = current[roomId] ?? [];
       const existing = selections.find((item) => item.serviceId === serviceId);
       const roomGuests = rooms.find((room) => room.id === roomId)?.guests ?? 1;
-      const safeChanges = changes.quantity === undefined ? changes : { ...changes, quantity: Math.min(roomGuests, Math.max(0, changes.quantity)) };
+        const safeChanges = changes.quantity === undefined ? changes : { ...changes, quantity: Math.min(roomGuests, Math.max(0, changes.quantity)) };
       const updatedList = existing
-        ? selections.map((item) => item.serviceId === serviceId ? { ...item, ...safeChanges } : item)
+          ? selections.map((item) => item.serviceId === serviceId ? { ...item, ...safeChanges } : item)
         : [...selections, { serviceId, quantity: roomGuests, applyToRoom: true, ...safeChanges }];
       return {
         ...current,
@@ -116,8 +151,8 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
       </div>; })}</div>}
     </div>}
     <div className="mt-5 rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Thông tin phòng</p><div className="mt-3 space-y-2">{rooms.map((room, index) => { const selections = roomServices[room.id] ?? []; const range = roomRanges[room.id] ?? fallbackRange; const displaySelections = serviceMode === "all" ? allRoomServices.map((item) => selections.find((selection) => selection.serviceId === item.serviceId) ?? { ...item, quantity: room.guests, applyToRoom: true }) : selections; return <div key={`info-room-${room.id}-${index}`} className="rounded-lg border border-slate-200 bg-white p-3 text-xs"><div className="flex items-start justify-between gap-3"><span className="min-w-0"><strong className="block text-slate-800">Phòng {room.id} · {room.type}</strong><span className="mt-1 block text-slate-500">Số người: {room.guests}</span><span className="mt-1 block text-slate-500">Check-in: {formatDate(range.checkIn, language)}</span><span className="block text-slate-500">Check-out: {formatDate(range.checkOut, language)}</span></span><span className="shrink-0 text-right font-bold text-slate-800">{money(room.price * nightsForRoom(room.id) + roomServiceTotal(room, displaySelections))}</span></div>{serviceMode === "all" && allRoomServices.length > 0 && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">{allRoomServices.map((serviceSelection, sIndex) => { const service = services.find((item) => String(item.id) === serviceSelection.serviceId); const selection = selections.find((item) => item.serviceId === serviceSelection.serviceId) ?? { serviceId: serviceSelection.serviceId, quantity: room.guests, applyToRoom: true }; return <div key={`info-svc-${serviceSelection.serviceId}-${sIndex}`} className="flex items-center justify-between gap-3"><span className="min-w-0 truncate font-semibold text-blue-700">{service?.name} · {money(service?.price ?? 0)} / người</span><div className="flex shrink-0 items-center gap-2"><label className="flex items-center gap-1 text-[11px] text-slate-500"><input type="checkbox" checked={selection.applyToRoom !== false} onChange={(event) => updateRoomService(room.id, serviceSelection.serviceId, { applyToRoom: event.target.checked, quantity: event.target.checked ? room.guests : selection.quantity })} />Áp dụng cả phòng</label><label className="flex items-center gap-1 text-[11px] text-slate-500">Số người<input aria-label={`Số người dùng ${service?.name ?? "dịch vụ"} tại phòng ${room.id}`} type="number" min="1" value={selection.quantity} onChange={(event) => updateRoomService(room.id, serviceSelection.serviceId, { quantity: Math.max(1, Number(event.target.value) || 1), applyToRoom: false })} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" /></label></div></div>; })}</div>}{serviceMode !== "all" && <span className="mt-1 block text-blue-700">{selections.length > 0 ? formatServices(room, selections) : "Chưa chọn dịch vụ"}</span>}</div>; })}</div></div>
-    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">Chi tiết từng phòng</div><div className="divide-y divide-slate-100">{rooms.map((room, index) => { const selections = serviceMode === "all" ? roomServices[room.id] ?? allRoomServices.map((item) => ({ ...item, quantity: room.guests })) : roomServices[room.id] ?? []; const roomAmount = room.price * nightsForRoom(room.id); return <div key={`detail-room-${room.id}-${index}`} className="px-4 py-3 text-xs"><div className="flex items-center justify-between gap-3"><strong className="text-slate-800">Phòng {room.id} · {room.type}</strong><strong className="text-slate-800">Tiền phòng: {money(roomAmount)}</strong></div><div className="mt-2 space-y-1 border-t border-slate-100 pt-2">{selections.length > 0 ? selections.map((selection, sIndex) => { const service = services.find((item) => String(item.id) === selection.serviceId); const unitPrice = servicePrice(selection); const amount = unitPrice * selection.quantity; return <div key={`detail-svc-${selection.serviceId}-${sIndex}`} className="flex items-center justify-between gap-3 text-slate-500"><span>{service?.name ?? "Dịch vụ"} · {money(unitPrice)}/dịch vụ × {selection.quantity}</span><strong className="shrink-0 text-blue-700">{money(amount)}</strong></div>; }) : <span className="text-slate-400">Chưa chọn dịch vụ</span>}</div></div>; })}</div></div>
-    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">Tóm tắt chi phí</div><div className="divide-y divide-slate-100">{rooms.map((room, index) => { const selections = serviceMode === "all" ? roomServices[room.id] ?? allRoomServices.map((item) => ({ ...item, quantity: room.guests })) : roomServices[room.id] ?? []; const roomAmount = room.price * nightsForRoom(room.id); const serviceAmount = roomServiceTotal(room, selections); return <div key={`summary-room-${room.id}-${index}`} className="grid gap-2 px-4 py-3 text-xs sm:grid-cols-[1.5fr_1fr_1fr_1fr] sm:items-center"><strong className="text-slate-800">Phòng {room.id}</strong><span className="text-slate-500">Tiền phòng: <strong className="text-slate-700">{money(roomAmount)}</strong></span><span className="text-slate-500">Tiền dịch vụ: <strong className="text-blue-700">{money(serviceAmount)}</strong></span><span className="text-left font-bold text-slate-800 sm:text-right">Tổng: {money(roomAmount + serviceAmount)}</span></div>; })}</div></div>
+    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">Chi tiết từng phòng</div><div className="divide-y divide-slate-100">{rooms.map((room, index) => { const selections = serviceMode === "all" ? roomServices[room.id] ?? allRoomServices.map((item) => ({ ...item, quantity: room.guests })) : roomServices[room.id] ?? []; const roomAmount = roomRangeTotal(room); return <div key={`detail-room-${room.id}-${index}`} className="px-4 py-3 text-xs"><div className="flex items-center justify-between gap-3"><strong className="text-slate-800">Phòng {room.id} · {room.type}</strong><strong className="text-slate-800">Tiền phòng: {money(roomAmount)}</strong></div><div className="mt-2 space-y-1 border-t border-slate-100 pt-2">{selections.length > 0 ? selections.map((selection, sIndex) => { const service = services.find((item) => String(item.id) === selection.serviceId); const unitPrice = servicePrice(selection); const amount = unitPrice * selection.quantity; return <div key={`detail-svc-${selection.serviceId}-${sIndex}`} className="flex items-center justify-between gap-3 text-slate-500"><span>{service?.name ?? "Dịch vụ"} · {money(unitPrice)}/dịch vụ × {selection.quantity}</span><strong className="shrink-0 text-blue-700">{money(amount)}</strong></div>; }) : <span className="text-slate-400">Chưa chọn dịch vụ</span>}</div></div>; })}</div></div>
+    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">Tóm tắt chi phí</div><div className="divide-y divide-slate-100">{rooms.map((room, index) => { const selections = serviceMode === "all" ? roomServices[room.id] ?? allRoomServices.map((item) => ({ ...item, quantity: room.guests })) : roomServices[room.id] ?? []; const roomAmount = roomRangeTotal(room); const serviceAmount = roomServiceTotal(room, selections); return <div key={`summary-room-${room.id}-${index}`} className="grid gap-2 px-4 py-3 text-xs sm:grid-cols-[1.5fr_1fr_1fr_1fr] sm:items-center"><strong className="text-slate-800">Phòng {room.id}</strong><span className="text-slate-500">Tiền phòng: <strong className="text-slate-700">{money(roomAmount)}</strong></span><span className="text-slate-500">Tiền dịch vụ: <strong className="text-blue-700">{money(serviceAmount)}</strong></span><span className="text-left font-bold text-slate-800 sm:text-right">Tổng: {money(roomAmount + serviceAmount)}</span></div>; })}</div></div>
     <div className="mt-5 flex flex-col-reverse justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center"><button type="button" onClick={onSkip} className="text-sm font-semibold text-slate-500 hover:text-slate-800">{skipLabel}</button><button type="button" onClick={onContinue} className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">{continueLabel} <ChevronRight size={16} className="ml-1 inline" /></button></div>
   </div>;
 }

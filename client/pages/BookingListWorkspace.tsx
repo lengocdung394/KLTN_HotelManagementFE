@@ -68,6 +68,9 @@ const isCancelledService = (service: Record<string, unknown>) => {
   return statusIsCancelled || cancellationFlag || hasCancellationDate || (Number.isFinite(quantity) && quantity <= 0);
 };
 
+const isCancelledBookingDetail = (detail: Record<string, unknown>) =>
+  String(detail.bookingStatusType ?? "").trim().toUpperCase() === "CANCELLED";
+
 const bookingServices = (detail: Record<string, unknown>) => {
   const serviceFields = [
     detail.bookingServiceResponsesForHotels,
@@ -110,7 +113,6 @@ export default function BookingListWorkspace() {
   const [editNotes, setEditNotes] = useState("");
   const [editSuccess, setEditSuccess] = useState("");
   const [editError, setEditError] = useState("");
-
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<"bank" | "cash" | "">("bank");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
@@ -545,11 +547,11 @@ export default function BookingListWorkspace() {
                 </div>
 
                 {/* Booking Room Details */}
-                {selectedBooking.bookingDetails && selectedBooking.bookingDetails.length > 0 && (
+                {selectedBooking.bookingDetails && selectedBooking.bookingDetails.filter((detail) => !isCancelledBookingDetail(detail)).length > 0 && (
                   <div className="booking-room-details order-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Chi tiết phòng lưu trú</h4>
                     <div className="space-y-2">
-                      {selectedBooking.bookingDetails.map((detail, idx) => {
+                      {selectedBooking.bookingDetails.filter((detail) => !isCancelledBookingDetail(detail)).map((detail, idx) => {
                         const serviceRequests = bookingServices(detail);
                         const roomName = String(detail.roomName ?? detail.roomTypeName ?? detail.roomType ?? "");
                         const roomSubtotal = detail.roomSubTotal ?? detail.roomSubtotal;
@@ -557,7 +559,7 @@ export default function BookingListWorkspace() {
                         return <div key={idx} className="rounded-lg border border-slate-200 p-3 text-xs text-slate-700 bg-white">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="font-bold text-slate-800">Phòng ID: {String(detail.roomId ?? "-")}</p>
+                              <p className="font-bold text-slate-800">Phòng: {String(detail.roomNumber ?? detail.roomId ?? "-")}</p>
                               {roomName && <p className="mt-0.5 text-slate-500">Loại phòng: {roomName}</p>}
                             </div>
                             {roomSubtotal !== undefined && <strong className="shrink-0 text-blue-700">Tạm tính: {money(roomSubtotal)}</strong>}
