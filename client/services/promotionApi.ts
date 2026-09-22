@@ -22,7 +22,7 @@ export type Promotion = {
 };
 
 export type CustomerPromotion = Promotion & {
-  customerId?: number;
+  customerId?: string;
   claimedAt?: string;
   used?: boolean;
 };
@@ -71,7 +71,7 @@ const normalizePromotion = (item: PromotionApiResponse): Promotion => {
 
 const normalizeCustomerPromotion = (item: PromotionApiResponse): CustomerPromotion => ({
   ...normalizePromotion(item),
-  customerId: valueOf(item, ["customerId", "customerID"]) == null ? undefined : parseNumber(valueOf(item, ["customerId", "customerID"])),
+  customerId: valueOf(item, ["customerId", "customerID"]) == null ? undefined : String(valueOf(item, ["customerId", "customerID"])),
   claimedAt: valueOf(item, ["claimedAt", "savedAt", "createdAt"]) == null ? undefined : String(valueOf(item, ["claimedAt", "savedAt", "createdAt"])),
   used: valueOf(item, ["used", "isUsed"]) == null ? undefined : Boolean(valueOf(item, ["used", "isUsed"])),
 });
@@ -97,7 +97,7 @@ export const promotionApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: ApiResponse<unknown>) => extractList(response).map(normalizePromotion).filter((promotion) => promotion.id && promotion.code),
     }),
-    getCustomerPromotions: builder.query<CustomerPromotion[], number>({
+    getCustomerPromotions: builder.query<CustomerPromotion[], string>({
       query: (customerId) => ({ url: `/customer-promotions/customer/${customerId}`, method: "GET" }),
       transformResponse: (response: ApiResponse<unknown>) => extractList(response).map(normalizeCustomerPromotion).filter((promotion) => promotion.id && promotion.code),
     }),

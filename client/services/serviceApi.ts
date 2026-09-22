@@ -11,12 +11,14 @@ export type HotelService = {
   name: string;
   detail: string;
   price: number;
+  unit: string;
   category: string;
   active: boolean;
+  imageUrl?: string;
 };
 
 export type ServiceResponse = {
-  id: number;
+  id: string;
   name: string;
   description: string;
   price: number;
@@ -36,7 +38,7 @@ export const serviceApi = baseApi.injectEndpoints({
         method: "GET",
         params: params ?? undefined,
       }),
-      transformResponse: (response: ApiResponse<ServiceResponse[]>) => (response?.result ?? []).map(({ id, name, description, price, category, active }) => ({ id: String(id), name, detail: description, price: Number(price ?? 0), category, active: active ?? true })),
+      transformResponse: (response: ApiResponse<ServiceResponse[]>) => (response?.result ?? []).map(({ id, name, description, price, unit, category, active, imageUrl }) => ({ id: String(id), name, detail: description, price: Number(price ?? 0), unit, category, active: active ?? true, imageUrl })),
     }),
   }),
 });

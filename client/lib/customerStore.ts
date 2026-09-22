@@ -43,7 +43,7 @@ export const upsertCustomer = (name: string, phone: string, identityNumber = "")
   const existing = customers.find((customer) => customer.phone.replace(/\D/g, "") === normalizedPhone);
   const next = existing
     ? customers.map((customer) => customer.id === existing.id ? { ...customer, name: trimmedName, phone: trimmedPhone, identityNumber: trimmedIdentityNumber } : customer)
-    : [{ id: `CUS-${String(customers.length + 1).padStart(3, "0")}`, name: trimmedName, phone: trimmedPhone, email: "", identityNumber: trimmedIdentityNumber, visits: 0, lastStay: "Chưa lưu trú", totalSpend: 0, tier: "new" as const, note: "Chưa có ghi chú." }, ...customers];
+    : [{ id: `customer-${customers.length + 1}`, name: trimmedName, phone: trimmedPhone, email: "", identityNumber: trimmedIdentityNumber, visits: 0, lastStay: "Chưa lưu trú", totalSpend: 0, tier: "new" as const, note: "Chưa có ghi chú." }, ...customers];
   saveCustomers(next);
   return next;
 };

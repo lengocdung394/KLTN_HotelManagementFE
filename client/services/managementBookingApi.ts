@@ -7,7 +7,7 @@ export type ManagementBookingServiceCancellation = {
 };
 
 export type ManagementBookingServiceAddition = {
-  serviceId: number;
+  serviceId: string;
   quantity: number;
   name?: string;
   price?: number;
@@ -20,14 +20,14 @@ export type ManagementBookingRoomServiceAddition = {
 };
 
 export type ManagementBookingRoomToAdd = {
-  roomId: number;
+  roomId: string;
   checkInTime: string;
   checkOutTime: string;
   numAdults: number;
   numChildren: number;
   numInfants: number;
   serviceRequests: {
-    serviceId: number;
+    serviceId: string;
     quantity: number;
     name?: string;
     price?: number;
@@ -36,7 +36,7 @@ export type ManagementBookingRoomToAdd = {
 };
 
 export type ManagementBookingServiceQuantityItem = {
-  serviceId: number;
+  serviceId: string;
   quantity: number;
 };
 
@@ -46,11 +46,11 @@ export type ManagementBookingUpdateServiceQuantityRequest = {
 };
 
 export type ManagementBookingModificationRequest = {
-  employeeId: number;
+  employeeId: string;
   bookingDetailIdsToCancel: number[];
   servicesToCancel: ManagementBookingServiceCancellation[];
   roomsToAdd: ManagementBookingRoomToAdd[];
-  roomsToChange: { bookingDetailId: number; newRoomId: number }[];
+  roomsToChange: { bookingDetailId: number; newRoomId: string }[];
   roomsToUpdateDates: {
     bookingDetailId: number;
     newCheckInTime: string;
@@ -68,7 +68,7 @@ export const managementBookingApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     modifyBooking: builder.mutation<
       BookingResponse,
-      { bookingId: number | string; request: ManagementBookingModificationRequest }
+      { bookingId: string; request: ManagementBookingModificationRequest }
     >({
       query: ({ bookingId, request }) => ({
         url: `/management-bookings/${bookingId}/modify`,

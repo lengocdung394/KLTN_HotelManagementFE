@@ -270,14 +270,14 @@ export default function BookingListWorkspace() {
 
     // Payment method === "bank"
     const id = bookingId(selectedBooking);
-    const orderIdNum = Number(selectedBooking.orderId ?? selectedBooking.bookingId);
+    const orderId = selectedBooking.orderId ?? selectedBooking.bookingId ?? "";
     const amount = Number(selectedBooking.finalAmount) || 0;
 
     let qrUrl = "";
 
-    if (Number.isFinite(orderIdNum)) {
+    if (orderId) {
       try {
-        const response = await createPaymentQr({ orderId: orderIdNum }).unwrap();
+        const response = await createPaymentQr({ orderId }).unwrap();
         if (response && response.checkoutUrl) {
           qrUrl = response.checkoutUrl;
         }

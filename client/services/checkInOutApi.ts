@@ -1,7 +1,7 @@
 import { baseApi } from "./baseApi";
 
 export type CheckInOutService = {
-  serviceId?: number;
+  serviceId?: string;
   price?: number;
   quantity?: number;
   usedAt?: string;
@@ -11,9 +11,9 @@ export type CheckInOutService = {
 };
 
 export type CheckInOutBookingDetail = {
-  bookingId?: number;
+  bookingId?: string;
   bookingDetailId?: number;
-  roomId?: number;
+  roomId?: string;
   roomName?: string;
   roomTypeName?: string;
   checkInTime?: string;

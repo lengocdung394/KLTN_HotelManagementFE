@@ -1,6 +1,6 @@
 import { toast } from "@/components/ui/use-toast";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Calendar, Check, RefreshCw, Save, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Calendar, RefreshCw, Save, Trash2, UserPlus, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import { useGetAllServicesQuery } from "../services/serviceApi";
@@ -34,66 +34,14 @@ const serviceDetailIdOf = (service: BookingDetail) => Number(
   ?? service.serviceId,
 );
 
-const serviceIdOf = (service: BookingDetail) => {
-  const serviceObj = service.service && typeof service.service === "object" ? service.service as Record<string, unknown> : null;
-  const detailId = service.bookingServiceDetailId
-    ?? service.serviceDetailId
-    ?? service.bookingServiceDetailID
-    ?? service.serviceDetailID;
-  const rawId = (
-    service.serviceId
-    ?? service.serviceID
-    ?? serviceObj?.id
-    ?? serviceObj?.serviceId
-    ?? serviceObj?.serviceID
-    ?? (service.id !== undefined && service.id !== detailId ? service.id : undefined)
-  );
-  return rawId == null ? "" : String(rawId);
-};
-
-const isCancelledService = (service: BookingDetail) => {
-  const status = String(
-    service.status
-    ?? service.serviceStatus
-    ?? service.bookingServiceStatus
-    ?? service.serviceDetailStatus
-    ?? service.bookingServiceDetailStatus
-    ?? service.state
-    ?? "",
-  ).trim().toUpperCase();
-  const cancellationFlag = [
-    service.isCancelled,
-    service.isCanceled,
-    service.isCancel,
-    service.cancelled,
-    service.canceled,
-    service.isDeleted,
-    service.deleted,
-  ].some((value) => value === true || String(value).toLowerCase() === "true");
-  const hasCancellationDate = Boolean(service.cancelledAt ?? service.canceledAt ?? service.cancellationDate);
-  const quantity = Number(service.quantity ?? service.amount);
-
-  return status.includes("CANCEL")
-    || status.includes("HỦY")
-    || status.includes("HUY")
-    || cancellationFlag
-    || hasCancellationDate
-    || (Number.isFinite(quantity) && quantity <= 0);
-};
-
 const servicesOf = (detail: BookingDetail) => ([
   detail.bookingServiceResponsesForHotels,
-  detail.bookingServiceResponseForHotel,
   detail.bookingServiceResponseForHotels,
   detail.bookingServiceDetails,
   detail.serviceRequests,
   detail.serviceResponses,
   detail.services,
-].find(Array.isArray) ?? Object.entries(detail).find(([key, value]) =>
-  Array.isArray(value) && key.toLowerCase().includes("service"),
-)?.[1] ?? []) as BookingDetail[];
-
-const activeServicesOf = (detail: BookingDetail) => servicesOf(detail).filter((service) => !isCancelledService(service));
+].find(Array.isArray) ?? []) as BookingDetail[];
 
 export default function BookingEditWorkspace() {
   const location = useLocation();
@@ -117,10 +65,11 @@ export default function BookingEditWorkspace() {
   // 2. Phục vụ HỦY DỊCH VỤ LẺ (servicesToCancel: { bookingDetailId, serviceDetailIds })
   const [cancelledServiceDetailIds, setCancelledServiceDetailIds] = useState<Record<number, number[]>>({});
 
+  // 3. Phục vụ ĐỔI PHÒNG (roomsToChange: { bookingDetailId, newRoomId })
+  const [roomChanges, setRoomChanges] = useState<Record<number, number>>({});
 
   // 4. Phục vụ CẬP NHẬT NGÀY LƯU TRÚ (roomsToUpdateDates: { bookingDetailId, newCheckInTime, newCheckoutTime })
   const [dateUpdates, setDateUpdates] = useState<Record<number, { checkIn: string; checkOut: string }>>({});
-  const [guestUpdates, setGuestUpdates] = useState<Record<number, { adults: number; children: number; infants: number }>>({});
 
   // 5. Phục vụ THÊM DỊCH VỤ MỚI CHO PHÒNG HIỆN CÓ (servicesToAddForExistingRooms)
   const [roomServices, setRoomServices] = useState<Record<string, ServiceSelection[]>>({});
@@ -147,28 +96,23 @@ export default function BookingEditWorkspace() {
 
   const editRooms = useMemo(() => activeDetails.map((detail, index) => {
     const databaseId = roomIdOf(detail);
-    const detailId = detailIdOf(detail);
-    const guestUpdate = guestUpdates[detailId];
-    const adults = guestUpdate?.adults ?? Number(detail.numAdults ?? detail.adults ?? 1);
-    const children = guestUpdate?.children ?? Number(detail.numChildren ?? detail.children ?? 0);
-    const infants = guestUpdate?.infants ?? Number(detail.numInfants ?? detail.infants ?? 0);
     return {
       id: String(databaseId || detail.roomNumber || `room-${index + 1}`),
       databaseId,
       type: String(detail.roomType ?? detail.roomName ?? "Phòng booking"),
-      guests: adults + children + infants,
+      guests: Number(detail.numAdults ?? detail.adults ?? 1) + Number(detail.numChildren ?? detail.children ?? 0) + Number(detail.numInfants ?? detail.infants ?? 0),
       price: Number(detail.baseRoomPricePerNight ?? detail.roomPrice ?? detail.price ?? 0),
     };
-  }), [activeDetails, guestUpdates]);
+  }), [activeDetails]);
 
   const initialServices = useMemo(() => Object.fromEntries(details.flatMap((detail) => {
     const roomId = roomIdOf(detail);
     const detailId = detailIdOf(detail);
-    const rawServices = activeServicesOf(detail);
+    const rawServices = servicesOf(detail);
     const groupedMap = new Map<string, ServiceSelection>();
 
     rawServices.forEach((service) => {
-      const sId = serviceIdOf(service);
+      const sId = String(service.serviceId ?? service.serviceID ?? service.id ?? "");
       if (!sId) return;
       const qty = Number(service.quantity ?? service.amount ?? 1);
       const dId = serviceDetailIdOf(service);
@@ -234,6 +178,10 @@ export default function BookingEditWorkspace() {
     });
   };
 
+  const handleRoomChange = (bookingDetailId: number, newRoomId: number) => {
+    setRoomChanges((prev) => ({ ...prev, [bookingDetailId]: newRoomId }));
+  };
+
   const handleDateChange = (bookingDetailId: number, field: "checkIn" | "checkOut", value: string) => {
     setDateUpdates((prev) => {
       const existing = prev[bookingDetailId] ?? { checkIn: "", checkOut: "" };
@@ -244,18 +192,6 @@ export default function BookingEditWorkspace() {
           [field]: value,
         },
       };
-    });
-  };
-
-  const handleGuestChange = (bookingDetailId: number, field: "adults" | "children" | "infants", value: number) => {
-    setGuestUpdates((prev) => {
-      const detail = details.find((item) => detailIdOf(item) === bookingDetailId);
-      const current = prev[bookingDetailId] ?? {
-        adults: Number(detail?.numAdults ?? detail?.adults ?? 1),
-        children: Number(detail?.numChildren ?? detail?.children ?? 0),
-        infants: Number(detail?.numInfants ?? detail?.infants ?? 0),
-      };
-      return { ...prev, [bookingDetailId]: { ...current, [field]: Math.max(field === "adults" ? 1 : 0, value) } };
     });
   };
 
@@ -289,36 +225,29 @@ export default function BookingEditWorkspace() {
     const rawEmployeeId = Number(employeeId ?? localStorage.getItem("id") ?? localStorage.getItem("employeeId") ?? 1);
     const numericEmployeeId = Number.isFinite(rawEmployeeId) && rawEmployeeId > 0 ? rawEmployeeId : 1;
 
-    const roomUpdateDetailIds = [...new Set([...Object.keys(dateUpdates), ...Object.keys(guestUpdates)])];
-    const roomsToUpdateDatesFormatted = roomUpdateDetailIds
-      .filter((detailIdStr) => !cancelledDetailIds.includes(Number(detailIdStr)))
-      .map((detailIdStr) => {
+    const roomsToChangeFormatted = Object.entries(roomChanges)
+      .filter(([detailIdStr, newRoomId]) => Boolean(newRoomId) && !cancelledDetailIds.includes(Number(detailIdStr)))
+      .map(([detailIdStr, newRoomId]) => ({
+        bookingDetailId: Number(detailIdStr),
+        newRoomId,
+      }));
+
+    const roomsToUpdateDatesFormatted = Object.entries(dateUpdates)
+      .filter(([detailIdStr, dates]) => Boolean(dates.checkIn || dates.checkOut) && !cancelledDetailIds.includes(Number(detailIdStr)))
+      .map(([detailIdStr, dates]) => {
         const detailId = Number(detailIdStr);
-        const dates = dateUpdates[detailId] ?? { checkIn: "", checkOut: "" };
         const detail = details.find((d) => detailIdOf(d) === detailId);
         const defaultIn = String(detail?.checkInTime ?? "").slice(0, 10);
         const defaultOut = String(detail?.checkOutTime ?? "").slice(0, 10);
         const checkIn = dates.checkIn || defaultIn;
         const checkOut = dates.checkOut || defaultOut;
-        const guestUpdate = guestUpdates[detailId];
-        const originalAdults = Number(detail?.numAdults ?? detail?.adults ?? 1);
-        const originalChildren = Number(detail?.numChildren ?? detail?.children ?? 0);
-        const originalInfants = Number(detail?.numInfants ?? detail?.infants ?? 0);
-        const adults = guestUpdate?.adults ?? originalAdults;
-        const children = guestUpdate?.children ?? originalChildren;
-        const infants = guestUpdate?.infants ?? originalInfants;
-        if (checkIn === defaultIn && checkOut === defaultOut && adults === originalAdults && children === originalChildren && infants === originalInfants) return null;
         return {
           bookingDetailId: detailId,
           newCheckInTime: checkIn ? `${checkIn}T14:00:00` : "",
           newCheckoutTime: checkOut ? `${checkOut}T12:00:00` : "",
           newCheckOutTime: checkOut ? `${checkOut}T12:00:00` : "",
-          numAdults: adults,
-          numChildren: children,
-          numInfants: infants,
         };
-      })
-      .filter((update): update is NonNullable<typeof update> => update !== null);
+      });
 
     const servicesToAddForExistingRoomsFormatted: { bookingDetailId: number; services: any[] }[] = [];
     const serviceQuantityUpdatesFormatted: { bookingDetailId: number; services: { serviceId: number; quantity: number }[] }[] = [];
@@ -330,17 +259,7 @@ export default function BookingEditWorkspace() {
       if (!Number.isFinite(bookingDetailId)) return;
 
       const currentSelections = roomServices[room.id] ?? roomServices[String(room.databaseId)] ?? [];
-      const initialRoomSelections = initialServices[room.id] ?? initialServices[String(room.databaseId)] ?? initialServices[String(roomIdOf(detail))] ?? [];
-      const origSelections = [
-        ...initialRoomSelections,
-        ...currentSelections
-          .filter((selection) => selection.isExisting && Number(selection.originalQuantity) > 0)
-          .filter((selection) => !initialRoomSelections.some((original) => String(original.serviceId) === String(selection.serviceId)))
-          .map((selection) => ({
-            ...selection,
-            quantity: Number(selection.originalQuantity),
-          })),
-      ];
+      const origSelections = initialServices[room.id] ?? initialServices[String(room.databaseId)] ?? initialServices[String(roomIdOf(detail))] ?? [];
 
       const additionsForRoom: any[] = [];
       const quantityUpdatesForRoom: { serviceId: number; quantity: number }[] = [];
@@ -349,8 +268,7 @@ export default function BookingEditWorkspace() {
         const sIdNum = Number(curr.serviceId);
         if (!Number.isFinite(sIdNum) || curr.quantity <= 0) return;
 
-        const orig = origSelections.find((o) => String(o.serviceId) === String(curr.serviceId))
-          ?? (curr.isExisting && Number(curr.originalQuantity) > 0 ? curr : undefined);
+        const orig = origSelections.find((o) => String(o.serviceId) === String(curr.serviceId));
         const currentQty = Number(curr.quantity) || 0;
         const origQty = orig ? Number(orig.originalQuantity ?? orig.quantity ?? 0) : 0;
 
@@ -420,7 +338,7 @@ export default function BookingEditWorkspace() {
       bookingDetailIdsToCancel: cancelledDetailIds,
       servicesToCancel: servicesToCancelFormatted,
       roomsToAdd: newRoomsToAdd,
-      roomsToChange: [],
+      roomsToChange: roomsToChangeFormatted,
       roomsToUpdateDates: roomsToUpdateDatesFormatted,
       servicesToAddForExistingRooms: servicesToAddForExistingRoomsFormatted,
       serviceQuantityUpdates: serviceQuantityUpdatesFormatted,
@@ -428,9 +346,9 @@ export default function BookingEditWorkspace() {
   }, [
     employeeId,
     cancelledServiceDetailIds,
+    roomChanges,
     cancelledDetailIds,
     dateUpdates,
-    guestUpdates,
     details,
     editRooms,
     activeDetails,
@@ -525,7 +443,7 @@ export default function BookingEditWorkspace() {
             const detailId = detailIdOf(detail);
             const rId = roomIdOf(detail);
             const isCancelled = cancelledDetailIds.includes(detailId);
-            const existingServicesList = activeServicesOf(detail);
+            const existingServicesList = servicesOf(detail);
             const cancelledServiceIdsForThisDetail = cancelledServiceDetailIds[detailId] ?? [];
             const currentDateUpdate = dateUpdates[detailId] ?? {
               checkIn: String(detail.checkInTime ?? "").slice(0, 10),
@@ -595,29 +513,28 @@ export default function BookingEditWorkspace() {
                       </div>
                     </div>
 
+                    {/* Đổi phòng */}
                     <div className="rounded-lg bg-white p-3 border border-slate-200">
-                      <label className="text-xs font-bold text-slate-700">Số lượng khách:</label>
-                      <div className="mt-2 grid grid-cols-3 gap-2">
-                        {(["adults", "children", "infants"] as const).map((field) => {
-                          const defaultValue = field === "adults"
-                            ? Number(detail.numAdults ?? detail.adults ?? 1)
-                            : field === "children"
-                              ? Number(detail.numChildren ?? detail.children ?? 0)
-                              : Number(detail.numInfants ?? detail.infants ?? 0);
-                          const value = guestUpdates[detailId]?.[field] ?? defaultValue;
-                          const label = field === "adults" ? "Người lớn" : field === "children" ? "Trẻ em" : "Em bé";
-                          return <label key={field} className="text-[11px] text-slate-500">
-                            {label}
-                            <input
-                              type="number"
-                              min={field === "adults" ? 1 : 0}
-                              value={value}
-                              onChange={(event) => handleGuestChange(detailId, field, Number(event.target.value) || 0)}
-                              className="mt-1 h-8 w-full rounded-md border border-slate-300 px-2 text-xs focus:border-blue-500 focus:outline-none"
-                            />
-                          </label>;
-                        })}
-                      </div>
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                        <RefreshCw size={14} className="text-amber-600" /> Đổi sang phòng khác:
+                      </label>
+                      <select
+                        value={roomChanges[detailId] ?? rId}
+                        onChange={(e) => handleRoomChange(detailId, Number(e.target.value))}
+                        className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value={rId}>Giữ phòng hiện tại (#{rId})</option>
+                        {hotelRooms
+                          .filter((hr) => Number(hr.id ?? hr.roomId) !== rId)
+                          .map((hr) => {
+                            const hrId = Number(hr.id ?? hr.roomId);
+                            return (
+                              <option key={hrId} value={hrId}>
+                                Phòng #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? "Phòng")} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString("vi-VN")}đ)
+                              </option>
+                            );
+                          })}
+                      </select>
                     </div>
 
                     {/* Dịch vụ lẻ đã đặt của phòng */}

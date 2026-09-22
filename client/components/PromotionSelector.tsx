@@ -16,7 +16,7 @@ type PromotionSelectorProps = {
 export default function PromotionSelector({ customerId, orderTotal = 0, onApply, onEligibilityChange }: PromotionSelectorProps) {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: branchPromotions = [], isLoading: isBranchLoading, isError: isBranchError } = useGetPromotionsQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
-  const { data: customerPromotions = [], isLoading: isCustomerLoading, isError: isCustomerError } = useGetCustomerPromotionsQuery(Number(customerId), { skip: !customerId || Number.isNaN(Number(customerId)) });
+  const { data: customerPromotions = [], isLoading: isCustomerLoading, isError: isCustomerError } = useGetCustomerPromotionsQuery(customerId ?? "", { skip: !customerId });
   const [promotionCode, setPromotionCode] = useState("");
   const [promotionSearch, setPromotionSearch] = useState("");
   const [appliedPromotion, setAppliedPromotion] = useState<SelectedPromotion | null>(null);

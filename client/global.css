@@ -99,6 +99,26 @@
   }
 }
 
+form.max-w-lg label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+form.max-w-lg label::before {
+  color: rgb(239 68 68);
+  content: "*";
+  margin-left: 4px;
+  order: 2;
+}
+
+form.max-w-lg label > input,
+form.max-w-lg label > select,
+form.max-w-lg label > textarea {
+  flex-basis: 100%;
+  order: 3;
+}
+
 @layer base {
   * {
     @apply border-border;

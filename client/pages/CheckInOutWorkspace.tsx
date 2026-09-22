@@ -143,7 +143,7 @@ type CleaningTask = (typeof initialCleaningTasks)[number];
 type FlowFilter = "all" | "check-in" | "check-out";
 type DailyRecord = {
   id: string;
-  bookingId?: number;
+  bookingId?: string;
   guest: string;
   phone?: string;
   room: string;
@@ -310,7 +310,7 @@ export default function CheckInOutWorkspace() {
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
   );
   const checkOutQuery = useGetTodayCheckOutsQuery(
-    { hotelId: Number(hotelId), date, status: "CONFIRMED", bookingStatus: "CHECKED_IN" },
+    { hotelId: Number(hotelId), date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
   );
   const [arrivalState, setArrivalState] = useState<DailyRecord[]>([]);

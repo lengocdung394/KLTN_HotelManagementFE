@@ -1,7 +1,7 @@
 import { baseApi } from "./baseApi";
 
 export type BookingServiceRequest = {
-  serviceId: number;
+  serviceId: string;
   quantity: number;
   name?: string;
   price?: number;
@@ -9,7 +9,7 @@ export type BookingServiceRequest = {
 };
 
 export type BookingDetailCreateRequest = {
-  roomId: number;
+  roomId: string;
   checkInTime: string;
   checkOutTime: string;
   numAdults: number;
@@ -19,28 +19,30 @@ export type BookingDetailCreateRequest = {
 };
 
 export type BookingCreateRequest = {
-  customerId: number;
-  employeeId?: number;
+  customerId: string;
+  employeeId?: string;
   bookingChannel: "ONLINE" | "OFFLINE";
-  customerPromotionId: number | null;
-  promotionId: number | null;
+  customerPromotionId: string | null;
+  promotionId: string | null;
   bookingDetails: BookingDetailCreateRequest[];
 };
 
 export type BookingResponse = Record<string, unknown>;
 
 export type BookingListItem = {
-  orderId?: number;
-  bookingId?: number;
-  customerId?: number;
+  id?: string;
+  orderId?: string;
+  bookingId?: string;
+  customerId?: string;
+  employeeId?: string;
   customerName?: string;
   bookingStatus?: string;
   bookingChannel?: string;
   createdAt?: string;
-  roomTotal?: number | string;
-  serviceTotal?: number | string;
-  discountTotal?: number | string;
-  finalAmount?: number | string;
+  roomTotal?: number;
+  serviceTotal?: number;
+  discountTotal?: number;
+  finalAmount?: number;
   bookingDetails?: Record<string, unknown>[];
   [key: string]: unknown;
 };
@@ -57,14 +59,14 @@ const extractBookingList = (response: unknown): BookingListItem[] => {
 };
 
 export type BookingUpdateRequest = {
-  bookingId?: number | string;
+  bookingId?: string;
   customerName?: string;
   bookingStatus?: string;
   bookingChannel?: string;
-  roomTotal?: number | string;
-  serviceTotal?: number | string;
-  discountTotal?: number | string;
-  finalAmount?: number | string;
+  roomTotal?: number;
+  serviceTotal?: number;
+  discountTotal?: number;
+  finalAmount?: number;
   notes?: string;
   [key: string]: unknown;
 };
@@ -79,7 +81,7 @@ export const bookingApi = baseApi.injectEndpoints({
       transformResponse: extractBookingList,
       providesTags: ["Booking"],
     }),
-    createCounterBooking: builder.mutation<BookingResponse, { employeeId: number; request: BookingCreateRequest }>({
+    createCounterBooking: builder.mutation<BookingResponse, { employeeId: string; request: BookingCreateRequest }>({
       query: ({ employeeId, request }) => ({
         url: `/bookings/counter/${employeeId}`,
         method: "POST",
@@ -87,7 +89,7 @@ export const bookingApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["Booking", "Room"],
     }),
-    updateBooking: builder.mutation<BookingResponse, { id: number | string; request: BookingUpdateRequest }>({
+    updateBooking: builder.mutation<BookingResponse, { id: string; request: BookingUpdateRequest }>({
       query: ({ id, request }) => ({
         url: `/bookings/${id}`,
         method: "PUT",

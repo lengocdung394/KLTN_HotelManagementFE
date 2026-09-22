@@ -8,7 +8,7 @@ export type PaymentResponse = {
 
 export const paymentApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    createPaymentQr: builder.mutation<PaymentResponse, { orderId: number }>({
+    createPaymentQr: builder.mutation<PaymentResponse, { orderId: string }>({
       query: (request) => ({
         url: "/payment/create-qr",
         method: "POST",
