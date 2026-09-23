@@ -43,7 +43,6 @@ export type CheckInOutBookingDetail = {
 };
 
 export type CheckInOutQuery = {
-  hotelId: number;
   date?: string;
   status?: string;
   bookingStatus?: string;
@@ -76,19 +75,19 @@ const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => 
 export const checkInOutApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
-      query: ({ hotelId, date, status, bookingStatus }) => ({
+      query: ({ date, status, bookingStatus }) => ({
         url: "/hotels/today-checkins",
         method: "GET",
-        params: { hotelId, date, status, bookingStatus },
+        params: { date, status, bookingStatus },
       }),
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),
     getTodayCheckOuts: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
-      query: ({ hotelId, date, status, bookingStatus }) => ({
+      query: ({ date, status, bookingStatus }) => ({
         url: "/hotels/today-checkouts",
         method: "GET",
-        params: { hotelId, date, status, bookingStatus },
+        params: { date, status, bookingStatus },
       }),
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],

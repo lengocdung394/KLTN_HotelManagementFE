@@ -6,6 +6,41 @@
 /* Theme, content globs, and plugins are declared in tailwind.config.ts. */
 @config "../tailwind.config.ts";
 
+html {
+  scrollbar-gutter: stable;
+}
+
+section:has(input[type="file"]) label > span:first-child::after {
+  content: " *";
+  color: #ef4444;
+}
+
+body:has(input[placeholder="Nhập mật khẩu hiện tại"])::before {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgb(15 23 42 / 0.35);
+  content: "";
+  pointer-events: auto;
+}
+
+body:has(div.fixed.inset-0) {
+  overflow: hidden !important;
+}
+
+section:has(input[placeholder="Nhập mật khẩu hiện tại"]) {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 50;
+  width: min(520px, calc(100vw - 32px));
+  margin: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid #2563eb;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 0.24);
+}
+
 @layer base {
   /**
    * Tailwind CSS theme

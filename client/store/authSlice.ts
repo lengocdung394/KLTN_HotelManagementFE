@@ -103,6 +103,14 @@ const authSlice = createSlice({
       localStorage.setItem("email", action.payload.email);
       localStorage.setItem("position", action.payload.position);
     },
+    updateProfile: (state, action: PayloadAction<{ fullName: string; email: string; position: string }>) => {
+      state.fullName = action.payload.fullName;
+      state.email = action.payload.email;
+      state.position = action.payload.position;
+      localStorage.setItem("fullName", action.payload.fullName);
+      localStorage.setItem("email", action.payload.email);
+      localStorage.setItem("position", action.payload.position);
+    },
     logout: (state) => {
       state.token = null;
       state.fullName = null;
@@ -116,5 +124,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setCredentials, logout } = authSlice.actions;
+export const { setCredentials, updateProfile, logout } = authSlice.actions;
 export default authSlice.reducer;

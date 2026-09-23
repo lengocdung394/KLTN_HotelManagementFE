@@ -51,6 +51,8 @@ export type BookingListItem = {
   [key: string]: unknown;
 };
 
+export type RoomMatrixResponse = Record<string, unknown>;
+
 const extractBookingList = (response: unknown): BookingListItem[] => {
   if (Array.isArray(response)) return response as BookingListItem[];
   if (!response || typeof response !== "object") return [];
@@ -77,9 +79,25 @@ export type BookingUpdateRequest = {
 
 export const bookingApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getRoomMatrix: builder.query<RoomMatrixResponse[], { startDate: string; endDate: string }>({
+      query: ({ startDate, endDate }) => ({
+        url: "/hotels/matrix",
+        method: "GET",
+        params: { startDate, endDate },
+      }),
+      transformResponse: (response: unknown) => {
+        if (Array.isArray(response)) return response as RoomMatrixResponse[];
+        if (response && typeof response === "object") {
+          const result = (response as { result?: unknown }).result;
+          if (Array.isArray(result)) return result as RoomMatrixResponse[];
+        }
+        return [];
+      },
+      providesTags: ["Booking"],
+    }),
     getBookingsByHotel: builder.query<BookingListItem[], number>({
       query: (hotelId) => ({
-        url: `/hotels/booking/${hotelId}`,
+        url: `/hotels/bookings`,
         method: "GET",
       }),
       transformResponse: extractBookingList,
@@ -87,7 +105,7 @@ export const bookingApi = baseApi.injectEndpoints({
     }),
     createCounterBooking: builder.mutation<BookingResponse, { employeeId: string; request: BookingCreateRequest }>({
       query: ({ employeeId, request }) => ({
-        url: `/bookings/counter/${employeeId}`,
+        url: `/bookings/counter`,
         method: "POST",
         data: request,
       }),
@@ -105,6 +123,7 @@ export const bookingApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetRoomMatrixQuery,
   useGetBookingsByHotelQuery,
   useCreateCounterBookingMutation,
   useUpdateBookingMutation,

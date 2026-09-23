@@ -300,18 +300,17 @@ const roomDetailsById: Record<string, RoomDetail> = {
 export default function CheckInOutWorkspace() {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [flowFilter, setFlowFilter] = useState<FlowFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
+  const currentDate = new Date().toLocaleDateString(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const date = toDateParam(selectedDate);
   const checkInQuery = useGetTodayCheckInsQuery(
-    { hotelId: Number(hotelId), date, status: "PENDING", bookingStatus: "CONFIRMED" },
-    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+    { date, status: "PENDING", bookingStatus: "CONFIRMED" },
   );
   const checkOutQuery = useGetTodayCheckOutsQuery(
-    { hotelId: Number(hotelId), date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
-    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+    { date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
   );
   const [arrivalState, setArrivalState] = useState<DailyRecord[]>([]);
   const [groupArrivalState, setGroupArrivalState] = useState({ ...groupArrival, rooms: [] as string[], status: "Đã check-in" });
@@ -835,7 +834,7 @@ export default function CheckInOutWorkspace() {
         </div>
         <span className="flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
           <Clock3 size={14} />
-          {t("common.dateLabel")}
+          {currentDate}
         </span>
       </div>
       <div className="border-b border-slate-100 p-4">

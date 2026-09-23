@@ -10,7 +10,7 @@ import { useGetBranchRoomDailyPricesQuery, useGetRoomTypesQuery, useGetRoomsByCu
 import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
-import { useCreateCounterBookingMutation, type BookingListItem } from "../services/bookingApi";
+import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrixQuery, type RoomMatrixResponse } from "../services/bookingApi";
 import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppSelector } from "../store/hooks";
@@ -67,6 +67,56 @@ const roomFloor = (room: BookingRoom) => room.floor ?? `Tầng ${room.id.split("
 const todayLocal = () => {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const matrixDate = (value: unknown) => {
+  if (typeof value !== "string") return undefined;
+  const match = value.match(/^\d{4}-\d{2}-\d{2}/);
+  return match?.[0];
+};
+
+const matrixValue = (item: Record<string, unknown>, keys: string[]) => {
+  const key = keys.find((candidate) => item[candidate] !== undefined && item[candidate] !== null && item[candidate] !== "");
+  return key ? item[key] : undefined;
+};
+
+const matrixRoomKey = (item: Record<string, unknown>) => {
+  const value = matrixValue(item, ["roomId", "roomID", "room_id", "roomNumber", "roomNo", "roomCode", "roomCode"]);
+  return value === undefined ? undefined : String(value);
+};
+
+const addMatrixRange = (busy: Map<string, Set<string>>, roomKey: string | undefined, startValue: unknown, endValue: unknown) => {
+  const start = matrixDate(startValue);
+  const end = matrixDate(endValue);
+  if (!roomKey || !start || !end || start >= end) return;
+  const dates = busy.get(roomKey) ?? new Set<string>();
+  for (let date = start; date < end; date = shiftDay(date, 1)) dates.add(date);
+  busy.set(roomKey, dates);
+};
+
+const buildMatrixBusyMap = (matrix: RoomMatrixResponse[]) => {
+  const busy = new Map<string, Set<string>>();
+  const walk = (value: unknown, inheritedRoomKey?: string) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => walk(item, inheritedRoomKey));
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const item = value as Record<string, unknown>;
+    const roomKey = matrixRoomKey(item) ?? inheritedRoomKey;
+    const bookingStatus = String(item.bookingStatus ?? item.status ?? "").toUpperCase();
+    if (bookingStatus === "CANCELLED" || bookingStatus === "CANCELED") return;
+    addMatrixRange(busy, roomKey, matrixValue(item, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]), matrixValue(item, ["endDate", "end", "checkOutDate", "checkOut", "checkOutTime", "checkoutTime", "bookingEndDate"]));
+    const dates = item.dates ?? item.bookedDates ?? item.occupiedDates;
+    if (Array.isArray(dates) && roomKey) {
+      const occupied = busy.get(roomKey) ?? new Set<string>();
+      dates.forEach((date) => { const normalized = matrixDate(date); if (normalized) occupied.add(normalized); });
+      busy.set(roomKey, occupied);
+    }
+    Object.values(item).forEach((child) => walk(child, roomKey));
+  };
+  walk(matrix);
+  return busy;
 };
 
 // Dịch 1 chuỗi ngày "YYYY-MM-DD" đi +/- delta ngày
@@ -206,6 +256,8 @@ function DesktopCalendar({
   const { data: dailyRoomPrices = {} } = useGetBranchRoomDailyPricesQuery(
     { hotelId, startDate: timelineStart, endDate: timelineEnd },
   );
+  const { data: roomMatrix = [] } = useGetRoomMatrixQuery({ startDate: timelineStart, endDate: timelineEnd });
+  const matrixBusyDays = useMemo(() => buildMatrixBusyMap(roomMatrix), [roomMatrix]);
   useEffect(() => {
     onDailyPricesChange?.(dailyRoomPrices);
   }, [dailyRoomPrices, onDailyPricesChange]);
@@ -213,6 +265,17 @@ function DesktopCalendar({
     const prices = dailyRoomPrices[room.id] ?? (room.databaseId ? dailyRoomPrices[room.databaseId] : undefined);
     const value = prices?.[day];
     return typeof value === "number" ? value : room.price;
+  };
+  const isMatrixReserved = (room: BookingRoom, day: string) => {
+    const keys = [room.databaseId, room.id, room.roomNumber].filter(Boolean).map(String);
+    return keys.some((key) => matrixBusyDays.get(key)?.has(day));
+  };
+  const isAvailableWithMatrix = (room: BookingRoom, start: string, end: string) => {
+    if (!isAvailableForRange(room.id, start, end)) return false;
+    for (let day = start; day < end; day = shiftDay(day, 1)) {
+      if (isMatrixReserved(room, day)) return false;
+    }
+    return true;
   };
 
   const [dragSelection, setDragSelection] = useState<{ roomId: string; startDayIndex: number; currentDayIndex: number } | null>(null);
@@ -248,7 +311,8 @@ function DesktopCalendar({
   const handlePointerDown = (roomId: string, dayIndex: number) => (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const dayValue = stableTimeline[dayIndex].value;
-    if (isPastDate(dayValue) || isReservedCell(roomId, dayValue)) return;
+    const room = visibleRooms.find((item) => item.id === roomId);
+    if (isPastDate(dayValue) || isReservedCell(roomId, dayValue) || (room && isMatrixReserved(room, dayValue))) return;
     
     setDragSelection({ roomId, startDayIndex: dayIndex, currentDayIndex: dayIndex });
   };
@@ -290,7 +354,8 @@ function DesktopCalendar({
           ? shiftDay(clickedDate, 1)
           : currentRange.checkOut;
 
-        if (isAvailableForRange(roomId, newCheckIn, newCheckOut)) {
+        const room = visibleRooms.find((item) => item.id === roomId);
+        if (room && isAvailableWithMatrix(room, newCheckIn, newCheckOut)) {
           setSelected((prev) => prev.includes(roomId) ? prev : [...prev, roomId]);
           setSelectedRanges((prev) => ({ ...prev, [roomId]: { checkIn: newCheckIn, checkOut: newCheckOut } }));
           setDragSelection(null);
@@ -334,13 +399,15 @@ function DesktopCalendar({
     
     let isValid = true;
     for (let i = minDay; i <= maxDay; i++) {
-       if (isReservedCell(roomId, stableTimeline[i].value)) {
+      const room = visibleRooms.find((item) => item.id === roomId);
+      if (isReservedCell(roomId, stableTimeline[i].value) || (room && isMatrixReserved(room, stableTimeline[i].value))) {
          isValid = false;
          break;
        }
     }
     
-    if (isValid && isAvailableForRange(roomId, newCheckIn, newCheckOut)) {
+    const room = visibleRooms.find((item) => item.id === roomId);
+    if (isValid && room && isAvailableWithMatrix(room, newCheckIn, newCheckOut)) {
       setSelected(prev => prev.includes(roomId) ? prev : [...prev, roomId]);
       setSelectedRanges(prev => ({ ...prev, [roomId]: { checkIn: newCheckIn, checkOut: newCheckOut } }));
     }
@@ -397,7 +464,7 @@ function DesktopCalendar({
               <div className="sticky left-0 top-0 z-20 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
-                  disabled={Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, selectedRanges[room.id]?.checkIn ?? checkIn, selectedRanges[room.id]?.checkOut ?? checkOut)}
+                  disabled={Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, selectedRanges[room.id]?.checkIn ?? checkIn, selectedRanges[room.id]?.checkOut ?? checkOut)}
                   onClick={() => {
                     if (selected.includes(room.id)) {
                       const remainingRooms = selected.filter((id) => id !== room.id);
@@ -419,7 +486,7 @@ function DesktopCalendar({
                       setSelectedRanges((prev) => ({ ...prev, [room.id]: defaultRange }));
                     }
                   }}
-                  className={`flex h-full w-full items-center gap-3 p-4 text-left transition-all duration-200 ${selected.includes(room.id) ? "bg-violet-50" : "bg-white hover:bg-slate-50"} ${Boolean(checkIn && checkOut) && !isAvailableForRange(room.id, checkIn, checkOut) ? "cursor-not-allowed opacity-60" : ""}`}
+                  className={`flex h-full w-full items-center gap-3 p-4 text-left transition-all duration-200 ${selected.includes(room.id) ? "bg-violet-50" : "bg-white hover:bg-slate-50"} ${Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, checkIn, checkOut) ? "cursor-not-allowed opacity-60" : ""}`}
                 >
                   <span className={`grid h-11 min-w-[58px] shrink-0 place-items-center rounded-xl px-2 text-[11px] font-bold whitespace-nowrap transition-all ${selected.includes(room.id) ? "bg-violet-600 text-white shadow-sm shadow-violet-200" : "bg-slate-100 text-slate-600"}`}>{room.id}</span>
                   <span className="min-w-0 flex-1 text-center">
@@ -432,6 +499,7 @@ function DesktopCalendar({
               {stableTimeline.map((date, dayIndex) => {
                 const day = date.value;
                 const reservation = (booked[room.id] || []).find((item) => day >= item.start && day < item.end);
+                const matrixReserved = isMatrixReserved(room, day);
                 const roomRange = selectedRanges[room.id];
                 const inRange = Boolean(roomRange) && day >= roomRange.checkIn && day < roomRange.checkOut;
                 const pastDay = isPastDate(day);
@@ -453,7 +521,7 @@ function DesktopCalendar({
                     <div className={`flex h-full min-h-[76px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-sm transition-all duration-200 ${
                       pastDay
                         ? "border-slate-200 bg-slate-200 text-slate-500"
-                        : reservation
+                          : reservation || matrixReserved
                           ? "border-emerald-300 bg-emerald-500 text-white shadow-emerald-100"
                           : isDraggingCell
                             ? "border-violet-300 bg-violet-500 text-white shadow-violet-200"
@@ -463,7 +531,7 @@ function DesktopCalendar({
                                 ? "border-violet-200 bg-violet-100 text-violet-700"
                                 : "border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:bg-sky-100"
                     }`}>
-                      <span className="truncate text-center text-[10px] font-bold">{money(roomPriceForDay(room, day))}/đêm</span>
+                      <span className="truncate text-center text-[10px] font-bold">{reservation || matrixReserved ? "Đã đặt" : `${money(roomPriceForDay(room, day))}/đêm`}</span>
                     </div>
                   </div>
                 );

@@ -1,4 +1,4 @@
-import { CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardList, Search, X, Sparkles } from "lucide-react";
+import { Building2, BriefcaseBusiness, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardList, Eye, EyeOff, Mail, Pencil, Search, UserRound, X, Sparkles } from "lucide-react";
 import { useLocation} from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,7 +18,8 @@ import CustomerWorkspace from "./CustomerWorkspace";
 import AppHeader from "../components/AppHeader";
 import AppSidebar from "../components/AppSidebar";
 import ScrollControls from "../components/ScrollControls";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { updateProfile } from "../store/authSlice";
 import type { BookingListItem } from "../services/bookingApi";
 
 const content: Record<string, { eyebrow: string; title: string; description: string; stats: [string, string][] }> = {
@@ -59,13 +60,193 @@ function BookingWorkspace() {
 function LanguageSettings() {
   const { t } = useTranslation();
   const currentLanguage = i18n.language.startsWith("en") ? "en" : "vi";
+  const { fullName, email, position, hotelName } = useAppSelector((state) => state.auth);
 
   const changeLanguage = (language: "en" | "vi") => {
     void i18n.changeLanguage(language);
     localStorage.setItem("language", language);
   };
 
-  return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-bold text-slate-900">{t("settings.languageTitle", "Ngôn ngữ")}</h3><p className="mt-1 text-sm text-slate-500">{t("settings.languageDescription", "Chọn ngôn ngữ hiển thị cho giao diện.")}</p></div><div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("settings.languageTitle", "Ngôn ngữ")}><button type="button" onClick={() => changeLanguage("vi")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "vi" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Tiếng Việt</button><button type="button" onClick={() => changeLanguage("en")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "en" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>English</button></div></div></section>;
+  return <><PersonalInfoSettings fullName={fullName} email={email} position={position} hotelName={hotelName} /><PasswordGate /><AccountSettings email={email} /><section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-bold text-slate-900">{t("settings.languageTitle", "Ngôn ngữ")}</h3><p className="mt-1 text-sm text-slate-500">{t("settings.languageDescription", "Chọn ngôn ngữ hiển thị cho giao diện.")}</p></div><div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("settings.languageTitle", "Ngôn ngữ")}><button type="button" onClick={() => changeLanguage("vi")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "vi" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Tiếng Việt</button><button type="button" onClick={() => changeLanguage("en")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "en" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>English</button></div></div></section></>;
+}
+
+function AccountSettings({ email }: { email: string | null }) {
+  const [visible, setVisible] = useState(false);
+  const [accountName, setAccountName] = useState(() => localStorage.getItem("accountName") || email || "");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [message, setMessage] = useState("");
+  const passwordsMismatch = Boolean(confirmPassword) && password !== confirmPassword;
+
+  useEffect(() => {
+    const handleProfileEditing = (event: Event) => setVisible(Boolean((event as CustomEvent<boolean>).detail));
+    window.addEventListener("profile-editing", handleProfileEditing);
+    return () => window.removeEventListener("profile-editing", handleProfileEditing);
+  }, []);
+
+  const saveAccount = () => {
+    if (!accountName.trim() || !password || passwordsMismatch) return;
+    localStorage.setItem("accountName", accountName.trim());
+    setPassword("");
+    setConfirmPassword("");
+    setMessage("Đã cập nhật thông tin tài khoản.");
+    window.setTimeout(() => setMessage(""), 2500);
+  };
+
+  return <section className={`${visible ? "mt-4" : "hidden"} rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm`}><div className="border-b border-slate-100 pb-4"><h3 className="font-bold text-slate-900">Thông tin tài khoản</h3><p className="mt-1 text-sm text-slate-500">Quản lý tên tài khoản và mật khẩu đăng nhập.</p></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="block"><span className="text-sm font-medium text-slate-700">Tên account <b className="text-red-500">*</b></span><input value={accountName} onChange={(event) => setAccountName(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label><div /><label className="block"><span className="text-sm font-medium text-slate-700">Mật khẩu mới <b className="text-red-500">*</b></span><span className="relative mt-1 block"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label><label className="block"><span className="text-sm font-medium text-slate-700">Nhập lại mật khẩu <b className="text-red-500">*</b></span><span className="relative mt-1 block"><input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-blue-100 ${passwordsMismatch ? "border-red-300 focus:border-red-400" : "border-slate-200 focus:border-blue-400"}`} /><button type="button" onClick={() => setShowConfirmPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}>{showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></span>{passwordsMismatch && <span className="mt-1 block text-xs text-red-500">Mật khẩu nhập lại không khớp.</span>}</label></div><div className="mt-5 flex items-center justify-between gap-3"><span className="text-xs font-medium text-emerald-600">{message}</span><button type="button" onClick={saveAccount} disabled={!accountName.trim() || !password || passwordsMismatch} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Lưu tài khoản</button></div></section>;
+}
+
+function PersonalInfoSettingsLegacy({ fullName, email, position, hotelName }: { fullName: string | null; email: string | null; position: string | null; hotelName: string | null }) {
+  const dispatch = useAppDispatch();
+  const [isEditing, setIsEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [form, setForm] = useState({
+    avatar: localStorage.getItem("profileAvatar") || "",
+    fullName: fullName || "",
+    position: position || "",
+    email: email || "",
+    identityNumber: localStorage.getItem("profileIdentityNumber") || "",
+    phone: localStorage.getItem("profilePhone") || "",
+    address: localStorage.getItem("profileAddress") || "",
+  });
+  const displayName = form.fullName.trim() || form.email.trim() || "Người dùng";
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const fields = [[UserRound, "Họ và tên", form.fullName], [Mail, "Email", form.email], [BriefcaseBusiness, "Chức vụ", form.position], [Building2, "Khách sạn", hotelName]] as const;
+  const editableFields = [["fullName", "Họ và tên", form.fullName], ["position", "Chức vụ", form.position], ["email", "Email", form.email], ["identityNumber", "CCCD", form.identityNumber], ["phone", "Số điện thoại", form.phone]] as const;
+  const profileFieldInputClass = "mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
+  const updateField = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const saveProfile = () => {
+    if (!form.fullName.trim() || !form.email.trim()) return;
+    dispatch(updateProfile({ fullName: form.fullName.trim(), email: form.email.trim(), position: form.position.trim() }));
+    localStorage.setItem("profileAvatar", form.avatar);
+    localStorage.setItem("profileIdentityNumber", form.identityNumber.trim());
+    localStorage.setItem("profilePhone", form.phone.trim());
+    localStorage.setItem("profileAddress", form.address.trim());
+    setIsEditing(false);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2500);
+  };
+  const cancelEditing = () => {
+    setForm({ avatar: localStorage.getItem("profileAvatar") || "", fullName: fullName || "", position: position || "", email: email || "", identityNumber: localStorage.getItem("profileIdentityNumber") || "", phone: localStorage.getItem("profilePhone") || "", address: localStorage.getItem("profileAddress") || "" });
+    setIsEditing(false);
+  };
+
+  return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">{initials}</div><div className="min-w-0"><h3 className="font-bold text-slate-900">Thông tin cá nhân</h3><p className="mt-1 truncate text-sm text-slate-500" title={displayName}>{displayName}</p></div></div>{!isEditing ? <button type="button" onClick={() => setIsEditing(true)} className="flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-blue-200 hover:text-blue-600"><Pencil size={15} />Chỉnh sửa</button> : <div className="flex gap-2"><button type="button" onClick={cancelEditing} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"><X size={15} />Hủy</button><button type="button" onClick={saveProfile} disabled={!form.fullName.trim() || !form.email.trim()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><Check size={15} />Lưu</button></div>}</div>{isEditing ? <div className="mt-5 grid gap-4 sm:grid-cols-2">{[["fullName", "Họ và tên", form.fullName], ["email", "Email", form.email], ["position", "Chức vụ", form.position]].map(([field, label, value]) => <label key={field} className="block"><span className="text-xs font-medium text-slate-500">{label}</span><input value={value} onChange={(event) => updateField(field as "fullName" | "email" | "position", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>)}<div className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3"><Building2 size={17} className="shrink-0 text-slate-400" /><div className="min-w-0"><p className="text-xs font-medium text-slate-500">Khách sạn</p><p className="mt-1 truncate text-sm font-semibold text-slate-700" title={hotelName || "Chưa cập nhật"}>{hotelName || "Chưa cập nhật"}</p></div></div></div> : <div className="mt-5 grid gap-4 sm:grid-cols-2">{fields.map(([Icon, label, value]) => <div key={label} className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3"><Icon size={17} className="mt-0.5 shrink-0 text-blue-600" /><div className="min-w-0"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 truncate text-sm font-semibold text-slate-800" title={value || "Chưa cập nhật"}>{value?.trim() || "Chưa cập nhật"}</p></div></div>)}</div>}{saved && <p className="mt-4 text-xs font-medium text-emerald-600">Đã cập nhật thông tin cá nhân.</p>}</section>;
+}
+
+function PasswordGate() {
+  const [visible, setVisible] = useState(false);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const showGate = () => {
+      setVisible(true);
+      setPassword("");
+      setError("");
+    };
+    const hideGate = () => setVisible(false);
+    window.addEventListener("profile-password-required", showGate);
+    window.addEventListener("profile-password-result", hideGate);
+    return () => {
+      window.removeEventListener("profile-password-required", showGate);
+      window.removeEventListener("profile-password-result", hideGate);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [visible]);
+
+  const verifyPassword = () => {
+    const savedPassword = sessionStorage.getItem("accountPassword");
+    if (!savedPassword) {
+      setError("Phiên đăng nhập chưa được xác thực lại. Vui lòng đăng xuất và đăng nhập lại.");
+      return;
+    }
+    const isCorrect = password === savedPassword;
+    if (!isCorrect) {
+      setError("Mật khẩu không chính xác.");
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("profile-password-result", { detail: true }));
+  };
+  const closeGate = () => window.dispatchEvent(new CustomEvent("profile-password-result", { detail: false }));
+
+  if (!visible) return null;
+  return <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm"><button type="button" onClick={closeGate} className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700" aria-label="Đóng"><X size={17} /></button><h3 className="font-bold text-slate-900">Xác thực mật khẩu</h3><p className="mt-1 text-sm text-slate-600">Nhập mật khẩu hiện tại để mở form chỉnh sửa thông tin.</p><div className="mt-4 flex max-w-xl flex-col gap-3 sm:flex-row"><div className="relative min-w-0 flex-1"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} placeholder="Nhập mật khẩu hiện tại" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><button type="button" onClick={verifyPassword} disabled={!password} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Xác nhận</button></div>{error && <p className="mt-2 text-xs font-medium text-red-600">{error}</p>}</section>;
+}
+
+function PersonalInfoSettings({ fullName, email, position, hotelName }: { fullName: string | null; email: string | null; position: string | null; hotelName: string | null }) {
+  const dispatch = useAppDispatch();
+  const [editing, setEditingState] = useState(false);
+  const [passwordVerified, setPasswordVerified] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [form, setForm] = useState({
+    avatar: localStorage.getItem("profileAvatar") || "",
+    fullName: fullName || "",
+    position: position || "",
+    email: email || "",
+    identityNumber: localStorage.getItem("profileIdentityNumber") || "",
+    phone: localStorage.getItem("profilePhone") || "",
+    address: localStorage.getItem("profileAddress") || "",
+  });
+  const setEditing = (value: boolean) => {
+    if (value) {
+      window.dispatchEvent(new Event("profile-password-required"));
+      return;
+    }
+    setEditingState(false);
+    setPasswordVerified(false);
+  };
+  useEffect(() => {
+    const handlePasswordResult = (event: Event) => {
+      const correct = (event as CustomEvent<boolean>).detail;
+      if (correct) {
+        setPasswordVerified(true);
+        setEditingState(true);
+      }
+      else setEditing(false);
+    };
+    window.addEventListener("profile-password-result", handlePasswordResult);
+    if (editing && !passwordVerified) {
+      window.dispatchEvent(new Event("profile-password-required"));
+    }
+    window.dispatchEvent(new CustomEvent("profile-editing", { detail: editing && passwordVerified }));
+    return () => window.removeEventListener("profile-password-result", handlePasswordResult);
+  }, [editing, passwordVerified]);
+  const displayName = form.fullName.trim() || form.email.trim() || "Người dùng";
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const cancel = () => {
+    setForm({ avatar: localStorage.getItem("profileAvatar") || "", fullName: fullName || "", position: position || "", email: email || "", identityNumber: localStorage.getItem("profileIdentityNumber") || "", phone: localStorage.getItem("profilePhone") || "", address: localStorage.getItem("profileAddress") || "" });
+    setEditing(false);
+    setPasswordVerified(false);
+  };
+  const save = () => {
+    if (!form.fullName.trim() || !form.email.trim()) return;
+    dispatch(updateProfile({ fullName: form.fullName.trim(), email: form.email.trim(), position: form.position.trim() }));
+    localStorage.setItem("profileAvatar", form.avatar);
+    localStorage.setItem("profileIdentityNumber", form.identityNumber.trim());
+    localStorage.setItem("profilePhone", form.phone.trim());
+    localStorage.setItem("profileAddress", form.address.trim());
+    setEditing(false);
+    setPasswordVerified(false);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2500);
+  };
+  const displayFields = [[UserRound, "Họ và tên", form.fullName], [Mail, "Email", form.email], [BriefcaseBusiness, "Chức vụ", form.position], [Building2, "Khách sạn", hotelName]] as const;
+  const editFields = [["fullName", "Họ và tên", form.fullName], ["position", "Chức vụ", form.position], ["email", "Email", form.email], ["identityNumber", "CCCD", form.identityNumber], ["phone", "Số điện thoại", form.phone]] as const;
+
+  return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">{initials}</div><div className="min-w-0"><h3 className="font-bold text-slate-900">Thông tin cá nhân</h3><p className="mt-1 truncate text-sm text-slate-500" title={displayName}>{displayName}</p></div></div>{editing ? <div className="flex gap-2"><button type="button" onClick={cancel} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"><X size={15} />Hủy</button><button type="button" onClick={save} disabled={!form.fullName.trim() || !form.email.trim()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><Check size={15} />Lưu</button></div> : <button type="button" onClick={() => setEditing(true)} className="flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"><Pencil size={15} />Chỉnh sửa</button>}</div>{editing ? <div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2 block"><span className="text-xs font-medium text-slate-500">Ảnh nhân viên</span><input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => update("avatar", String(reader.result)); reader.readAsDataURL(file); }} className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>{editFields.map(([field, label, value]) => <label key={field} className="block"><span className="text-xs font-medium text-slate-500">{label}</span><input value={value} onChange={(event) => update(field, event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>)}<label className="sm:col-span-2 block"><span className="text-xs font-medium text-slate-500">Địa chỉ</span><textarea value={form.address} onChange={(event) => update("address", event.target.value)} className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label><div className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3"><Building2 size={17} className="shrink-0 text-slate-400" /><div><p className="text-xs font-medium text-slate-500">Khách sạn</p><p className="mt-1 text-sm font-semibold text-slate-700">{hotelName || "Chưa cập nhật"}</p></div></div></div> : <div className="mt-5 grid gap-4 sm:grid-cols-2">{displayFields.map(([Icon, label, value]) => <div key={label} className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3"><Icon size={17} className="mt-0.5 shrink-0 text-blue-600" /><div className="min-w-0"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 truncate text-sm font-semibold text-slate-800" title={value || "Chưa cập nhật"}>{value?.trim() || "Chưa cập nhật"}</p></div></div>)}</div>}{saved && <p className="mt-4 text-xs font-medium text-emerald-600">Đã cập nhật thông tin cá nhân.</p>}</section>;
 }
 
 export default function ModulePage({ path: routePath, onLogout }: { path: string; onLogout: () => void }) {
