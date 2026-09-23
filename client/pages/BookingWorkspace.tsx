@@ -13,8 +13,10 @@ import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrixQuery, type RoomMatrixResponse } from "../services/bookingApi";
 import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { sumRoomPriceForRange } from "../lib/bookingPricing";
+import { bindHotelSocketEvents } from "../lib/socket";
+import { baseApi } from "../services/baseApi";
 
 type BookingRoom = { id: string; databaseId?: string; roomNumber?: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
 
@@ -232,6 +234,7 @@ function DesktopCalendar({
   onDailyPricesChange?: (prices: RoomDailyPricesResponse) => void;
 }) {
   const { t } = useTranslation();
+  const dispatch = useAppDispatch();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -255,8 +258,26 @@ function DesktopCalendar({
   const timelineEnd = stableTimeline[stableTimeline.length - 1]?.value ?? timelineStart;
   const { data: dailyRoomPrices = {} } = useGetBranchRoomDailyPricesQuery(
     { hotelId, startDate: timelineStart, endDate: timelineEnd },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
   );
-  const { data: roomMatrix = [] } = useGetRoomMatrixQuery({ startDate: timelineStart, endDate: timelineEnd });
+  const { data: roomMatrix = [] } = useGetRoomMatrixQuery(
+    { startDate: timelineStart, endDate: timelineEnd },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+
+  useEffect(() => {
+    if (!hotelId || Number.isNaN(Number(hotelId))) return;
+
+    bindHotelSocketEvents({
+      onRoomMatrixUpdated: () => {
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+      },
+      onNewBookingNotification: () => {
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+      },
+    });
+  }, [dispatch, hotelId]);
+
   const matrixBusyDays = useMemo(() => buildMatrixBusyMap(roomMatrix), [roomMatrix]);
   useEffect(() => {
     onDailyPricesChange?.(dailyRoomPrices);
@@ -550,6 +571,7 @@ export default function BookingWorkspace() {
   const initialCustomerId = String(initialBooking?.customerId ?? initialBooking?.customerID ?? "");
   const { data: customerById } = useGetCustomerByIdQuery(initialCustomerId, { skip: !initialCustomerId });
   const { t, i18n } = useTranslation();
+  const dispatch = useAppDispatch();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
   const [createCounterBooking, { isLoading: isCreatingBooking, error: bookingError }] = useCreateCounterBookingMutation();

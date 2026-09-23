@@ -24,7 +24,9 @@ import {
 } from "../services/bookingApi";
 import { useCreatePaymentQrMutation } from "../services/paymentApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { bindHotelSocketEvents } from "../lib/socket";
+import { baseApi } from "../services/baseApi";
 
 const valueOf = (item: BookingListItem, keys: string[]) =>
   keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
@@ -71,6 +73,25 @@ const isCancelledService = (service: Record<string, unknown>) => {
 const isCancelledBookingDetail = (detail: Record<string, unknown>) =>
   String(detail.bookingStatusType ?? "").trim().toUpperCase() === "CANCELLED";
 
+const isCancelledBooking = (booking: Partial<Record<string, unknown>> | null | undefined) => {
+  if (!booking) return false;
+
+  const status = String(
+    booking.bookingStatus
+    ?? booking.status
+    ?? booking.bookingState
+    ?? "",
+  ).trim().toUpperCase();
+
+  return (
+    status === "CANCELLED"
+    || status === "CANCELED"
+    || status.includes("CANCEL")
+    || status.includes("HỦY")
+    || status.includes("HUY")
+  );
+};
+
 const bookingServices = (detail: Record<string, unknown>) => {
   const serviceFields = [
     detail.bookingServiceResponsesForHotels,
@@ -90,6 +111,7 @@ const bookingServices = (detail: Record<string, unknown>) => {
 
 export default function BookingListWorkspace() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -142,6 +164,19 @@ export default function BookingListWorkspace() {
   const { data: hotelServices = [] } = useGetAllServicesQuery(
     hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true },
   );
+
+  useEffect(() => {
+    if (!hotelId) return;
+
+    bindHotelSocketEvents({
+      onRoomMatrixUpdated: () => {
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+      },
+      onNewBookingNotification: () => {
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+      },
+    });
+  }, [dispatch, hotelId]);
 
   // Merge API bookings with local overrides
   const bookings = fetchedBookings.map((b) => {
@@ -196,12 +231,23 @@ export default function BookingListWorkspace() {
 
   // Open Edit Modal & populate form
   const handleOpenEdit = (booking: BookingListItem) => {
+    if (isCancelledBooking(booking)) {
+      setEditError("Booking đã bị hủy, không thể chỉnh sửa.");
+      return;
+    }
+
     navigate("/bookings", { state: { editBooking: booking } });
   };
 
   // Save Booking Edits
   const handleSaveEdit = async () => {
     if (!editingBooking) return;
+
+    if (isCancelledBooking(editingBooking)) {
+      setEditError("Booking đã bị hủy, không thể chỉnh sửa.");
+      return;
+    }
+
     const id = bookingId(editingBooking);
     const roomAmt = Number(editRoomTotal) || 0;
     const srvAmt = Number(editServiceTotal) || 0;
@@ -373,6 +419,7 @@ export default function BookingListWorkspace() {
                 {paginatedBookings.map((booking, index) => {
                   const status = textOf(booking, ["bookingStatus"], "PENDING");
                   const isPaid = status === "PAID" || status === "Đã thanh toán";
+                  const isCancelled = isCancelledBooking(booking);
                   return (
                     <tr key={`${bookingId(booking)}-${index}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-5 py-4 font-semibold text-blue-700">#{bookingId(booking)}</td>
@@ -410,8 +457,14 @@ export default function BookingListWorkspace() {
                           </button>
                           <button
                             type="button"
+                            disabled={isCancelled}
+                            title={isCancelled ? "Booking đã hủy nên không thể chỉnh sửa" : "Chỉnh sửa booking"}
                             onClick={() => handleOpenEdit(booking)}
-                            className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 transition-colors"
+                            className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              isCancelled
+                                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                                : "border-amber-200 text-amber-700 hover:bg-amber-50"
+                            }`}
                           >
                             <Pencil size={14} />
                             Chỉnh sửa
