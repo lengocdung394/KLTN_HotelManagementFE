@@ -1,3 +1,4 @@
+import { toast } from "@/components/ui/use-toast";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BatchActionDialog from "../components/BatchActionDialog";
@@ -7,7 +8,13 @@ import DatePickerPopover from "../components/DatePickerPopover";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import EarlyLateStayNotice from "../components/EarlyLateStayNotice";
 import { useGetAllServicesQuery } from "../services/serviceApi";
-import { useGetTodayCheckInsQuery, useGetTodayCheckOutsQuery, type CheckInOutBookingDetail } from "../services/checkInOutApi";
+import {
+  useBulkCheckInMutation,
+  useBulkCheckOutMutation,
+  useGetTodayCheckInsQuery,
+  useGetTodayCheckOutsQuery,
+  type CheckInOutBookingDetail,
+} from "../services/checkInOutApi";
 import { useAppSelector } from "../store/hooks";
 import {
   CalendarCheck,
@@ -25,121 +32,12 @@ import {
 
 type ServiceCharge = { serviceId?: string; name: string; quantity: number; amount: number; usedAt?: string };
 
-const arrivals = [
-  {
-    id: "BK-00842",
-    guest: "Nguyễn Minh Anh",
-    phone: "090 123 4567",
-    room: "101 · Deluxe King",
-    time: "14:00",
-    guests: 2,
-    status: "Chờ check-in",
-  },
-  {
-    id: "BK-00840",
-    guest: "Trần Thùy Dương",
-    phone: "098 765 4321",
-    room: "102 · Deluxe Twin",
-    time: "15:30",
-    guests: 2,
-    status: "Chờ check-in",
-  },
-  {
-    id: "BK-00837",
-    guest: "Lê Hoàng Nam",
-    phone: "090 555 0198",
-    room: "203 · Executive Suite",
-    time: "16:00",
-    guests: 3,
-    status: "Đã check-in",
-  },
-];
-
-const groupArrival = {
-  id: "BK-00845",
-  guest: "Nguyễn Hoàng Long",
-  phone: "091 234 5678",
-  rooms: ["101", "102", "103", "104", "105"],
-  time: "13:30",
-  guests: 10,
-  status: "Chờ check-in",
+type CleaningTask = {
+  room: string;
+  type: string;
+  detail: string;
+  assignee: string;
 };
-
-const groupDeparture = {
-  id: "BK-00846",
-  guest: "Công ty Minh Thành",
-  rooms: ["301", "302", "303", "304", "305"],
-  time: "12:00",
-  guests: 10,
-  status: "Đang ở",
-  roomAmounts: [2000000, 2500000, 2500000, 3000000, 3000000],
-  services: [80000, 0, 120000, 50000, 0],
-};
-
-const departures = [
-  {
-    id: "BK-00841",
-    guest: "Phạm Gia Huy",
-    room: "103 · Executive",
-    time: "11:00",
-    status: "Đang ở",
-    roomPaid: true,
-    services: [
-      { name: "Nước suối", quantity: 2, amount: 30000 },
-      { name: "Giặt ủi", quantity: 1, amount: 50000 },
-    ],
-    lateFee: 0,
-  },
-  {
-    id: "BK-00839",
-    guest: "Công ty VinaTech",
-    room: "201 · Suite Garden",
-    time: "12:00",
-    status: "Đang ở",
-    roomPaid: true,
-    services: [],
-    lateFee: 200000,
-  },
-  {
-    id: "BK-00838",
-    guest: "Đỗ Khánh Linh",
-    room: "202 · Suite Garden",
-    time: "12:00",
-    status: "Đã trả phòng",
-    roomPaid: true,
-    services: [],
-    lateFee: 0,
-  },
-];
-
-const cleaningStaff = [
-  "Nguyễn Thị Mai",
-  "Lê Thị Hương",
-  "Phạm Ngọc Anh",
-  "Trần Minh Tú",
-];
-const initialCleaningTasks = [
-  {
-    room: "102",
-    type: "Deluxe Twin",
-    detail: "Khách sắp nhận phòng · 15:30",
-    assignee: "",
-  },
-  {
-    room: "201",
-    type: "Suite Garden",
-    detail: "Khách vừa trả phòng · 12:00",
-    assignee: "",
-  },
-  {
-    room: "202",
-    type: "Suite Garden",
-    detail: "Khách vừa trả phòng · 12:00",
-    assignee: "",
-  },
-];
-
-type CleaningTask = (typeof initialCleaningTasks)[number];
 type FlowFilter = "all" | "check-in" | "check-out";
 type DailyRecord = {
   id: string;
@@ -222,81 +120,6 @@ type RoomDetail = {
   amenities: string[];
 };
 
-const roomDetailsById: Record<string, RoomDetail> = {
-  "101": {
-    id: "101",
-    type: "Deluxe King",
-    floor: "Tầng 1",
-    beds: "1 giường lớn",
-    size: "28 m²",
-    view: "Hướng sông",
-    rate: "1.250.000đ/đêm",
-    status: "Sẵn sàng",
-    note: "Phòng gần thang máy, ưu tiên check-in sớm.",
-    amenities: ["Ban công", "Máy lạnh", "Wifi", "TV 50 inch", "Minibar"],
-  },
-  "102": {
-    id: "102",
-    type: "Deluxe Twin",
-    floor: "Tầng 1",
-    beds: "2 giường đơn",
-    size: "30 m²",
-    view: "Nhìn sân vườn",
-    rate: "1.250.000đ/đêm",
-    status: "Đang dọn",
-    note: "Đang chuẩn bị phòng cho lượt nhận lúc 15:30.",
-    amenities: ["Bữa sáng", "Wifi", "Máy sấy", "Bàn làm việc"],
-  },
-  "103": {
-    id: "103",
-    type: "Executive",
-    floor: "Tầng 1",
-    beds: "1 giường lớn",
-    size: "32 m²",
-    view: "Nhìn phố",
-    rate: "1.850.000đ/đêm",
-    status: "Đang ở",
-    note: "Khách yêu cầu late check-out 30 phút.",
-    amenities: ["Bồn tắm", "Wifi", "TV", "Két an toàn"],
-  },
-  "201": {
-    id: "201",
-    type: "Suite Garden",
-    floor: "Tầng 2",
-    beds: "1 giường lớn",
-    size: "45 m²",
-    view: "Vườn riêng",
-    rate: "2.450.000đ/đêm",
-    status: "Đang ở",
-    note: "Đoàn doanh nghiệp, cần hóa đơn công ty.",
-    amenities: ["Phòng khách", "Bồn tắm", "Wifi", "Máy pha cà phê"],
-  },
-  "202": {
-    id: "202",
-    type: "Suite Garden",
-    floor: "Tầng 2",
-    beds: "1 giường lớn",
-    size: "45 m²",
-    view: "Vườn riêng",
-    rate: "2.450.000đ/đêm",
-    status: "Cần dọn",
-    note: "Vừa check-out, ưu tiên dọn trước 14:00.",
-    amenities: ["Phòng khách", "Minibar", "Wifi", "Bàn ăn nhỏ"],
-  },
-  "203": {
-    id: "203",
-    type: "Executive Suite",
-    floor: "Tầng 2",
-    beds: "1 giường lớn",
-    size: "52 m²",
-    view: "Hướng sông",
-    rate: "3.100.000đ/đêm",
-    status: "Đang ở",
-    note: "Khách VIP, ưu tiên hỗ trợ concierge.",
-    amenities: ["Phòng khách", "Bồn tắm", "Wifi tốc độ cao", "Máy pha cà phê"],
-  },
-};
-
 export default function CheckInOutWorkspace() {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
@@ -313,11 +136,18 @@ export default function CheckInOutWorkspace() {
     { date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
   );
   const [arrivalState, setArrivalState] = useState<DailyRecord[]>([]);
-  const [groupArrivalState, setGroupArrivalState] = useState({ ...groupArrival, rooms: [] as string[], status: "Đã check-in" });
+  const [groupArrivalState, setGroupArrivalState] = useState({
+    id: "",
+    guest: "",
+    phone: "",
+    rooms: [] as string[],
+    time: "",
+    guests: 0,
+    status: "Đã check-in",
+  });
   const [checkedInGroupRooms, setCheckedInGroupRooms] = useState<string[]>([]);
   const [departureState, setDepartureState] = useState<DailyRecord[]>([]);
-  const [cleaningTasks, setCleaningTasks] =
-    useState<CleaningTask[]>(initialCleaningTasks);
+  const [cleaningTasks, setCleaningTasks] = useState<CleaningTask[]>([]);
   const [pendingCleaning, setPendingCleaning] = useState<{
     room: string;
     type: string;
@@ -335,11 +165,22 @@ export default function CheckInOutWorkspace() {
     [],
   );
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
-  const [groupDepartureState, setGroupDepartureState] = useState({ ...groupDeparture, rooms: [] as string[], status: "Đã trả phòng" });
+  const [groupDepartureState, setGroupDepartureState] = useState({
+    id: "",
+    guest: "",
+    rooms: [] as string[],
+    time: "",
+    guests: 0,
+    status: "Đã trả phòng",
+    roomAmounts: [] as number[],
+    services: [] as number[],
+  });
   const [selectedGroupDepartureRooms, setSelectedGroupDepartureRooms] = useState<string[]>([]);
   const [confirmedGroupDepartureRooms, setConfirmedGroupDepartureRooms] = useState<string[]>([]);
   const [groupCheckoutOpen, setGroupCheckoutOpen] = useState(false);
   const [warningAction, setWarningAction] = useState<{ id: string; flow: "check-in" | "check-out"; message: string; fee: number } | null>(null);
+  const [bulkCheckIn, { isLoading: isBulkCheckInLoading }] = useBulkCheckInMutation();
+  const [bulkCheckOut, { isLoading: isBulkCheckOutLoading }] = useBulkCheckOutMutation();
   const [serviceRecord, setServiceRecord] = useState<DailyRecord | null>(null);
   const [serviceSelections, setServiceSelections] = useState<ServiceSelection[]>([]);
   const [serviceRoomSelections, setServiceRoomSelections] = useState<Record<string, ServiceSelection[]>>({});
@@ -499,8 +340,11 @@ export default function CheckInOutWorkspace() {
                 const isLate = !isCheckIn && now > scheduled;
                 if (isLate || isEarly) {
                   setWarningAction({ id: record.id, flow: record.flow, fee: isEarly ? 150000 : 200000, message: isEarly ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.` : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.` });
-                } else if (isCheckIn) completeRecord(record.id, record.flow);
-                else setCheckoutRecord(record);
+                } else if (isCheckIn) {
+                  void handleBulkCheckIn([record]);
+                } else {
+                  setCheckoutRecord(record);
+                }
               }}
               className={`flex w-36 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:shadow-md ${isCheckIn ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}
             >
@@ -581,6 +425,12 @@ export default function CheckInOutWorkspace() {
     }
   };
 
+  const normalizeDetailId = (value: string | number | undefined) => {
+    if (value === undefined || value === null || value === "") return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   const completeRecord = (id: string, flow: "check-in" | "check-out") => {
     if (flow === "check-in") {
       setArrivalState((current) =>
@@ -612,6 +462,65 @@ export default function CheckInOutWorkspace() {
         );
         setPendingCleaning({ room, type });
       }
+    }
+  };
+
+  const handleBulkCheckIn = async (records: DailyRecord[]) => {
+    const grouped = records.reduce<Record<string, number[]>>((result, record) => {
+      const detailId = normalizeDetailId(record.id);
+      if (!record.bookingId || detailId === null) return result;
+      result[record.bookingId] = [...(result[record.bookingId] ?? []), detailId];
+      return result;
+    }, {});
+
+    try {
+      await Promise.all(
+        Object.entries(grouped).map(([bookingId, bookingDetailIds]) =>
+          bulkCheckIn({ bookingId, bookingDetailIds }).unwrap(),
+        ),
+      );
+      records.forEach((record) => completeRecord(record.id, "check-in"));
+      const first = records[0];
+      const bookingLine = `Mã booking: #${first?.bookingId ?? first?.id ?? "-"}`;
+      const guestLine = `Khách hàng: ${first?.guest ?? "-"}`;
+
+      toast({
+        variant: "booking",
+        title: "Check-in thành công",
+        description: (
+          <div className="space-y-1 text-sm">
+            <div className="font-semibold text-slate-800">{bookingLine}</div>
+            <div className="text-slate-700">{guestLine}</div>
+          </div>
+        ),
+      });
+    } catch (error) {
+      console.error("Bulk check-in failed", error);
+      toast({
+        variant: "destructive",
+        title: "Check-in thất bại",
+        description: "Không thể hoàn tất check-in. Vui lòng thử lại.",
+      });
+    }
+  };
+
+  const handleBulkCheckOut = async (records: DailyRecord[]) => {
+    const grouped = records.reduce<Record<string, number[]>>((result, record) => {
+      const detailId = normalizeDetailId(record.id);
+      if (!record.bookingId || detailId === null) return result;
+      result[record.bookingId] = [...(result[record.bookingId] ?? []), detailId];
+      return result;
+    }, {});
+
+    try {
+      await Promise.all(
+        Object.entries(grouped).map(([bookingId, bookingDetailIds]) =>
+          bulkCheckOut({ bookingId, bookingDetailIds }).unwrap(),
+        ),
+      );
+      records.forEach((record) => completeRecord(record.id, "check-out"));
+    } catch (error) {
+      console.error("Bulk check-out failed", error);
     }
   };
 
@@ -662,8 +571,11 @@ export default function CheckInOutWorkspace() {
     );
   };
 
-  const confirmBatchCheckout = () => {
-    selectedDepartureIds.forEach((id) => completeRecord(id, "check-out"));
+  const confirmBatchCheckout = async () => {
+    const selectedRecords = departureState.filter((record) => selectedDepartureIds.includes(record.id));
+    if (selectedRecords.length > 0) {
+      await handleBulkCheckOut(selectedRecords);
+    }
     setSelectedDepartureIds([]);
     setBatchCheckoutOpen(false);
     setPendingCleaning(null);
@@ -735,11 +647,21 @@ export default function CheckInOutWorkspace() {
     lateFee: record.lateFee,
   }));
 
-  const confirmCheckout = () => {
+  const confirmCheckout = async () => {
     if (!checkoutRecord) return;
-    completeRecord(checkoutRecord.id, "check-out");
+    await handleBulkCheckOut([checkoutRecord]);
     setCheckoutRecord(null);
   };
+
+  const cleaningStaff = useMemo(
+    () => {
+      const assigned = cleaningTasks
+        .map((task) => task.assignee)
+        .filter(Boolean);
+      return assigned.length > 0 ? Array.from(new Set(assigned)) : ["Nhân viên dọn phòng"];
+    },
+    [cleaningTasks],
+  );
 
   const pendingArrivals =
     arrivalState.filter((item) => item.status === "Chờ check-in").length +
@@ -813,7 +735,7 @@ export default function CheckInOutWorkspace() {
       ),
       amenities: [t("frontDesk.notUpdated", "Not updated")],
     };
-    setRoomPreview({ record, detail: roomDetailsById[roomId] || fallback });
+    setRoomPreview({ record, detail: fallback });
   };
 
   return (
@@ -934,7 +856,12 @@ export default function CheckInOutWorkspace() {
               actionLabel="Check-in các phòng"
               actionCount={pendingGroup.length}
               actionDisabled={false}
-              onAction={(nextSelected) => nextSelected.filter((id) => recordIds.includes(id)).forEach((id) => completeRecord(id, "check-in"))}
+              onAction={async (nextSelected) => {
+                const nextRecords = records.filter((record) => nextSelected.includes(record.id));
+                if (nextRecords.length > 0) {
+                  await handleBulkCheckIn(nextRecords);
+                }
+              }}
             />
           );
         })}
@@ -1009,7 +936,7 @@ export default function CheckInOutWorkspace() {
           </p>
         </div>
       )}
-      {warningAction && <EarlyLateStayNotice action={warningAction.flow} message={warningAction.message} fee={warningAction.fee} onCancel={() => setWarningAction(null)} onConfirm={() => { const action = warningAction; setWarningAction(null); if (action.flow === "check-in") completeRecord(action.id, action.flow); else setCheckoutRecord(filtered.find((record) => record.id === action.id) ?? null); }} />}
+      {warningAction && <EarlyLateStayNotice action={warningAction.flow} message={warningAction.message} fee={warningAction.fee} onCancel={() => setWarningAction(null)} onConfirm={() => { const action = warningAction; setWarningAction(null); const record = filtered.find((item) => item.id === action.id) ?? null; if (action.flow === "check-in" && record) { void handleBulkCheckIn([record]); } else if (record) { setCheckoutRecord(record); } }} />}
       {serviceRecord && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setServiceRecord(null)}>
           <div className="booking-service-modal-scroll max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>

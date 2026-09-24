@@ -48,6 +48,9 @@ export type CheckInOutQuery = {
   bookingStatus?: string;
 };
 
+export type BulkCheckInOutRequest = number[];
+export type BulkCheckInOutResponse = Record<string, unknown>;
+
 const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => {
   const values = Array.isArray(response)
     ? response
@@ -92,7 +95,42 @@ export const checkInOutApi = baseApi.injectEndpoints({
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),
+    bulkCheckIn: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: number[] }>({
+      query: ({ bookingId, bookingDetailIds }) => ({
+        url: `/checkInOuts/${bookingId}/check-in/bulk`,
+        method: "POST",
+        data: bookingDetailIds,
+      }),
+      transformResponse: (response: unknown) => {
+        if (!response || typeof response !== "object") return {} as BulkCheckInOutResponse;
+        if ("result" in response && response.result && typeof response.result === "object") {
+          return response.result as BulkCheckInOutResponse;
+        }
+        return response as BulkCheckInOutResponse;
+      },
+      invalidatesTags: ["Booking"],
+    }),
+    bulkCheckOut: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: number[] }>({
+      query: ({ bookingId, bookingDetailIds }) => ({
+        url: `/checkInOuts/${bookingId}/check-out/bulk`,
+        method: "POST",
+        data: bookingDetailIds,
+      }),
+      transformResponse: (response: unknown) => {
+        if (!response || typeof response !== "object") return {} as BulkCheckInOutResponse;
+        if ("result" in response && response.result && typeof response.result === "object") {
+          return response.result as BulkCheckInOutResponse;
+        }
+        return response as BulkCheckInOutResponse;
+      },
+      invalidatesTags: ["Booking"],
+    }),
   }),
 });
 
-export const { useGetTodayCheckInsQuery, useGetTodayCheckOutsQuery } = checkInOutApi;
+export const {
+  useGetTodayCheckInsQuery,
+  useGetTodayCheckOutsQuery,
+  useBulkCheckInMutation,
+  useBulkCheckOutMutation,
+} = checkInOutApi;

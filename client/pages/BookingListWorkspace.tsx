@@ -22,7 +22,7 @@ import {
   type BookingListItem,
   type BookingUpdateRequest,
 } from "../services/bookingApi";
-import { useCreatePaymentQrMutation } from "../services/paymentApi";
+import { useCreatePaymentQrMutation, usePayWithCashMutation } from "../services/paymentApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { bindHotelSocketEvents } from "../lib/socket";
@@ -35,8 +35,9 @@ const textOf = (item: BookingListItem, keys: string[], fallback = "-") =>
   String(valueOf(item, keys) ?? fallback);
 
 const money = (value: unknown) => {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? `${amount.toLocaleString("vi-VN")}đ` : "-";
+  const numericValue = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  if (!Number.isFinite(numericValue)) return "-";
+  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(numericValue)}đ`;
 };
 
 const bookingId = (booking: BookingListItem) => textOf(booking, ["bookingId", "orderId", "id"]);
@@ -137,10 +138,12 @@ export default function BookingListWorkspace() {
   const [editError, setEditError] = useState("");
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<"bank" | "cash" | "">("bank");
+  const [cashAmountPaid, setCashAmountPaid] = useState("");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(0);
   const [paymentError, setPaymentError] = useState("");
   const [paymentSuccess, setPaymentSuccess] = useState("");
+  const [cashChangeAmount, setCashChangeAmount] = useState<number | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const handleCopy = (text: string, fieldName: string) => {
@@ -154,6 +157,7 @@ export default function BookingListWorkspace() {
 
   // RTK Query hooks
   const [createPaymentQr, { isLoading: isCreatingQr }] = useCreatePaymentQrMutation();
+  const [payWithCash, { isLoading: isPayingCash }] = usePayWithCashMutation();
   const [updateBookingApi, { isLoading: isUpdatingBooking }] = useUpdateBookingMutation();
   const {
     data: fetchedBookings = [],
@@ -215,10 +219,12 @@ export default function BookingListWorkspace() {
   // Reset payment state when selectedBooking changes
   useEffect(() => {
     setPaymentMethod("bank");
+    setCashAmountPaid("");
     setCheckoutUrl(null);
     setQrSecondsLeft(0);
     setPaymentError("");
     setPaymentSuccess("");
+    setCashChangeAmount(null);
     setShowQrModal(false);
   }, [selectedBooking]);
 
@@ -298,6 +304,11 @@ export default function BookingListWorkspace() {
   // Handle Payment
   const handlePayBooking = async () => {
     if (!selectedBooking) return;
+    if (isCancelledBooking(selectedBooking)) {
+      setPaymentError("Booking đã bị hủy, không thể tạo mã thanh toán.");
+      setPaymentSuccess("");
+      return;
+    }
     setPaymentError("");
     setPaymentSuccess("");
 
@@ -308,11 +319,39 @@ export default function BookingListWorkspace() {
 
     if (paymentMethod === "cash") {
       const id = bookingId(selectedBooking);
-      setLocalOverrides((prev) => ({
-        ...prev,
-        [id]: { bookingStatus: "PAID" },
-      }));
-      setPaymentSuccess(`Xác nhận đã thu ${money(selectedBooking.finalAmount)} tiền mặt thành công!`);
+      const amountPaid = Number(cashAmountPaid) || 0;
+      const orderId = String(selectedBooking.orderId ?? selectedBooking.bookingId ?? id);
+      if (!orderId || amountPaid <= 0) {
+        setPaymentError("Vui lòng nhập số tiền khách đưa hợp lệ.");
+        return;
+      }
+      const totalDue = Number(selectedBooking.finalAmount) || 0;
+      const fallbackChange = Math.max(0, amountPaid - totalDue);
+      try {
+        const paymentResponse = await payWithCash({ orderId, amountPaid, note: "Thanh toán tiền mặt tại quầy" }).unwrap();
+        const responseChange = Number(
+          paymentResponse?.changeAmount
+          ?? paymentResponse?.refundAmount
+          ?? paymentResponse?.cashChange
+          ?? paymentResponse?.change
+          ?? fallbackChange,
+        );
+        setCashChangeAmount(Number.isFinite(responseChange) ? responseChange : fallbackChange);
+        setLocalOverrides((prev) => ({
+          ...prev,
+          [id]: {
+            bookingStatus: "CONFIRMED",
+            paymentStatus: "PAID",
+            invoiceStatus: "PAID",
+          },
+        }));
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+        setPaymentSuccess(`Xác nhận đã thu ${money(amountPaid)} tiền mặt thành công!`);
+      } catch (error: any) {
+        const data = error?.data;
+        const message = typeof data === "string" ? data : data?.message ?? data?.result?.message ?? error?.message ?? "Không thể thanh toán tiền mặt.";
+        setPaymentError(String(message));
+      }
       return;
     }
 
@@ -349,6 +388,10 @@ export default function BookingListWorkspace() {
   };
 
   const qrTimeLabel = `${String(Math.floor(qrSecondsLeft / 60)).padStart(2, "0")}:${String(qrSecondsLeft % 60).padStart(2, "0")}`;
+  const cashBillTotal = Number(selectedBooking?.finalAmount) || 0;
+  const enteredCashAmount = Number(cashAmountPaid) || 0;
+  const computedCashChange = Math.max(0, enteredCashAmount - cashBillTotal);
+  const displayCashChange = cashChangeAmount ?? computedCashChange;
 
   return (
     <section className="booking-list-workspace mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -698,6 +741,7 @@ export default function BookingListWorkspace() {
                       type="button"
                       onClick={() => {
                         setPaymentMethod("cash");
+                        if (!cashAmountPaid) setCashAmountPaid(String(Number(selectedBooking?.finalAmount) || 0));
                         setPaymentError("");
                         setPaymentSuccess("");
                       }}
@@ -718,6 +762,18 @@ export default function BookingListWorkspace() {
                         <p className="text-xs text-slate-500 mt-0.5">Xác nhận đã thu tiền mặt trực tiếp từ khách hàng.</p>
                       </div>
                     </button>
+                    {paymentMethod === "cash" && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                        <label className="block text-sm font-semibold text-slate-700">
+                          Tiền khách đưa
+                          <div className="relative mt-1.5">
+                            <input type="number" min="1" step="1000" value={cashAmountPaid} onChange={(event) => setCashAmountPaid(event.target.value)} placeholder="Nhập số tiền khách đưa" className="h-10 w-full rounded-lg border border-emerald-200 bg-white px-3 pr-10 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                            <span className="pointer-events-none absolute right-3 top-2.5 text-sm text-slate-400">đ</span>
+                          </div>
+                          <span className="mt-1 block text-xs font-normal text-slate-500">Tổng cần thu: {money(selectedBooking?.finalAmount)}</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {/* Payment Feedback Banners */}
@@ -732,6 +788,19 @@ export default function BookingListWorkspace() {
                     <div className="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800 font-semibold">
                       <Check size={16} className="shrink-0 text-emerald-600" />
                       <span>{paymentSuccess}</span>
+                    </div>
+                  )}
+
+                  {paymentMethod === "cash" && (cashAmountPaid !== "" || cashChangeAmount !== null) && (
+                    <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <span className="text-sm font-semibold text-amber-800">
+                        {enteredCashAmount >= cashBillTotal ? "Tiền trả lại khách" : "Còn thiếu"}
+                      </span>
+                      <span className="text-lg font-bold text-amber-900">
+                        {enteredCashAmount >= cashBillTotal
+                          ? money(displayCashChange)
+                          : money(Math.max(0, cashBillTotal - enteredCashAmount))}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -749,7 +818,7 @@ export default function BookingListWorkspace() {
                   <button
                     type="button"
                     onClick={() => void handlePayBooking()}
-                    disabled={isCreatingQr}
+                    disabled={isCreatingQr || isPayingCash || isCancelledBooking(selectedBooking)}
                     className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-50 ${
                       paymentMethod === "cash" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"
                     }`}
@@ -762,7 +831,7 @@ export default function BookingListWorkspace() {
                     ) : (
                       <>
                         <CreditCard size={16} />
-                        {isCreatingQr ? "Đang tạo mã..." : "Tạo QR Thanh toán"}
+                        {isPayingCash ? "Đang ghi nhận..." : isCreatingQr ? "Đang tạo mã..." : "Tạo QR Thanh toán"}
                       </>
                     )}
                   </button>

@@ -1167,11 +1167,25 @@ export default function BookingWorkspace() {
   const storedEmployeeId = localStorage.getItem("id");
   const bookingEmployeeId = storedEmployeeId ?? employeeId ?? "";
   const hasGuestDetails = Boolean(bookingGuest.name.trim() && bookingGuest.phone.trim() && bookingGuest.identityNumber.trim());
+  const goToServices = () => {
+    if (!hasGuestDetails) {
+      setPaymentError("Vui lòng nhập đủ họ tên, số điện thoại và CCCD của khách hàng.");
+      return;
+    }
+    setPaymentError("");
+    setStep("services");
+  };
   const customerReady = Boolean(initialBooking || bookingGuest.customerId);
   const canSubmitBooking = !promotionBlocked && hasGuestDetails && customerReady && (Boolean(initialBooking) || Boolean(String(bookingEmployeeId).trim())) && !isCreatingBooking && !isModifyingBooking;
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [step]);
+  useEffect(() => {
+    if (step === "services" && !hasGuestDetails) {
+      setStep("guest");
+      setPaymentError("Vui lòng nhập đủ họ tên, số điện thoại và CCCD của khách hàng.");
+    }
+  }, [step, hasGuestDetails]);
   useEffect(() => () => clearRoomGuestCache(), []);
   const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
   const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
@@ -1371,10 +1385,10 @@ export default function BookingWorkspace() {
           <div className="h-fit rounded-xl bg-slate-50 p-4">
             <p className="text-center text-xs font-bold uppercase tracking-wider text-blue-600">{t("booking.bookingSummary")}</p>
             <p className="mt-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UserRound size={14} />Thông tin người đặt</p>
-            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-              <p className="mt-1 text-sm font-bold text-slate-800">{bookingGuest.name || "Chưa nhập tên người đặt"}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{bookingGuest.phone || "Chưa nhập số điện thoại"}</p>
-            </div>
+            {hasGuestDetails ? <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+              <p className="mt-1 text-sm font-bold text-slate-800">{bookingGuest.name}</p>
+              <p className="mt-0.5 text-xs text-slate-500">{bookingGuest.phone}</p>
+            </div> : <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">Nhập đủ họ tên, số điện thoại và CCCD để hiển thị thông tin khách hàng.</div>}
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UsersRound size={14} />Thông tin phòng</p>
@@ -1426,7 +1440,7 @@ export default function BookingWorkspace() {
               <p className="mt-0.5 text-xs text-violet-600">Số tiền cần thanh toán: {money(bookingEstimate.total)}</p>
               </div>
             </>}
-            {step === "guest" ? <button onClick={() => setStep("services")} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">Tiếp tục chọn dịch vụ</button> : <>
+            {step === "guest" ? <button disabled={!hasGuestDetails} onClick={goToServices} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">Tiếp tục chọn dịch vụ</button> : <>
               {step === "promotion" && !hasGuestDetails && <p className="mt-3 text-xs text-amber-600">Vui lòng nhập đủ tên, số điện thoại và CCCD của khách hàng.</p>}
               {step === "promotion" && hasGuestDetails && !customerReady && <p className="mt-3 text-xs text-amber-600">Đang tạo hồ sơ khách hàng, vui lòng chờ trong giây lát.</p>}
               {step === "promotion" && !String(bookingEmployeeId).trim() && <p className="mt-1 text-xs text-amber-600">Không tìm thấy mã admin/nhân viên trong phiên đăng nhập.</p>}

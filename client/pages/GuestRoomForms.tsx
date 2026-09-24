@@ -22,6 +22,15 @@ export type RoomGuestCounts = { adults: number; children: number; infants: numbe
 type Customer = CustomerResponse;
 
 const countOptions = (max: number, value: number) => Array.from({ length: Math.max(max, value) + 1 }, (_, index) => index);
+const getCustomerErrorMessage = (error: any) => {
+  const data = error?.data;
+  if (typeof data === "string") return data;
+  if (data?.result?.message) return String(data.result.message);
+  if (data?.message) return String(data.message);
+  if (data?.result?.error) return String(data.result.error);
+  if (Array.isArray(data?.errors)) return data.errors.map((item: any) => item?.message || item).join(", ");
+  return error?.message || "Không thể tạo khách hàng. Vui lòng kiểm tra lại thông tin.";
+};
 const roomGuestCache: Record<string, RoomGuestCounts> = {};
 export const bookingCache = { roomTotal: 0 };
 export const setBookingRoomTotalCache = (roomTotal: number) => {
@@ -81,7 +90,9 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
       const customer = await createWalkInCustomer({ fullName: guest.name.trim(), phone: guest.phone.trim(), cccd: guest.identityNumber.trim() }).unwrap();
       onGuestChange({ ...guest, customerId: String(customer.id) });
     } catch (error) {
+      const message = getCustomerErrorMessage(error);
       console.error("[booking] create walk-in customer failed", error);
+      window.alert(`Tạo khách hàng thất bại: ${message}`);
     }
   };
   const totalCapacityFor = (room: GuestRoom) => Math.max(0, Number(room.guests ?? 0) + Number(room.maxExtraGuests ?? 0));

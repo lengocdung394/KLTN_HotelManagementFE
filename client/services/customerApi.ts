@@ -19,6 +19,14 @@ export type WalkInCustomerRequest = {
 	cccd: string;
 };
 
+export type CustomerUpdateRequest = {
+	name: string;
+	phone: string;
+	email: string;
+	identityNumber: string;
+	note: string;
+};
+
 type ApiCustomer = Record<string, unknown>;
 
 const valueOf = (item: ApiCustomer, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
@@ -91,7 +99,15 @@ export const customerApi = baseApi.injectEndpoints({
 			},
 			invalidatesTags: ["Customer"],
 		}),
+		updateCustomer: builder.mutation<CustomerResponse, { id: string; request: CustomerUpdateRequest }>({
+			query: ({ id, request }) => ({ url: `/customer/${encodeURIComponent(id)}`, method: "PUT", data: request }),
+			transformResponse: (response: unknown) => {
+				const value = response && typeof response === "object" && "result" in response ? (response as { result?: unknown }).result : response;
+				return normalizeCustomer((value ?? {}) as ApiCustomer, 0);
+			},
+			invalidatesTags: ["Customer"],
+		}),
 	}),
 });
 
-export const { useGetCustomersByHotelIdQuery, useGetCustomerByIdQuery, useLazyGetCustomerByIdQuery, useCreateWalkInCustomerMutation } = customerApi;
+export const { useGetCustomersByHotelIdQuery, useGetCustomerByIdQuery, useLazyGetCustomerByIdQuery, useCreateWalkInCustomerMutation, useUpdateCustomerMutation } = customerApi;
