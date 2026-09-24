@@ -5,7 +5,7 @@ import "./i18n";
 import { Toaster } from "@/components/ui/toaster";
 import { createRoot } from "react-dom/client";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Provider } from "react-redux";
 import { store } from "./store";
@@ -15,11 +15,31 @@ import NotFound from "./pages/NotFound";
 import ModulePage from "./pages/ModulePage";
 import CustomerPage from "./pages/CustomerPage";
 import LoginPage from "./pages/LoginPage";
+import { disconnectSocket, initSocket } from "./lib/socket";
 
 const App = () => {
   const [authenticated, setAuthenticated] = useState(() => Boolean(window.localStorage.getItem("accessToken")));
+
+  useEffect(() => {
+    const token = window.localStorage.getItem("accessToken");
+
+    if (authenticated && token) {
+      initSocket(token);
+    } else {
+      disconnectSocket();
+    }
+
+    return () => {
+      if (!authenticated) {
+        disconnectSocket();
+      }
+    };
+  }, [authenticated]);
+
   const handleLogout = () => {
     window.localStorage.removeItem("staywise-authenticated");
+    window.localStorage.removeItem("accessToken");
+    disconnectSocket();
     setAuthenticated(false);
   };
 
@@ -33,6 +53,7 @@ const App = () => {
             <Route path="/" element={<Navigate to="/overview" replace />} />
             <Route path="/overview" element={<Index onLogout={handleLogout} />} />
             <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={handleLogout} />} />
+            <Route path="/booking-list" element={<ModulePage path="/booking-list" onLogout={handleLogout} />} />
             <Route path="/customers" element={<CustomerPage onLogout={handleLogout} />} />
             <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={handleLogout} />} />
             <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={handleLogout} />} />

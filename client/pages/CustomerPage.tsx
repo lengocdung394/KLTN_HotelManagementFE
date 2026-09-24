@@ -2,7 +2,6 @@ import { Link, useLocation } from "react-router-dom";
 import {
   CalendarCheck,
   CalendarDays,
-  ChevronDown,
   ClipboardList,
   ConciergeBell,
   DoorOpen,
@@ -46,21 +45,19 @@ export default function CustomerPage({ onLogout }: { onLogout: () => void }) {
   const location = useLocation();
   const [mobile, setMobile] = useState(false);
   const { hotelName } = useAppSelector((state) => state.auth);
-  const branchLabel = hotelName || "Tất cả chi nhánh";
   return (
     <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
       <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-blue-950 px-4 py-5 text-white transition-transform duration-200 ease-out lg:translate-x-0 ${mobile ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="h-5" />
-        <div className="mt-2 px-3">
-          <button type="button" className="flex h-11 min-h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-800/80">
+        <div className="mt-2 min-w-0 px-3">
+          <div className="flex h-11 min-h-11 w-full min-w-0 items-center overflow-hidden rounded-xl border border-blue-300/20 bg-blue-900/70 px-3 text-left text-sm font-semibold text-white shadow-sm shadow-blue-950/20">
             <span className="flex w-0 min-w-0 flex-1 items-center gap-2.5">
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-300 text-[11px] font-bold text-amber-950">M</span>
-              <span className="truncate">{branchLabel}</span>
+              <span className="truncate" title={hotelName || "Tất cả chi nhánh"}>{hotelName || "Tất cả chi nhánh"}</span>
             </span>
-            <ChevronDown size={15} className="ml-2 shrink-0 text-blue-200" />
-          </button>
+          </div>
         </div>
         <nav className="mt-8 min-h-0 flex-1 space-y-1 overflow-y-auto">
           {navigation.map(([href, key, Icon]) => (

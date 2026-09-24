@@ -6,6 +6,7 @@ interface LoginRequest {
 }
 
 interface AuthenticationResult {
+  id: string;
   token: string;
   email: string;
   fullName: string;

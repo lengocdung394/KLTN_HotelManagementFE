@@ -6,9 +6,37 @@ interface ApiResponse<T> {
   result: T;
 }
 
-export type RoomResponse = Record<string, unknown>;
-export type RoomTypeDetailResponse = Record<string, unknown>;
-export type BedTypeResponse = Record<string, unknown>;
+export type RoomResponse = {
+  id?: string;
+  roomId?: string;
+  roomNumber?: string | number;
+  roomCode?: string;
+  roomType?: string;
+  roomName?: string;
+  roomStatus?: string;
+  basePrice?: number;
+  price?: number;
+  totalPrice?: number;
+  standardCapacity?: number;
+  maxAdults?: number;
+  maxChildren?: number;
+  maxInfants?: number;
+  maxExtraGuests?: number;
+  extraAdultFee?: number;
+  extraChildFee?: number;
+  floorId?: number;
+  buildingId?: number;
+  [key: string]: unknown;
+};
+export type RoomTypeDetailResponse = {
+  [key: string]: unknown;
+};
+export type BedTypeResponse = {
+  id?: string;
+  name?: string;
+  [key: string]: unknown;
+};
+export type RoomDailyPricesResponse = Record<string, Record<string, number>>;
 
 export const roomApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -65,6 +93,14 @@ export const roomApi = baseApi.injectEndpoints({
       providesTags: ["Room"],
     }),
 
+    getBranchRoomDailyPrices: builder.query<RoomDailyPricesResponse, { hotelId: number; startDate: string; endDate: string }>({
+      query: ({ hotelId, startDate, endDate }) => ({
+        url: "/management-rooms/branch-prices",
+        method: "GET",
+        params: { hotelId, startDate, endDate },
+      }),
+    }),
+
     getRoomTypeDetail: builder.query<RoomTypeDetailResponse, { hotelId: number; roomType: string }>({
       query: ({ hotelId, roomType }) => ({
         url: `/hotels/${hotelId}/room-types/${roomType}/detail`,
@@ -74,4 +110,4 @@ export const roomApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useCreateRoomMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetRoomTypeDetailQuery } = roomApi;
+export const { useCreateRoomMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery } = roomApi;

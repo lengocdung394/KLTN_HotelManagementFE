@@ -138,25 +138,107 @@ function RoomDetailModal({ room, onClose }: { room: Room; onClose: () => void })
   const [showGallery, setShowGallery] = useState(false);
   const galleryImages = room.images.length > 0 ? room.images : ["https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg"];
 
-  return <div className="fixed inset-0 z-60 grid place-items-center bg-slate-950/50 p-4" onMouseDown={onClose}>
-    <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
-        <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Thông tin phòng</p><h3 className="mt-1 text-2xl font-bold text-slate-900">Phòng {room.id} · {room.name}</h3><p className="mt-1 text-sm text-slate-500">{room.floor} · {room.size} · {room.beds}</p></div>
+  return <div className="fixed inset-0 z-60 grid place-items-center bg-slate-950/50 p-3 sm:p-4" onMouseDown={onClose}>
+    <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Thông tin phòng</p>
+          <h3 className="text-lg font-bold text-slate-900">Phòng {room.id} · {room.name}</h3>
+          <p className="text-xs text-slate-500">{room.floor} · {room.size} · {room.beds}</p>
+        </div>
         <button type="button" onClick={onClose} className="text-2xl leading-none text-slate-400 hover:text-slate-700" aria-label="Đóng">×</button>
       </div>
-      <div className="space-y-5 overflow-y-auto p-6">
-          <div className="space-y-5">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100"><img src={galleryImages[0]} alt={`${room.name} · phòng ${room.id}`} className="h-80 w-full object-cover" /></div>
-          <div className="rounded-2xl border border-slate-200 p-5"><h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Thông tin phòng</h4><div className="mt-4 grid gap-3 sm:grid-cols-2"><div><p className="text-xs text-slate-400">Loại phòng</p><p className="mt-1 font-semibold text-slate-800">{room.name}</p></div><div><p className="text-xs text-slate-400">Loại giường</p><p className="mt-1 font-semibold text-slate-800">{room.beds}</p></div><div><p className="text-xs text-slate-400">Diện tích</p><p className="mt-1 font-semibold text-slate-800">{room.size}</p></div><div><p className="text-xs text-slate-400">Vị trí</p><p className="mt-1 font-semibold text-slate-800">{room.floor}</p></div></div></div>
+
+      <div className="space-y-3.5 overflow-y-auto p-4 text-xs sm:text-sm">
+        <div className="space-y-3">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+            <img src={galleryImages[0]} alt={`${room.name} · phòng ${room.id}`} className="h-44 w-full object-cover" />
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3.5">
+            <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Thông tin chi tiết</h4>
+            <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
+              <div><p className="text-[11px] text-slate-400">Loại phòng</p><p className="font-semibold text-slate-800">{room.name}</p></div>
+              <div><p className="text-[11px] text-slate-400">Loại giường</p><p className="font-semibold text-slate-800">{room.beds}</p></div>
+              <div><p className="text-[11px] text-slate-400">Diện tích</p><p className="font-semibold text-slate-800">{room.size}</p></div>
+              <div><p className="text-[11px] text-slate-400">Vị trí</p><p className="font-semibold text-slate-800">{room.floor}</p></div>
+            </div>
+          </div>
         </div>
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className="rounded-2xl bg-slate-50 p-5"><div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-slate-700">Trạng thái</p><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[room.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status}</span></div><div className="mt-4 flex items-end justify-between border-t border-slate-200 pt-4"><span className="text-sm text-slate-500">Giá phòng / đêm</span><strong className="text-xl text-slate-900">{money(room.price)}</strong></div></div>
-          <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-5"><h4 className="text-sm font-bold uppercase tracking-wide text-amber-800">Quy định số lượng người - Quy định giá tiền</h4><div className="mt-4 space-y-3 text-sm"><div className="flex justify-between gap-3"><span className="text-slate-600">Sức chứa tiêu chuẩn</span><strong className="text-slate-900">{room.standardCapacity} người</strong></div><div className="flex justify-between gap-3"><span className="text-slate-600">Người ghép tối đa</span><strong className="text-slate-900">{room.maxExtraGuests} người</strong></div><div className="flex justify-between gap-3 border-t border-amber-200 pt-3"><span className="text-slate-600">Phụ thu người lớn</span><strong className="text-amber-800">{money(room.extraAdultFee)} / người</strong></div><div className="flex justify-between gap-3"><span className="text-slate-600">Phụ thu trẻ em</span><strong className="text-amber-800">{money(room.extraChildFee)} / người</strong></div><p className="border-t border-amber-200 pt-3 text-xs text-slate-500">Em bé dưới 2 tuổi được miễn phí.</p></div></div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl bg-slate-50 p-3.5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-slate-700">Trạng thái</p>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusStyle[room.status]}`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status}
+                </span>
+              </div>
+            </div>
+            <div className="mt-3 flex items-end justify-between border-t border-slate-200 pt-3">
+              <span className="text-xs text-slate-500">Giá phòng / đêm</span>
+              <strong className="text-lg text-slate-900">{money(room.price)}</strong>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3.5">
+            <h4 className="text-xs font-bold uppercase tracking-wide text-amber-800">Quy định sức chứa & giá</h4>
+            <div className="mt-2 space-y-1.5 text-xs">
+              <div className="flex justify-between gap-2"><span className="text-slate-600">Sức chứa tiêu chuẩn</span><strong className="text-slate-900">{room.standardCapacity} người</strong></div>
+              <div className="flex justify-between gap-2"><span className="text-slate-600">Người ghép tối đa</span><strong className="text-slate-900">{room.maxExtraGuests} người</strong></div>
+              <div className="flex justify-between gap-2 border-t border-amber-200 pt-1.5"><span className="text-slate-600">Phụ thu người lớn</span><strong className="text-amber-800">{money(room.extraAdultFee)}</strong></div>
+              <div className="flex justify-between gap-2"><span className="text-slate-600">Phụ thu trẻ em</span><strong className="text-amber-800">{money(room.extraChildFee)}</strong></div>
+              <p className="border-t border-amber-200 pt-1 text-[11px] text-slate-500">Em bé dưới 2 tuổi miễn phí.</p>
+            </div>
+          </div>
         </div>
-        <div className="rounded-2xl border border-slate-200 p-5"><h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Tiện nghi mỗi phòng</h4><div className="mt-4 flex flex-wrap gap-2">{room.services.length > 0 ? room.services.map((service) => <span key={service} className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"><Check size={13} />{service}</span>) : <p className="text-sm text-slate-400">Chưa cập nhật tiện nghi.</p>}</div></div>
+
+        <div className="rounded-xl border border-slate-200 p-3.5">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Tiện nghi phòng</h4>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {room.services.length > 0 ? room.services.map((service) => (
+              <span key={service} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                <Check size={12} />{service}
+              </span>
+            )) : <p className="text-xs text-slate-400">Chưa cập nhật tiện nghi.</p>}
+          </div>
+        </div>
       </div>
-      <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4"><button type="button" onClick={() => setShowGallery(true)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Xem toàn bộ ảnh</button><button type="button" onClick={onClose} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Đóng</button></div>
-      {showGallery && <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/80 p-5" onMouseDown={() => setShowGallery(false)}><div className="w-full max-w-5xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between text-white"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Thư viện ảnh</p><h4 className="mt-1 text-xl font-bold">Phòng {room.id} · {room.name}</h4></div><button type="button" onClick={() => setShowGallery(false)} className="text-3xl leading-none text-white/70 hover:text-white" aria-label="Đóng thư viện ảnh">×</button></div><div className="relative mt-4 overflow-hidden rounded-2xl bg-black"><img src={galleryImages[galleryIndex]} alt={`Ảnh phòng ${galleryIndex + 1}`} className="h-[min(65vh,620px)] w-full object-contain" /><button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryImages.length) % galleryImages.length)} className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-slate-700">‹</button><button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryImages.length)} className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-2xl text-slate-700">›</button></div><div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-8">{galleryImages.map((image, index) => <button type="button" key={`${image}-full-${index}`} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-400" : "border-transparent"}`}><img src={image} alt={`Ảnh thu nhỏ ${index + 1}`} className="h-16 w-full object-cover" /></button>)}</div></div></div>}
+
+      <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+        <button type="button" onClick={() => setShowGallery(true)} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+          Xem toàn bộ ảnh
+        </button>
+        <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700">
+          Đóng
+        </button>
+      </div>
+
+      {showGallery && (
+        <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/80 p-4" onMouseDown={() => setShowGallery(false)}>
+          <div className="w-full max-w-4xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between text-white">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300">Thư viện ảnh</p>
+                <h4 className="mt-0.5 text-lg font-bold">Phòng {room.id} · {room.name}</h4>
+              </div>
+              <button type="button" onClick={() => setShowGallery(false)} className="text-2xl leading-none text-white/70 hover:text-white" aria-label="Đóng thư viện ảnh">×</button>
+            </div>
+            <div className="relative mt-3 overflow-hidden rounded-xl bg-black">
+              <img src={galleryImages[galleryIndex]} alt={`Ảnh phòng ${galleryIndex + 1}`} className="h-[min(60vh,500px)] w-full object-contain" />
+              <button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryImages.length) % galleryImages.length)} className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700">‹</button>
+              <button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryImages.length)} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700">›</button>
+            </div>
+            <div className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-8">
+              {galleryImages.map((image, index) => (
+                <button type="button" key={`${image}-full-${index}`} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-400" : "border-transparent"}`}>
+                  <img src={image} alt={`Ảnh thu nhỏ ${index + 1}`} className="h-14 w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </div>;
 }
@@ -1140,7 +1222,6 @@ export default function RoomWorkspace() {
         </div>
       </div>
     )}
-    {detailRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => setDetailRoom(null)}><div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">{t("room.roomInformation")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">{t("room.roomLabel")} {detailRoom.id} · {detailRoom.name}</h3><p className="mt-1 text-sm text-slate-500">{t("room.floorLabel", { floor: detailRoom.floor.match(/\d+/)?.[0] ?? detailRoom.floor })} · {detailRoom.size} · {translateBed(detailRoom.beds)}</p></div><button type="button" onClick={() => setDetailRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="grid gap-4 p-5 lg:grid-cols-[1.1fr_1fr]"><div><div className="overflow-hidden rounded-xl"><img src={detailRoom.images[0]} alt={`${detailRoom.name} · ${t("room.roomLabel")} ${detailRoom.id}`} className="h-52 w-full object-cover" /></div><div className="mt-3 grid grid-cols-3 gap-2">{detailRoom.images.slice(1, 4).map((image, index) => <img key={image} src={image} alt={`${t("room.roomLabel")} ${detailRoom.id} · ${t("room.photoCount", { count: index + 2 })}`} className="h-16 w-full rounded-lg object-cover" />)}</div></div><div className="space-y-3"><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-500">{t("room.currentStatus")}</p><div className="mt-2 flex items-center justify-between"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[detailRoom.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{detailRoom.status === "Sẵn sàng" ? t("room.ready") : detailRoom.status === "Đang dọn" ? t("room.cleaning") : detailRoom.status === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span><p className="text-sm font-bold text-slate-900">{money(detailRoom.price)}<span className="text-xs font-normal text-slate-500"> {t("room.perNight")}</span></p></div>{detailRoom.cleaner ? <p className="mt-2 text-xs text-slate-500">{t("room.housekeepingStaff")} <span className="font-semibold text-slate-700">{detailRoom.cleaner}</span></p> : <p className="mt-2 text-xs text-slate-400">{t("room.unassignedCleaning")}</p>}</div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-500">{t("room.roomSpecifications")}</p><div className="mt-2 space-y-1.5 text-sm text-slate-700"><p><span className="font-semibold">{t("room.maximumGuests")}</span> {t("room.maxGuestsLabel", { count: detailRoom.capacity })}</p><p><span className="font-semibold">{t("room.bedLabel")}</span> {translateBed(detailRoom.beds)}</p><p><span className="font-semibold">{t("room.areaLabel")}</span> {detailRoom.size}</p><p><span className="font-semibold">{t("room.locationLabel")}</span> {t("room.floorLabel", { floor: detailRoom.floor.match(/\d+/)?.[0] ?? detailRoom.floor })}</p></div></div></div></div><div className="border-t border-slate-100 px-5 py-4"><p className="text-xs font-semibold text-slate-500">{t("room.amenitiesLabel")}</p><div className="mt-2 flex flex-wrap gap-2">{detailRoom.services.map((service) => <span key={service} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{service}</span>)}</div>{detailRoom.description && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{detailRoom.description}</p>}<div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setGalleryRoom(detailRoom); setGalleryIndex(0); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("room.viewAllPhotos")}</button><button type="button" onClick={() => setDetailRoom(null)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{t("common.close")}</button></div></div></div></div>}
     {galleryRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 p-4" onMouseDown={() => setGalleryRoom(null)}><div className="w-full max-w-4xl rounded-2xl bg-white p-4 shadow-2xl sm:p-5" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Thư viện ảnh</p><h3 className="mt-1 text-lg font-bold text-slate-900">Phòng {galleryRoom.id} · {galleryRoom.name}</h3></div><button type="button" onClick={() => setGalleryRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="relative mt-4 overflow-hidden rounded-xl bg-slate-100"><img src={galleryRoom.images[galleryIndex]} alt={`${galleryRoom.name} · ảnh ${galleryIndex + 1}`} className="h-[min(52vh,420px)] w-full object-cover" /><button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryRoom.images.length) % galleryRoom.images.length)} className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md">‹</button><button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryRoom.images.length)} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md">›</button></div><div className="mt-3 grid grid-cols-4 gap-2">{galleryRoom.images.map((image, index) => <button type="button" key={image} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-600" : "border-transparent"}`}><img src={image} alt={`Ảnh thu nhỏ ${index + 1}`} className="h-16 w-full object-cover" /></button>)}</div></div></div>}
     {assignmentRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4" onMouseDown={() => setAssignmentRoom(null)}><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-amber-600">{t("frontDesk.cleaningAssignment")}</p><h3 className="mt-1 text-lg font-bold text-slate-900">{t("room.roomLabel")} {assignmentRoom.id} · {assignmentRoom.name}</h3><p className="mt-1 text-sm text-slate-500">{t("frontDesk.cleaningDescription")}</p></div><button type="button" onClick={() => setAssignmentRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="mt-5 space-y-2">{employees.map((employee) => <button type="button" key={employee} onClick={() => { updateRoom(assignmentRoom.id, { cleaner: employee, status: "Đang dọn" }); setAssignmentRoom(null); }} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition hover:border-amber-300 hover:bg-amber-50"><span className="grid h-9 w-9 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">{employee.split(" ").map((part) => part[0]).slice(-2).join("")}</span><span><span className="block text-sm font-semibold text-slate-800">{employee}</span><span className="mt-0.5 block text-xs text-slate-500">Housekeeping · {t("room.housekeepingReady")}</span></span></button>)}</div><button type="button" onClick={() => setAssignmentRoom(null)} className="mt-5 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("common.cancel")}</button></div></div>}
   </section>;

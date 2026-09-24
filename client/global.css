@@ -1,10 +1,45 @@
 /** @import must precede all other statements */
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap");
 
 @import "tailwindcss";
 
 /* Theme, content globs, and plugins are declared in tailwind.config.ts. */
 @config "../tailwind.config.ts";
+
+html {
+  scrollbar-gutter: stable;
+}
+
+section:has(input[type="file"]) label > span:first-child::after {
+  content: " *";
+  color: #ef4444;
+}
+
+body:has(input[placeholder="Nhập mật khẩu hiện tại"])::before {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgb(15 23 42 / 0.35);
+  content: "";
+  pointer-events: auto;
+}
+
+body:has(div.fixed.inset-0) {
+  overflow: hidden !important;
+}
+
+section:has(input[placeholder="Nhập mật khẩu hiện tại"]) {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 50;
+  width: min(520px, calc(100vw - 32px));
+  margin: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid #2563eb;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 0.24);
+}
 
 @layer base {
   /**
@@ -99,6 +134,26 @@
   }
 }
 
+form.max-w-lg label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+form.max-w-lg label::before {
+  color: rgb(239 68 68);
+  content: "*";
+  margin-left: 4px;
+  order: 2;
+}
+
+form.max-w-lg label > input,
+form.max-w-lg label > select,
+form.max-w-lg label > textarea {
+  flex-basis: 100%;
+  order: 3;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -107,7 +162,7 @@
   body {
     @apply bg-background text-foreground;
     font-family: "DM Sans", sans-serif;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
 
   .login-shell { background: #e9f2ff; background-image: radial-gradient(circle at 12% 15%, rgb(255 255 255 / 0.85), transparent 28%), radial-gradient(circle at 88% 84%, rgb(253 230 138 / 0.28), transparent 24%), linear-gradient(135deg, #eaf3ff 0%, #f8fafc 52%, #fff7ed 100%); }
@@ -122,7 +177,7 @@
   @media (prefers-reduced-motion: reduce) { .login-orb, .login-panel-lines { animation: none; } }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: "Manrope", sans-serif;
+    font-family: "DM Sans", sans-serif;
   }
 
   :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
@@ -552,6 +607,10 @@
     border-radius: 0 0 0.75rem 0.75rem !important;
   }
 
+  .payment-column > div.mb-4.grid {
+    display: none !important;
+  }
+
   .promotion-panel.border-blue-100,
   .promotion-panel .border-blue-100 { border-color: rgb(167 243 208) !important; }
   .promotion-panel.bg-blue-50\/40 { background-color: rgb(236 253 245) !important; }
@@ -560,6 +619,21 @@
   .promotion-panel .hover\:bg-blue-700:hover { background-color: rgb(4 120 87) !important; }
   .promotion-panel .text-blue-700 { color: rgb(4 120 87) !important; }
   .promotion-panel .hover\:bg-blue-50:hover { background-color: rgb(236 253 245) !important; }
+
+  .promotion-panel > div.grid.gap-3.sm\:grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .promotion-panel .grid.gap-3 > div > div.mt-2.space-y-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .promotion-panel .grid.gap-3 > div > div.mt-2.space-y-2 > * {
+    margin-top: 0;
+    min-width: 0;
+  }
 
   section.mt-7.overflow-hidden > div.border-b > div.flex.items-center.gap-2 {
     gap: 0.25rem;
@@ -587,10 +661,6 @@
   section.mt-7.overflow-hidden > div.border-b > div.flex.items-center.gap-2 > button:hover {
     background: white;
     color: rgb(37 99 235);
-  }
-
-  .payment-column > div.mb-4.grid {
-    display: none !important;
   }
 
   .booking-service-selector > nav > div:first-child > div {
@@ -675,7 +745,6 @@
     color: white !important;
     box-shadow: none !important;
   }
-
 
   pre,
   code {

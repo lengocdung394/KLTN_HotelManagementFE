@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { cn } from "./utils";
+import { sumRoomPriceForRange } from "./bookingPricing";
+
+describe("sumRoomPriceForRange", () => {
+  it("should sum room price for each day including nightly surcharge", () => {
+    const room = { id: "A-101" };
+    const range = { checkIn: "2026-09-22", checkOut: "2026-09-24" };
+    const getPriceForDate = (entry: typeof room, date: string) => date === "2026-09-22" ? 100000 : 150000;
+
+    expect(sumRoomPriceForRange(room, range, getPriceForDate, 20000)).toBe(290000);
+  });
+});
 
 describe("cn function", () => {
   it("should merge classes correctly", () => {

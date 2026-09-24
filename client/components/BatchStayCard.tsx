@@ -87,7 +87,13 @@ export default function BatchStayCard({ mode, title, description, items, selecte
           {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
         <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${colors.icon}`}>{isCheckIn ? <LogIn size={17} /> : <LogOut size={17} />}</span>
-        <div><h3 className="font-bold text-slate-900">{title}</h3><p className="mt-1 text-sm text-slate-600">{description}</p></div>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-500">Tên:</span>
+            <h3 className="font-bold text-slate-900">{title}</h3>
+          </div>
+          <p className="mt-1 text-sm text-slate-600">{description}</p>
+        </div>
       </div>
       <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
         {onAddService && <button type="button" onClick={onAddService} className="w-56 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-50">Thêm dịch vụ</button>}

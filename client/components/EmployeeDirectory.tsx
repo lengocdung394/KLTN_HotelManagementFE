@@ -1,13 +1,13 @@
 import { FormEvent, useState } from "react";
 import { Plus, UserRound, X } from "lucide-react";
 
-type Employee = { name: string; role: string; initials: string; color: string };
+type Employee = { id: string; name: string; role: string; initials: string; color: string };
 
 const initialEmployees: Employee[] = [
-  { name: "Nguyễn Thị Mai", role: "Housekeeping", initials: "MM", color: "bg-rose-100 text-rose-700" },
-  { name: "Lê Thị Hương", role: "Housekeeping", initials: "HH", color: "bg-amber-100 text-amber-700" },
-  { name: "Phạm Ngọc Anh", role: "Lễ tân", initials: "AA", color: "bg-blue-100 text-blue-700" },
-  { name: "Trần Minh Tú", role: "Lễ tân", initials: "TT", color: "bg-sky-100 text-sky-700" },
+  { id: "employee-1", name: "Nguyễn Thị Mai", role: "Housekeeping", initials: "MM", color: "bg-rose-100 text-rose-700" },
+  { id: "employee-2", name: "Lê Thị Hương", role: "Housekeeping", initials: "HH", color: "bg-amber-100 text-amber-700" },
+  { id: "employee-3", name: "Phạm Ngọc Anh", role: "Lễ tân", initials: "AA", color: "bg-blue-100 text-blue-700" },
+  { id: "employee-4", name: "Trần Minh Tú", role: "Lễ tân", initials: "TT", color: "bg-sky-100 text-sky-700" },
 ];
 
 export default function EmployeeDirectory() {
@@ -25,7 +25,7 @@ export default function EmployeeDirectory() {
     const trimmedName = name.trim();
     if (!trimmedName) return;
     const initials = trimmedName.split(" ").map((part) => part[0]).slice(-2).join("").toUpperCase();
-    setEmployees((current) => [...current, { name: trimmedName, role, initials, color: role === "Lễ tân" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700" }]);
+    setEmployees((current) => [...current, { id: `employee-${current.length + 1}`, name: trimmedName, role, initials, color: role === "Lễ tân" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700" }]);
     setName("");
     setRole("Lễ tân");
     setEmail("");

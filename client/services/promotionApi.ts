@@ -16,12 +16,13 @@ export type Promotion = {
   startDate: string;
   endDate: string;
   active: boolean;
+  minimumOrderAmount?: number;
   hotelId?: number;
   hotelName?: string;
 };
 
 export type CustomerPromotion = Promotion & {
-  customerId?: number;
+  customerId?: string;
   claimedAt?: string;
   used?: boolean;
 };
@@ -35,23 +36,42 @@ const parseNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const normalizePromotion = (item: PromotionApiResponse): Promotion => ({
-  id: String(valueOf(item, ["id", "promotionId", "promotionID"]) ?? ""),
-  name: String(valueOf(item, ["name", "promotionName", "title"]) ?? "Khuyến mãi"),
-  code: String(valueOf(item, ["code", "promotionCode", "voucherCode"]) ?? ""),
-  description: String(valueOf(item, ["description", "detail", "content"]) ?? ""),
-  value: parseNumber(valueOf(item, ["value", "discountValue", "discount", "percent"])),
-  valueType: String(valueOf(item, ["valueType", "discountType", "type"]) ?? "PERCENTAGE"),
-  startDate: String(valueOf(item, ["startDate", "fromDate", "validFrom", "startAt"]) ?? ""),
-  endDate: String(valueOf(item, ["endDate", "toDate", "validTo", "endAt"]) ?? ""),
-  active: Boolean(valueOf(item, ["active", "isActive", "available"]) ?? true),
-  hotelId: valueOf(item, ["hotelId", "hotelID"]) == null ? undefined : parseNumber(valueOf(item, ["hotelId", "hotelID"])),
-  hotelName: valueOf(item, ["hotelName"]) == null ? undefined : String(valueOf(item, ["hotelName"])),
-});
+const minimumFromDescription = (description: unknown) => {
+  const text = String(description ?? "").toLowerCase().replace(/\s/g, "");
+  const millionMatch = text.match(/từ([\d.,]+)triệu/);
+  if (millionMatch) return parseNumber(millionMatch[1].replace(",", ".")) * 1_000_000;
+  const amountMatch = text.match(/từ([\d.,]+)(?:đ|vnđ|vnd)/);
+  return amountMatch ? parseNumber(amountMatch[1].replace(/\./g, "").replace(",", ".")) : undefined;
+};
+
+const normalizePromotion = (item: PromotionApiResponse): Promotion => {
+  const nestedPromotion = item.promotion;
+  const source = nestedPromotion && typeof nestedPromotion === "object"
+    ? nestedPromotion as PromotionApiResponse
+    : item;
+  const description = valueOf(source, ["description", "detail", "content"]);
+  const minimumValue = valueOf(source, ["minimumOrderAmount", "minOrderAmount", "minimumTotal", "minTotal", "minimumAmount", "minAmount", "minimumBookingAmount", "minBookingValue"])
+    ?? valueOf(item, ["minimumOrderAmount", "minOrderAmount", "minimumTotal", "minTotal", "minimumAmount", "minAmount", "minimumBookingAmount", "minBookingValue"]);
+
+  return {
+    id: String(valueOf(source, ["id", "promotionId", "promotionID"]) ?? valueOf(item, ["promotionId", "promotionID", "id"]) ?? ""),
+    name: String(valueOf(source, ["name", "promotionName", "title"]) ?? "Khuyến mãi"),
+    code: String(valueOf(source, ["code", "promotionCode", "voucherCode"]) ?? ""),
+    description: String(description ?? ""),
+    value: parseNumber(valueOf(source, ["value", "discountValue", "discount", "percent"])),
+    valueType: String(valueOf(source, ["valueType", "discountType", "type"]) ?? "PERCENTAGE"),
+    startDate: String(valueOf(source, ["startDate", "fromDate", "validFrom", "startAt"]) ?? ""),
+    endDate: String(valueOf(source, ["endDate", "toDate", "validTo", "endAt"]) ?? ""),
+    active: Boolean(valueOf(source, ["active", "isActive", "available"]) ?? true),
+    minimumOrderAmount: minimumValue == null ? minimumFromDescription(description) : parseNumber(minimumValue),
+    hotelId: valueOf(source, ["hotelId", "hotelID"]) == null ? undefined : parseNumber(valueOf(source, ["hotelId", "hotelID"])),
+    hotelName: valueOf(source, ["hotelName"]) == null ? undefined : String(valueOf(source, ["hotelName"])),
+  };
+};
 
 const normalizeCustomerPromotion = (item: PromotionApiResponse): CustomerPromotion => ({
   ...normalizePromotion(item),
-  customerId: valueOf(item, ["customerId", "customerID"]) == null ? undefined : parseNumber(valueOf(item, ["customerId", "customerID"])),
+  customerId: valueOf(item, ["customerId", "customerID"]) == null ? undefined : String(valueOf(item, ["customerId", "customerID"])),
   claimedAt: valueOf(item, ["claimedAt", "savedAt", "createdAt"]) == null ? undefined : String(valueOf(item, ["claimedAt", "savedAt", "createdAt"])),
   used: valueOf(item, ["used", "isUsed"]) == null ? undefined : Boolean(valueOf(item, ["used", "isUsed"])),
 });
@@ -77,7 +97,7 @@ export const promotionApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: ApiResponse<unknown>) => extractList(response).map(normalizePromotion).filter((promotion) => promotion.id && promotion.code),
     }),
-    getCustomerPromotions: builder.query<CustomerPromotion[], number>({
+    getCustomerPromotions: builder.query<CustomerPromotion[], string>({
       query: (customerId) => ({ url: `/customer-promotions/customer/${customerId}`, method: "GET" }),
       transformResponse: (response: ApiResponse<unknown>) => extractList(response).map(normalizeCustomerPromotion).filter((promotion) => promotion.id && promotion.code),
     }),
