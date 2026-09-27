@@ -1082,7 +1082,10 @@ export default function RoomWorkspace() {
 
                     <div className="space-y-3 text-sm">
                       <div>
-                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Số lượng người tiêu chuẩn</label>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Số lượng người tiêu chuẩn
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
                         <input
                           type="number"
                           min="1"
@@ -1093,7 +1096,10 @@ export default function RoomWorkspace() {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Số người cho phép ở ghép</label>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Số người cho phép ở ghép
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
                         <input
                           type="number"
                           min="0"
@@ -1104,7 +1110,10 @@ export default function RoomWorkspace() {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Giá phòng / đêm</label>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Giá phòng / đêm
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
                         <div className="relative">
                           <input
                             type="number"
@@ -1119,7 +1128,10 @@ export default function RoomWorkspace() {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Phụ thu người lớn</label>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Phụ thu người lớn
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
                         <div className="relative">
                           <input
                             type="number"
@@ -1134,7 +1146,10 @@ export default function RoomWorkspace() {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Phụ thu trẻ em</label>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Phụ thu trẻ em
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
                         <div className="relative">
                           <input
                             type="number"

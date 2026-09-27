@@ -38,6 +38,112 @@ export type BedTypeResponse = {
 };
 export type RoomDailyPricesResponse = Record<string, Record<string, number>>;
 
+export type RoomSeasonalRate = {
+  id?: string | number;
+  name?: string;
+  rateName?: string;
+  startDate?: string;
+  endDate?: string;
+  roomType?: string | string[] | null;
+  roomTypes?: string[] | string | null;
+  roomTypeAdjustments?: Record<string, number>;
+  percentValue?: number;
+  price?: number;
+  value?: number;
+  modifierType?: string;
+  fixedPrices?: Record<string, number>;
+  colorTheme?: "amber" | "emerald" | "purple" | "rose" | "blue" | string;
+  [key: string]: unknown;
+};
+
+export type RoomSeasonalRatePageResponse = {
+  content: RoomSeasonalRate[];
+  page?: {
+    size?: number;
+    number?: number;
+    totalElements?: number;
+    totalPages?: number;
+  };
+};
+
+export type CreateRoomSeasonalRateRequest = {
+  roomType: string;
+  rateName: string;
+  startDate: string;
+  endDate: string;
+  price: number;
+};
+
+const valueOf = (source: Record<string, unknown>, keys: string[]) =>
+  keys
+    .map((key) => source[key])
+    .find((value) => value !== undefined && value !== null && value !== "");
+
+const parseNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeRoomTypeValues = (value: unknown): string[] => {
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  if (typeof value === "string") {
+    if (value.trim() === "") return [];
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
+const extractRoomSeasonalRatePage = (response: unknown): RoomSeasonalRatePageResponse => {
+  if (Array.isArray(response)) {
+    return { content: response as RoomSeasonalRate[] };
+  }
+
+  if (!response || typeof response !== "object") {
+    return { content: [] };
+  }
+
+  const result = (response as { result?: unknown }).result;
+  if (result && typeof result === "object") {
+    const page = result as { content?: unknown; items?: unknown; data?: unknown; records?: unknown; page?: unknown };
+    const contentArray = [page.content, page.items, page.data, page.records].find(Array.isArray);
+    const innerPage = page.page && typeof page.page === "object" ? (page.page as Record<string, unknown>) : undefined;
+
+    const pageRecord = page as Record<string, unknown>;
+
+    return {
+      content: Array.isArray(contentArray) ? (contentArray as RoomSeasonalRate[]) : [],
+      page: innerPage
+        ? {
+            size: Number(innerPage["size"] ?? pageRecord["size"] ?? 10),
+            number: Number(innerPage["number"] ?? pageRecord["number"] ?? 0),
+            totalElements: Number(innerPage["totalElements"] ?? pageRecord["totalElements"] ?? 0),
+            totalPages: Number(innerPage["totalPages"] ?? pageRecord["totalPages"] ?? 1),
+          }
+        : undefined,
+    };
+  }
+
+  const page = response as { content?: unknown; items?: unknown; data?: unknown; records?: unknown; page?: unknown };
+  const contentArray = [page.content, page.items, page.data, page.records].find(Array.isArray);
+  const responsePage = page.page && typeof page.page === "object" ? (page.page as Record<string, unknown>) : undefined;
+  const pageRecord = page as Record<string, unknown>;
+
+  return {
+    content: Array.isArray(contentArray) ? (contentArray as RoomSeasonalRate[]) : [],
+    page: responsePage
+      ? {
+          size: Number(responsePage["size"] ?? pageRecord["size"] ?? 10),
+          number: Number(responsePage["number"] ?? pageRecord["number"] ?? 0),
+          totalElements: Number(responsePage["totalElements"] ?? pageRecord["totalElements"] ?? 0),
+          totalPages: Number(responsePage["totalPages"] ?? pageRecord["totalPages"] ?? 1),
+        }
+      : undefined,
+  };
+};
+
 export const roomApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     createRoom: builder.mutation<RoomResponse, { roomInfo: { floorId: number; roomStatus: string; roomType: string; basePrice: number; standardCapacity: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; defaultImageIndex: number; amenityIds: number[] }; imageFiles: File[] }>({
@@ -109,7 +215,58 @@ export const roomApi = baseApi.injectEndpoints({
         method: "GET",
       }),
     }),
+
+    getRoomSeasonalRates: builder.query<RoomSeasonalRatePageResponse, { roomType?: string; date?: string; page?: number; size?: number; sort?: string } | void>(
+      {
+        query: (params) => ({
+          url: "/room_seasonal_rates/hotel/by-date",
+          method: "GET",
+          params: {
+            page: 0,
+            size: 10,
+            sort: "startDate,asc",
+            ...params,
+          },
+        }),
+        transformResponse: (response: unknown) => {
+          const pageData = extractRoomSeasonalRatePage(response);
+
+          return {
+            content: pageData.content.map((item) => {
+              const rawId = valueOf(item as Record<string, unknown>, ["id", "roomSeasonalRateId", "seasonalRateId"]);
+              const normalizedId = rawId == null ? String(Date.now() + Math.random()) : String(rawId);
+
+              return {
+                ...item,
+                id: normalizedId,
+                name: String(valueOf(item as Record<string, unknown>, ["rateName", "name", "title", "ruleName", "seasonName"]) ?? "Sự kiện giá"),
+                startDate: String(valueOf(item as Record<string, unknown>, ["startDate", "start_date", "fromDate", "validFrom"]) ?? ""),
+                endDate: String(valueOf(item as Record<string, unknown>, ["endDate", "end_date", "toDate", "validTo"]) ?? ""),
+                roomType: valueOf(item as Record<string, unknown>, ["roomType", "room_type", "type"]) ?? valueOf(item as Record<string, unknown>, ["roomTypes", "room_types"]),
+                roomTypes: normalizeRoomTypeValues(
+                  valueOf(item as Record<string, unknown>, ["roomTypes", "room_types", "appliedRoomTypes"]) ??
+                    valueOf(item as Record<string, unknown>, ["roomType", "room_type", "type"])
+                ),
+                percentValue: parseNumber(
+                  valueOf(item as Record<string, unknown>, ["percentValue", "percent_value", "value", "adjustmentPercent", "ratePercent", "modifierPercent", "discountPercent"]) ?? 0
+                ),
+                colorTheme: (valueOf(item as Record<string, unknown>, ["colorTheme", "color_theme"]) as string | undefined) ?? "emerald",
+              } as RoomSeasonalRate;
+            }),
+            page: pageData.page,
+          };
+        },
+      },
+    ),
+
+    createRoomSeasonalRate: builder.mutation<RoomSeasonalRate[] | unknown, CreateRoomSeasonalRateRequest[]>({
+      query: (payload) => ({
+        url: "/room_seasonal_rates/createSeasonalRate",
+        method: "POST",
+        data: payload,
+      }),
+    }),
   }),
 });
 
-export const { useCreateRoomMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery } = roomApi;
+export const { useCreateRoomMutation, useCreateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery } = roomApi;

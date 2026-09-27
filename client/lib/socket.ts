@@ -21,6 +21,7 @@ type HotelSocketHandlers = {
   onNewBookingNotification?: (data: unknown) => void;
   onCustomerBookingUpdated?: (data: unknown) => void;
   onCustomerCreated?: (data: unknown) => void;
+  onSeasonalRateAnnouncement?: (data: unknown) => void;
 };
 
 let hotelSocketHandlers: HotelSocketHandlers = {};
@@ -91,6 +92,7 @@ export const bindHotelSocketEvents = ({
   onNewBookingNotification,
   onCustomerBookingUpdated,
   onCustomerCreated,
+  onSeasonalRateAnnouncement,
 }: HotelSocketHandlers = {}) => {
   hotelSocketHandlers = {
     ...hotelSocketHandlers,
@@ -99,6 +101,7 @@ export const bindHotelSocketEvents = ({
     ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
     ...(onCustomerBookingUpdated ? { onCustomerBookingUpdated } : {}),
     ...(onCustomerCreated ? { onCustomerCreated } : {}),
+    ...(onSeasonalRateAnnouncement ? { onSeasonalRateAnnouncement } : {}),
   };
 
   if (!socket) return;
@@ -108,6 +111,7 @@ export const bindHotelSocketEvents = ({
   socket.off("new_booking_notification");
   socket.off("customer_booking_updated");
   socket.off("customer_created");
+  socket.off("seasonal_rate_announcement");
 
   if (hotelSocketHandlers.onRoomMatrixUpdated) {
     socket.on("room_matrix_updated", hotelSocketHandlers.onRoomMatrixUpdated);
@@ -127,6 +131,10 @@ export const bindHotelSocketEvents = ({
 
   if (hotelSocketHandlers.onCustomerCreated) {
     socket.on("customer_created", hotelSocketHandlers.onCustomerCreated);
+  }
+
+  if (hotelSocketHandlers.onSeasonalRateAnnouncement) {
+    socket.on("seasonal_rate_announcement", hotelSocketHandlers.onSeasonalRateAnnouncement);
   }
 };
 
@@ -192,6 +200,10 @@ export const initSocket = (token: string | null) => {
     const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
     const roomName = payload.hotelId != null ? `hotel_${payload.hotelId}` : "global";
     console.log("👤 [Socket] customer_created matched room:", roomName);
+  });
+
+  socket.on("seasonal_rate_announcement", (data) => {
+    console.log("📢 [Socket] seasonal_rate_announcement:", data);
   });
 
   attachHotelSocketHandlers();
