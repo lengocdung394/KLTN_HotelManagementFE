@@ -82,6 +82,7 @@ export const roomApi = baseApi.injectEndpoints({
         params: { floorId },
       }),
       transformResponse: (response: ApiResponse<RoomResponse[]>) => response?.result ?? [],
+      providesTags: ["Room"],
     }),
 
     getRoomsByCurrentHotel: builder.query<RoomResponse[], void>({
@@ -99,6 +100,7 @@ export const roomApi = baseApi.injectEndpoints({
         method: "GET",
         params: { hotelId, startDate, endDate },
       }),
+      providesTags: ["Room"],
     }),
 
     getRoomTypeDetail: builder.query<RoomTypeDetailResponse, { hotelId: number; roomType: string }>({

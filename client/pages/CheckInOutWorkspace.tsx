@@ -16,7 +16,9 @@ import {
   type CheckInOutBookingDetail,
 } from "../services/checkInOutApi";
 import { useAppSelector } from "../store/hooks";
+import { useGetRoomMatrixQuery } from "../services/bookingApi";
 import {
+  AlertTriangle,
   CalendarCheck,
   CalendarDays,
   Check,
@@ -60,6 +62,71 @@ type DailyRecord = {
 const toDateParam = (value?: Date) => value
   ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
   : undefined;
+
+const shiftDay = (dateStr: string, delta: number) => {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+};
+
+const matrixValue = (item: Record<string, unknown>, keys: string[]) => {
+  const key = keys.find((candidate) => item[candidate] !== undefined && item[candidate] !== null && item[candidate] !== "");
+  return key ? item[key] : undefined;
+};
+
+const matrixRoomKey = (item: Record<string, unknown>) => {
+  const value = matrixValue(item, ["roomId", "roomID", "room_id", "roomNumber", "roomNo", "roomCode"]);
+  return value === undefined ? undefined : String(value);
+};
+
+type MatrixBusyItem = {
+  roomKey: string;
+  bookingId?: string;
+  startDate: Date;
+  endDate: Date;
+  status?: string;
+};
+
+const extractMatrixBusyRanges = (matrix: unknown[]): MatrixBusyItem[] => {
+  const items: MatrixBusyItem[] = [];
+
+  const walk = (value: unknown, inheritedRoomKey?: string) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => walk(item, inheritedRoomKey));
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+
+    const obj = value as Record<string, unknown>;
+    const roomKey = matrixRoomKey(obj) ?? inheritedRoomKey;
+    const bookingStatus = String(obj.bookingStatus ?? obj.status ?? "").toUpperCase();
+
+    if (bookingStatus === "CANCELLED" || bookingStatus === "CANCELED") return;
+
+    const startVal = matrixValue(obj, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]);
+    const endVal = matrixValue(obj, ["endDate", "end", "checkOutDate", "checkOut", "checkOutTime", "checkoutTime", "bookingEndDate"]);
+    const bId = matrixValue(obj, ["bookingId", "bookingID", "id"]);
+
+    if (roomKey && startVal && endVal) {
+      const startDate = new Date(String(startVal));
+      const endDate = new Date(String(endVal));
+      if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && startDate < endDate) {
+        items.push({
+          roomKey: String(roomKey),
+          bookingId: bId ? String(bId) : undefined,
+          startDate,
+          endDate,
+          status: bookingStatus,
+        });
+      }
+    }
+
+    Object.values(obj).forEach((child) => walk(child, roomKey));
+  };
+
+  walk(matrix);
+  return items;
+};
 
 const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord["flow"]): DailyRecord => {
   const roomNumber = String(detail.roomNumber ?? detail.roomId ?? "-");
@@ -135,6 +202,55 @@ export default function CheckInOutWorkspace() {
   const checkOutQuery = useGetTodayCheckOutsQuery(
     { date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
   );
+
+  const todayStr = date ?? toDateParam(new Date()) ?? new Date().toISOString().slice(0, 10);
+  const matrixStart = shiftDay(todayStr, -3);
+  const matrixEnd = shiftDay(todayStr, 3);
+  const { data: matrixData = [] } = useGetRoomMatrixQuery({ startDate: matrixStart, endDate: matrixEnd });
+
+  const [matrixBlockedNotice, setMatrixBlockedNotice] = useState<{
+    roomNumber: string;
+    message: string;
+  } | null>(null);
+
+  const checkMatrixCheckInConflict = (record: DailyRecord) => {
+    const now = new Date();
+    const [hours, minutes] = record.time.split(":").map(Number);
+    const scheduled = new Date(now);
+    if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
+      scheduled.setHours(hours, minutes, 0, 0);
+    } else {
+      scheduled.setHours(14, 0, 0, 0);
+    }
+
+    if (now >= scheduled) return null;
+
+    const recordRoomNumber = record.room.split(" · ")[0].trim();
+    const currentBookingId = String(record.bookingId ?? record.id ?? "").trim();
+    const busyItems = extractMatrixBusyRanges(matrixData);
+
+    for (const item of busyItems) {
+      const isSameRoom = item.roomKey === recordRoomNumber || record.room.includes(item.roomKey);
+      if (!isSameRoom) continue;
+
+      if (item.bookingId && currentBookingId && (item.bookingId === currentBookingId || currentBookingId.includes(item.bookingId))) {
+        continue;
+      }
+
+      if (now < item.endDate && scheduled > item.startDate) {
+        const formattedEnd = `${String(item.endDate.getHours()).padStart(2, "0")}:${String(item.endDate.getMinutes()).padStart(2, "0")} ${item.endDate.toLocaleDateString("vi-VN")}`;
+        return {
+          roomNumber: recordRoomNumber,
+          conflictBookingId: item.bookingId,
+          busyStart: item.startDate,
+          busyEnd: item.endDate,
+          message: `Phòng ${recordRoomNumber} đang bận trong ma trận phòng (khách trước lưu trú đến ${formattedEnd}). Hệ thống đã chặn làm thủ tục check-in sớm!`,
+        };
+      }
+    }
+
+    return null;
+  };
   const [arrivalState, setArrivalState] = useState<DailyRecord[]>([]);
   const [groupArrivalState, setGroupArrivalState] = useState({
     id: "",
@@ -258,17 +374,20 @@ export default function CheckInOutWorkspace() {
           : record.status === "Đã check-in"
             ? "Đã check-in"
             : "Đã check-out";
-        const addServiceButton = <button type="button" onClick={() => openServiceSelector(record)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50">Thêm dịch vụ</button>;
+    const addServiceButton = <button type="button" onClick={() => openServiceSelector(record)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50">Thêm dịch vụ</button>;
+    const matrixConflict = isCheckIn && record.status === "Chờ check-in" ? checkMatrixCheckInConflict(record) : null;
 
     return (
       <article
         key={record.id}
-        className={`relative mx-4 my-3 flex flex-col gap-4 overflow-hidden rounded-xl border bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${isCheckIn ? "border-blue-200" : "border-amber-200"}`}
+        className={`relative mx-4 my-3 flex flex-col gap-4 overflow-hidden rounded-xl border bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
+          matrixConflict ? "border-rose-300 ring-1 ring-rose-200" : isCheckIn ? "border-blue-200" : "border-amber-200"
+        }`}
       >
         <span className={`absolute right-0 top-0 h-0 w-0 border-b-28 border-l-28 border-b-transparent ${record.roomPaid ? "border-l-emerald-500" : "border-l-rose-500"}`} title={record.roomPaid ? "Đã thanh toán" : "Chưa thanh toán"} aria-label={record.roomPaid ? "Đã thanh toán" : "Chưa thanh toán"} />
         <div className="flex items-center gap-3">
           <div
-            className={`grid h-10 w-10 place-items-center rounded-full ${isCheckIn ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}
+            className={`grid h-10 w-10 place-items-center rounded-full ${matrixConflict ? "bg-rose-100 text-rose-700" : isCheckIn ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}
           >
             {isCheckIn ? <LogIn size={18} /> : <LogOut size={18} />}
           </div>
@@ -283,6 +402,12 @@ export default function CheckInOutWorkspace() {
                 </span>
               )}
             </div>
+            {matrixConflict && (
+              <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/80 p-2.5 text-xs font-semibold text-rose-800 shadow-2xs">
+                <AlertTriangle size={16} className="shrink-0 text-rose-600" />
+                <span>{matrixConflict.message}</span>
+              </div>
+            )}
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Thông tin phòng</p>
               <div className="mt-2 grid gap-1.5 text-xs text-slate-500 sm:grid-cols-3">
@@ -338,6 +463,23 @@ export default function CheckInOutWorkspace() {
                 scheduled.setHours(hours, minutes, 0, 0);
                 const isEarly = isCheckIn && now < scheduled;
                 const isLate = !isCheckIn && now > scheduled;
+
+                if (isCheckIn && isEarly) {
+                  const conflict = checkMatrixCheckInConflict(record);
+                  if (conflict) {
+                    toast({
+                      variant: "destructive",
+                      title: "Chặn check-in sớm (Trùng ma trận phòng)",
+                      description: conflict.message,
+                    });
+                    setMatrixBlockedNotice({
+                      roomNumber: conflict.roomNumber,
+                      message: conflict.message,
+                    });
+                    return;
+                  }
+                }
+
                 if (isLate || isEarly) {
                   setWarningAction({ id: record.id, flow: record.flow, fee: isEarly ? 150000 : 200000, message: isEarly ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.` : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.` });
                 } else if (isCheckIn) {
@@ -346,7 +488,9 @@ export default function CheckInOutWorkspace() {
                   setCheckoutRecord(record);
                 }
               }}
-              className={`flex w-36 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:shadow-md ${isCheckIn ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}
+              className={`flex w-36 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:shadow-md ${
+                matrixConflict ? "bg-rose-600 hover:bg-rose-700" : isCheckIn ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"
+              }`}
             >
               {isCheckIn ? "Check-in" : "Check-out"}
             </button>
@@ -466,6 +610,22 @@ export default function CheckInOutWorkspace() {
   };
 
   const handleBulkCheckIn = async (records: DailyRecord[]) => {
+    for (const record of records) {
+      const conflict = checkMatrixCheckInConflict(record);
+      if (conflict) {
+        toast({
+          variant: "destructive",
+          title: "Chặn check-in sớm (Trùng ma trận phòng)",
+          description: conflict.message,
+        });
+        setMatrixBlockedNotice({
+          roomNumber: conflict.roomNumber,
+          message: conflict.message,
+        });
+        return;
+      }
+    }
+
     const grouped = records.reduce<Record<string, number[]>>((result, record) => {
       const detailId = normalizeDetailId(record.id);
       if (!record.bookingId || detailId === null) return result;
@@ -936,7 +1096,76 @@ export default function CheckInOutWorkspace() {
           </p>
         </div>
       )}
-      {warningAction && <EarlyLateStayNotice action={warningAction.flow} message={warningAction.message} fee={warningAction.fee} onCancel={() => setWarningAction(null)} onConfirm={() => { const action = warningAction; setWarningAction(null); const record = filtered.find((item) => item.id === action.id) ?? null; if (action.flow === "check-in" && record) { void handleBulkCheckIn([record]); } else if (record) { setCheckoutRecord(record); } }} />}
+      {warningAction && (
+        <EarlyLateStayNotice
+          action={warningAction.flow}
+          message={warningAction.message}
+          fee={warningAction.fee}
+          onCancel={() => setWarningAction(null)}
+          onConfirm={() => {
+            const action = warningAction;
+            setWarningAction(null);
+            const record = filtered.find((item) => item.id === action.id) ?? null;
+            if (action.flow === "check-in" && record) {
+              const conflict = checkMatrixCheckInConflict(record);
+              if (conflict) {
+                toast({
+                  variant: "destructive",
+                  title: "Chặn check-in sớm (Trùng ma trận phòng)",
+                  description: conflict.message,
+                });
+                setMatrixBlockedNotice({
+                  roomNumber: conflict.roomNumber,
+                  message: conflict.message,
+                });
+                return;
+              }
+              void handleBulkCheckIn([record]);
+            } else if (record) {
+              setCheckoutRecord(record);
+            }
+          }}
+        />
+      )}
+      {matrixBlockedNotice && (
+        <div
+          className="fixed inset-0 z-60 grid place-items-center bg-slate-950/40 p-4 backdrop-blur-xs"
+          onMouseDown={() => setMatrixBlockedNotice(null)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-150"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3.5 text-rose-600">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-100 text-rose-700">
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Chặn thủ tục Check-in sớm
+                </h3>
+                <p className="mt-0.5 text-xs text-rose-600 font-semibold">
+                  Trùng lịch bận trên Ma trận phòng (GetMatrix)
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-xs font-medium text-slate-700 leading-relaxed">
+              {matrixBlockedNotice.message}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setMatrixBlockedNotice(null)}
+                className="rounded-lg bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 transition-colors shadow-sm"
+              >
+                Đã hiểu & Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {serviceRecord && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setServiceRecord(null)}>
           <div className="booking-service-modal-scroll max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>

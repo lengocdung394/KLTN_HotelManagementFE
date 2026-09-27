@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { cn } from "./utils";
 import { sumRoomPriceForRange } from "./bookingPricing";
+import { CUSTOMER_REFRESH_EVENTS, buildCustomerSocketPayload } from "./socket";
 
 describe("sumRoomPriceForRange", () => {
   it("should sum room price for each day including nightly surcharge", () => {
@@ -9,6 +10,19 @@ describe("sumRoomPriceForRange", () => {
     const getPriceForDate = (entry: typeof room, date: string) => date === "2026-09-22" ? 100000 : 150000;
 
     expect(sumRoomPriceForRange(room, range, getPriceForDate, 20000)).toBe(290000);
+  });
+});
+
+describe("customer socket refresh payload", () => {
+  it("should include hotel id and customer details for customer creation updates", () => {
+    const payload = buildCustomerSocketPayload(12, { id: "c-1", name: "Nguyễn Văn A", phone: "0901234567" });
+
+    expect(CUSTOMER_REFRESH_EVENTS).toContain("customer_created");
+    expect(payload).toMatchObject({
+      hotelId: 12,
+      customer: { id: "c-1", name: "Nguyễn Văn A", phone: "0901234567" },
+    });
+    expect(payload.createdAt).toBeTypeOf("string");
   });
 });
 

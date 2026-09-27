@@ -46,6 +46,12 @@ export type BookingListItem = {
   roomTotal?: number;
   serviceTotal?: number;
   discountTotal?: number;
+  discountRoomAmount?: number;
+  discountServiceAmount?: number;
+  discountAmountTotal?: number;
+  paidAmount?: number;
+  remainingAmount?: number;
+  customerDueAmount?: number;
   finalAmount?: number;
   bookingDetails?: Record<string, unknown>[];
   [key: string]: unknown;

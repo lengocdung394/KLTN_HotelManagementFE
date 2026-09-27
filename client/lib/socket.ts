@@ -4,13 +4,38 @@ const SOCKET_URL = "http://localhost:8085";
 
 let socket: Socket | null = null;
 
+export const CUSTOMER_REFRESH_EVENTS = ["customer_created", "customer_booking_updated"] as const;
+
+export const buildCustomerSocketPayload = (
+  hotelId: string | number | null | undefined,
+  customer: Record<string, unknown> | null | undefined,
+) => ({
+  hotelId: hotelId === null || hotelId === undefined || hotelId === "" ? null : Number(hotelId),
+  customer: customer ?? null,
+  createdAt: new Date().toISOString(),
+});
+
 type HotelSocketHandlers = {
   onRoomMatrixUpdated?: (data: unknown) => void;
+  onRoomPolicyUpdated?: (data: unknown) => void;
   onNewBookingNotification?: (data: unknown) => void;
   onCustomerBookingUpdated?: (data: unknown) => void;
+  onCustomerCreated?: (data: unknown) => void;
 };
 
 let hotelSocketHandlers: HotelSocketHandlers = {};
+const pendingCustomerEvents: Array<{ event: "customer_created"; payload: Record<string, unknown> }> = [];
+
+const flushPendingCustomerEvents = () => {
+  if (!socket || !socket.connected) return;
+
+  while (pendingCustomerEvents.length > 0) {
+    const queuedEvent = pendingCustomerEvents.shift();
+    if (!queuedEvent) continue;
+    socket.emit(queuedEvent.event, queuedEvent.payload);
+    console.log("📦 [Socket] flushed queued customer event:", queuedEvent.event, queuedEvent.payload);
+  }
+};
 
 const decodeJwtPayload = (token: string) => {
   try {
@@ -62,31 +87,46 @@ const getCurrentHotelId = () => {
 
 export const bindHotelSocketEvents = ({
   onRoomMatrixUpdated,
+  onRoomPolicyUpdated,
   onNewBookingNotification,
   onCustomerBookingUpdated,
+  onCustomerCreated,
 }: HotelSocketHandlers = {}) => {
   hotelSocketHandlers = {
-    onRoomMatrixUpdated,
-    onNewBookingNotification,
-    onCustomerBookingUpdated,
+    ...hotelSocketHandlers,
+    ...(onRoomMatrixUpdated ? { onRoomMatrixUpdated } : {}),
+    ...(onRoomPolicyUpdated ? { onRoomPolicyUpdated } : {}),
+    ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
+    ...(onCustomerBookingUpdated ? { onCustomerBookingUpdated } : {}),
+    ...(onCustomerCreated ? { onCustomerCreated } : {}),
   };
 
   if (!socket) return;
 
   socket.off("room_matrix_updated");
+  socket.off("room_policy_updated");
   socket.off("new_booking_notification");
   socket.off("customer_booking_updated");
+  socket.off("customer_created");
 
-  if (onRoomMatrixUpdated) {
-    socket.on("room_matrix_updated", onRoomMatrixUpdated);
+  if (hotelSocketHandlers.onRoomMatrixUpdated) {
+    socket.on("room_matrix_updated", hotelSocketHandlers.onRoomMatrixUpdated);
   }
 
-  if (onNewBookingNotification) {
-    socket.on("new_booking_notification", onNewBookingNotification);
+  if (hotelSocketHandlers.onRoomPolicyUpdated) {
+    socket.on("room_policy_updated", hotelSocketHandlers.onRoomPolicyUpdated);
   }
 
-  if (onCustomerBookingUpdated) {
-    socket.on("customer_booking_updated", onCustomerBookingUpdated);
+  if (hotelSocketHandlers.onNewBookingNotification) {
+    socket.on("new_booking_notification", hotelSocketHandlers.onNewBookingNotification);
+  }
+
+  if (hotelSocketHandlers.onCustomerBookingUpdated) {
+    socket.on("customer_booking_updated", hotelSocketHandlers.onCustomerBookingUpdated);
+  }
+
+  if (hotelSocketHandlers.onCustomerCreated) {
+    socket.on("customer_created", hotelSocketHandlers.onCustomerCreated);
   }
 };
 
@@ -127,10 +167,16 @@ export const initSocket = (token: string | null) => {
       socket?.emit("join_hotel_room", String(hotelId));
       console.log("🏢 [Socket] join_hotel_room emitted:", hotelId);
     }
+
+    flushPendingCustomerEvents();
   });
 
   socket.on("room_matrix_updated", (data) => {
     console.log("📅 [Socket] room_matrix_updated:", data);
+  });
+
+  socket.on("room_policy_updated", (data) => {
+    console.log("💰 [Socket] room_policy_updated:", data);
   });
 
   socket.on("new_booking_notification", (data) => {
@@ -139,6 +185,13 @@ export const initSocket = (token: string | null) => {
 
   socket.on("customer_booking_updated", (data) => {
     console.log("👤 [Socket] customer_booking_updated:", data);
+  });
+
+  socket.on("customer_created", (data) => {
+    console.log("👤 [Socket] customer_created:", data);
+    const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const roomName = payload.hotelId != null ? `hotel_${payload.hotelId}` : "global";
+    console.log("👤 [Socket] customer_created matched room:", roomName);
   });
 
   attachHotelSocketHandlers();
@@ -159,6 +212,28 @@ export const disconnectSocket = () => {
     socket.disconnect();
     socket = null;
   }
+};
+
+export const emitCustomerCreated = (
+  hotelId: string | number | null | undefined,
+  customer: Record<string, unknown> | null | undefined,
+) => {
+  const payload = buildCustomerSocketPayload(hotelId, customer);
+
+  if (!socket) {
+    pendingCustomerEvents.push({ event: "customer_created", payload });
+    console.log("👤 [Socket] queued customer_created until socket connects:", payload);
+    return;
+  }
+
+  if (!socket.connected) {
+    pendingCustomerEvents.push({ event: "customer_created", payload });
+    console.log("👤 [Socket] queued customer_created while offline:", payload);
+    return;
+  }
+
+  socket.emit("customer_created", payload);
+  console.log("👤 [Socket] customer_created emitted:", payload);
 };
 
 export const joinUserRoom = (userId: string | number | null) => {

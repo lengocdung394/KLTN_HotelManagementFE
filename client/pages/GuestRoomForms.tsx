@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, UserRound } from "lucide-react";
+import { emitCustomerCreated } from "../lib/socket";
 import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazyGetCustomerByIdQuery, type CustomerResponse } from "../services/customerApi";
 import { useAppSelector } from "../store/hooks";
 
@@ -89,6 +90,14 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     try {
       const customer = await createWalkInCustomer({ fullName: guest.name.trim(), phone: guest.phone.trim(), cccd: guest.identityNumber.trim() }).unwrap();
       onGuestChange({ ...guest, customerId: String(customer.id) });
+      emitCustomerCreated(hotelId, {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        identityNumber: customer.identityNumber,
+        tier: customer.tier,
+      });
     } catch (error) {
       const message = getCustomerErrorMessage(error);
       console.error("[booking] create walk-in customer failed", error);

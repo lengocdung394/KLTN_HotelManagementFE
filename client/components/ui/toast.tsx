@@ -28,11 +28,11 @@ const toastVariants = cva(
     variants: {
       variant: {
         default:
-          "border-emerald-400/50 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 border-l-4 border-l-emerald-300",
+          "border-2 border-yellow-400 bg-yellow-100 text-slate-900 shadow-[0_8px_24px_rgba(250,204,21,0.28)]",
         success:
-          "border-emerald-400/50 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 border-l-4 border-l-emerald-300",
+          "border-2 border-yellow-400 bg-yellow-100 text-slate-900 shadow-[0_8px_24px_rgba(250,204,21,0.28)]",
         booking:
-          "border border-blue-500/70 bg-white/80 text-slate-800 shadow-lg shadow-blue-200/60 backdrop-blur-sm border-l-4 border-l-blue-500",
+          "border-2 border-yellow-400 bg-yellow-50 text-slate-800 shadow-[0_8px_24px_rgba(250,204,21,0.22)]",
         destructive:
           "destructive group border-rose-400/50 bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 text-white shadow-lg shadow-rose-600/25 border-l-4 border-l-rose-300",
       },
@@ -80,7 +80,7 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-2 top-2 rounded-full p-1.5 text-white/70 transition-all hover:bg-white/20 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/40",
+      "absolute right-2 top-2 rounded-full bg-yellow-200/80 p-1.5 text-amber-900/80 transition-all hover:bg-yellow-300 hover:text-amber-950 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-yellow-400/50",
       className,
     )}
     toast-close=""
