@@ -67,6 +67,7 @@ export type RoomSeasonalRatePageResponse = {
 };
 
 export type CreateRoomSeasonalRateRequest = {
+  id?: number | string;
   roomType: string;
   rateName: string;
   startDate: string;
@@ -96,7 +97,7 @@ const normalizeRoomTypeValues = (value: unknown): string[] => {
   return [];
 };
 
-const extractRoomSeasonalRatePage = (response: unknown): RoomSeasonalRatePageResponse => {
+export const extractRoomSeasonalRatePage = (response: unknown): RoomSeasonalRatePageResponse => {
   if (Array.isArray(response)) {
     return { content: response as RoomSeasonalRate[] };
   }
@@ -105,40 +106,48 @@ const extractRoomSeasonalRatePage = (response: unknown): RoomSeasonalRatePageRes
     return { content: [] };
   }
 
-  const result = (response as { result?: unknown }).result;
-  if (result && typeof result === "object") {
-    const page = result as { content?: unknown; items?: unknown; data?: unknown; records?: unknown; page?: unknown };
-    const contentArray = [page.content, page.items, page.data, page.records].find(Array.isArray);
-    const innerPage = page.page && typeof page.page === "object" ? (page.page as Record<string, unknown>) : undefined;
+  const responseObj = response as Record<string, unknown>;
+  const result = responseObj.result;
 
-    const pageRecord = page as Record<string, unknown>;
+  const contentSources = [
+    Array.isArray(result) ? result : undefined,
+    result && typeof result === "object" ? (result as Record<string, unknown>).content : undefined,
+    result && typeof result === "object" ? (result as Record<string, unknown>).items : undefined,
+    result && typeof result === "object" ? (result as Record<string, unknown>).data : undefined,
+    result && typeof result === "object" ? (result as Record<string, unknown>).records : undefined,
+    responseObj.content,
+    responseObj.items,
+    responseObj.data,
+    responseObj.records,
+  ];
 
-    return {
-      content: Array.isArray(contentArray) ? (contentArray as RoomSeasonalRate[]) : [],
-      page: innerPage
-        ? {
-            size: Number(innerPage["size"] ?? pageRecord["size"] ?? 10),
-            number: Number(innerPage["number"] ?? pageRecord["number"] ?? 0),
-            totalElements: Number(innerPage["totalElements"] ?? pageRecord["totalElements"] ?? 0),
-            totalPages: Number(innerPage["totalPages"] ?? pageRecord["totalPages"] ?? 1),
-          }
-        : undefined,
-    };
-  }
+  const contentArray = contentSources.find(Array.isArray) as RoomSeasonalRate[] | undefined;
 
-  const page = response as { content?: unknown; items?: unknown; data?: unknown; records?: unknown; page?: unknown };
-  const contentArray = [page.content, page.items, page.data, page.records].find(Array.isArray);
-  const responsePage = page.page && typeof page.page === "object" ? (page.page as Record<string, unknown>) : undefined;
-  const pageRecord = page as Record<string, unknown>;
+  const pageObject =
+    (result && typeof result === "object" && (result as Record<string, unknown>).page && typeof (result as Record<string, unknown>).page === "object"
+      ? ((result as Record<string, unknown>).page as Record<string, unknown>)
+      : responseObj.page && typeof responseObj.page === "object"
+        ? (responseObj.page as Record<string, unknown>)
+        : undefined);
+
+  const size = Number(pageObject?.size ?? pageObject?.pageSize ?? responseObj.size ?? 10);
+  const number = Number(pageObject?.number ?? pageObject?.pageNumber ?? responseObj.number ?? 0);
+  const totalElements = Number(pageObject?.totalElements ?? pageObject?.total ?? responseObj.totalElements ?? responseObj.total ?? 0);
+  const totalPages = Number(
+    pageObject?.totalPages ??
+      pageObject?.totalPage ??
+      responseObj.totalPages ??
+      (size > 0 && totalElements > 0 ? Math.ceil(totalElements / size) : 1)
+  );
 
   return {
-    content: Array.isArray(contentArray) ? (contentArray as RoomSeasonalRate[]) : [],
-    page: responsePage
+    content: Array.isArray(contentArray) ? contentArray : [],
+    page: pageObject
       ? {
-          size: Number(responsePage["size"] ?? pageRecord["size"] ?? 10),
-          number: Number(responsePage["number"] ?? pageRecord["number"] ?? 0),
-          totalElements: Number(responsePage["totalElements"] ?? pageRecord["totalElements"] ?? 0),
-          totalPages: Number(responsePage["totalPages"] ?? pageRecord["totalPages"] ?? 1),
+          size: Number.isFinite(size) ? size : 10,
+          number: Number.isFinite(number) ? number : 0,
+          totalElements: Number.isFinite(totalElements) ? totalElements : 0,
+          totalPages: Number.isFinite(totalPages) ? totalPages : 1,
         }
       : undefined,
   };
@@ -259,14 +268,65 @@ export const roomApi = baseApi.injectEndpoints({
       },
     ),
 
+    getRoomSeasonalRatesByMonth: builder.query<RoomSeasonalRatePageResponse, { hotelId: number; month: number; year: number }>(
+      {
+        query: ({ hotelId, month, year }) => ({
+          url: `/room_seasonal_rates/hotel/${hotelId}/monthly`,
+          method: "GET",
+          params: {
+            month,
+            year,
+          },
+        }),
+        transformResponse: (response: unknown) => {
+          const pageData = extractRoomSeasonalRatePage(response);
+
+          return {
+            content: pageData.content.map((item) => {
+              const rawId = valueOf(item as Record<string, unknown>, ["id", "roomSeasonalRateId", "seasonalRateId"]);
+              const normalizedId = rawId == null ? String(Date.now() + Math.random()) : String(rawId);
+
+              return {
+                ...item,
+                id: normalizedId,
+                name: String(valueOf(item as Record<string, unknown>, ["rateName", "name", "title", "ruleName", "seasonName"]) ?? "Sự kiện giá"),
+                startDate: String(valueOf(item as Record<string, unknown>, ["startDate", "start_date", "fromDate", "validFrom"]) ?? ""),
+                endDate: String(valueOf(item as Record<string, unknown>, ["endDate", "end_date", "toDate", "validTo"]) ?? ""),
+                roomType: valueOf(item as Record<string, unknown>, ["roomType", "room_type", "type"]) ?? valueOf(item as Record<string, unknown>, ["roomTypes", "room_types"]),
+                roomTypes: normalizeRoomTypeValues(
+                  valueOf(item as Record<string, unknown>, ["roomTypes", "room_types", "appliedRoomTypes"]) ??
+                    valueOf(item as Record<string, unknown>, ["roomType", "room_type", "type"])
+                ),
+                percentValue: parseNumber(
+                  valueOf(item as Record<string, unknown>, ["percentValue", "percent_value", "value", "adjustmentPercent", "ratePercent", "modifierPercent", "discountPercent"]) ?? 0
+                ),
+                colorTheme: (valueOf(item as Record<string, unknown>, ["colorTheme", "color_theme"]) as string | undefined) ?? "emerald",
+              } as RoomSeasonalRate;
+            }),
+            page: pageData.page,
+          };
+        },
+      },
+    ),
+
     createRoomSeasonalRate: builder.mutation<RoomSeasonalRate[] | unknown, CreateRoomSeasonalRateRequest[]>({
       query: (payload) => ({
         url: "/room_seasonal_rates/createSeasonalRate",
         method: "POST",
         data: payload,
       }),
+      invalidatesTags: ["Room"],
+    }),
+
+    updateRoomSeasonalRate: builder.mutation<RoomSeasonalRate[] | unknown, CreateRoomSeasonalRateRequest[]>({
+      query: (payload) => ({
+        url: "/room_seasonal_rates/updateSeasonalRate",
+        method: "POST",
+        data: payload,
+      }),
+      invalidatesTags: ["Room"],
     }),
   }),
 });
 
-export const { useCreateRoomMutation, useCreateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery } = roomApi;
+export const { useCreateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;

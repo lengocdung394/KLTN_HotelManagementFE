@@ -1,4 +1,5 @@
 import { toast } from "@/components/ui/use-toast";
+import DatePickerPopover from "../components/DatePickerPopover";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -178,99 +179,32 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
 
 function DatePicker({ label, value, min, onChange }: { label: string; value: string; min?: string; onChange: (value: string) => void }) {
   const { t, i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const [viewDate, setViewDate] = useState(() => value ? new Date(`${value}T00:00:00`) : new Date(2026, 8, 1));
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const monthLabel = viewDate.toLocaleDateString(i18n.language === "en" ? "en-US" : "vi-VN", { month: "long", year: "numeric" });
-  const pickerId = label === t("booking.checkInDate") ? "check-in" : "check-out";
-  useEffect(() => { const openPicker = () => setOpen(true); window.addEventListener(`open-${pickerId}`, openPicker); return () => window.removeEventListener(`open-${pickerId}`, openPicker); }, [pickerId]);
-  useEffect(() => {
-    const handleOutsidePointerDown = (event: PointerEvent) => {
-      if (open && pickerRef.current && !pickerRef.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", handleOutsidePointerDown);
-    return () => document.removeEventListener("pointerdown", handleOutsidePointerDown);
-  }, [open]);
-  const today = todayLocal();
-  const selectDay = (day: number) => {
-    const next = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (!min || next >= min) onChange(next);
+
+  const formatDateForInput = (date: Date | undefined) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
-  const selectToday = () => { const current = new Date(); const date = current.toISOString().slice(0, 10); if (!min || date >= min) { onChange(date); setViewDate(new Date(current.getFullYear(), current.getMonth(), 1)); } };
+
   return (
     <div className="relative z-50">
       <p className="text-xs font-bold text-slate-700">{label}</p>
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="mt-1.5 flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 text-left text-xs font-semibold text-slate-800 outline-none transition duration-150 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-      >
-        <span>{formatDateLabel(value, t("booking.noDateSelected"), i18n.language)}</span>
-        <CalendarDays size={16} className="text-blue-600" />
-      </button>
-
-      {open && (
-        <div ref={pickerRef} className="absolute left-0 top-[4.5rem] z-50 w-[min(19rem,calc(100vw-2rem))] rounded-3xl border border-slate-200/90 bg-white p-4 shadow-2xl backdrop-blur-xs">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-            <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
-              <ChevronLeft size={16} />
-            </button>
-            <p className="text-xs font-extrabold capitalize tracking-wide text-slate-800">{monthLabel}</p>
-            <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
-              <ChevronRight size={16} />
-            </button>
-          </div>
-
-          <div className="mt-3 grid grid-cols-7 text-center text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-            {["sunShort", "monShort", "tueShort", "wedShort", "thuShort", "friShort", "satShort"].map((day) => (
-              <span key={day} className="py-1">{t(`calendar.${day}`)}</span>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 mt-1">
-            {Array.from({ length: firstDay }, (_, index) => <span key={`empty-${index}`} />)}
-            {Array.from({ length: daysInMonth }, (_, index) => {
-              const day = index + 1;
-              const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-              const disabled = Boolean(min && date < min);
-              const isSelected = date === value;
-              const isToday = date === today;
-
-              return (
-                <button
-                  type="button"
-                  key={date}
-                  disabled={disabled}
-                  onClick={() => selectDay(day)}
-                  className={`grid aspect-square place-items-center rounded-xl text-xs font-bold transition duration-150 ${
-                    disabled
-                      ? "cursor-not-allowed text-slate-300 opacity-40"
-                      : isSelected
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs shadow-blue-300"
-                      : isToday
-                      ? "border-2 border-blue-500 text-blue-700 bg-blue-50/50"
-                      : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
-                  }`}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={selectToday}
-            className="mt-3 w-full rounded-xl bg-slate-100 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-50 hover:text-blue-800"
-          >
-            {t("booking.today", "Hôm nay")}
-          </button>
-        </div>
-      )}
+      <div className="mt-1.5">
+        <DatePickerPopover
+          value={value ? new Date(`${value}T00:00:00`) : undefined}
+          onChange={(nextDate) => {
+            if (!nextDate) return;
+            const nextValue = formatDateForInput(nextDate);
+            if (!min || nextValue >= min) {
+              onChange(nextValue);
+            }
+          }}
+          placeholder={t("booking.noDateSelected", "Chọn ngày")}
+          buttonClassName="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 text-left text-xs font-semibold text-slate-800 outline-none transition duration-150 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+        />
+      </div>
     </div>
   );
 }
@@ -313,6 +247,10 @@ function DesktopCalendar({
   const todayValue = todayLocal();
   const [timelineStart, setTimelineStart] = useState(todayValue);
   const [timelinePickerOpen, setTimelinePickerOpen] = useState(false);
+  const [timelinePickerMonth, setTimelinePickerMonth] = useState(() => new Date(`${todayValue}T00:00:00`));
+  useEffect(() => {
+    setTimelinePickerMonth(new Date(`${timelineStart}T00:00:00`));
+  }, [timelineStart]);
   const stableTimeline = useMemo(() => {
     const start = new Date(`${timelineStart}T00:00:00`);
 
@@ -348,6 +286,9 @@ function DesktopCalendar({
       },
       onNewBookingNotification: () => {
         dispatch(baseApi.util.invalidateTags(["Booking", "Room"]));
+      },
+      onSeasonalRateAnnouncementUpdate: () => {
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking", "BranchRoomPolicy"]));
       },
     });
   }, [dispatch, hotelId]);
@@ -571,21 +512,100 @@ function DesktopCalendar({
             {formatRange(shiftDay(timelineStart, 7))} <ChevronRight size={15} />
           </button>
 
-          {timelinePickerOpen && (
-            <div className="absolute right-0 top-12 z-50 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xl">
-              <label className="block text-xs font-bold text-slate-700">{t("booking.selectDate", "Chọn ngày bắt đầu")}</label>
-              <input
-                type="date"
-                min={todayValue}
-                value={timelineStart}
-                onChange={(event) => {
-                  setTimelineStart(event.target.value);
-                  setTimelinePickerOpen(false);
-                }}
-                className="mt-2 h-9 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-              />
-            </div>
-          )}
+          {timelinePickerOpen && (() => {
+            const pickerYear = timelinePickerMonth.getFullYear();
+            const pickerMonth = timelinePickerMonth.getMonth();
+            const firstDayOfMonth = new Date(pickerYear, pickerMonth, 1).getDay();
+            const daysInMonth = new Date(pickerYear, pickerMonth + 1, 0).getDate();
+            const monthLabel = timelinePickerMonth.toLocaleDateString("vi-VN", { month: "long", year: "numeric" });
+            const selectedDate = new Date(`${timelineStart}T00:00:00`);
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0);
+
+            return (
+              <div className="absolute right-0 top-12 z-50 w-[min(19rem,calc(100vw-2rem))] rounded-[1.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_18px_45px_rgba(15,23,42,0.12)]">
+                <div className="flex items-center justify-between pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setTimelinePickerMonth(new Date(pickerYear, pickerMonth - 1, 1))}
+                    className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Tháng trước"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p>
+
+                  <button
+                    type="button"
+                    onClick={() => setTimelinePickerMonth(new Date(pickerYear, pickerMonth + 1, 1))}
+                    className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Tháng sau"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                  {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map((day) => (
+                    <span key={day} className="py-1">{day}</span>
+                  ))}
+                </div>
+
+                <div className="mt-1 grid grid-cols-7 gap-1">
+                  {Array.from({ length: firstDayOfMonth }, (_, index) => (
+                    <span key={`empty-${index}`} className="h-9 w-9" />
+                  ))}
+
+                  {Array.from({ length: daysInMonth }, (_, index) => {
+                    const day = index + 1;
+                    const date = new Date(pickerYear, pickerMonth, day);
+                    const isSelected = date.toDateString() === selectedDate.toDateString();
+                    const isToday = date.toDateString() === todayDate.toDateString();
+                    const isDisabled = date < todayDate;
+
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => {
+                          const nextDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                          setTimelineStart(nextDate);
+                          setTimelinePickerOpen(false);
+                        }}
+                        className={`grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
+                          isSelected
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : isDisabled
+                              ? "cursor-not-allowed text-slate-300"
+                              : isToday
+                                ? "border border-blue-200 bg-blue-50 font-bold text-blue-700"
+                                : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = new Date();
+                    const nextDate = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+                    setTimelineStart(nextDate);
+                    setTimelinePickerOpen(false);
+                  }}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                >
+                  <Check size={14} />
+                  Hôm nay
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

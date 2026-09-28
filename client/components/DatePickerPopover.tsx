@@ -1,31 +1,67 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 interface DatePickerPopoverProps {
   value?: Date;
   onChange: (date: Date | undefined) => void;
+  onMonthChange?: (month: Date) => void;
   placeholder?: string;
   buttonClassName?: string;
   align?: "start" | "center" | "end";
   label?: string;
+  highlightDates?: Array<Date | string>;
 }
 
 const weekDays = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
+const normalizeCalendarDateKey = (value: Date | string) => {
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+
+  if (typeof value !== "string") return "";
+
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const isoMatch = trimmed.match(/^\d{4}-\d{2}-\d{2}/);
+  const dateFromIso = isoMatch ? isoMatch[0] : trimmed.split("T")[0];
+  if (dateFromIso && /^\d{4}-\d{2}-\d{2}$/.test(dateFromIso)) {
+    return dateFromIso;
+  }
+
+  const slashMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+};
+
 export default function DatePickerPopover({
   value,
   onChange,
+  onMonthChange,
   placeholder = "Chọn ngày",
   buttonClassName,
   align = "end",
   label,
+  highlightDates = [],
 }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(() => {
     const current = value ?? new Date();
     return new Date(current.getFullYear(), current.getMonth(), 1);
   });
+
+  useEffect(() => {
+    if (!value) return;
+    setPickerMonth(new Date(value.getFullYear(), value.getMonth(), 1));
+  }, [value?.getTime()]);
 
   const pickerMonthLabel = useMemo(
     () =>
@@ -35,6 +71,29 @@ export default function DatePickerPopover({
       }),
     [pickerMonth],
   );
+
+  const highlightDateKeys = useMemo(() => {
+    const keys = new Set<string>();
+
+    highlightDates.forEach((dateValue) => {
+      if (!dateValue) return;
+
+      const date = typeof dateValue === "string"
+        ? dateValue.trim()
+        : dateValue instanceof Date
+          ? dateValue
+          : null;
+
+      if (!date) return;
+
+      const normalizedKey = normalizeCalendarDateKey(date);
+      if (!normalizedKey) return;
+
+      keys.add(normalizedKey);
+    });
+
+    return keys;
+  }, [highlightDates]);
 
   const pickerYear = pickerMonth.getFullYear();
   const pickerMonthIndex = pickerMonth.getMonth();
@@ -68,7 +127,11 @@ export default function DatePickerPopover({
         <div className="flex items-center justify-between pb-3">
           <button
             type="button"
-            onClick={() => setPickerMonth(new Date(pickerYear, pickerMonthIndex - 1, 1))}
+            onClick={() => {
+              const nextMonth = new Date(pickerYear, pickerMonthIndex - 1, 1);
+              setPickerMonth(nextMonth);
+              onMonthChange?.(nextMonth);
+            }}
             className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
             aria-label="Tháng trước"
           >
@@ -79,7 +142,11 @@ export default function DatePickerPopover({
 
           <button
             type="button"
-            onClick={() => setPickerMonth(new Date(pickerYear, pickerMonthIndex + 1, 1))}
+            onClick={() => {
+              const nextMonth = new Date(pickerYear, pickerMonthIndex + 1, 1);
+              setPickerMonth(nextMonth);
+              onMonthChange?.(nextMonth);
+            }}
             className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
             aria-label="Tháng sau"
           >
@@ -103,8 +170,10 @@ export default function DatePickerPopover({
           {Array.from({ length: daysInMonth }, (_, index) => {
             const day = index + 1;
             const date = new Date(pickerYear, pickerMonthIndex, day);
+            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             const isSelected = value && date.toDateString() === value.toDateString();
             const isToday = date.toDateString() === today.toDateString();
+            const isHighlighted = highlightDateKeys.has(dateKey);
 
             return (
               <button
@@ -112,14 +181,17 @@ export default function DatePickerPopover({
                 type="button"
                 onClick={() => {
                   onChange(date);
+                  setPickerMonth(new Date(date.getFullYear(), date.getMonth(), 1));
                   setOpen(false);
                 }}
                 className={`grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
                   isSelected
                     ? "bg-blue-600 text-white shadow-sm"
-                    : isToday
-                      ? "border border-blue-200 bg-blue-50 font-bold text-blue-700"
-                      : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                    : isHighlighted
+                      ? "border border-emerald-300 bg-emerald-100 font-bold text-emerald-800 shadow-sm"
+                      : isToday
+                        ? "border border-blue-200 bg-blue-50 font-bold text-blue-700"
+                        : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
                 }`}
               >
                 {day}
@@ -133,7 +205,9 @@ export default function DatePickerPopover({
           onClick={() => {
             const current = new Date();
             onChange(current);
-            setPickerMonth(new Date(current.getFullYear(), current.getMonth(), 1));
+            const nextMonth = new Date(current.getFullYear(), current.getMonth(), 1);
+            setPickerMonth(nextMonth);
+            onMonthChange?.(nextMonth);
             setOpen(false);
           }}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"

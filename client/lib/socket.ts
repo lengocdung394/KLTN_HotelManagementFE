@@ -5,6 +5,7 @@ const SOCKET_URL = "http://localhost:8085";
 let socket: Socket | null = null;
 
 export const CUSTOMER_REFRESH_EVENTS = ["customer_created", "customer_booking_updated"] as const;
+export const SEASONAL_RATE_UPDATE_EVENT = "seasonal_rate_announcement_update";
 
 export const buildCustomerSocketPayload = (
   hotelId: string | number | null | undefined,
@@ -15,6 +16,16 @@ export const buildCustomerSocketPayload = (
   createdAt: new Date().toISOString(),
 });
 
+export const buildSeasonalRateSocketPayload = (
+  hotelId: string | number | null | undefined,
+  rateData: Record<string, unknown> | Record<string, unknown>[] | null | undefined,
+) => ({
+  hotelId: hotelId === null || hotelId === undefined || hotelId === "" ? null : Number(hotelId),
+  event: SEASONAL_RATE_UPDATE_EVENT,
+  data: Array.isArray(rateData) ? rateData : rateData ? [rateData] : [],
+  createdAt: new Date().toISOString(),
+});
+
 type HotelSocketHandlers = {
   onRoomMatrixUpdated?: (data: unknown) => void;
   onRoomPolicyUpdated?: (data: unknown) => void;
@@ -22,6 +33,7 @@ type HotelSocketHandlers = {
   onCustomerBookingUpdated?: (data: unknown) => void;
   onCustomerCreated?: (data: unknown) => void;
   onSeasonalRateAnnouncement?: (data: unknown) => void;
+  onSeasonalRateAnnouncementUpdate?: (data: unknown) => void;
 };
 
 let hotelSocketHandlers: HotelSocketHandlers = {};
@@ -93,6 +105,7 @@ export const bindHotelSocketEvents = ({
   onCustomerBookingUpdated,
   onCustomerCreated,
   onSeasonalRateAnnouncement,
+  onSeasonalRateAnnouncementUpdate,
 }: HotelSocketHandlers = {}) => {
   hotelSocketHandlers = {
     ...hotelSocketHandlers,
@@ -102,6 +115,7 @@ export const bindHotelSocketEvents = ({
     ...(onCustomerBookingUpdated ? { onCustomerBookingUpdated } : {}),
     ...(onCustomerCreated ? { onCustomerCreated } : {}),
     ...(onSeasonalRateAnnouncement ? { onSeasonalRateAnnouncement } : {}),
+    ...(onSeasonalRateAnnouncementUpdate ? { onSeasonalRateAnnouncementUpdate } : {}),
   };
 
   if (!socket) return;
@@ -112,6 +126,7 @@ export const bindHotelSocketEvents = ({
   socket.off("customer_booking_updated");
   socket.off("customer_created");
   socket.off("seasonal_rate_announcement");
+  socket.off(SEASONAL_RATE_UPDATE_EVENT);
 
   if (hotelSocketHandlers.onRoomMatrixUpdated) {
     socket.on("room_matrix_updated", hotelSocketHandlers.onRoomMatrixUpdated);
@@ -135,6 +150,10 @@ export const bindHotelSocketEvents = ({
 
   if (hotelSocketHandlers.onSeasonalRateAnnouncement) {
     socket.on("seasonal_rate_announcement", hotelSocketHandlers.onSeasonalRateAnnouncement);
+  }
+
+  if (hotelSocketHandlers.onSeasonalRateAnnouncementUpdate) {
+    socket.on(SEASONAL_RATE_UPDATE_EVENT, hotelSocketHandlers.onSeasonalRateAnnouncementUpdate);
   }
 };
 
@@ -204,6 +223,10 @@ export const initSocket = (token: string | null) => {
 
   socket.on("seasonal_rate_announcement", (data) => {
     console.log("📢 [Socket] seasonal_rate_announcement:", data);
+  });
+
+  socket.on(SEASONAL_RATE_UPDATE_EVENT, (data) => {
+    console.log("📢 [Socket] seasonal_rate_announcement_update:", data);
   });
 
   attachHotelSocketHandlers();

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import DatePickerPopover from "./DatePickerPopover";
 import { toast } from "../hooks/use-toast";
-import { bindHotelSocketEvents } from "../lib/socket";
-import { useCreateRoomSeasonalRateMutation, useGetRoomSeasonalRatesQuery, type RoomSeasonalRate } from "../services/roomApi";
+import { bindHotelSocketEvents, SEASONAL_RATE_UPDATE_EVENT } from "../lib/socket";
+import { useSelector } from "react-redux";
+import { useCreateRoomSeasonalRateMutation, useGetRoomSeasonalRatesByMonthQuery, useGetRoomSeasonalRatesQuery, useUpdateRoomSeasonalRateMutation, type RoomSeasonalRate } from "../services/roomApi";
 import {
   CalendarDays,
   Check,
@@ -72,6 +74,7 @@ export type PriceEventRule = {
   fixedPrices: Record<string, number>;
   colorTheme: "amber" | "emerald" | "purple" | "rose" | "blue";
   roomTypeAdjustments?: Record<string, number>; // roomType -> percentValue
+  recordIds?: Record<string, number | string | null>;
 };
 
 type PricingGroupForm = {
@@ -81,14 +84,44 @@ type PricingGroupForm = {
 };
 
 const colorThemeHeader: Record<string, string> = {
-  amber: "from-emerald-50/80 via-emerald-50 to-lime-50/60 border-emerald-100 text-emerald-900",
-  emerald: "from-emerald-50/80 via-teal-50/70 to-emerald-50/80 border-emerald-100 text-emerald-900",
-  purple: "from-emerald-50/80 via-violet-50/40 to-emerald-50/80 border-emerald-100 text-emerald-900",
-  rose: "from-emerald-50/80 via-rose-50/40 to-emerald-50/80 border-emerald-100 text-emerald-900",
-  blue: "from-sky-50/60 via-emerald-50/80 to-emerald-50/80 border-emerald-100 text-emerald-900",
+  amber: "from-orange-50/80 via-orange-50 to-amber-50/60 border-orange-100 text-orange-900",
+  emerald: "from-emerald-50/80 via-emerald-50 to-lime-50/60 border-emerald-100 text-emerald-900",
+  purple: "from-violet-50/80 via-violet-50/40 to-violet-50/80 border-violet-100 text-violet-900",
+  rose: "from-rose-50/80 via-rose-50/40 to-rose-50/80 border-rose-100 text-rose-900",
+  blue: "from-blue-50/80 via-sky-50/80 to-blue-50/80 border-blue-100 text-blue-900",
+};
+
+const statusColorHeader: Record<"ACTIVE" | "UPCOMING" | "EXPIRED", string> = {
+  ACTIVE: "from-emerald-50/80 via-emerald-50 to-lime-50/60 border-emerald-100 text-emerald-900",
+  UPCOMING: "from-blue-50/80 via-sky-50/80 to-blue-50/80 border-blue-100 text-blue-900",
+  EXPIRED: "from-orange-50/80 via-orange-50 to-amber-50/60 border-orange-100 text-orange-900",
 };
 
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
+
+const normalizeDateKey = (value: string | null | undefined) => {
+  if (!value) return "";
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return "";
+
+  const isoMatch = trimmed.match(/^\d{4}-\d{2}-\d{2}/);
+  const dateFromIso = isoMatch ? isoMatch[0] : trimmed.split("T")[0];
+
+  if (dateFromIso && /^\d{4}-\d{2}-\d{2}$/.test(dateFromIso)) {
+    return dateFromIso;
+  }
+
+  const slashMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+};
 
 const mapRoomTypeLabel = (value: string) => {
   const normalized = String(value).trim().toUpperCase();
@@ -187,6 +220,7 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
     const mergedRoomTypes: string[] = [];
     const roomTypeAdjustments: Record<string, number> = {};
     const fixedPrices: Record<string, number> = {};
+    const recordIds: Record<string, number | string | null> = {};
 
     groupItems.forEach((item) => {
       const rawRoomTypeValues = Array.isArray(item.roomTypes)
@@ -216,6 +250,8 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
 
         const percent = Number(item.percentValue ?? 0);
         roomTypeAdjustments[rt] = percent;
+        const sourceId = item.id != null ? String(item.id) : null;
+        recordIds[rt] = sourceId ? sourceId : null;
       });
     });
 
@@ -234,6 +270,7 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
       roomTypeAdjustments: Object.keys(roomTypeAdjustments).length > 0 ? roomTypeAdjustments : undefined,
       fixedPrices,
       colorTheme: firstColor in colorThemeHeader ? firstColor : "emerald",
+      recordIds: Object.keys(recordIds).length > 0 ? recordIds : undefined,
     });
   });
 
@@ -243,22 +280,80 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
 export default function EventPricingCalendar() {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [isDateFilterActive, setIsDateFilterActive] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const hotelId = useSelector((state: any) => state.auth.hotelId);
 
-  const { data, isLoading: isLoadingSeasonalRates, refetch } = useGetRoomSeasonalRatesQuery(
-    { date: selectedDate, page: currentPage, size: 10, sort: "startDate,asc" },
-    { skip: false }
+  const month = visibleMonth.getMonth() + 1;
+  const year = visibleMonth.getFullYear();
+
+  const dayQuery = useGetRoomSeasonalRatesQuery(
+    { date: selectedDate, page: currentPage, size: 1000, sort: "startDate,asc" },
+    { skip: !isDateFilterActive || !selectedDate || !hotelId || Number.isNaN(Number(hotelId)) }
   );
+
+  const monthQuery = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId: Number(hotelId), month, year },
+    { skip: isDateFilterActive || !hotelId || Number.isNaN(Number(hotelId)) }
+  );
+
+  const { data, isLoading: isLoadingSeasonalRates, refetch } = isDateFilterActive ? dayQuery : monthQuery;
   const [createRoomSeasonalRate, { isLoading: isCreatingSeasonalRate }] = useCreateRoomSeasonalRateMutation();
+  const [updateRoomSeasonalRate, { isLoading: isUpdatingSeasonalRate }] = useUpdateRoomSeasonalRateMutation();
 
   const seasonalRates = data?.content ?? [];
+  const allSeasonalRates = seasonalRates;
   const totalPages = Math.max(data?.page?.totalPages ?? 1, 1);
+
+  const highlightSeasonalRates = useMemo(() => seasonalRates, [seasonalRates]);
 
   const [events, setEvents] = useState<PriceEventRule[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "UPCOMING" | "EXPIRED">("ALL");
   const [selectedRoomTypeFilter, setSelectedRoomTypeFilter] = useState<"ALL" | RoomType>("ALL");
   const lastSyncedSeasonalSignatureRef = useRef("");
+  const autoAlignedEventDateRef = useRef(false);
+
+  useEffect(() => {
+    if (autoAlignedEventDateRef.current || highlightSeasonalRates.length === 0) return;
+
+    const firstEventDate = [...highlightSeasonalRates]
+      .map((item) => normalizeDateKey(item.startDate))
+      .filter(Boolean)
+      .sort()[0];
+
+    if (!firstEventDate) return;
+
+    setSelectedDate(firstEventDate);
+    autoAlignedEventDateRef.current = true;
+  }, [highlightSeasonalRates]);
+
+  const calendarHighlightEvents = useMemo(() => groupSeasonalRatesToEvents(highlightSeasonalRates), [highlightSeasonalRates]);
+
+  const eventDates = useMemo(
+    () =>
+      calendarHighlightEvents.flatMap((evt) => {
+        const startDate = normalizeDateKey(evt.startDate);
+        const endDate = normalizeDateKey(evt.endDate);
+
+        if (!startDate || !endDate) return [];
+
+        const start = new Date(`${startDate}T00:00:00`);
+        const end = new Date(`${endDate}T00:00:00`);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+
+        const days: string[] = [];
+
+        for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+          days.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`);
+        }
+
+        return days;
+      }),
+    [calendarHighlightEvents],
+  );
 
   useEffect(() => {
     const nextEvents = seasonalRates.length > 0 ? groupSeasonalRatesToEvents(seasonalRates) : [];
@@ -279,6 +374,28 @@ export default function EventPricingCalendar() {
     lastSyncedSeasonalSignatureRef.current = nextSignature;
     setEvents(nextEvents);
   }, [seasonalRates]);
+
+  useEffect(() => {
+    bindHotelSocketEvents({
+      onSeasonalRateAnnouncementUpdate: (data) => {
+        const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+        const payloadData = Array.isArray(payload.data) ? payload.data : Array.isArray(data) ? data : [];
+        const rateLabel =
+          (payloadData[0] as Record<string, unknown> | undefined)?.rateName ??
+          (payloadData[0] as Record<string, unknown> | undefined)?.name ??
+          "giá mùa vụ";
+
+        toast({
+          variant: "default",
+          title: "Cập nhật giá mùa vụ",
+          description: `${String(rateLabel)} vừa được cập nhật. Danh sách giá đã được đồng bộ mới nhất.`,
+          duration: 10000,
+        });
+
+        refetch();
+      },
+    });
+  }, [refetch]);
 
   // Modal State
   const [showEventModal, setShowEventModal] = useState(false);
@@ -330,7 +447,52 @@ export default function EventPricingCalendar() {
     setColorTheme(evt.colorTheme);
     setFormValidationError(null);
 
-    if (evt.roomTypeAdjustments && Object.keys(evt.roomTypeAdjustments).length > 0) {
+    const rawMatchingEventRows = seasonalRates.filter((item) => {
+      const itemName = String(item.rateName ?? item.name ?? "").trim();
+      const itemStartDate = String(item.startDate ?? "").trim();
+      const itemEndDate = String(item.endDate ?? "").trim();
+
+      return itemName === evt.name && itemStartDate === evt.startDate && itemEndDate === evt.endDate;
+    });
+
+    if (rawMatchingEventRows.length > 0) {
+      const groupedMap = new Map<string, string[]>();
+
+      rawMatchingEventRows.forEach((item) => {
+        const roomTypeValues = Array.isArray(item.roomTypes)
+          ? item.roomTypes
+          : typeof item.roomTypes === "string"
+            ? item.roomTypes.split(",")
+            : typeof item.roomType === "string"
+              ? [item.roomType]
+              : Array.isArray(item.roomType)
+                ? item.roomType
+                : ["ALL"];
+
+        const normalizedRoomTypes = roomTypeValues
+          .map((value) => mapRoomTypeLabel(String(value).trim()))
+          .filter(Boolean);
+
+        const rawValue = Number(item.price ?? item.value ?? item.percentValue ?? 0);
+        const key = String(rawValue);
+        const previous = groupedMap.get(key) ?? [];
+        const nextRoomTypes = normalizedRoomTypes.length > 0 ? normalizedRoomTypes : ["ALL"];
+
+        groupedMap.set(key, [...previous, ...nextRoomTypes]);
+      });
+
+      const groups: PricingGroupForm[] = Array.from(groupedMap.entries()).map(([pct, rts], idx) => {
+        const uniqueRoomTypes = [...new Set(rts)];
+
+        return {
+          id: `group-${idx}-${Date.now()}`,
+          roomTypes: uniqueRoomTypes.length === roomTypesList.length ? ["ALL"] : uniqueRoomTypes,
+          percentValue: String(pct),
+        };
+      });
+
+      setPricingGroups(groups.length > 0 ? groups : [{ id: `group-${Date.now()}`, roomTypes: evt.roomTypes, percentValue: String(evt.percentValue) }]);
+    } else if (evt.roomTypeAdjustments && Object.keys(evt.roomTypeAdjustments).length > 0) {
       const groupedMap = new Map<number, string[]>();
       Object.entries(evt.roomTypeAdjustments).forEach(([rt, pct]) => {
         const list = groupedMap.get(pct) ?? [];
@@ -383,54 +545,48 @@ export default function EventPricingCalendar() {
       ? ["ALL"]
       : Array.from(allSelectedTypesSet);
 
-    if (editingEventId) {
-      setEvents((current) =>
-        current.map((evt) =>
-          evt.id === editingEventId
-            ? {
-                ...evt,
-                name: eventName.trim(),
-                startDate,
-                endDate,
-                roomTypes: selectedRoomTypesList,
-                modifierType: "PERCENT",
-                percentValue: overallPercent,
-                roomTypeAdjustments,
-                colorTheme,
-              }
-            : evt
-        )
-      );
-      setShowEventModal(false);
-      return;
-    }
-
     const seasonalRateRequests = pricingGroups.flatMap((group) => {
       const priceValue = Number(group.percentValue) || 0;
       const roomTypesToSave = group.roomTypes.includes("ALL") ? roomTypesList : group.roomTypes;
 
-      return roomTypesToSave.map((roomType) => ({
-        roomType: mapRoomTypeToEnum(roomType),
-        rateName: eventName.trim(),
-        startDate,
-        endDate,
-        price: priceValue,
-      }));
+      return roomTypesToSave.map((roomType) => {
+        const currentEditingEvent = editingEventId ? events.find((evt) => evt.id === editingEventId) : undefined;
+        const recordIdForRoom = currentEditingEvent?.recordIds?.[roomType] ?? null;
+
+        return {
+          id: recordIdForRoom ?? null,
+          roomType: mapRoomTypeToEnum(roomType),
+          rateName: eventName.trim(),
+          startDate,
+          endDate,
+          price: priceValue,
+        };
+      });
     });
 
     try {
-      await createRoomSeasonalRate(seasonalRateRequests).unwrap();
+      if (editingEventId) {
+        await updateRoomSeasonalRate(seasonalRateRequests).unwrap();
+        toast({
+          variant: "default",
+          title: "Cập nhật giá mùa vụ",
+          description: `Đã chỉnh sửa ${eventName.trim()} và đồng bộ thay đổi tới khách hàng.`,
+          duration: 10000,
+        });
+      } else {
+        await createRoomSeasonalRate(seasonalRateRequests).unwrap();
+        toast({
+          variant: "success",
+          title: "Cập nhật giá thành công",
+          description: "Đã lưu cấu hình giá theo sự kiện cho các loại phòng đã chọn.",
+          duration: 10000,
+        });
+      }
 
       await refetch();
       closeFormModal();
-      toast({
-        variant: "success",
-        title: "Cập nhật giá thành công",
-        description: "Đã lưu cấu hình giá theo sự kiện cho các loại phòng đã chọn.",
-        duration: 10000,
-      });
     } catch (error) {
-      console.error("Lỗi khi tạo sự kiện giá theo phòng:", error);
+      console.error("Lỗi khi lưu sự kiện giá theo phòng:", error);
       const errorMessage =
         typeof error === "object" && error !== null && "data" in error
           ? ((error as { data?: { message?: string } }).data?.message ?? "Không thể lưu cấu hình giá.")
@@ -438,7 +594,7 @@ export default function EventPricingCalendar() {
       setFormValidationError(errorMessage);
       toast({
         variant: "destructive",
-        title: "Lưu cấu hình giá thất bại",
+        title: editingEventId ? "Cập nhật cấu hình giá thất bại" : "Lưu cấu hình giá thất bại",
         description: errorMessage,
         duration: 10000,
       });
@@ -486,7 +642,7 @@ export default function EventPricingCalendar() {
         <button
           type="button"
           onClick={openCreateModal}
-          className="flex w-fit items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4.5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition duration-150 active:scale-95"
+          className="flex w-fit items-center gap-2 rounded-xl bg-linear-to-r from-blue-600 to-sky-500 px-4.5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-sky-600 transition duration-150 active:scale-95"
         >
           <Plus size={16} className="stroke-[2.5]" />
           Tạo sự kiện giá mới
@@ -495,7 +651,7 @@ export default function EventPricingCalendar() {
 
       {/* 2. Controls & Search Filter Bar */}
       <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_auto_auto] lg:items-center">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto] lg:items-center">
           {/* Search Input */}
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
@@ -509,25 +665,48 @@ export default function EventPricingCalendar() {
           </div>
 
           {/* Date Picker */}
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-2xs">
-            <CalendarDays size={16} className="text-blue-600" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value || today);
+          <div className="min-w-45">
+            <DatePickerPopover
+              value={selectedDate ? new Date(`${selectedDate}T00:00:00`) : undefined}
+              onMonthChange={(nextMonth) => {
+                setVisibleMonth(nextMonth);
+                setIsDateFilterActive(false);
                 setCurrentPage(0);
               }}
-              className="h-8 w-full border-0 bg-transparent text-xs font-bold text-slate-700 outline-none"
+              onChange={(nextDate) => {
+                if (!nextDate) return;
+                const nextValue = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`;
+                setSelectedDate(nextValue);
+                setVisibleMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+                setIsDateFilterActive(true);
+                setCurrentPage(0);
+              }}
+              highlightDates={eventDates}
+              placeholder="Chọn ngày"
+              buttonClassName="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
-          </label>
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "ALL" | "ACTIVE" | "UPCOMING" | "EXPIRED")}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs outline-none focus:border-blue-500"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="ACTIVE">Đang diễn ra</option>
+              <option value="UPCOMING">Sắp diễn ra</option>
+              <option value="EXPIRED">Hết hạn</option>
+            </select>
+          </div>
 
           {/* Room Type Filter Dropdown */}
           <div className="flex items-center gap-2">
             <select
               value={selectedRoomTypeFilter}
               onChange={(e) => setSelectedRoomTypeFilter(e.target.value as any)}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs outline-none focus:border-blue-500"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs outline-none focus:border-blue-500"
             >
               <option value="ALL">Tất cả loại phòng</option>
               {roomTypesList.map((rt) => (
@@ -575,7 +754,7 @@ export default function EventPricingCalendar() {
                   Sắp diễn ra
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 border border-slate-200">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700 border border-orange-300">
                   Đã hết hạn
                 </span>
               );
@@ -591,28 +770,30 @@ export default function EventPricingCalendar() {
                 Điều chỉnh {minPct > 0 ? `+${minPct}%` : `${minPct}%`} ~ {maxPct > 0 ? `+${maxPct}%` : `${maxPct}%`} theo nhóm phòng
               </span>
             ) : evt.percentValue > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-900 border border-emerald-100">
-                <TrendingUp size={14} className="text-emerald-600" />
+              <span className="inline-flex items-center gap-1 rounded-xl bg-orange-50 px-3 py-1 text-xs font-extrabold text-orange-900 border border-orange-100">
+                <TrendingUp size={14} className="text-orange-600" />
                 Tăng +{evt.percentValue}% giá phòng
               </span>
             ) : evt.percentValue < 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-900 border border-emerald-100">
-                <TrendingDown size={14} className="text-emerald-600" />
+              <span className="inline-flex items-center gap-1 rounded-xl bg-orange-50 px-3 py-1 text-xs font-extrabold text-orange-900 border border-orange-100">
+                <TrendingDown size={14} className="text-orange-600" />
                 Giảm {evt.percentValue}% ưu đãi
               </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 border border-slate-200">
-                Giữ nguyên giá gốc
-              </span>
-            );
+            ) : null;
 
             return (
               <div
                 key={evt.id}
-                className="group relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition duration-200 hover:border-blue-400 hover:shadow-md"
+                className={`group relative overflow-hidden rounded-2xl border bg-white shadow-xs transition duration-200 hover:shadow-md ${
+                  status === "ACTIVE"
+                    ? "border-emerald-300 hover:border-emerald-400"
+                    : status === "UPCOMING"
+                      ? "border-blue-300 hover:border-blue-400"
+                      : "border-orange-300 hover:border-orange-400"
+                }`}
               >
                 {/* Event Card Header */}
-                <div className={`flex flex-col gap-3 bg-gradient-to-r ${colorThemeHeader[evt.colorTheme] || colorThemeHeader.amber} p-5 border-b sm:flex-row sm:items-center sm:justify-between`}>
+                <div className={`flex flex-col gap-3 bg-linear-to-r ${statusColorHeader[status] || colorThemeHeader[evt.colorTheme] || colorThemeHeader.amber} p-5 border-b sm:flex-row sm:items-center sm:justify-between`}>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       {statusPill}
@@ -980,10 +1161,10 @@ export default function EventPricingCalendar() {
               <button
                 type="button"
                 onClick={saveEventRule}
-                disabled={!eventName.trim() || !startDate || !endDate || isCreatingSeasonalRate}
-                className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4.5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50"
+                disabled={!eventName.trim() || !startDate || !endDate || isCreatingSeasonalRate || isUpdatingSeasonalRate}
+                className="rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 px-4.5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50"
               >
-                {isCreatingSeasonalRate ? "Đang lưu..." : editingEventId ? "Cập nhật sự kiện" : "Lưu cấu hình giá"}
+                {isCreatingSeasonalRate || isUpdatingSeasonalRate ? "Đang lưu..." : editingEventId ? "Cập nhật sự kiện" : "Lưu cấu hình giá"}
               </button>
             </div>
           </div>
