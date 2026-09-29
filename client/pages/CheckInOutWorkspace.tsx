@@ -570,9 +570,9 @@ export default function CheckInOutWorkspace() {
   };
 
   const normalizeDetailId = (value: string | number | undefined) => {
-    if (value === undefined || value === null || value === "") return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    if (value === undefined || value === null) return null;
+    const normalized = String(value).trim();
+    return normalized || null;
   };
 
   const completeRecord = (id: string, flow: "check-in" | "check-out") => {
@@ -626,7 +626,7 @@ export default function CheckInOutWorkspace() {
       }
     }
 
-    const grouped = records.reduce<Record<string, number[]>>((result, record) => {
+    const grouped = records.reduce<Record<string, string[]>>((result, record) => {
       const detailId = normalizeDetailId(record.id);
       if (!record.bookingId || detailId === null) return result;
       result[record.bookingId] = [...(result[record.bookingId] ?? []), detailId];
@@ -645,7 +645,7 @@ export default function CheckInOutWorkspace() {
       const guestLine = `Khách hàng: ${first?.guest ?? "-"}`;
 
       toast({
-        variant: "booking",
+        variant: "checkin",
         title: "Check-in thành công",
         description: (
           <div className="space-y-1 text-sm">
@@ -665,7 +665,7 @@ export default function CheckInOutWorkspace() {
   };
 
   const handleBulkCheckOut = async (records: DailyRecord[]) => {
-    const grouped = records.reduce<Record<string, number[]>>((result, record) => {
+    const grouped = records.reduce<Record<string, string[]>>((result, record) => {
       const detailId = normalizeDetailId(record.id);
       if (!record.bookingId || detailId === null) return result;
       result[record.bookingId] = [...(result[record.bookingId] ?? []), detailId];
@@ -679,6 +679,11 @@ export default function CheckInOutWorkspace() {
         ),
       );
       records.forEach((record) => completeRecord(record.id, "check-out"));
+      toast({
+        variant: "checkout",
+        title: "Check-out thành công",
+        description: `Đã hoàn tất check-out cho ${records.length} phòng.`,
+      });
     } catch (error) {
       console.error("Bulk check-out failed", error);
     }
@@ -1016,6 +1021,12 @@ export default function CheckInOutWorkspace() {
               actionLabel="Check-in các phòng"
               actionCount={pendingGroup.length}
               actionDisabled={false}
+              onAddService={() => openGroupServiceSelector(
+                String(firstRecord.bookingId ?? firstRecord.id),
+                firstRecord.guest,
+                pendingGroup.map((record) => record.room.split(" · ")[0]),
+                pendingGroup.reduce((total, record) => total + (record.guests ?? 0), 0),
+              )}
               onAction={async (nextSelected) => {
                 const nextRecords = records.filter((record) => nextSelected.includes(record.id));
                 if (nextRecords.length > 0) {

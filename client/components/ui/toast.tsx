@@ -31,6 +31,12 @@ const toastVariants = cva(
           "border-2 border-yellow-400 bg-yellow-100 text-slate-900 shadow-[0_8px_24px_rgba(250,204,21,0.28)]",
         success:
           "border-2 border-emerald-300 bg-emerald-50 text-emerald-800 shadow-[0_8px_20px_rgba(16,185,129,0.18)]",
+        promotion:
+          "border-2 border-purple-300 bg-purple-50 text-purple-800 shadow-[0_8px_20px_rgba(168,85,247,0.2)]",
+        checkin:
+          "border-2 border-blue-300 bg-blue-50 text-blue-800 shadow-[0_8px_20px_rgba(59,130,246,0.18)]",
+        checkout:
+          "border-2 border-orange-300 bg-orange-50 text-orange-800 shadow-[0_8px_20px_rgba(249,115,22,0.18)]",
         booking:
           "border-2 border-yellow-400 bg-yellow-50 text-slate-800 shadow-[0_8px_24px_rgba(250,204,21,0.22)]",
         destructive:

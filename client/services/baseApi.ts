@@ -6,6 +6,6 @@ export const baseApi = createApi({
   baseQuery: axiosBaseQuery(),
   keepUnusedDataFor: 300,
   refetchOnMountOrArgChange: false,
-  tagTypes: ["User", "Room", "Booking", "Staff", "Customer", "BranchRoomPolicy"],
+  tagTypes: ["User", "Room", "Booking", "Staff", "Customer", "BranchRoomPolicy", "Promotion"],
   endpoints: () => ({}),
 });

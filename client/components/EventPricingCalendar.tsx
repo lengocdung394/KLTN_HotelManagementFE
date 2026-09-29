@@ -281,6 +281,7 @@ export default function EventPricingCalendar() {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [isDateFilterActive, setIsDateFilterActive] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const hotelId = useSelector((state: any) => state.auth.hotelId);
@@ -292,6 +293,10 @@ export default function EventPricingCalendar() {
     { hotelId: Number(hotelId), month, year },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) }
   );
+  const calendarMonthQuery = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId: Number(hotelId), month: calendarMonth.getMonth() + 1, year: calendarMonth.getFullYear() },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) }
+  );
 
   const { data, isLoading: isLoadingSeasonalRates, refetch } = monthQuery;
   const [createRoomSeasonalRate, { isLoading: isCreatingSeasonalRate }] = useCreateRoomSeasonalRateMutation();
@@ -301,7 +306,7 @@ export default function EventPricingCalendar() {
   const allSeasonalRates = seasonalRates;
   const totalPages = Math.max(data?.page?.totalPages ?? 1, 1);
 
-  const highlightSeasonalRates = useMemo(() => seasonalRates, [seasonalRates]);
+  const highlightSeasonalRates = calendarMonthQuery.data?.content ?? [];
 
   const [events, setEvents] = useState<PriceEventRule[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -311,9 +316,9 @@ export default function EventPricingCalendar() {
   const autoAlignedEventDateRef = useRef(false);
 
   useEffect(() => {
-    if (autoAlignedEventDateRef.current || highlightSeasonalRates.length === 0) return;
+    if (autoAlignedEventDateRef.current || seasonalRates.length === 0) return;
 
-    const firstEventDate = [...highlightSeasonalRates]
+    const firstEventDate = [...seasonalRates]
       .map((item) => normalizeDateKey(item.startDate))
       .filter(Boolean)
       .sort()[0];
@@ -322,7 +327,7 @@ export default function EventPricingCalendar() {
 
     setSelectedDate(firstEventDate);
     autoAlignedEventDateRef.current = true;
-  }, [highlightSeasonalRates]);
+  }, [seasonalRates]);
 
   const calendarHighlightEvents = useMemo(() => groupSeasonalRatesToEvents(highlightSeasonalRates), [highlightSeasonalRates]);
 
@@ -384,7 +389,7 @@ export default function EventPricingCalendar() {
           variant: "default",
           title: "Cập nhật giá mùa vụ",
           description: `${String(rateLabel)} vừa được cập nhật. Danh sách giá đã được đồng bộ mới nhất.`,
-          duration: 10000,
+          duration: 15000,
         });
 
         refetch();
@@ -566,7 +571,7 @@ export default function EventPricingCalendar() {
           variant: "default",
           title: "Cập nhật giá mùa vụ",
           description: `Đã chỉnh sửa ${eventName.trim()} và đồng bộ thay đổi tới khách hàng.`,
-          duration: 10000,
+          duration: 15000,
         });
       } else {
         await createRoomSeasonalRate(seasonalRateRequests).unwrap();
@@ -574,7 +579,7 @@ export default function EventPricingCalendar() {
           variant: "success",
           title: "Cập nhật giá thành công",
           description: "Đã lưu cấu hình giá theo sự kiện cho các loại phòng đã chọn.",
-          duration: 10000,
+          duration: 15000,
         });
       }
 
@@ -591,7 +596,7 @@ export default function EventPricingCalendar() {
         variant: "destructive",
         title: editingEventId ? "Cập nhật cấu hình giá thất bại" : "Lưu cấu hình giá thất bại",
         description: errorMessage,
-        duration: 10000,
+        duration: 15000,
       });
     }
   };
@@ -669,16 +674,14 @@ export default function EventPricingCalendar() {
             <DatePickerPopover
               iconOnly
               value={selectedDate ? new Date(`${selectedDate}T00:00:00`) : undefined}
-              onMonthChange={(nextMonth) => {
-                setVisibleMonth(nextMonth);
-                setIsDateFilterActive(false);
-                setCurrentPage(0);
-              }}
+              onMonthChange={setCalendarMonth}
               onChange={(nextDate) => {
                 if (!nextDate) return;
                 const nextValue = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`;
                 setSelectedDate(nextValue);
-                setVisibleMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+                const nextMonth = new Date(nextDate.getFullYear(), nextDate.getMonth(), 1);
+                setVisibleMonth(nextMonth);
+                setCalendarMonth(nextMonth);
                 setIsDateFilterActive(true);
                 setCurrentPage(0);
               }}

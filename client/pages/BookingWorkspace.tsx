@@ -4,11 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
-import GuestRoomForms, { bookingCache, clearRoomGuestCache, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
+import GuestRoomForms, { bookingCache, clearRoomGuestCache, isBookingGuestValid, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
-import { useGetBranchRoomDailyPricesQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomDailyPricesResponse } from "../services/roomApi";
+import { useGetBranchRoomDailyPricesQuery, useGetRoomSeasonalRatesByMonthQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomDailyPricesResponse, type RoomSeasonalRate } from "../services/roomApi";
 import { useGetBuildingsByCurrentHotelQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
@@ -77,6 +77,17 @@ const matrixDate = (value: unknown) => {
   if (typeof value !== "string") return undefined;
   const match = value.match(/^\d{4}-\d{2}-\d{2}/);
   return match?.[0];
+};
+
+const getSeasonalEventDates = (events: RoomSeasonalRate[]) => {
+  const dates = new Set<string>();
+  events.forEach((event) => {
+    const startDate = matrixDate(event.startDate);
+    const endDate = matrixDate(event.endDate);
+    if (!startDate || !endDate || startDate > endDate) return;
+    for (let date = startDate; date <= endDate; date = shiftDay(date, 1)) dates.add(date);
+  });
+  return [...dates];
 };
 
 const matrixValue = (item: Record<string, unknown>, keys: string[]) => {
@@ -201,8 +212,18 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
   };
 };
 
-function DatePicker({ label, value, min, onChange }: { label: string; value: string; min?: string; onChange: (value: string) => void }) {
+function DatePicker({ label, value, min, onChange, hotelId }: { label: string; value: string; min?: string; onChange: (value: string) => void; hotelId?: string | number | null }) {
   const { t, i18n } = useTranslation();
+  const [pickerMonth, setPickerMonth] = useState(() => value ? new Date(`${value}T00:00:00`) : new Date());
+  const { data: monthlyRates } = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId: Number(hotelId), month: pickerMonth.getMonth() + 1, year: pickerMonth.getFullYear() },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+  const eventDates = useMemo(() => getSeasonalEventDates(monthlyRates?.content ?? []), [monthlyRates?.content]);
+
+  useEffect(() => {
+    if (value) setPickerMonth(new Date(`${value}T00:00:00`));
+  }, [value]);
 
   const formatDateForInput = (date: Date | undefined) => {
     if (!date) return "";
@@ -218,6 +239,8 @@ function DatePicker({ label, value, min, onChange }: { label: string; value: str
       <div className="mt-1.5">
         <DatePickerPopover
           value={value ? new Date(`${value}T00:00:00`) : undefined}
+          onMonthChange={setPickerMonth}
+          highlightDates={eventDates}
           onChange={(nextDate) => {
             if (!nextDate) return;
             const nextValue = formatDateForInput(nextDate);
@@ -289,6 +312,20 @@ function DesktopCalendar({
     });
   }, [timelineStart]);
   const timelineEnd = stableTimeline[stableTimeline.length - 1]?.value ?? timelineStart;
+  const timelineStartDate = new Date(`${timelineStart}T00:00:00`);
+  const timelineEndDate = new Date(`${timelineEnd}T00:00:00`);
+  const { data: startMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId, month: timelineStartDate.getMonth() + 1, year: timelineStartDate.getFullYear() },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+  const { data: endMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId, month: timelineEndDate.getMonth() + 1, year: timelineEndDate.getFullYear() },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+  const seasonalEventDates = useMemo(
+    () => new Set(getSeasonalEventDates([...(startMonthEvents?.content ?? []), ...(endMonthEvents?.content ?? [])])),
+    [startMonthEvents?.content, endMonthEvents?.content],
+  );
   const { data: dailyRoomPrices = {} } = useGetBranchRoomDailyPricesQuery(
     { hotelId, startDate: timelineStart, endDate: timelineEnd },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
@@ -649,6 +686,7 @@ function DesktopCalendar({
             {stableTimeline.map((date) => {
               const isWeekend = date.day === "T7" || date.day === "CN";
               const isToday = date.value === todayValue;
+              const hasEvent = seasonalEventDates.has(date.value);
 
               return (
                 <div
@@ -667,6 +705,7 @@ function DesktopCalendar({
                   <p className={`mt-0.5 text-xs font-extrabold ${isPastDate(date.value) ? "text-slate-400" : isToday ? "text-blue-900" : "text-slate-800"}`}>
                     {date.label}
                   </p>
+                  {hasEvent && <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span>}
                 </div>
               );
             })}
@@ -1359,7 +1398,7 @@ export default function BookingWorkspace() {
         const res = await modifyBooking({ bookingId: id, request: modificationRequest }).unwrap();
         console.log("===> [BOOKING WORKSPACE MODIFY SUCCESS]:", res);
         toast({
-          variant: "success",
+          variant: "default",
           title: "Cập nhật booking thành công!",
           description: `Đã cập nhật các thay đổi cho booking #${id}.`,
         });
@@ -1379,7 +1418,7 @@ export default function BookingWorkspace() {
       }
       return;
     }
-    const hasGuestDetails = Boolean(bookingGuest.name.trim() && bookingGuest.phone.trim() && bookingGuest.identityNumber.trim());
+    const hasGuestDetails = isBookingGuestValid(bookingGuest);
     if (!hasGuestDetails || (!initialBooking && !customerId) || !counterEmployeeId.trim()) {
       console.warn("[booking] blocked: guest details, customer id, or employeeId are incomplete", { guest: bookingGuest, employeeId: counterEmployeeId });
       return;
@@ -1392,7 +1431,7 @@ export default function BookingWorkspace() {
       const res = await createCounterBooking({ employeeId: counterEmployeeId, request }).unwrap();
       const newBookingId = (res as any)?.bookingId ?? (res as any)?.id;
       toast({
-        variant: "booking",
+        variant: "success",
         title: "Đặt phòng thành công!",
         description: newBookingId ? `Đã hoàn tất tạo đơn đặt phòng #${newBookingId}.` : "Đã hoàn tất tạo đơn đặt phòng cho khách hàng.",
       });
@@ -1413,7 +1452,7 @@ export default function BookingWorkspace() {
   };
   const storedEmployeeId = localStorage.getItem("id");
   const bookingEmployeeId = storedEmployeeId ?? employeeId ?? "";
-  const hasGuestDetails = Boolean(bookingGuest.name.trim() && bookingGuest.phone.trim() && bookingGuest.identityNumber.trim());
+  const hasGuestDetails = isBookingGuestValid(bookingGuest);
   const goToServices = () => {
     if (!hasGuestDetails) {
       setPaymentError("Vui lòng nhập đủ họ tên, số điện thoại và CCCD của khách hàng.");
@@ -1486,8 +1525,8 @@ export default function BookingWorkspace() {
       {step === "rooms" ? (
         <div className="p-5">
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
-            <DatePicker label={t("booking.checkInDate")} value={checkIn} onChange={setCheckIn} />
-            <DatePicker label={t("booking.checkOutDate")} value={checkOut} min={checkIn || undefined} onChange={setCheckOut} />
+            <DatePicker label={t("booking.checkInDate")} value={checkIn} onChange={setCheckIn} hotelId={hotelId} />
+            <DatePicker label={t("booking.checkOutDate")} value={checkOut} min={checkIn || undefined} onChange={setCheckOut} hotelId={hotelId} />
             <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{hasDates ? `${nights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
           </div>
 

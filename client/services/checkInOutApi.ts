@@ -48,7 +48,7 @@ export type CheckInOutQuery = {
   bookingStatus?: string;
 };
 
-export type BulkCheckInOutRequest = number[];
+export type BulkCheckInOutRequest = string[];
 export type BulkCheckInOutResponse = Record<string, unknown>;
 
 const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => {
@@ -95,7 +95,7 @@ export const checkInOutApi = baseApi.injectEndpoints({
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),
-    bulkCheckIn: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: number[] }>({
+    bulkCheckIn: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: BulkCheckInOutRequest }>({
       query: ({ bookingId, bookingDetailIds }) => ({
         url: `/checkInOuts/${bookingId}/check-in/bulk`,
         method: "POST",
@@ -110,7 +110,7 @@ export const checkInOutApi = baseApi.injectEndpoints({
       },
       invalidatesTags: ["Booking"],
     }),
-    bulkCheckOut: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: number[] }>({
+    bulkCheckOut: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: BulkCheckInOutRequest }>({
       query: ({ bookingId, bookingDetailIds }) => ({
         url: `/checkInOuts/${bookingId}/check-out/bulk`,
         method: "POST",
