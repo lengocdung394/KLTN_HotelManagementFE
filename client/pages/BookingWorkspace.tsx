@@ -3,12 +3,13 @@ import DatePickerPopover from "../components/DatePickerPopover";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
+import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
 import GuestRoomForms, { bookingCache, clearRoomGuestCache, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
+import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
 import { useGetBranchRoomDailyPricesQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomDailyPricesResponse } from "../services/roomApi";
-import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
+import { useGetBuildingsByCurrentHotelQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrixQuery, type RoomMatrixResponse } from "../services/bookingApi";
@@ -19,7 +20,7 @@ import { sumRoomPriceForRange } from "../lib/bookingPricing";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
-type BookingRoom = { id: string; databaseId?: string; roomNumber?: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
+type BookingRoom = { id: string; databaseId?: string; roomNumber?: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string; images?: string[]; services?: string[]; status?: string; description?: string };
 
 const roomTypes = {
   1: { type: "Standard Room", beds: "1 giường đơn", size: "25 m²", guests: 1, price: 1000000, amenity: "Điều hòa · TV · Phòng tắm riêng" },
@@ -145,6 +146,25 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
   const floorValue = String(getApiValue(item, ["floorNumber", "floorLevel", "floorName", "floorId", "floorID"]) ?? "");
   const rawSize = getApiValue(item, ["roomSize", "size", "area", "roomArea", "acreage"]);
   const size = rawSize === undefined ? fallback.size : `${rawSize}`.includes("m²") ? String(rawSize) : `${rawSize} m²`;
+  const rawImages = getApiValue(item, ["avatarUrl", "imageUrls", "images"]);
+  const imageEntries = Array.isArray(rawImages) ? rawImages : rawImages ? [rawImages] : [];
+  const defaultImage = getApiValue(item, ["defaultImageUrl", "imageUrl"]);
+  const images = [
+    ...(typeof defaultImage === "string" ? [defaultImage] : []),
+    ...imageEntries.map((image) => typeof image === "string" ? image : String((image as Record<string, unknown>).url ?? "")),
+  ].filter((image, imageIndex, values) => image && values.indexOf(image) === imageIndex);
+  const rawServices = getApiValue(item, ["amenities", "roomAmenities", "amenityList", "amenityResponses", "roomAmenityResponses", "services", "amenityNames"]);
+  const serviceEntries = Array.isArray(rawServices) ? rawServices : typeof rawServices === "string" ? rawServices.split(/[;,|]/) : [];
+  const services = serviceEntries.map((service) => {
+    if (typeof service === "string") return service.trim();
+    if (!service || typeof service !== "object") return "";
+    const amenity = service as Record<string, unknown>;
+    const nestedAmenity = amenity.amenity && typeof amenity.amenity === "object" ? amenity.amenity as Record<string, unknown> : amenity;
+    return String(nestedAmenity.name ?? nestedAmenity.amenityName ?? nestedAmenity.serviceName ?? nestedAmenity.title ?? "").trim();
+  }).filter(Boolean);
+  const rawStatus = String(getApiValue(item, ["roomStatus", "status"]) ?? "");
+  const status = ({ READY: "Sẵn sàng", MAINTENANCE: "Bảo trì", IN_USE: "Đang ở", CLEANING: "Đang dọn" } as Record<string, string>)[rawStatus.toUpperCase()] ?? (rawStatus || undefined);
+  const description = getApiValue(item, ["description", "roomDescription"]);
   const price = Number(getApiValue(item, ["totalPrice", "basePrice", "price"]) ?? fallback.price);
   const guests = Number(getApiValue(item, ["standardCapacity", "capacity", "maxGuests", "guestCapacity"]) ?? fallback.guests);
   const maxExtraGuests = Number(getApiValue(item, ["maxExtraGuests"]) ?? 0);
@@ -174,6 +194,10 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
     buildingId: buildingId === undefined ? undefined : String(buildingId),
     buildingName: buildingName || undefined,
     floor: floorValue.toLowerCase().startsWith("tầng") ? floorValue : floorValue ? `Tầng ${floorValue}` : undefined,
+    images,
+    services,
+    status,
+    description: description == null ? undefined : String(description),
   };
 };
 
@@ -316,6 +340,7 @@ function DesktopCalendar({
 
   const [dragSelection, setDragSelection] = useState<{ roomId: string; startDayIndex: number; currentDayIndex: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [roomDetails, setRoomDetails] = useState<RoomDetailsData | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
@@ -651,7 +676,7 @@ function DesktopCalendar({
           {visibleRooms.map((room) => (
             <div key={room.id} className="grid min-h-[100px] border-b border-slate-100 last:border-0 relative hover:bg-slate-50/40 transition-colors" style={{ gridTemplateColumns: `260px repeat(${totalDays}, minmax(96px, 1fr))` }}>
               {/* Left Room Title Column */}
-              <div className="sticky left-0 top-0 z-20 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+              <div className="sticky left-0 top-0 z-20 flex items-stretch gap-1 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
                   disabled={Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, selectedRanges[room.id]?.checkIn ?? checkIn, selectedRanges[room.id]?.checkOut ?? checkOut)}
@@ -676,7 +701,7 @@ function DesktopCalendar({
                       setSelectedRanges((prev) => ({ ...prev, [room.id]: defaultRange }));
                     }
                   }}
-                  className={`flex h-full w-full items-center gap-3 p-3.5 text-left transition-all duration-200 ${
+                  className={`flex h-full min-w-0 flex-1 items-center gap-3 p-3.5 text-left transition-all duration-200 ${
                     selected.includes(room.id) ? "bg-blue-50/70" : "bg-white hover:bg-slate-50"
                   } ${Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, checkIn, checkOut) ? "cursor-not-allowed opacity-60" : ""}`}
                 >
@@ -693,6 +718,29 @@ function DesktopCalendar({
                     <strong className="block truncate text-xs font-bold text-slate-800">{room.type}</strong>
                     <small className="mt-0.5 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
                   </span>
+                </button>
+                <button type="button" title={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} aria-label={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} onClick={() => setRoomDetails({
+                  id: room.id,
+                  name: room.type,
+                  images: room.images ?? [],
+                  floor: room.floor ?? roomFloor(room),
+                  size: room.size,
+                  beds: room.beds,
+                  capacity: room.guests,
+                  standardCapacity: room.guests,
+                  maxExtraGuests: room.maxExtraGuests,
+                  extraAdultFee: room.extraAdultFee,
+                  extraChildFee: room.extraChildFee,
+                  guestPolicy: `Tiêu chuẩn ${room.guests} người · Ghép thêm tối đa ${room.maxExtraGuests} người`,
+                  price: room.price,
+                  status: room.status ?? "Chưa cập nhật",
+                  cleaner: "",
+                  services: room.services ?? [],
+                  description: room.description,
+                  buildingId: room.buildingId,
+                  buildingName: room.buildingName,
+                })} className="my-auto mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                  <Eye size={16} />
                 </button>
               </div>
 
@@ -744,6 +792,7 @@ function DesktopCalendar({
           ))}
         </div>
       </div>
+      {roomDetails && <RoomDetailModal room={roomDetails} onClose={() => setRoomDetails(null)} />}
     </div>
   );
 }
@@ -760,7 +809,7 @@ export default function BookingWorkspace() {
   const [createCounterBooking, { isLoading: isCreatingBooking, error: bookingError }] = useCreateCounterBookingMutation();
   const [modifyBooking, { isLoading: isModifyingBooking }] = useModifyBookingMutation();
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
-  const { data: apiBuildings } = useGetBuildingsByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { data: apiBuildings } = useGetBuildingsByCurrentHotelQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const { data: apiRoomTypes } = useGetRoomTypesQuery();
   const { data: apiRooms, isLoading: isRoomsLoading, isError: isRoomsError } = useGetRoomsByCurrentHotelQuery();
   const [step, setStep] = useState<"rooms" | "guest" | "services" | "promotion" | "success">("rooms");

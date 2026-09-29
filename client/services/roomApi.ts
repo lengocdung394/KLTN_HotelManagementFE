@@ -24,9 +24,20 @@ export type RoomResponse = {
   maxExtraGuests?: number;
   extraAdultFee?: number;
   extraChildFee?: number;
-  floorId?: number;
-  buildingId?: number;
+  floorId?: string | number;
+  buildingId?: string | number;
   [key: string]: unknown;
+};
+export type RoomCreateRequest = {
+  roomNumber: string;
+  floorId: string;
+  roomStatus: string;
+  roomType: string;
+  defaultImageIndex: number;
+  amenityIds: number[];
+};
+export type RoomUpdateRequest = RoomCreateRequest & {
+  keptImageUrls: string[];
 };
 export type RoomTypeDetailResponse = {
   [key: string]: unknown;
@@ -155,15 +166,25 @@ export const extractRoomSeasonalRatePage = (response: unknown): RoomSeasonalRate
 
 export const roomApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    createRoom: builder.mutation<RoomResponse, { roomInfo: { floorId: number; roomStatus: string; roomType: string; basePrice: number; standardCapacity: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; defaultImageIndex: number; amenityIds: number[] }; imageFiles: File[] }>({
+    createRoom: builder.mutation<RoomResponse, { roomInfo: RoomCreateRequest; imageFiles: File[] }>({
       query: ({ roomInfo, imageFiles }) => {
         const formData = new FormData();
         formData.append("roomInfo", new Blob([JSON.stringify(roomInfo)], { type: "application/json" }));
         imageFiles.forEach((file) => formData.append("avatarUrl", file));
-        return { url: "/rooms/create", method: "POST", data: formData };
+        return { url: "/room/create", method: "POST", data: formData };
       },
       transformResponse: (response: ApiResponse<RoomResponse>) => response?.result ?? {},
-      invalidatesTags: ["Room"],
+      invalidatesTags: ["Room", "Booking"],
+    }),
+    updateRoom: builder.mutation<RoomResponse, { roomId: string; room: RoomUpdateRequest; images: File[] }>({
+      query: ({ roomId, room, images }) => {
+        const formData = new FormData();
+        formData.append("room", new Blob([JSON.stringify(room)], { type: "application/json" }));
+        images.forEach((file) => formData.append("images", file));
+        return { url: `/room/updateRoomById/${encodeURIComponent(roomId)}`, method: "PUT", data: formData };
+      },
+      transformResponse: (response: ApiResponse<RoomResponse>) => response?.result ?? {},
+      invalidatesTags: ["Room", "Booking"],
     }),
     // Trả về mảng string[] từ Backend
     getRoomTypes: builder.query<string[], void>({
@@ -329,4 +350,4 @@ export const roomApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useCreateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;
+export const { useCreateRoomMutation, useUpdateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;

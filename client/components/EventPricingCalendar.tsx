@@ -3,7 +3,7 @@ import DatePickerPopover from "./DatePickerPopover";
 import { toast } from "../hooks/use-toast";
 import { bindHotelSocketEvents, SEASONAL_RATE_UPDATE_EVENT } from "../lib/socket";
 import { useSelector } from "react-redux";
-import { useCreateRoomSeasonalRateMutation, useGetRoomSeasonalRatesByMonthQuery, useGetRoomSeasonalRatesQuery, useUpdateRoomSeasonalRateMutation, type RoomSeasonalRate } from "../services/roomApi";
+import { useCreateRoomSeasonalRateMutation, useGetRoomSeasonalRatesByMonthQuery, useUpdateRoomSeasonalRateMutation, type RoomSeasonalRate } from "../services/roomApi";
 import {
   CalendarDays,
   Check,
@@ -288,17 +288,12 @@ export default function EventPricingCalendar() {
   const month = visibleMonth.getMonth() + 1;
   const year = visibleMonth.getFullYear();
 
-  const dayQuery = useGetRoomSeasonalRatesQuery(
-    { date: selectedDate, page: currentPage, size: 1000, sort: "startDate,asc" },
-    { skip: !isDateFilterActive || !selectedDate || !hotelId || Number.isNaN(Number(hotelId)) }
-  );
-
   const monthQuery = useGetRoomSeasonalRatesByMonthQuery(
     { hotelId: Number(hotelId), month, year },
-    { skip: isDateFilterActive || !hotelId || Number.isNaN(Number(hotelId)) }
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) }
   );
 
-  const { data, isLoading: isLoadingSeasonalRates, refetch } = isDateFilterActive ? dayQuery : monthQuery;
+  const { data, isLoading: isLoadingSeasonalRates, refetch } = monthQuery;
   const [createRoomSeasonalRate, { isLoading: isCreatingSeasonalRate }] = useCreateRoomSeasonalRateMutation();
   const [updateRoomSeasonalRate, { isLoading: isUpdatingSeasonalRate }] = useUpdateRoomSeasonalRateMutation();
 
@@ -616,10 +611,15 @@ export default function EventPricingCalendar() {
         evt.roomTypes.includes("ALL") ||
         evt.roomTypes.includes(selectedRoomTypeFilter) ||
         Boolean(evt.roomTypeAdjustments?.[selectedRoomTypeFilter] !== undefined);
+      const eventStartDate = normalizeDateKey(evt.startDate);
+      const eventEndDate = normalizeDateKey(evt.endDate);
+      const matchesDate = !isDateFilterActive || Boolean(
+        eventStartDate && eventEndDate && eventStartDate <= selectedDate && selectedDate <= eventEndDate
+      );
 
-      return matchesSearch && matchesStatus && matchesRoomType;
+      return matchesSearch && matchesStatus && matchesRoomType && matchesDate;
     });
-  }, [events, searchQuery, statusFilter, selectedRoomTypeFilter, todayStr]);
+  }, [events, searchQuery, statusFilter, selectedRoomTypeFilter, selectedDate, isDateFilterActive, todayStr]);
 
   return (
     <div className="space-y-6">
@@ -665,8 +665,9 @@ export default function EventPricingCalendar() {
           </div>
 
           {/* Date Picker */}
-          <div className="min-w-45">
+          <div className="w-fit">
             <DatePickerPopover
+              iconOnly
               value={selectedDate ? new Date(`${selectedDate}T00:00:00`) : undefined}
               onMonthChange={(nextMonth) => {
                 setVisibleMonth(nextMonth);
@@ -683,7 +684,7 @@ export default function EventPricingCalendar() {
               }}
               highlightDates={eventDates}
               placeholder="Chọn ngày"
-              buttonClassName="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              buttonClassName="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white p-0 text-slate-700 shadow-2xs outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
 
@@ -739,7 +740,7 @@ export default function EventPricingCalendar() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
           {filteredEvents.map((evt) => {
             const status = getEventStatus(evt);
             const statusPill =

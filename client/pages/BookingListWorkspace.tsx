@@ -733,6 +733,18 @@ export default function BookingListWorkspace() {
                         const roomName = String(detail.roomName ?? detail.roomTypeName ?? detail.roomType ?? "");
                         const roomSubtotal = detail.roomSubTotal ?? detail.roomSubtotal;
                         const roomPricePerNight = detail.baseRoomPricePerNight ?? detail.roomPrice;
+                        const actualCheckInTime = detail.actualCheckInTime ?? detail.actualCheckIn ?? detail.realCheckInTime ?? detail.checkInActualTime ?? null;
+                        const actualCheckOutTime = detail.actualCheckOutTime ?? detail.actualCheckOut ?? detail.realCheckOutTime ?? detail.checkOutActualTime ?? null;
+                        const bookingCheckInTime = detail.checkInTime ?? null;
+                        const bookingCheckOutTime = detail.checkOutTime ?? null;
+                        const extraFeeValue = detail.extraAdultFeePerNight ?? detail.extraAdultFee ?? detail.extraCharge ?? detail.surcharge ?? detail.additionalFee ?? 0;
+                        const earlyCheckinFee = detail.earlyCheckInFee ?? 0;
+                        const hasValue = (value: unknown) => Boolean(value !== null && value !== undefined && String(value).trim() && String(value).toUpperCase() !== "NULL");
+                        const hasActualCheckInValue = hasValue(actualCheckInTime);
+                        const hasActualCheckOutValue = hasValue(actualCheckOutTime);
+                        const hasBookingCheckInValue = hasValue(bookingCheckInTime);
+                        const hasBookingCheckOutValue = hasValue(bookingCheckOutTime);
+                        const hasEarlyCheckinFeeValue = Number(earlyCheckinFee) > 0;
                         return <div key={idx} className="rounded-lg border border-slate-200 p-3 text-xs text-slate-700 bg-white">
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -741,10 +753,18 @@ export default function BookingListWorkspace() {
                             </div>
                             {roomSubtotal !== undefined && <strong className="shrink-0 text-blue-700">Tạm tính: {money(roomSubtotal)}</strong>}
                           </div>
-                          <div className="mt-1 flex justify-between text-slate-500">
-                            <span>Nhận: {formatDate(detail.checkInTime)}</span>
-                            <span>Trả: {formatDate(detail.checkOutTime)}</span>
+                          <div className="mt-1 flex flex-wrap justify-between gap-2 text-slate-500">
+                            {hasBookingCheckInValue && <span>Nhận: {formatDate(bookingCheckInTime)}</span>}
+                            {hasBookingCheckOutValue && <span>Trả: {formatDate(bookingCheckOutTime)}</span>}
                           </div>
+                          {(hasActualCheckInValue || hasActualCheckOutValue || Number(extraFeeValue) > 0 || hasEarlyCheckinFeeValue) && (
+                            <div className="mt-1 grid gap-1 text-slate-500">
+                              {hasActualCheckInValue && <div className="flex justify-between gap-3"><span>Check-in thực tế: {formatDate(actualCheckInTime)}</span></div>}
+                              {hasActualCheckOutValue && <div className="flex justify-between gap-3"><span>Check-out thực tế: {formatDate(actualCheckOutTime)}</span></div>}
+                              {Number(extraFeeValue) > 0 && <div className="flex justify-between gap-3"><span>Phụ thu: {money(extraFeeValue)}</span></div>}
+                              {hasEarlyCheckinFeeValue && <div className="flex justify-between gap-3"><span>Phí check-in sớm: {money(earlyCheckinFee)}</span></div>}
+                            </div>
+                          )}
                           {roomPricePerNight !== undefined && <p className="mt-1 text-slate-500">Giá phòng/đêm: {money(roomPricePerNight)}</p>}
                           <div className="mt-3 border-t border-slate-100 pt-2">
                             <p className="font-semibold text-slate-600">Dịch vụ ({serviceRequests.length})</p>

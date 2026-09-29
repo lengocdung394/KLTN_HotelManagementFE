@@ -268,7 +268,7 @@
     ,"doubleSingleBeds": "2 giường đơn"
     ,"kingBed": "giường King Size"
     ,"housekeepingReady": "Sẵn sàng nhận việc"
-    ,"floorLabel": "Tầng {{floor}}"
+    ,"floorLabel": "Tầng: {{floor}}"
     ,"photoCount": "{{count}} ảnh"
     ,"maxGuestsLabel": "Tối đa {{count}} khách"
     ,"airConditioning": "Điều hòa"

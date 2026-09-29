@@ -268,7 +268,7 @@
     ,"doubleSingleBeds": "2 single beds"
     ,"kingBed": "King-size bed"
     ,"housekeepingReady": "Ready to work"
-    ,"floorLabel": "Floor {{floor}}"
+    ,"floorLabel": "Floor: {{floor}}"
     ,"photoCount": "{{count}} photos"
     ,"maxGuestsLabel": "Up to {{count}} guests"
     ,"airConditioning": "Air conditioning"

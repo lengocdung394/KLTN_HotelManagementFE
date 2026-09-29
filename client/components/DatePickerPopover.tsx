@@ -11,6 +11,7 @@ interface DatePickerPopoverProps {
   align?: "start" | "center" | "end";
   label?: string;
   highlightDates?: Array<Date | string>;
+  iconOnly?: boolean;
 }
 
 const weekDays = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -51,6 +52,7 @@ export default function DatePickerPopover({
   align = "end",
   label,
   highlightDates = [],
+  iconOnly = false,
 }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(() => {
@@ -100,6 +102,8 @@ export default function DatePickerPopover({
   const firstDayOfMonth = new Date(pickerYear, pickerMonthIndex, 1).getDay();
   const daysInMonth = new Date(pickerYear, pickerMonthIndex + 1, 0).getDate();
   const today = new Date();
+  const selectedDateLabel = value?.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const accessibleLabel = selectedDateLabel ? `${placeholder}: ${selectedDateLabel}` : placeholder;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -110,11 +114,11 @@ export default function DatePickerPopover({
             buttonClassName ??
             "flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
           }
-          aria-label={placeholder}
-          title={placeholder}
+          aria-label={accessibleLabel}
+          title={accessibleLabel}
         >
           <CalendarDays size={16} className="text-blue-600" />
-          <span>{label ? `${label}: ` : ""}{value ? value.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }) : placeholder}</span>
+          {!iconOnly && <span>{label ? `${label}: ` : ""}{selectedDateLabel ?? placeholder}</span>}
         </button>
       </PopoverTrigger>
 

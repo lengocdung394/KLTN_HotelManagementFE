@@ -27,6 +27,8 @@ export const buildSeasonalRateSocketPayload = (
 });
 
 type HotelSocketHandlers = {
+  onRoomCreated?: (data: unknown) => void;
+  onRoomUpdated?: (data: unknown) => void;
   onRoomMatrixUpdated?: (data: unknown) => void;
   onRoomPolicyUpdated?: (data: unknown) => void;
   onNewBookingNotification?: (data: unknown) => void;
@@ -99,6 +101,8 @@ const getCurrentHotelId = () => {
 };
 
 export const bindHotelSocketEvents = ({
+  onRoomCreated,
+  onRoomUpdated,
   onRoomMatrixUpdated,
   onRoomPolicyUpdated,
   onNewBookingNotification,
@@ -109,6 +113,8 @@ export const bindHotelSocketEvents = ({
 }: HotelSocketHandlers = {}) => {
   hotelSocketHandlers = {
     ...hotelSocketHandlers,
+    ...(onRoomCreated ? { onRoomCreated } : {}),
+    ...(onRoomUpdated ? { onRoomUpdated } : {}),
     ...(onRoomMatrixUpdated ? { onRoomMatrixUpdated } : {}),
     ...(onRoomPolicyUpdated ? { onRoomPolicyUpdated } : {}),
     ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
@@ -120,6 +126,8 @@ export const bindHotelSocketEvents = ({
 
   if (!socket) return;
 
+  socket.off("room_create");
+  socket.off("room_update");
   socket.off("room_matrix_updated");
   socket.off("room_policy_updated");
   socket.off("new_booking_notification");
@@ -127,6 +135,14 @@ export const bindHotelSocketEvents = ({
   socket.off("customer_created");
   socket.off("seasonal_rate_announcement");
   socket.off(SEASONAL_RATE_UPDATE_EVENT);
+
+  if (hotelSocketHandlers.onRoomCreated) {
+    socket.on("room_create", hotelSocketHandlers.onRoomCreated);
+  }
+
+  if (hotelSocketHandlers.onRoomUpdated) {
+    socket.on("room_update", hotelSocketHandlers.onRoomUpdated);
+  }
 
   if (hotelSocketHandlers.onRoomMatrixUpdated) {
     socket.on("room_matrix_updated", hotelSocketHandlers.onRoomMatrixUpdated);

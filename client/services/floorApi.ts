@@ -18,7 +18,14 @@ export const floorApi = baseApi.injectEndpoints({
 			}),
 			transformResponse: (response: ApiResponse<FloorResponse[]>) => response?.result ?? [],
 		}),
+		getFloorsByHotelId: builder.query<FloorResponse[], void>({
+			query: () => ({
+				url: "/floor/getFloorsByHotelId",
+				method: "GET",
+			}),
+			transformResponse: (response: ApiResponse<FloorResponse[]>) => response?.result ?? [],
+		}),
 	}),
 });
 
-export const { useGetFloorsByBuildingIdQuery } = floorApi;
+export const { useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery } = floorApi;
