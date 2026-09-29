@@ -15,6 +15,7 @@ import AppHeader from "../components/AppHeader";
 import AppSidebar from "../components/AppSidebar";
 import ScrollControls from "../components/ScrollControls";
 import { useAppSelector } from "../store/hooks";
+import { useSidebar } from "../hooks/useSidebar";
 
 const rooms = ["101", "102", "103", "104"];
 
@@ -87,22 +88,29 @@ function DashboardCheckInOut() {
 
 export default function Index({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
-  
-    const { fullName, email, position, hotelName } = useAppSelector((state) => state.auth);
+  const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
+  const { fullName, email, position, hotelName } = useAppSelector((state) => state.auth);
   const branchLabel = hotelName || "Tất cả chi nhánh";
-  const [mobile, setMobile] = useState(false);
   return (
     <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
-      <AppSidebar mobile={mobile} onCloseMobile={() => setMobile(false)} onLogout={onLogout} fullName={fullName || email} position={position} />
-      {mobile && (
+      <AppSidebar
+        mobile={mobileOpen}
+        onCloseMobile={closeMobile}
+        onLogout={onLogout}
+        fullName={fullName || email}
+        position={position}
+        collapsed={collapsed}
+        onToggleCollapse={toggleSidebar}
+      />
+      {mobileOpen && (
         <div
           className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden"
-          onClick={() => setMobile(false)}
+          onClick={closeMobile}
         />
       )}
-      <main className="min-w-0 lg:pl-64">
-        <AppHeader onMenuClick={() => setMobile(true)} fullName={fullName || email} />
-        <div className="mx-auto min-w-0 max-w-7xl px-5 py-7 lg:px-9">
+      <main className={`min-w-0 transition-[padding] duration-300 ease-in-out ${collapsed ? "lg:pl-0" : "lg:pl-72"}`}>
+        <AppHeader onMenuClick={toggleSidebar} fullName={fullName || email} collapsed={collapsed} />
+        <div className={`mx-auto min-w-0 px-4 py-6 sm:px-6 lg:px-8 transition-[max-width] duration-300 ease-in-out ${collapsed ? "max-w-[1650px]" : "max-w-7xl"}`}>
           <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <p className="mb-1 text-sm font-semibold text-blue-600">
@@ -191,12 +199,9 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                     {t("common.tasksUpdated")}
                   </p>
                 </div>
-                <Link
-                  to="/tasks"
-                  className="text-xs font-semibold text-blue-600"
-                >
+                <span className="text-xs font-semibold text-slate-400">
                   {t("dashboard.viewAll")}
-                </Link>
+                </span>
               </div>
               <div className="space-y-3">
                 <div className="flex items-center gap-3 rounded-xl bg-amber-50/70 p-3">

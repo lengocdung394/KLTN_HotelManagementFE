@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { BedDouble, Check, ImagePlus, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
+import EventPricingCalendar from "../components/EventPricingCalendar";
+import RoomAmenitiesTab from "../components/RoomAmenitiesTab";
+import RoomListTab from "../components/RoomListTab";
+import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
 import { Label } from "@radix-ui/react-label";
-import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
-import { useGetAllAmenitiesQuery } from "../services/amenityApi.ts";
-import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
-import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
-import { useAppSelector } from "../store/hooks";
+import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation } from "../services/roomApi";
+import { useGetAllAmenitiesQuery, type AmenityResponse } from "../services/amenityApi.ts";
+import { useGetBuildingsByCurrentHotelQuery } from "../services/buildingApi";
+import { useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery } from "../services/floorApi";
+import { useGetBranchRoomPoliciesQuery, useUpdateBranchRoomPolicyMutation } from "../services/branchRoomPolicyApi";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { baseApi } from "../services/baseApi";
+import { bindHotelSocketEvents } from "../lib/socket";
 
 type ImportedRoomRow = Record<string, string>;
 
@@ -101,28 +110,9 @@ const createBuildingCode = (currentBuildings: Building[]) => {
   } while (currentBuildings.some((building) => building.id === code));
   return code;
 };
-type RoomRecord = {
-  id: string;
-  buildingName?: string;
-  name: string;
-  images: string[];
-  floor: string;
-  size: string;
-  beds: string;
-  capacity: number;
-  standardCapacity: number;
-  maxExtraGuests: number;
-  extraAdultFee: number;
-  extraChildFee: number;
-  guestPolicy: string;
-  price: number;
-  status: string;
-  cleaner: string;
-  services: string[];
-};
+type Room = RoomDetailsData;
 const employees = ["Nguyễn Thị Mai", "Lê Thị Hương", "Phạm Ngọc Anh", "Trần Minh Tú"];
 const statuses = ["Sẵn sàng", "Đang dọn", "Đang ở", "Bảo trì"];
-const initialFloors = ["Tầng 1", "Tầng 2", "Tầng 3", "Tầng 4"];
 const statusStyle: Record<string, string> = { "Sẵn sàng": "bg-emerald-50 text-emerald-700", "Đang dọn": "bg-amber-50 text-amber-700", "Đang ở": "bg-blue-50 text-blue-700", "Bảo trì": "bg-rose-50 text-rose-700" };
 const roomTypeLabels: Record<string, string> = { STANDARD: "Standard Room", DELUXE: "Deluxe Room", SUITE: "Suite Room", FAMILY: "Family Room" };
 const roomTypeValues: Record<string, string> = Object.fromEntries(Object.entries(roomTypeLabels).map(([value, label]) => [label, value]));
@@ -131,124 +121,12 @@ const statusValues: Record<string, string> = Object.fromEntries(Object.entries(s
 const roomTypeLabel = (value: string) => roomTypeLabels[value] ?? value;
 const statusLabel = (value: string) => statusLabels[value] ?? value;
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
-type Room = RoomRecord & { description?: string };
-
-function RoomDetailModal({ room, onClose }: { room: Room; onClose: () => void }) {
-  const [galleryIndex, setGalleryIndex] = useState(0);
-  const [showGallery, setShowGallery] = useState(false);
-  const galleryImages = room.images.length > 0 ? room.images : ["https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg"];
-
-  return <div className="fixed inset-0 z-60 grid place-items-center bg-slate-950/50 p-3 sm:p-4" onMouseDown={onClose}>
-    <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">Thông tin phòng</p>
-          <h3 className="text-lg font-bold text-slate-900">Phòng {room.id} · {room.name}</h3>
-          <p className="text-xs text-slate-500">{room.floor} · {room.size} · {room.beds}</p>
-        </div>
-        <button type="button" onClick={onClose} className="text-2xl leading-none text-slate-400 hover:text-slate-700" aria-label="Đóng">×</button>
-      </div>
-
-      <div className="space-y-3.5 overflow-y-auto p-4 text-xs sm:text-sm">
-        <div className="space-y-3">
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-            <img src={galleryImages[0]} alt={`${room.name} · phòng ${room.id}`} className="h-44 w-full object-cover" />
-          </div>
-          <div className="rounded-xl border border-slate-200 p-3.5">
-            <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Thông tin chi tiết</h4>
-            <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
-              <div><p className="text-[11px] text-slate-400">Loại phòng</p><p className="font-semibold text-slate-800">{room.name}</p></div>
-              <div><p className="text-[11px] text-slate-400">Loại giường</p><p className="font-semibold text-slate-800">{room.beds}</p></div>
-              <div><p className="text-[11px] text-slate-400">Diện tích</p><p className="font-semibold text-slate-800">{room.size}</p></div>
-              <div><p className="text-[11px] text-slate-400">Vị trí</p><p className="font-semibold text-slate-800">{room.floor}</p></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl bg-slate-50 p-3.5 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold text-slate-700">Trạng thái</p>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusStyle[room.status]}`}>
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status}
-                </span>
-              </div>
-            </div>
-            <div className="mt-3 flex items-end justify-between border-t border-slate-200 pt-3">
-              <span className="text-xs text-slate-500">Giá phòng / đêm</span>
-              <strong className="text-lg text-slate-900">{money(room.price)}</strong>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3.5">
-            <h4 className="text-xs font-bold uppercase tracking-wide text-amber-800">Quy định sức chứa & giá</h4>
-            <div className="mt-2 space-y-1.5 text-xs">
-              <div className="flex justify-between gap-2"><span className="text-slate-600">Sức chứa tiêu chuẩn</span><strong className="text-slate-900">{room.standardCapacity} người</strong></div>
-              <div className="flex justify-between gap-2"><span className="text-slate-600">Người ghép tối đa</span><strong className="text-slate-900">{room.maxExtraGuests} người</strong></div>
-              <div className="flex justify-between gap-2 border-t border-amber-200 pt-1.5"><span className="text-slate-600">Phụ thu người lớn</span><strong className="text-amber-800">{money(room.extraAdultFee)}</strong></div>
-              <div className="flex justify-between gap-2"><span className="text-slate-600">Phụ thu trẻ em</span><strong className="text-amber-800">{money(room.extraChildFee)}</strong></div>
-              <p className="border-t border-amber-200 pt-1 text-[11px] text-slate-500">Em bé dưới 2 tuổi miễn phí.</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 p-3.5">
-          <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Tiện nghi phòng</h4>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {room.services.length > 0 ? room.services.map((service) => (
-              <span key={service} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                <Check size={12} />{service}
-              </span>
-            )) : <p className="text-xs text-slate-400">Chưa cập nhật tiện nghi.</p>}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
-        <button type="button" onClick={() => setShowGallery(true)} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-          Xem toàn bộ ảnh
-        </button>
-        <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700">
-          Đóng
-        </button>
-      </div>
-
-      {showGallery && (
-        <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/80 p-4" onMouseDown={() => setShowGallery(false)}>
-          <div className="w-full max-w-4xl" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between text-white">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300">Thư viện ảnh</p>
-                <h4 className="mt-0.5 text-lg font-bold">Phòng {room.id} · {room.name}</h4>
-              </div>
-              <button type="button" onClick={() => setShowGallery(false)} className="text-2xl leading-none text-white/70 hover:text-white" aria-label="Đóng thư viện ảnh">×</button>
-            </div>
-            <div className="relative mt-3 overflow-hidden rounded-xl bg-black">
-              <img src={galleryImages[galleryIndex]} alt={`Ảnh phòng ${galleryIndex + 1}`} className="h-[min(60vh,500px)] w-full object-contain" />
-              <button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryImages.length) % galleryImages.length)} className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700">‹</button>
-              <button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryImages.length)} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700">›</button>
-            </div>
-            <div className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-8">
-              {galleryImages.map((image, index) => (
-                <button type="button" key={`${image}-full-${index}`} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-400" : "border-transparent"}`}>
-                  <img src={image} alt={`Ảnh thu nhỏ ${index + 1}`} className="h-14 w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  </div>;
-}
-
 type CreateRoomFormState = {
+  roomNumber: string;
   roomType: string;
   building: string;
   floor: string;
   area: string;
-  price: string;
   standardCapacity: string;
   maxExtraGuests: string;
   extraAdultFee: string;
@@ -272,9 +150,8 @@ const roomFormDefaults = (roomType: string) => {
   const details = roomTypeDetails[roomType] ?? roomTypeDetails["Standard Room"];
   return {
     area: details.area.replace(/[^\d.,]/g, ""),
-    price: String(details.price),
     standardCapacity: String(details.capacity),
-    maxExtraGuests: "0",
+    maxExtraGuests: "",
     extraAdultFee: "",
     extraChildFee: "",
     bedType: details.beds,
@@ -282,6 +159,7 @@ const roomFormDefaults = (roomType: string) => {
 };
 
 const emptyCreateRoomForm: CreateRoomFormState = {
+  roomNumber: "",
   roomType: "Standard Room",
   building: "A",
   floor: "1",
@@ -297,18 +175,48 @@ const emptyFloorForm = { name: "" };
 
 export default function RoomWorkspace() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const dispatch = useAppDispatch();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: apiRoomTypes, isLoading: isRoomTypesLoading, isError: isRoomTypesError } = useGetRoomTypesQuery();
   const { data: apiBedTypes, isLoading: isBedTypesLoading, isError: isBedTypesError } = useGetAllBedTypesQuery();
   const { data: apiRoomStatuses, isLoading: isRoomStatusesLoading, isError: isRoomStatusesError } = useGetRoomStatusesQuery();
   const { data: apiAmenities, isLoading: isAmenitiesLoading, isError: isAmenitiesError } = useGetAllAmenitiesQuery();
   const [createRoom, { isLoading: isCreatingRoom }] = useCreateRoomMutation();
-  const availableRoomTypes = (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value)));
-  const availableRoomStatuses = (apiRoomStatuses ?? []).map((value) => statusLabel(String(value)));
+  const [updateRoomApi, { isLoading: isUpdatingRoom }] = useUpdateRoomMutation(); // Added updateRoomApi
+  const [amenityOverrides, setAmenityOverrides] = useState<Record<number, AmenityResponse>>({});
+  const amenityCatalog = useMemo(() => (apiAmenities ?? []).map((amenity) => amenityOverrides[amenity.id] ?? amenity), [apiAmenities, amenityOverrides]);
+  const availableRoomTypes = useMemo(() => (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value))), [apiRoomTypes]);
+  const availableRoomStatuses = useMemo(() => (apiRoomStatuses ?? []).map((value) => statusLabel(String(value))), [apiRoomStatuses]);
   const amenityOptions = useMemo(() => (apiAmenities ?? []).map((amenity) => amenity.name).filter(Boolean), [apiAmenities]);
   const bedTypeOptions = useMemo(() => (apiBedTypes ?? []).map((item) => String(item.bedTypeName ?? item.name ?? item.description ?? "")).filter(Boolean), [apiBedTypes]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
-  const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors">("rooms");
+  const requestedTab = new URLSearchParams(location.search).get("tab");
+  const defaultRoomTab: "rooms" | "pricing" | "amenities" = requestedTab === "pricing" || requestedTab === "amenities" ? requestedTab : "rooms";
+  const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing" | "amenities">(defaultRoomTab);
+  const [pricingMode, setPricingMode] = useState<"branch" | "event">("branch");
+  const [editingPricingType, setEditingPricingType] = useState<string | null>(null);
+  const [pricingSaveError, setPricingSaveError] = useState<string | null>(null);
+  const { data: branchRoomPolicies = [], isLoading: isBranchPoliciesLoading, isError: isBranchPoliciesError } = useGetBranchRoomPoliciesQuery();
+  const [updateBranchRoomPolicy, { isLoading: isUpdatingPolicy }] = useUpdateBranchRoomPolicyMutation();
+  useEffect(() => {
+    if (!hotelId || Number.isNaN(Number(hotelId))) return;
+
+    bindHotelSocketEvents({
+      onRoomCreated: () => {
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
+      },
+      onRoomUpdated: () => {
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
+      },
+      onRoomPolicyUpdated: () => {
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking", "BranchRoomPolicy"]));
+      },
+    });
+  }, [dispatch, hotelId]);
+  useEffect(() => {
+    setActiveTab((current) => (current === defaultRoomTab ? current : defaultRoomTab));
+  }, [defaultRoomTab]);
   const [buildings, setBuildings] = useState<Building[]>(() => {
     if (typeof window === "undefined") return initialBuildings;
     const stored = window.localStorage.getItem("staywise-buildings");
@@ -320,31 +228,26 @@ export default function RoomWorkspace() {
       return initialBuildings;
     }
   });
-  const [floors, setFloors] = useState<string[]>(() => {
-    if (typeof window === "undefined") return initialFloors;
-    const stored = window.localStorage.getItem("staywise-floors");
-    if (!stored) return initialFloors;
-    try {
-      const saved = JSON.parse(stored) as string[];
-      return saved.length > 0 ? saved : initialFloors;
-    } catch {
-      return initialFloors;
-    }
-  });
+  const [pricingDrafts, setPricingDrafts] = useState<Record<string, { price: string; extraAdultFee: string; extraChildFee: string; standardCapacity: string; maxExtraGuests: string }>>({});
+  const [floors, setFloors] = useState<string[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
-  const { data: apiBuildings } = useGetBuildingsByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
-  const { data: apiFloors, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(Number(selectedBuildingId), { skip: !selectedBuildingId || Number.isNaN(Number(selectedBuildingId)) });
+  const { data: apiBuildings } = useGetBuildingsByCurrentHotelQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { currentData: apiFloorsByBuilding, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(Number(selectedBuildingId), { skip: !selectedBuildingId || Number.isNaN(Number(selectedBuildingId)) });
   const [rooms, setRooms] = useState<Room[]>([]);
   const [query, setQuery] = useState("");
   const [building, setBuilding] = useState("Tất cả các tòa");
   const [floor, setFloor] = useState("Tất cả các tầng");
+  const [roomType, setRoomType] = useState("Tất cả loại phòng");
   const [status, setStatus] = useState("Tất cả trạng thái");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [assignmentRoom, setAssignmentRoom] = useState<Room | null>(null);
   const [statusMenuRoom, setStatusMenuRoom] = useState<string | null>(null);
   const [galleryRoom, setGalleryRoom] = useState<Room | null>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editingRoomDatabaseId, setEditingRoomDatabaseId] = useState<string | null>(null);
   const [showCreateBuilding, setShowCreateBuilding] = useState(false);
   const [editingBuildingId, setEditingBuildingId] = useState<string | null>(null);
   const [buildingQuery, setBuildingQuery] = useState("");
@@ -362,18 +265,69 @@ export default function RoomWorkspace() {
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
   const selectedRoomTypeValue = roomTypeValues[createRoomForm.roomType] ?? createRoomForm.roomType;
-  const { data: roomTypeDetail, isLoading: isRoomTypeDetailLoading, isError: isRoomTypeDetailError } = useGetRoomTypeDetailQuery(
+  const { currentData: roomTypeDetail, isLoading: isRoomTypeDetailLoading, isError: isRoomTypeDetailError } = useGetRoomTypeDetailQuery(
     { hotelId: Number(hotelId), roomType: selectedRoomTypeValue },
-    { skip: !hotelId || !createRoomForm.roomType || editingRoomId !== null },
+    { skip: !hotelId || !createRoomForm.roomType },
   );
   const getApiValue = (item: Record<string, unknown>, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
+  const { data: apiFloorsByHotel = [] } = useGetFloorsByHotelIdQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const getRoomAmenityNames = (item: Record<string, unknown>) => {
+    const amenityKeys = ["amenities", "roomAmenities", "amenityList", "amenityResponses", "roomAmenityResponses", "services", "amenityIds", "amenityNames"];
+    const nestedRoom = getApiValue(item, ["roomInfo", "roomDetails", "room"]);
+    const nestedRoomRecord = nestedRoom && typeof nestedRoom === "object" ? nestedRoom as Record<string, unknown> : undefined;
+    const rawAmenities = getApiValue(item, amenityKeys) ?? (nestedRoomRecord ? getApiValue(nestedRoomRecord, amenityKeys) : undefined);
+    const entries = Array.isArray(rawAmenities)
+      ? rawAmenities
+      : typeof rawAmenities === "string"
+        ? rawAmenities.split(/[;,|]/).map((name) => name.trim()).filter(Boolean)
+        : rawAmenities == null ? [] : [rawAmenities];
+    const resolveAmenityName = (value: string) => {
+      const amenityName = value.trim();
+      return apiAmenities?.find((option) => String(option.id) === amenityName || normalizeText(option.name) === normalizeText(amenityName))?.name ?? amenityName;
+    };
+
+    return entries.map((value) => {
+      if (typeof value === "string") return resolveAmenityName(value);
+
+      const amenity = (value && typeof value === "object" ? value : { id: value }) as Record<string, unknown>;
+      const nestedAmenity = amenity.amenity ?? amenity.service;
+      if (typeof nestedAmenity === "string" && nestedAmenity.trim()) return resolveAmenityName(nestedAmenity);
+      const details: Record<string, unknown> = nestedAmenity && typeof nestedAmenity === "object" ? nestedAmenity as Record<string, unknown> : amenity;
+      const name = details.name ?? details.amenityName ?? details.serviceName ?? details.title;
+      if (name != null && String(name).trim()) return resolveAmenityName(String(name));
+
+      const id = details.id ?? details.amenityId ?? details.serviceId ?? amenity.amenityId ?? amenity.serviceId;
+      return id == null ? "" : resolveAmenityName(String(id));
+    }).filter(Boolean);
+  };
   const { data: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError } = useGetRoomsByCurrentHotelQuery();
-  const apiFloorOptions = (apiFloors ?? []).map((item) => {
+  const apiFloorOptions = useMemo(() => (apiFloorsByBuilding ?? []).map((item) => {
     const id = getApiValue(item, ["id", "floorId", "floorID"]);
-    const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
-    const displayName = String(name ?? id ?? "");
-    return { id: String(id ?? ""), name: displayName.toLowerCase().startsWith("tầng") ? displayName : `Tầng ${displayName}` };
-  }).filter((item) => item.id && item.name);
+    const floorNumber = getApiValue(item, ["floorNumber", "floorLevel", "number"]);
+    const name = getApiValue(item, ["name", "floorName"]);
+    const displayName = String(floorNumber ?? name ?? "");
+    return { id: String(id ?? ""), name: displayName };
+  }).filter((item) => item.id && item.name), [apiFloorsByBuilding]);
+  const hotelFloorOptions = useMemo(() => apiFloorsByHotel.map((item) => {
+    const id = getApiValue(item, ["id", "floorId", "floorID"]);
+    const floorNumber = getApiValue(item, ["floorNumber", "floorLevel", "number"]);
+    const name = getApiValue(item, ["name", "floorName"]);
+    const displayName = String(floorNumber ?? name ?? "");
+    const buildingValue = getApiValue(item, ["building"]);
+    const buildingRecord = buildingValue && typeof buildingValue === "object" ? buildingValue as Record<string, unknown> : {};
+    const buildingId = getApiValue(item, ["buildingId", "buildingID"]) ?? getApiValue(buildingRecord, ["id", "buildingId", "buildingID"]);
+    return {
+      id: String(id ?? ""),
+      name: displayName,
+      buildingId: String(buildingId ?? ""),
+    };
+  }).filter((item) => item.id && item.name), [apiFloorsByHotel]);
+  const hotelFloorNames = useMemo(() => [...new Set(hotelFloorOptions.map((item) => item.name))], [hotelFloorOptions]);
+  const hotelFloorsForSelectedBuilding = useMemo(
+    () => hotelFloorOptions.filter((item) => !selectedBuildingId || !item.buildingId || item.buildingId === selectedBuildingId),
+    [hotelFloorOptions, selectedBuildingId],
+  );
+  const selectedBuildingFloorOptions = apiFloorsByBuilding !== undefined ? apiFloorOptions : hotelFloorsForSelectedBuilding;
   useEffect(() => {
     console.log("[RoomWorkspace] rooms by current hotel", { rooms: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError });
   }, [apiRooms, roomsError, isRoomsLoading, isRoomsFetching, isRoomsError]);
@@ -384,8 +338,11 @@ export default function RoomWorkspace() {
       const roomType = roomTypeLabel(String(getApiValue(item, ["roomType", "roomName", "type", "name"]) ?? "STANDARD"));
       const details = roomTypeDetails[roomType] ?? roomTypeDetails["Standard Room"];
       const roomId = String(getApiValue(item, ["roomNumber", "roomCode", "code", "id"]) ?? `room-${index + 1}`);
+      const databaseIdValue = getApiValue(item, ["id", "roomId"]);
+      const databaseId = databaseIdValue == null ? undefined : String(databaseIdValue);
       const floorId = getApiValue(item, ["floorId", "floorID"]);
       const floorNumber = getApiValue(item, ["floorNumber", "floorLevel"]);
+      const buildingId = hotelFloorOptions.find((floorOption) => floorOption.id === String(floorId ?? ""))?.buildingId; // Added buildingId
       const buildingName = String(getApiValue(item, ["nameBuilding", "buildingName"]) ?? "").trim();
       const avatarValue = getApiValue(item, ["avatarUrl", "imageUrls", "images"]);
       const avatarUrls = Array.isArray(avatarValue)
@@ -400,10 +357,7 @@ export default function RoomWorkspace() {
         ...(typeof defaultImageUrl === "string" ? [defaultImageUrl] : []),
         ...avatarUrls.map((image) => image.url),
       ].filter((image, imageIndex, values) => values.indexOf(image) === imageIndex);
-      const amenities = getApiValue(item, ["amenities"]);
-      const services = Array.isArray(amenities)
-        ? amenities.map((amenity) => typeof amenity === "string" ? amenity : String((amenity as Record<string, unknown>)?.name ?? "")).filter(Boolean)
-        : [];
+      const services = getRoomAmenityNames(item);
       const rawBeds = getApiValue(item, ["beds", "bedTypes"]);
       const bedItems = Array.isArray(rawBeds) ? rawBeds : rawBeds && typeof rawBeds === "object" ? [rawBeds] : [];
       const bedNames = bedItems.map((bed) => {
@@ -427,10 +381,13 @@ export default function RoomWorkspace() {
 
       return {
         id: roomId,
+        databaseId,
         buildingName: buildingName || undefined,
+        buildingId, // Added buildingId to the object being returned
+        floorId: floorId == null ? undefined : String(floorId), // Ensured floorId is correctly formatted
         name: roomType,
         images,
-        floor: `Tầng ${floorNumber ?? floorId ?? ""}`,
+        floor: String(floorNumber ?? ""),
         size: String(getApiValue(item, ["roomSize", "size", "area", "roomArea", "acreage"]) ?? "Chưa cập nhật"),
         beds: bedNames.join(" · ") || String(getApiValue(item, ["bedType", "bedTypeName"]) ?? details.beds),
         capacity: Number.isFinite(standardCapacity) ? standardCapacity : details.capacity,
@@ -450,7 +407,7 @@ export default function RoomWorkspace() {
       const previous = current.find((item) => item.id === room.id);
       return previous ? { ...room, status: previous.status, cleaner: previous.cleaner } : room;
     }));
-  }, [apiRooms]);
+  }, [apiRooms, apiAmenities, hotelFloorOptions]);
   useEffect(() => {
     if (!apiBuildings) return;
     const nextBuildings = apiBuildings.map((item) => {
@@ -458,34 +415,33 @@ export default function RoomWorkspace() {
       const name = getApiValue(item, ["name", "buildingName", "buildingCode", "code"]);
       return { id: String(id ?? ""), name: String(name ?? id ?? "Tòa nhà") };
     }).filter((item) => item.id);
-    setBuildings(nextBuildings);
-    setSelectedBuildingId((current) => nextBuildings.some((item) => item.id === current) ? current : (nextBuildings[0]?.id ?? ""));
-    setCreateRoomForm((current) => ({
-      ...current,
-      building: nextBuildings.some((item) => item.id === current.building) ? current.building : (nextBuildings[0]?.id ?? current.building),
-    }));
+
+    setBuildings((current) => (current.length === nextBuildings.length && current.every((building, index) => building.id === nextBuildings[index]?.id && building.name === nextBuildings[index]?.name) ? current : nextBuildings));
+    setSelectedBuildingId((current) => {
+      const nextSelected = nextBuildings.some((item) => item.id === current) ? current : (nextBuildings[0]?.id ?? "");
+      return nextSelected === current ? current : nextSelected;
+    });
+    setCreateRoomForm((current) => {
+      const nextBuilding = nextBuildings.some((item) => item.id === current.building) ? current.building : (nextBuildings[0]?.id ?? current.building);
+      return nextBuilding === current.building ? current : { ...current, building: nextBuilding };
+    });
   }, [apiBuildings]);
   useEffect(() => {
-    if (!apiFloors) return;
-    const nextFloors = apiFloors.map((item) => {
-      const id = getApiValue(item, ["id", "floorId", "floorID"]);
-      const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
-      const displayName = String(name ?? id ?? "");
-      return displayName.toLowerCase().startsWith("tầng") ? displayName : `Tầng ${displayName}`;
-    }).filter(Boolean);
-    setFloors(nextFloors);
-    setCreateRoomForm((current) => ({
-      ...current,
-      floor: apiFloorOptions.some((item) => item.id === current.floor) ? current.floor : (apiFloorOptions[0]?.id ?? current.floor),
-    }));
-  }, [apiFloors]);
+    const nextFloors = selectedBuildingFloorOptions.map((item) => item.name);
+
+    setFloors((current) => (current.length === nextFloors.length && current.every((floorName, index) => floorName === nextFloors[index]) ? current : nextFloors));
+    setCreateRoomForm((current) => {
+      const nextFloor = selectedBuildingFloorOptions.some((item) => item.id === current.floor) ? current.floor : (selectedBuildingFloorOptions[0]?.id ?? current.floor);
+      return nextFloor === current.floor ? current : { ...current, floor: nextFloor };
+    });
+  }, [selectedBuildingFloorOptions]);
   useEffect(() => {
-    setCreateRoomForm((current) => ({
-      ...current,
-      roomType: availableRoomTypes.some((type) => String(type) === current.roomType) ? current.roomType : (availableRoomTypes[0] ?? current.roomType),
-      status: availableRoomStatuses.some((status) => String(status) === current.status) ? current.status : (availableRoomStatuses[0] ?? current.status),
-    }));
-  }, [apiRoomTypes, apiRoomStatuses]);
+    setCreateRoomForm((current) => {
+      const nextRoomType = availableRoomTypes.some((type) => String(type) === current.roomType) ? current.roomType : (availableRoomTypes[0] ?? current.roomType);
+      const nextStatus = availableRoomStatuses.some((status) => String(status) === current.status) ? current.status : (availableRoomStatuses[0] ?? current.status);
+      return nextRoomType === current.roomType && nextStatus === current.status ? current : { ...current, roomType: nextRoomType, status: nextStatus };
+    });
+  }, [apiRoomTypes, apiRoomStatuses, availableRoomTypes, availableRoomStatuses]);
   useEffect(() => {
     if (!roomTypeDetail || editingRoomId !== null) return;
 
@@ -499,18 +455,29 @@ export default function RoomWorkspace() {
       return name ? `${quantity > 1 ? `${quantity} ` : ""}${name}` : "";
     }).filter(Boolean);
     const standardCapacity = getDetailValue(["standardCapacity", "standardAdults", "capacity", "maxAdults", "adults", "adultCapacity", "numberOfAdults"]);
-    const maxExtraGuests = getDetailValue(["maxExtraGuests"]);
+    const roomTypePolicy = branchRoomPolicies.find((policy) => {
+      const policyRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
+      return roomTypeLabel(String(policyRoomType ?? "")) === createRoomForm.roomType;
+    });
+    const maxExtraGuests = getDetailValue(["maxExtraGuests", "maxExtraGuest", "extraGuestCapacity"])
+      ?? getApiValue(roomTypePolicy ?? {}, ["maxExtraGuests", "max_extra_guests", "extraGuestCapacity"]);
     const extraAdultFee = getDetailValue(["extraAdultFee"]);
     const extraChildFee = getDetailValue(["extraChildFee"]);
-    setCreateRoomForm((current) => ({
-      ...current,
-      standardCapacity: standardCapacity !== undefined ? String(standardCapacity) : current.standardCapacity,
-      maxExtraGuests: maxExtraGuests !== undefined ? String(maxExtraGuests) : current.maxExtraGuests,
-      extraAdultFee: extraAdultFee !== undefined ? String(extraAdultFee) : current.extraAdultFee,
-      extraChildFee: extraChildFee !== undefined ? String(extraChildFee) : current.extraChildFee,
-      bedType: bedNames.length > 0 ? bedNames.join(" · ") : current.bedType,
-    }));
-  }, [roomTypeDetail, editingRoomId]);
+
+    setCreateRoomForm((current) => {
+      const nextStandardCapacity = standardCapacity !== undefined ? String(standardCapacity) : current.standardCapacity;
+      const nextMaxExtraGuests = maxExtraGuests !== undefined ? String(maxExtraGuests) : current.maxExtraGuests;
+      const nextExtraAdultFee = extraAdultFee !== undefined ? String(extraAdultFee) : current.extraAdultFee;
+      const nextExtraChildFee = extraChildFee !== undefined ? String(extraChildFee) : current.extraChildFee;
+      const nextBedType = bedNames.length > 0 ? bedNames.join(" · ") : current.bedType;
+
+      if (current.standardCapacity === nextStandardCapacity && current.maxExtraGuests === nextMaxExtraGuests && current.extraAdultFee === nextExtraAdultFee && current.extraChildFee === nextExtraChildFee && current.bedType === nextBedType) {
+        return current;
+      }
+
+      return { ...current, standardCapacity: nextStandardCapacity, maxExtraGuests: nextMaxExtraGuests, extraAdultFee: nextExtraAdultFee, extraChildFee: nextExtraChildFee, bedType: nextBedType };
+    });
+  }, [roomTypeDetail, branchRoomPolicies, createRoomForm.roomType, editingRoomId]);
   const isAnyModalOpen = showCreateRoom || Boolean(detailRoom) || Boolean(galleryRoom) || Boolean(assignmentRoom);
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -535,28 +502,121 @@ export default function RoomWorkspace() {
 
     return undefined;
   }, [isAnyModalOpen]);
-  const generatedRoomCode = useMemo(() => {
-    const prefix = `${createRoomForm.building}-${createRoomForm.floor}-`;
-    const usedSequence = rooms
-      .map((room) => room.id)
-      .filter((id) => id.startsWith(prefix))
-      .map((id) => Number(id.slice(prefix.length)))
-      .filter((value) => Number.isInteger(value) && value > 0);
-
-    let nextSequence = 1;
-    while (usedSequence.includes(nextSequence)) nextSequence += 1;
-    return `${prefix}${nextSequence}`;
-  }, [rooms, createRoomForm.building, createRoomForm.floor]);
   const filtered = useMemo(() => rooms
     .filter((room) => `${room.id} ${room.name}`.toLowerCase().includes(query.toLowerCase()))
     .filter((room) => building === "Tất cả các tòa" || room.id.startsWith(`${building}-`) || room.buildingName?.includes(building))
     .filter((room) => floor === "Tất cả các tầng" || room.floor === floor)
-    .filter((room) => status === "Tất cả trạng thái" || room.status === status), [rooms, query, building, floor, status]);
+    .filter((room) => roomType === "Tất cả loại phòng" || room.name === roomType)
+    .filter((room) => status === "Tất cả trạng thái" || room.status === status), [rooms, query, building, floor, roomType, status]);
+  const roomTypePricing = useMemo(() => {
+    const pricingMap = new Map<string, { roomType: string; policyId?: string; price: number; extraAdultFee: number; extraChildFee: number; standardCapacity: number; maxExtraGuests: number; area?: number; capacity?: number; count: number }>();
+    rooms.forEach((room) => {
+      const existing = pricingMap.get(room.name) ?? {
+        roomType: room.name,
+        price: room.price,
+        extraAdultFee: room.extraAdultFee,
+        extraChildFee: room.extraChildFee,
+        standardCapacity: room.standardCapacity,
+        maxExtraGuests: room.maxExtraGuests,
+        area: undefined,
+        capacity: room.standardCapacity,
+        count: 0,
+      };
+      pricingMap.set(room.name, {
+        ...existing,
+        price: room.price || existing.price,
+        extraAdultFee: room.extraAdultFee || existing.extraAdultFee,
+        extraChildFee: room.extraChildFee || existing.extraChildFee,
+        standardCapacity: room.standardCapacity || existing.standardCapacity,
+        maxExtraGuests: room.maxExtraGuests || existing.maxExtraGuests,
+        capacity: room.standardCapacity || existing.capacity || room.standardCapacity,
+        count: existing.count + 1,
+      });
+    });
+    branchRoomPolicies.forEach((policy) => {
+      const rawRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
+      const roomType = roomTypeLabel(String(rawRoomType ?? ""));
+      if (!roomType) return;
+
+      const existing = pricingMap.get(roomType);
+      const policyId = getApiValue(policy, ["id", "policyId", "branchRoomPolicyId", "branchRoomPolicyID"]);
+      const policyNumber = (keys: string[], fallback: number) => {
+        const value = getApiValue(policy, keys);
+        const parsed = Number(value);
+        return value !== undefined && Number.isFinite(parsed) ? parsed : fallback;
+      };
+
+      pricingMap.set(roomType, {
+        roomType,
+        policyId: policyId == null ? existing?.policyId : String(policyId),
+        price: policyNumber(["basePrice", "base_price", "price", "roomPrice", "pricePerNight", "listedPrice"], existing?.price ?? 0),
+        extraAdultFee: policyNumber(["extraAdultFee", "extra_adult_fee", "adultSurcharge"], existing?.extraAdultFee ?? 0),
+        extraChildFee: policyNumber(["extraChildFee", "extra_child_fee", "childSurcharge"], existing?.extraChildFee ?? 0),
+        standardCapacity: policyNumber(["standardCapacity", "standard_capacity", "capacity", "maxAdults"], existing?.standardCapacity ?? 1),
+        maxExtraGuests: policyNumber(["maxExtraGuests", "max_extra_guests", "extraGuestCapacity"], existing?.maxExtraGuests ?? 0),
+        area: policyNumber(["area", "roomArea", "squareMeters", "size"], existing?.area ?? 0),
+        capacity: policyNumber(["maxCapacity", "capacity", "maxAdults", "standardCapacity"], existing?.capacity ?? 0),
+        count: existing?.count ?? rooms.filter((room) => room.name === roomType).length,
+      });
+    });
+    return Array.from(pricingMap.values()).sort((left, right) => left.roomType.localeCompare(right.roomType));
+  }, [rooms, branchRoomPolicies]);
+  const selectedRoomTypePolicy = branchRoomPolicies.find((policy) => {
+    const policyRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
+    return roomTypeLabel(String(policyRoomType ?? "")) === createRoomForm.roomType;
+  });
+  const standardRoomPrice = Number(
+    getApiValue(selectedRoomTypePolicy ?? {}, ["basePrice", "base_price", "price", "roomPrice", "pricePerNight", "listedPrice"]) ??
+    getApiValue(roomTypeDetail ?? {}, ["basePrice", "base_price", "price", "roomPrice", "pricePerNight", "listedPrice"]) ??
+    roomTypeDetails[createRoomForm.roomType]?.price ??
+    roomTypeDetails["Standard Room"].price
+  );
+  const officialRoomPrice = standardRoomPrice;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRooms = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, building, floor, roomType, status, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    const nextDrafts: Record<string, { price: string; extraAdultFee: string; extraChildFee: string; standardCapacity: string; maxExtraGuests: string }> = {};
+    roomTypePricing.forEach((entry) => {
+      nextDrafts[entry.roomType] = {
+        price: String(entry.price),
+        extraAdultFee: String(entry.extraAdultFee),
+        extraChildFee: String(entry.extraChildFee),
+        standardCapacity: String(entry.standardCapacity),
+        maxExtraGuests: String(entry.maxExtraGuests),
+      };
+    });
+
+    setPricingDrafts((current) => {
+      const hasDifferentEntry = Object.keys(nextDrafts).some((roomType) => {
+        const nextDraft = nextDrafts[roomType];
+        const currentDraft = current[roomType];
+        return !currentDraft || currentDraft.price !== nextDraft.price || currentDraft.extraAdultFee !== nextDraft.extraAdultFee || currentDraft.extraChildFee !== nextDraft.extraChildFee || currentDraft.standardCapacity !== nextDraft.standardCapacity || currentDraft.maxExtraGuests !== nextDraft.maxExtraGuests;
+      });
+
+      const hasRemovedEntry = Object.keys(current).some((roomType) => !(roomType in nextDrafts));
+      if (!hasDifferentEntry && !hasRemovedEntry) return current;
+      return { ...current, ...nextDrafts };
+    });
+  }, [roomTypePricing]);
+
   const filteredAmenityOptions = useMemo(() => {
     const normalizedQuery = normalizeText(amenitySearch);
 
     return (apiAmenities ?? []).filter((amenity) => !normalizedQuery || normalizeText(amenity.name).includes(normalizedQuery));
   }, [apiAmenities, amenitySearch]);
+  const saveAmenityEdit = (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => {
+    setAmenityOverrides((current) => ({ ...current, [amenity.id]: { ...amenity, ...changes } }));
+  };
   const filteredBuildings = useMemo(() => {
     const normalizedQuery = normalizeText(buildingQuery);
     const matchingBuildings = buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
@@ -575,16 +635,78 @@ export default function RoomWorkspace() {
   const closeCreateRoomModal = () => {
     setShowCreateRoom(false);
     setEditingRoomId(null);
+    setEditingRoomDatabaseId(null);
     setCreateRoomForm(emptyCreateRoomForm);
     setAmenitySearch("");
     setShowAmenityMenu(false);
     setRoomImageFiles([]);
   };
+  const handlePricingDraftChange = (roomType: string, field: "price" | "extraAdultFee" | "extraChildFee" | "standardCapacity" | "maxExtraGuests", value: string) => {
+    setPricingDrafts((current) => ({
+      ...current,
+      [roomType]: {
+        price: current[roomType]?.price ?? "0",
+        extraAdultFee: current[roomType]?.extraAdultFee ?? "0",
+        extraChildFee: current[roomType]?.extraChildFee ?? "0",
+        standardCapacity: current[roomType]?.standardCapacity ?? "1",
+        maxExtraGuests: current[roomType]?.maxExtraGuests ?? "0",
+        [field]: value,
+      },
+    }));
+  };
+  const saveRoomTypePricing = async (roomType: string) => {
+    const draft = pricingDrafts[roomType];
+    const entry = roomTypePricing.find((item) => item.roomType === roomType);
+    if (!draft || !entry?.policyId) return false;
+    const nextPrice = Number(draft.price) || 0;
+    const nextExtraAdultFee = Number(draft.extraAdultFee) || 0;
+    const nextExtraChildFee = Number(draft.extraChildFee) || 0;
+    const nextStandardCapacity = Number(draft.standardCapacity) || 1;
+    const nextMaxExtraGuests = Number(draft.maxExtraGuests) || 0;
+
+    setPricingSaveError(null);
+    try {
+      await updateBranchRoomPolicy({
+        policyId: entry.policyId,
+        request: {
+          price: nextPrice,
+          extraAdultFee: nextExtraAdultFee,
+          extraChildFee: nextExtraChildFee,
+          standardCapacity: nextStandardCapacity,
+          maxExtraGuests: nextMaxExtraGuests,
+        },
+      }).unwrap();
+      setRooms((current) => current.map((room) => room.name === roomType ? {
+        ...room,
+        price: nextPrice,
+        extraAdultFee: nextExtraAdultFee,
+        extraChildFee: nextExtraChildFee,
+        standardCapacity: nextStandardCapacity,
+        maxExtraGuests: nextMaxExtraGuests,
+        capacity: nextStandardCapacity,
+        guestPolicy: `Tiêu chuẩn ${nextStandardCapacity} người · Ghép thêm tối đa ${nextMaxExtraGuests} người`,
+      } : room));
+      toast({
+        variant: "success",
+        title: "Cập nhật giá thành công!",
+        description: `Giá cho ${roomType} đã được cập nhật và đồng bộ cho chi nhánh.`,
+      });
+      return true;
+    } catch {
+      setPricingSaveError("Không thể cập nhật cấu hình giá. Vui lòng thử lại.");
+      return false;
+    }
+  };
   const openEditRoomModal = (room: Room) => {
     const details = roomFormDefaults(room.name);
     const area = room.size.match(/[\d.,]+/)?.[0] ?? details.area;
+    const floorOption = hotelFloorOptions.find((item) => item.id === room.floorId || item.name === room.floor); // Added floorOption
+    const buildingId = room.buildingId ?? floorOption?.buildingId ?? selectedBuildingId; // Corrected buildingId assignment
+    const floorId = room.floorId ?? floorOption?.id ?? ""; // Corrected floorId assignment
+    if (buildingId) setSelectedBuildingId(buildingId); // Set selectedBuildingId if buildingId is available
     setEditingRoomId(room.id);
-    setCreateRoomForm({ roomType: room.name, building: room.id.split("-")[0], floor: room.id.split("-")[1] ?? "1", area, price: String(room.price), standardCapacity: String(room.standardCapacity || room.capacity), maxExtraGuests: String(room.maxExtraGuests), extraAdultFee: String(room.extraAdultFee || ""), extraChildFee: String(room.extraChildFee || ""), bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" });
+    setEditingRoomDatabaseId(room.databaseId ?? null);
+    setCreateRoomForm({ roomNumber: /^\d+$/.test(room.id) ? room.id : "", roomType: room.name, building: buildingId, floor: floorId, area, standardCapacity: String(room.standardCapacity || room.capacity), maxExtraGuests: String(room.maxExtraGuests), extraAdultFee: String(room.extraAdultFee || ""), extraChildFee: String(room.extraChildFee || ""), bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" }); // Updated to use buildingId and floorId
     setShowCreateRoom(true);
   };
   const openCreateBuildingModal = () => {
@@ -633,7 +755,6 @@ export default function RoomWorkspace() {
     const nextFloors = editingFloor ? floors.map((floor) => floor === editingFloor ? name : floor) : [...floors, name];
     setFloors(nextFloors);
     setRooms((current) => editingFloor ? current.map((room) => room.floor === editingFloor ? { ...room, floor: name } : room) : current);
-    window.localStorage.setItem("staywise-floors", JSON.stringify(nextFloors));
     closeCreateFloorModal();
   };
   const appendAmenity = (value?: string) => {
@@ -659,60 +780,71 @@ export default function RoomWorkspace() {
     setAmenityPrice("");
     setShowAmenityMenu(false);
   };
-  const removeAmenity = (value: string) => setCreateRoomForm((current) => ({ ...current, amenities: current.amenities.filter((item) => item !== value) }));
+  const removeAmenity = (value: string) => setCreateRoomForm((current) => ({ ...current, amenities: current.amenities.filter((item) => normalizeText(item) !== normalizeText(value)) }));
   const clearAllAmenities = () => setCreateRoomForm((current) => ({ ...current, amenities: [] }));
   const addImages = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const selectedFiles = Array.from(files);
+    const availableSlots = Math.max(0, 8 - createRoomForm.images.length);
+    const selectedFiles = Array.from(files).slice(0, availableSlots);
+    if (selectedFiles.length === 0) return;
     const nextImages = selectedFiles.map((file) => URL.createObjectURL(file));
-    setRoomImageFiles((current) => [...current, ...selectedFiles].slice(0, 8));
+    setRoomImageFiles((current) => [...current, ...selectedFiles]);
     setCreateRoomForm((current) => {
-      const mergedImages = [...current.images, ...nextImages].slice(0, 8);
+      const mergedImages = [...current.images, ...nextImages];
       const nextDefault = current.defaultImage ?? mergedImages[0] ?? null;
       return { ...current, images: mergedImages, defaultImage: nextDefault };
     });
   };
-  const removeImage = (image: string) => setCreateRoomForm((current) => {
-    const removedIndex = current.images.indexOf(image);
-    const remaining = current.images.filter((item) => item !== image);
-    const nextDefault = current.defaultImage === image ? (remaining[0] ?? null) : current.defaultImage;
-    setRoomImageFiles((files) => files.filter((_, index) => index !== removedIndex));
-    return { ...current, images: remaining, defaultImage: nextDefault };
-  });
+  const removeImage = (image: string) => {
+    const removedUploadIndex = image.startsWith("blob:")
+      ? createRoomForm.images.filter((item) => item.startsWith("blob:")).indexOf(image)
+      : -1;
+    if (removedUploadIndex >= 0) {
+      setRoomImageFiles((files) => files.filter((_, index) => index !== removedUploadIndex));
+    }
+    setCreateRoomForm((current) => {
+      const remaining = current.images.filter((item) => item !== image);
+      const nextDefault = current.defaultImage === image ? (remaining[0] ?? null) : current.defaultImage;
+      return { ...current, images: remaining, defaultImage: nextDefault };
+    });
+  };
   const saveRoom = async () => {
-    const roomCode = editingRoomId ?? generatedRoomCode;
+    const isEditingRoom = editingRoomId !== null;
+    const roomCode = createRoomForm.roomNumber.trim();
     const roomType = createRoomForm.roomType.trim();
     const roomDetails = roomTypeDetails[roomType] ?? roomTypeDetails["Standard Room"];
     const location = `Tòa ${createRoomForm.building} - Tầng ${createRoomForm.floor}`;
     const description = createRoomForm.description.trim();
     const area = Number(createRoomForm.area.replace(/,/g, "."));
-    const price = Number(createRoomForm.price.replace(/[^\d]/g, ""));
+    const price = officialRoomPrice;
     const standardCapacity = Number(createRoomForm.standardCapacity);
     const maxExtraGuests = Number(createRoomForm.maxExtraGuests);
     const extraAdultFee = Number(createRoomForm.extraAdultFee || 0);
     const extraChildFee = Number(createRoomForm.extraChildFee || 0);
     const bedType = createRoomForm.bedType || roomDetails.beds;
-    if (!roomType || !area || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
-      window.alert("Vui lòng nhập đầy đủ các trường bắt buộc.");
+    const showRoomSaveError = (title: string, description: string) => toast({
+      variant: "destructive",
+      title,
+      description,
+    });
+
+    if (!roomCode || !roomType || !area || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
+      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Vui lòng nhập đầy đủ các trường bắt buộc.");
       return;
     }
-    if (!editingRoomId && rooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase())) {
-      window.alert("Mã phòng tự tạo bị trùng, vui lòng thử lại.");
+    if (rooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase() && room.id !== editingRoomId)) {
+      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Số phòng đã tồn tại, vui lòng nhập số khác.");
       return;
     }
     if (!editingRoomId) {
       if (roomImageFiles.length === 0) {
-        window.alert("Vui lòng tải lên ít nhất một ảnh phòng.");
+        showRoomSaveError("Không thể thêm phòng", "Vui lòng tải lên ít nhất một ảnh phòng.");
         return;
       }
-      const selectedFloor = apiFloors?.find((item) => {
-        const id = getApiValue(item, ["id", "floorId", "floorID"]);
-        const name = getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]);
-        return String(id) === createRoomForm.floor || String(name) === createRoomForm.floor;
-      });
-      const floorId = Number(getApiValue(selectedFloor ?? {}, ["id", "floorId"]));
-      if (!Number.isInteger(floorId) || floorId <= 0) {
-        window.alert("Vui lòng chọn tầng hợp lệ.");
+      const selectedFloor = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor || item.name === createRoomForm.floor);
+      const floorId = selectedFloor?.id;
+      if (!floorId) {
+        showRoomSaveError("Không thể thêm phòng", "Vui lòng chọn tầng hợp lệ.");
         return;
       }
       const defaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
@@ -721,14 +853,66 @@ export default function RoomWorkspace() {
         .filter((id): id is number => id !== undefined);
       try {
         await createRoom({
-            roomInfo: { floorId, roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status, roomType: roomTypeValues[roomType] ?? roomType, basePrice: price, standardCapacity, maxExtraGuests, extraAdultFee, extraChildFee, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds },
+            roomInfo: { roomNumber: roomCode, floorId, roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status, roomType: roomTypeValues[roomType] ?? roomType, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds },
           imageFiles: roomImageFiles,
         }).unwrap();
         closeCreateRoomModal();
-        window.alert("Thêm phòng mới thành công!");
+        toast({
+          variant: "success",
+          title: "Thêm phòng thành công",
+          description: "Phòng mới đã được thêm vào danh sách.",
+        });
       } catch (error) {
-        window.alert(error instanceof Error ? error.message : "Không thể thêm phòng.");
+        const errorRecord = error && typeof error === "object" ? error as { data?: unknown; message?: unknown } : {};
+        const responseData = errorRecord.data && typeof errorRecord.data === "object" ? errorRecord.data as { message?: unknown } : undefined;
+        const message = typeof errorRecord.data === "string"
+          ? errorRecord.data
+          : typeof responseData?.message === "string"
+            ? responseData.message
+            : typeof errorRecord.message === "string"
+              ? errorRecord.message
+              : "Không thể thêm phòng. Vui lòng thử lại.";
+        showRoomSaveError("Không thể thêm phòng", message);
       }
+      return;
+    }
+    if (!createRoomForm.floor) {
+      showRoomSaveError("Không thể cập nhật phòng", "Vui lòng chọn tầng hợp lệ.");
+      return;
+    }
+    if (!editingRoomDatabaseId) {
+      showRoomSaveError("Không thể cập nhật phòng", "Không tìm thấy ID phòng từ máy chủ. Vui lòng tải lại danh sách phòng.");
+      return;
+    }
+    const updateDefaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
+    const updateAmenityIds = createRoomForm.amenities
+      .map((name) => amenityCatalog.find((amenity) => amenity.name === name)?.id)
+      .filter((id): id is number => id !== undefined);
+    try {
+      await updateRoomApi({
+        roomId: editingRoomDatabaseId,
+        room: {
+          roomNumber: roomCode,
+          floorId: createRoomForm.floor,
+          roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status,
+          roomType: roomTypeValues[roomType] ?? roomType,
+          defaultImageIndex: Math.max(updateDefaultImageIndex, 0),
+          amenityIds: updateAmenityIds,
+          keptImageUrls: createRoomForm.images.filter((image) => !image.startsWith("blob:")),
+        },
+        images: roomImageFiles,
+      }).unwrap();
+    } catch (error) {
+      const errorRecord = error && typeof error === "object" ? error as { data?: unknown; message?: unknown } : {};
+      const responseData = errorRecord.data && typeof errorRecord.data === "object" ? errorRecord.data as { message?: unknown } : undefined;
+      const message = typeof errorRecord.data === "string"
+        ? errorRecord.data
+        : typeof responseData?.message === "string"
+          ? responseData.message
+          : typeof errorRecord.message === "string"
+            ? errorRecord.message
+            : "Không thể cập nhật phòng. Vui lòng thử lại.";
+      showRoomSaveError("Không thể cập nhật phòng", message);
       return;
     }
     const orderedImages = createRoomForm.defaultImage
@@ -738,7 +922,7 @@ export default function RoomWorkspace() {
       id: roomCode,
       name: roomType,
       images: orderedImages.length > 0 ? orderedImages : ["https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg"],
-      floor: location,
+      floor: selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor)?.name ?? location,
       size: `${area} m²`,
       beds: bedType,
       capacity: standardCapacity,
@@ -749,12 +933,19 @@ export default function RoomWorkspace() {
       guestPolicy: `Tiêu chuẩn: ${standardCapacity} người · Ghép thêm tối đa: ${maxExtraGuests} người`,
       price,
       status: createRoomForm.status || "Sẵn sàng",
-      cleaner: editingRoomId ? rooms.find((item) => item.id === editingRoomId)?.cleaner ?? "" : "",
+      cleaner: isEditingRoom ? rooms.find((item) => item.id === editingRoomId)?.cleaner ?? "" : "",
       description,
       services: createRoomForm.amenities.length > 0 ? createRoomForm.amenities : ["Wifi tốc độ cao", ...(description ? [description] : [])],
     };
     setRooms((current) => editingRoomId ? current.map((item) => item.id === editingRoomId ? room : item) : [room, ...current]);
     closeCreateRoomModal();
+    if (isEditingRoom) {
+      toast({
+        variant: "booking",
+        title: "Cập nhật phòng thành công",
+        description: `Thông tin phòng ${roomCode} đã được cập nhật.`,
+      });
+    }
   };
   const importRoomsFromFile = async (file: File | null) => {
     if (!file) return;
@@ -785,7 +976,7 @@ export default function RoomWorkspace() {
           id: roomCode,
           name: roomType,
           images: [],
-          floor: `Tầng ${floorNumber}`,
+          floor: floorNumber,
           size: area.toLowerCase().includes("m") ? area : `${area} m²`,
           beds: getValue(row, ["giường", "giuong", "beds"]) || "1 giường",
           capacity,
@@ -812,39 +1003,335 @@ export default function RoomWorkspace() {
 
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
     {detailRoom && <RoomDetailModal room={detailRoom} onClose={() => setDetailRoom(null)} />}
-    <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
-      <div><h3 className="font-bold text-slate-900">{t("room.roomList")}</h3><p className="mt-1 text-sm text-slate-500">{filtered.length} {t("room.roomsAtBranch")} · {t("room.realTimeUpdate")}</p></div>
-      <div className="flex flex-wrap gap-2">{activeTab === "buildings" ? <button type="button" onClick={openCreateBuildingModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addBuilding")}</button> : activeTab === "floors" ? <button type="button" onClick={openCreateFloorModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addFloor")}</button> : activeTab === "rooms" ? <button type="button" onClick={() => setShowCreateRoom(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addRoom")}</button> : null}</div>
-    </div>
-    <div className="flex border-b border-slate-100 bg-slate-50/60 p-2"><button type="button" onClick={() => setActiveTab("rooms")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button><button type="button" onClick={() => setActiveTab("buildings")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button><button type="button" onClick={() => setActiveTab("floors")} className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button></div>
+    {activeTab !== "pricing" && <>
+      {activeTab !== "amenities" && <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div><h3 className="font-bold text-slate-900">{t("room.roomList")}</h3><p className="mt-1 text-sm text-slate-500">{filtered.length} {t("room.roomsAtBranch")} · {t("room.realTimeUpdate")}</p></div>
+        <div className="flex flex-wrap gap-2">{activeTab === "buildings" ? <button type="button" onClick={openCreateBuildingModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addBuilding")}</button> : activeTab === "floors" ? <button type="button" onClick={openCreateFloorModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addFloor")}</button> : activeTab === "rooms" ? <button type="button" onClick={() => setShowCreateRoom(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addRoom")}</button> : null}</div>
+      </div>}
+      <div className="flex flex-wrap border-b border-slate-100 bg-slate-50/60 p-2">
+        <button type="button" onClick={() => setActiveTab("rooms")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button>
+        <button type="button" onClick={() => setActiveTab("buildings")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button>
+        <button type="button" onClick={() => setActiveTab("floors")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button>
+        <button type="button" onClick={() => setActiveTab("amenities")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "amenities" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>Danh sách tiện nghi</button>
+      </div>
+    </>}
     {activeTab === "buildings" && <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} />}
     {activeTab === "floors" && <>
       {isFloorsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tầng của tòa nhà này.</p>}
       {(isFloorsLoading || isFloorsFetching) && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tầng...</p>}
       <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} />
     </>}
-    {activeTab === "rooms" && <>
-    <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row">
-      <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></div>
-      <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={building} onChange={(e) => setBuilding(e.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-44"><option value="Tất cả các tòa">{t("room.allBuildings")}</option>{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
-      <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={floor} onChange={(e) => setFloor(e.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-44"><option value="Tất cả các tầng">{t("room.allFloors")}</option>{floors.map((item) => <option key={item}>{item}</option>)}</select></div>
-      <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-52"><option value="Tất cả trạng thái">{t("room.allStatuses")}</option>{availableRoomStatuses.map((item) => <option key={item}>{item}</option>)}</select></div>
-    </div>
-    <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-      {filtered.map((room) => <article key={room.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50">
-        <button type="button" onClick={() => { setGalleryRoom(room); setGalleryIndex(0); }} className="group relative block h-36 w-full overflow-hidden text-left"><img src={room.images[0]} alt={`${room.name} · ${t("room.roomLabel", "Room")} ${room.id}`} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950/55 via-transparent to-transparent" /><span className="absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[10px] font-bold text-slate-800 shadow-sm">{t("room.roomLabel", "Room")} {room.id}</span><span className="absolute bottom-3 right-3 rounded-md bg-slate-950/60 px-2 py-1 text-[10px] font-semibold text-white">{t("room.photoCount", "{{count}} photos", { count: room.images.length })}</span></button>
-        <div className="flex items-start justify-between bg-gradient-to-br from-blue-50 to-slate-50 p-4"><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-950 text-sm font-bold text-white shadow-sm">{room.id}</div><div><p className="font-bold text-slate-900">{room.name}</p><p className="mt-0.5 text-xs text-slate-500">{room.buildingName ?? "Chưa cập nhật tòa"} · {t("room.floorLabel", "Floor {{floor}}", { floor: room.floor.match(/\d+/)?.[0] ?? room.floor })} · {room.size}</p></div></div><div className="relative"><button type="button" onClick={() => setStatusMenuRoom((current) => current === room.id ? null : room.id)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"><MoreHorizontal size={18} /></button>{statusMenuRoom === room.id && <div className="absolute right-0 top-9 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"><p className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{t("room.roomStatus")}</p>{statuses.map((nextStatus) => <button type="button" key={nextStatus} onClick={() => { updateRoom(room.id, { status: nextStatus, cleaner: nextStatus === "Đang dọn" ? room.cleaner : "" }); setStatusMenuRoom(null); }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition hover:bg-slate-50 ${room.status === nextStatus ? "text-blue-700" : "text-slate-600"}`}><span>{nextStatus === "Sẵn sàng" ? t("room.ready") : nextStatus === "Đang dọn" ? t("room.cleaning") : nextStatus === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span>{room.status === nextStatus && <Check size={14} />}</button>)}</div>}</div></div>
-        <div className="p-4"><div className="flex items-start justify-between gap-2"><div><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[room.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status === "Sẵn sàng" ? t("room.ready") : room.status === "Đang dọn" ? t("room.cleaning") : room.status === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span></div><p className="text-sm font-bold text-slate-900">{money(room.price)}<span className="text-xs font-normal text-slate-400"> {t("room.perNight")}</span></p></div>
-          <div className="mt-4 grid grid-cols-2 gap-2 border-y border-slate-100 py-3"><p className="flex min-w-0 items-center gap-2 text-xs text-slate-600"><BedDouble size={15} className="shrink-0 text-slate-400" /><span className="truncate">{translateBed(room.beds)}</span></p><p className="flex min-w-0 items-center justify-end gap-2 text-right text-xs text-slate-600"><Users size={15} className="shrink-0 text-slate-400" /><span className="truncate">Tiêu chuẩn {room.standardCapacity} người</span></p></div>
-          <div className="mt-3 flex flex-wrap gap-1.5">{room.services.map((service) => <span key={service} className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-600"><Check size={11} className="text-emerald-500" />{service === "Điều hòa" ? t("room.airConditioning") : service === "Phòng tắm riêng" ? t("room.privateBathroom") : service === "Wifi" ? t("room.wifi") : service}</span>)}</div>
-          <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2.5"><div className="grid grid-cols-2 gap-2 text-[11px]"><p className="text-slate-600">Phụ thu người lớn: <strong className="text-amber-800">{money(room.extraAdultFee)}/người</strong></p><p className="text-slate-600">Phụ thu trẻ em: <strong className="text-amber-800">{money(room.extraChildFee)}/người</strong></p></div><p className="mt-1 text-[10px] text-slate-500">Em bé dưới 2 tuổi: miễn phí</p></div>
-          {room.status === "Đang dọn" && <button type="button" onClick={() => completeCleaning(room)} className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-700"><Check size={14} />{t("room.confirmCleaning")}</button>}
-          <div className="mt-4 border-t border-slate-100 pt-3"><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0">{room.cleaner ? <p className="truncate text-[11px] text-slate-500"><Sparkles size={13} className="mr-1 inline text-amber-500" />{room.cleaner}</p> : <p className="text-[11px] text-slate-400">{t("room.unassignedCleaning")}</p>}</div><div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => openEditRoomModal(room)} className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Pencil size={12} />{t("room.edit")}</button><button type="button" onClick={() => setDetailRoom(room)} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50">{t("room.details")}</button>{!room.cleaner && <button type="button" onClick={() => setAssignmentRoom(room)} className="rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100">{t("room.assign")}</button>}</div></div></div>
+    {activeTab === "amenities" && <RoomAmenitiesTab amenities={amenityCatalog} isLoading={isAmenitiesLoading} isError={isAmenitiesError} onSave={saveAmenityEdit} />}
+    {activeTab === "rooms" && <RoomListTab
+      filtered={filtered}
+      paginatedRooms={paginatedRooms}
+      buildings={buildings}
+      floors={hotelFloorNames}
+      roomTypes={availableRoomTypes}
+      statuses={availableRoomStatuses}
+      statusStyle={statusStyle}
+      query={query}
+      onQueryChange={setQuery}
+      building={building}
+      onBuildingChange={setBuilding}
+      floor={floor}
+      onFloorChange={setFloor}
+      roomType={roomType}
+      onRoomTypeChange={setRoomType}
+      status={status}
+      onStatusChange={setStatus}
+      statusMenuRoom={statusMenuRoom}
+      setStatusMenuRoom={setStatusMenuRoom}
+      safePage={safePage}
+      pageSize={pageSize}
+      onPageChange={setPage}
+      onPageSizeChange={setPageSize}
+      onUpdateRoom={updateRoom}
+      onCompleteCleaning={completeCleaning}
+      onEditRoom={openEditRoomModal}
+      onShowGallery={(room) => { setGalleryRoom(room); setGalleryIndex(0); }}
+      onShowDetails={setDetailRoom}
+      onAssign={setAssignmentRoom}
+    />}
+    {activeTab === "pricing" && (
+      <div className="p-6 space-y-6">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h4 className="text-xl font-bold text-slate-900">Cấu hình giá niêm yết</h4>
+            <p className="mt-1 text-xs text-slate-500">Thiết lập mức giá cơ bản và phụ thu theo loại phòng hoặc theo lịch sự kiện đặc biệt.</p>
+          </div>
         </div>
-      </article>)}
-    </div>
-    {filtered.length === 0 && <div className="p-10 text-center"><p className="font-semibold text-slate-700">Không tìm thấy phòng</p><p className="mt-1 text-xs text-slate-400">Thử thay đổi từ khoá hoặc bộ lọc trạng thái.</p></div>}
-    </>}
+        {pricingMode === "branch" && isBranchPoliciesLoading && <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Đang tải cấu hình giá chi nhánh...</p>}
+        {pricingMode === "branch" && isBranchPoliciesError && <p className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">Không thể tải cấu hình giá chi nhánh.</p>}
+        {pricingMode === "branch" && pricingSaveError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{pricingSaveError}</p>}
+        <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-1">
+          <button type="button" onClick={() => setPricingMode("branch")} className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold transition ${pricingMode === "branch" ? "bg-white text-blue-700 shadow-xs" : "text-slate-500 hover:text-slate-800"}`}>
+            <Building2 size={16} />Cấu hình giá theo loại phòng
+          </button>
+          <button
+            type="button"
+            onClick={() => setPricingMode("event")}
+            className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold transition ${
+              pricingMode === "event" ? "bg-white text-blue-700 shadow-xs" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <CalendarDays size={16} />
+            Cấu hình giá theo sự kiện
+          </button>
+        </div>
+
+        {pricingMode === "branch" ? (
+          <div className="space-y-6">
+            {editingPricingType && (() => {
+              const entry = roomTypePricing.find((item) => item.roomType === editingPricingType);
+              if (!entry) return null;
+              const draft = pricingDrafts[entry.roomType] || {
+                price: String(entry.price),
+                extraAdultFee: String(entry.extraAdultFee),
+                extraChildFee: String(entry.extraChildFee),
+                standardCapacity: String(entry.standardCapacity),
+                maxExtraGuests: String(entry.maxExtraGuests),
+              };
+              const currentPriceNum = Number(draft.price) || 0;
+              const currentAdultFeeNum = Number(draft.extraAdultFee) || 0;
+              const currentChildFeeNum = Number(draft.extraChildFee) || 0;
+              const currentStandardCapacity = Number(draft.standardCapacity) || entry.standardCapacity || 1;
+              const currentMaxExtraGuests = Number(draft.maxExtraGuests) || entry.maxExtraGuests || 0;
+              const isModified = String(draft.price) !== String(entry.price) || String(draft.extraAdultFee) !== String(entry.extraAdultFee) || String(draft.extraChildFee) !== String(entry.extraChildFee) || String(draft.standardCapacity) !== String(entry.standardCapacity) || String(draft.maxExtraGuests) !== String(entry.maxExtraGuests);
+
+              return (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setEditingPricingType(null)}>
+                  <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.12)]" onMouseDown={(event) => event.stopPropagation()}>
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="mt-2 text-[18px] font-bold leading-none tracking-[-0.02em] text-slate-600">Cập nhật cho loại phòng</h3>
+                        <h3 className="mt-2 text-[16px] font-black leading-none tracking-[-0.03em] text-slate-900">{entry.roomType}</h3>
+                      </div>
+                      <button type="button" onClick={() => setEditingPricingType(null)} className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Số lượng người tiêu chuẩn
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={draft.standardCapacity}
+                          onChange={(event) => handlePricingDraftChange(entry.roomType, "standardCapacity", event.target.value)}
+                          className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Số người cho phép ở ghép
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={draft.maxExtraGuests}
+                          onChange={(event) => handlePricingDraftChange(entry.roomType, "maxExtraGuests", event.target.value)}
+                          className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Giá phòng / đêm
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1000"
+                            value={draft.price}
+                            onChange={(event) => handlePricingDraftChange(entry.roomType, "price", event.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 pr-12 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">VNĐ</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Phụ thu người lớn
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1000"
+                            value={draft.extraAdultFee}
+                            onChange={(event) => handlePricingDraftChange(entry.roomType, "extraAdultFee", event.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 pr-12 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">VNĐ</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                          Phụ thu trẻ em
+                          <span className="ml-1 text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1000"
+                            value={draft.extraChildFee}
+                            onChange={(event) => handlePricingDraftChange(entry.roomType, "extraChildFee", event.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 pr-12 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">VNĐ</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
+                      <span className="text-[11px] font-semibold text-slate-500">{currentStandardCapacity} người · {currentMaxExtraGuests} ghép thêm · {money(currentPriceNum)} / {money(currentAdultFeeNum)} / {money(currentChildFeeNum)}</span>
+                      <div className="flex gap-2.5">
+                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-100">Hủy</button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (await saveRoomTypePricing(entry.roomType)) setEditingPricingType(null);
+                          }}
+                          className={`h-10 rounded-xl px-4 text-sm font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
+                          disabled={!isModified || !entry.policyId || isUpdatingPolicy}
+                        >
+                          {isUpdatingPolicy ? "Đang lưu..." : "Lưu"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4">
+              {roomTypePricing.map((entry) => {
+                const fallbackDetails = roomTypeDetails[entry.roomType] ?? {
+                  area: entry.area ? `${entry.area} m²` : "N/A",
+                  beds: "",
+                  capacity: entry.capacity || entry.standardCapacity || 1,
+                  guestPolicy: "",
+                  price: entry.price,
+                  description: "",
+                };
+                const details = roomTypeDetails[entry.roomType] ? roomTypeDetails[entry.roomType] : fallbackDetails;
+                const displayArea = entry.area ? `${entry.area} m²` : details.area;
+                const displayCapacity = entry.capacity || details.capacity || entry.standardCapacity;
+                const draft = pricingDrafts[entry.roomType] || {
+                  price: String(entry.price),
+                  extraAdultFee: String(entry.extraAdultFee),
+                  extraChildFee: String(entry.extraChildFee),
+                  standardCapacity: String(entry.standardCapacity),
+                  maxExtraGuests: String(entry.maxExtraGuests),
+                };
+
+                const currentPriceNum = Number(draft.price) || 0;
+                const currentAdultFeeNum = Number(draft.extraAdultFee) || 0;
+                const currentChildFeeNum = Number(draft.extraChildFee) || 0;
+                const currentStandardCapacity = Number(draft.standardCapacity) || entry.standardCapacity || 1;
+                const currentMaxExtraGuests = Number(draft.maxExtraGuests) || entry.maxExtraGuests || 0;
+
+                const isModified =
+                  String(draft.price) !== String(entry.price) ||
+                  String(draft.extraAdultFee) !== String(entry.extraAdultFee) ||
+                  String(draft.extraChildFee) !== String(entry.extraChildFee) ||
+                  String(draft.standardCapacity) !== String(entry.standardCapacity) ||
+                  String(draft.maxExtraGuests) !== String(entry.maxExtraGuests);
+
+                const theme =
+                  entry.roomType === "Suite Room"
+                    ? { iconBg: "bg-amber-500/15 text-amber-700", accent: "bg-amber-500" }
+                    : entry.roomType === "Deluxe Room"
+                    ? { iconBg: "bg-violet-500/15 text-violet-700", accent: "bg-violet-500" }
+                    : entry.roomType === "Family Room"
+                    ? { iconBg: "bg-emerald-500/15 text-emerald-700", accent: "bg-emerald-500" }
+                    : { iconBg: "bg-blue-500/15 text-blue-700", accent: "bg-blue-500" };
+
+                return (
+                  <div
+                    key={entry.roomType}
+                    className="flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${theme.iconBg}`}>
+                            <BedDouble size={20} />
+                          </div>
+                          <div className="w-full">
+                            <h5 className="text-base font-bold text-slate-900">{entry.roomType}</h5>
+                            <div className={`mt-1 h-1 w-20 rounded-full ${theme.accent}`} />
+                            {details && (
+                              <p className="mt-2 text-xs text-slate-500">
+                                {displayArea} · {displayCapacity} người
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                            {entry.count} phòng
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingPricingType(entry.roomType)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+                            title="Chỉnh sửa"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 border-t border-slate-100 pt-3">
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Tiêu chuẩn</span>
+                          <strong className="text-sm font-bold text-slate-900">{currentStandardCapacity} người</strong>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Cho phép ghép</span>
+                          <strong className="text-sm font-bold text-slate-900">{currentMaxExtraGuests} người</strong>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Giá phòng / đêm</span>
+                          <strong className="text-sm font-bold text-slate-900">{money(currentPriceNum)}</strong>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Phụ thu người lớn</span>
+                          <strong className="font-semibold text-slate-700">+{money(currentAdultFeeNum)}/người</strong>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Phụ thu trẻ em</span>
+                          <strong className="font-semibold text-slate-700">+{money(currentChildFeeNum)}/trẻ</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <EventPricingCalendar />
+          </div>
+        )}
+      </div>
+    )}
     {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateBuildingModal}>
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between">
@@ -882,7 +1369,7 @@ export default function RoomWorkspace() {
 
             <div className="flex items-center gap-2">
               <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Hủy</button>
-              <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom ? "Đang lưu..." : editingRoomId ? "Lưu thay đổi" : "Lưu phòng"}</button>
+              <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom || isUpdatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom || isUpdatingRoom ? "Đang lưu..." : editingRoomId ? "Lưu thay đổi" : "Lưu phòng"}</button>
             </div>
           </div>
 
@@ -915,9 +1402,13 @@ export default function RoomWorkspace() {
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
+                    Số phòng <span className="text-rose-500">*</span>
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" required value={createRoomForm.roomNumber} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomNumber: event.target.value.replace(/\D/g, "") }))} placeholder="Ví dụ: 101" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  </label>
+                  <label className="block text-sm font-semibold text-slate-700">
                     Tầng <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} disabled={isFloorsLoading || isFloorsFetching || apiFloorOptions.length === 0} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
-                      {isFloorsLoading || isFloorsFetching ? <option value="">Đang tải tầng...</option> : apiFloorOptions.length === 0 ? <option value="">Chưa có tầng</option> : apiFloorOptions.map((item) => (
+                    <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} disabled={isFloorsLoading || isFloorsFetching || selectedBuildingFloorOptions.length === 0} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
+                      {isFloorsLoading || isFloorsFetching ? <option value="">Đang tải tầng...</option> : selectedBuildingFloorOptions.length === 0 ? <option value="">Chưa có tầng</option> : selectedBuildingFloorOptions.map((item) => (
                         <option key={item.id} value={item.id}>{item.name.startsWith("Tầng") ? item.name : `Tầng ${item.name}`}</option>
                       ))}
                     </select>
@@ -934,24 +1425,25 @@ export default function RoomWorkspace() {
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     Diện tích <span className="text-rose-500">*</span>
-                    <input type="number" min="1" step="0.1" value={createRoomForm.area} onChange={(event) => setCreateRoomForm((current) => ({ ...current, area: event.target.value }))} placeholder="25" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    <input type="number" min="1" step="0.1" value={createRoomForm.area} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
 
                   <label className="block text-sm font-semibold text-slate-700">
-                    Giá phòng / đêm <span className="text-rose-500">*</span>
-                    <input type="number" min="1" step="1000" value={createRoomForm.price} onChange={(event) => setCreateRoomForm((current) => ({ ...current, price: event.target.value }))} placeholder="1000000" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    Giá tiêu chuẩn
+                    <input type="number" min="1" step="1000" value={standardRoomPrice} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-normal text-slate-500 outline-none" />
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Giá chính thức / đêm: {money(officialRoomPrice)} (tiện ích tính riêng)</span>
                   </label>
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-3">
                   <label className="block text-sm font-semibold text-slate-700">
                     Sức chứa tiêu chuẩn <span className="text-rose-500">*</span>
-                    <input type="number" min="1" value={createRoomForm.standardCapacity} onChange={(event) => setCreateRoomForm((current) => ({ ...current, standardCapacity: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    <input type="number" min="1" value={createRoomForm.standardCapacity} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
                     <span className="mt-1 block text-xs font-normal text-slate-400">Số khách đã bao gồm trong giá phòng</span>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    Số người ghép tối đa
-                    <input type="number" min="0" value={createRoomForm.maxExtraGuests} onChange={(event) => setCreateRoomForm((current) => ({ ...current, maxExtraGuests: event.target.value }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    Số người ghép tối đa<span className="text-rose-500">*</span>
+                    <input type="number" min="0" value={createRoomForm.maxExtraGuests} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
                     <span className="mt-1 block text-xs font-normal text-slate-400">Số khách thêm ngoài tiêu chuẩn</span>
                   </label>
                 </div>
@@ -959,11 +1451,11 @@ export default function RoomWorkspace() {
                 <div className="mt-4 grid gap-4 rounded-xl border border-amber-100 bg-amber-50/60 p-3 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-amber-900">
                     Phụ thu người lớn / người
-                    <input type="number" min="0" step="1000" value={createRoomForm.extraAdultFee} onChange={(event) => setCreateRoomForm((current) => ({ ...current, extraAdultFee: event.target.value }))} placeholder="0" className="mt-1.5 h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100" />
+                    <input type="number" min="0" step="1000" value={createRoomForm.extraAdultFee} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-amber-200 bg-amber-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
                   <label className="block text-sm font-semibold text-amber-900">
                     Phụ thu trẻ em / người
-                    <input type="number" min="0" step="1000" value={createRoomForm.extraChildFee} onChange={(event) => setCreateRoomForm((current) => ({ ...current, extraChildFee: event.target.value }))} placeholder="0" className="mt-1.5 h-11 w-full rounded-xl border border-amber-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100" />
+                    <input type="number" min="0" step="1000" value={createRoomForm.extraChildFee} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-amber-200 bg-amber-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
                 </div>
 
@@ -1093,11 +1585,11 @@ export default function RoomWorkspace() {
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredAmenityOptions.map((item) => {
-                    const checked = createRoomForm.amenities.includes(item.name);
+                    const checked = createRoomForm.amenities.some((amenity) => normalizeText(amenity) === normalizeText(item.name));
                     return (
                       <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 transition hover:border-blue-200 hover:bg-blue-50/40">
                         <input type="checkbox" checked={checked} onChange={() => (checked ? removeAmenity(item.name) : setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, item.name] }))) } className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                        <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                        <span title={item.name} className="min-w-0 flex-1 truncate">{item.name}</span>
                         <span className="shrink-0 text-xs font-semibold text-blue-600">{money(item.price)}</span>
                       </label>
                     );
@@ -1191,8 +1683,8 @@ export default function RoomWorkspace() {
                     <strong className="font-semibold text-slate-800">{createRoomForm.area || 25} m²</strong>
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span>Giá</span>
-                    <strong className="font-semibold text-slate-800">{Number(createRoomForm.price || 0).toLocaleString("vi-VN")}đ</strong>
+                    <span>Giá chính thức</span>
+                    <strong className="font-semibold text-slate-800">{money(officialRoomPrice)}</strong>
                   </div>
                 </div>
               </div>

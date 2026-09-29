@@ -24,7 +24,7 @@ export default function BuildingManagementPanel({ buildings, query, filteredBuil
     </div>
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {filteredBuildings.map((building) => <div key={building.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
-        <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{building.name}</p><p className="mt-0.5 text-[10px] font-semibold tracking-wider text-slate-400">{building.id}</p></div>
+        <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{building.name}</p></div>
         <button type="button" onClick={() => onEdit(building)} aria-label={`${t("room.editBuilding", "Sửa tòa nhà")} ${building.name}`} className="ml-2 rounded-lg p-2 text-slate-400 transition hover:bg-white hover:text-blue-600"><Pencil size={15} /></button>
       </div>)}
     </div>
