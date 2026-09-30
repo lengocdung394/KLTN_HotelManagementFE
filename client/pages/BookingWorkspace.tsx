@@ -906,14 +906,14 @@ function DesktopCalendar({
                     <button
                       type="button"
                       disabled={!canChangeRoom?.(room)}
-                      title={!canChangeRoom?.(room) ? "Chỉ được đổi phòng khi booking-detail còn PENDING và chưa check-in." : isChangingRoom && room.id === roomChangeTargetRoomId ? "Đang chọn phòng thay thế" : "Đổi phòng"}
-                      aria-label={`Đổi phòng ${room.roomNumber ?? room.id}`}
+                      title={!canChangeRoom?.(room) ? "Chỉ được đổi phòng khi booking-detail còn PENDING và chưa check-in." : isChangingRoom && room.id === roomChangeTargetRoomId ? "Hủy đổi phòng" : "Đổi phòng"}
+                      aria-label={`${isChangingRoom && room.id === roomChangeTargetRoomId ? "Hủy đổi phòng" : "Đổi phòng"} ${room.roomNumber ?? room.id}`}
                       onClick={() => onStartRoomChange?.(room)}
                       aria-pressed={isChangingRoom && room.id === roomChangeTargetRoomId}
                       className={`flex h-8 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent ${isChangingRoom && room.id === roomChangeTargetRoomId ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 shadow-sm" : "text-blue-600 hover:bg-blue-50"}`}
                     >
                       <RefreshCw size={13} />
-                      <span>Đổi</span>
+                      <span>{isChangingRoom && room.id === roomChangeTargetRoomId ? "Hủy" : "Đổi"}</span>
                     </button>
                   )}
                   <button type="button" title={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} aria-label={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} onClick={() => setRoomDetails({
@@ -1035,6 +1035,7 @@ export default function BookingWorkspace() {
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [roomChangeTargetBookingDetailId, setRoomChangeTargetBookingDetailId] = useState<string | null>(null);
   const [roomChangeTargetRoomId, setRoomChangeTargetRoomId] = useState<string | null>(null);
+  const [roomChangeOriginalRange, setRoomChangeOriginalRange] = useState<RoomDateRange | null>(null);
   const [roomChangeTargets, setRoomChangeTargets] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -1319,9 +1320,34 @@ export default function BookingWorkspace() {
     && bookingDetailStatusOf(detail) === "PENDING"
     && !hasActualCheckIn(detail)
   );
+  const cancelRoomReplacement = () => {
+    const sourceRoom = roomChangeTargetRoomId
+      ? selectedRooms.find((room) => room.id === roomChangeTargetRoomId)
+      : undefined;
+    if (sourceRoom && roomChangeOriginalRange) {
+      const roomKeys = [sourceRoom.id, sourceRoom.databaseId].filter((key): key is string => Boolean(key));
+      setSelectedRanges((current) => roomKeys.reduce((next, key) => ({ ...next, [key]: roomChangeOriginalRange }), current));
+    }
+    setRoomChangeTargetBookingDetailId(null);
+    setRoomChangeTargetRoomId(null);
+    setRoomChangeOriginalRange(null);
+    setIsAddingRoom(false);
+  };
   const beginRoomReplacement = (room: BookingRoom) => {
+    if (roomChangeTargetRoomId === room.id) {
+      cancelRoomReplacement();
+      return;
+    }
     const detail = findBookingDetailForRoom(room);
     if (initialBooking && !canChangeBookingRoom(detail)) return;
+    const originalRange = selectedRanges[room.id]
+      ?? (room.databaseId ? selectedRanges[room.databaseId] : undefined)
+      ?? (detail ? {
+        checkIn: String(detail.checkInTime ?? detail.checkInDate ?? "").slice(0, 10),
+        checkOut: String(detail.checkOutTime ?? detail.checkOutDate ?? "").slice(0, 10),
+      } : undefined)
+      ?? { checkIn, checkOut };
+    setRoomChangeOriginalRange(originalRange);
     setRoomChangeTargetBookingDetailId(detail ? bookingDetailIdOf(detail) : null);
     setRoomChangeTargetRoomId(room.id);
     setIsAddingRoom(true);
@@ -1343,6 +1369,7 @@ export default function BookingWorkspace() {
     if (!oldRoom || oldRoom.id === newRoom.id) {
       setRoomChangeTargetBookingDetailId(null);
       setRoomChangeTargetRoomId(null);
+      setRoomChangeOriginalRange(null);
       setIsAddingRoom(false);
       return;
     }
@@ -1405,6 +1432,7 @@ export default function BookingWorkspace() {
     }
     setRoomChangeTargetBookingDetailId(null);
     setRoomChangeTargetRoomId(null);
+    setRoomChangeOriginalRange(null);
     setIsAddingRoom(false);
     setPaymentError("");
   };
@@ -1873,7 +1901,7 @@ export default function BookingWorkspace() {
         <div className="p-5">
           {roomChangeTargetRoomId && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <span>Đang đổi phòng {roomChangeTargetRoom?.id ?? String(roomChangeTargetDetail?.roomNumber ?? "")} · dịch vụ sẽ được giữ lại.</span>
-            <button type="button" onClick={() => { setRoomChangeTargetBookingDetailId(null); setRoomChangeTargetRoomId(null); setIsAddingRoom(false); }} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Hủy đổi phòng</button>
+            <button type="button" onClick={cancelRoomReplacement} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Hủy đổi phòng</button>
           </div>}
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
             <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} />
