@@ -74,7 +74,7 @@ export default function StaffTabsWorkspace({ initialTab = "staff", initialShiftF
   const [expandedDays, setExpandedDays] = useState(week.map((day) => day.key));
   const [schedule, setSchedule] = useState(initialSchedule);
   const [shiftFormOpen, setShiftFormOpen] = useState(initialShiftFormOpen);
-  const summaryOpen = false;
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [formDay, setFormDay] = useState("mon");
   const [formRole, setFormRole] = useState<Role>("Lễ tân");
   const [formShift, setFormShift] = useState<Shift>("Ca sáng");

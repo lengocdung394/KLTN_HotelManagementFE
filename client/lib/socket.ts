@@ -1,4 +1,6 @@
 import { io, type Socket } from "socket.io-client";
+import { store } from "../store";
+import { baseApi } from "../services/baseApi";
 
 const SOCKET_URL = "http://localhost:8085";
 
@@ -131,14 +133,29 @@ export const initSocket = (token: string | null) => {
 
   socket.on("room_matrix_updated", (data) => {
     console.log("📅 [Socket] room_matrix_updated:", data);
+    try {
+      store.dispatch(baseApi.util.invalidateTags(["Booking", "Room"]));
+    } catch (e) {
+      console.error(e);
+    }
   });
 
   socket.on("new_booking_notification", (data) => {
     console.log("🔔 [Socket] new_booking_notification:", data);
+    try {
+      store.dispatch(baseApi.util.invalidateTags(["Booking", "Room", "Customer"]));
+    } catch (e) {
+      console.error(e);
+    }
   });
 
   socket.on("customer_booking_updated", (data) => {
     console.log("👤 [Socket] customer_booking_updated:", data);
+    try {
+      store.dispatch(baseApi.util.invalidateTags(["Booking", "Customer"]));
+    } catch (e) {
+      console.error(e);
+    }
   });
 
   attachHotelSocketHandlers();
