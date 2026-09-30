@@ -26,6 +26,25 @@ const detailIdOf = (detail: BookingDetail) => String(
   ?? detail.id
   ?? "",
 );
+const bookingDetailStatusOf = (detail: BookingDetail) => String(
+  detail.bookingDetailStatusType
+  ?? detail.bookingDetailsStatusType
+  ?? detail.bookingDetailStatus
+  ?? detail.bookingStatusType
+  ?? detail.detailStatus
+  ?? detail.status
+  ?? "",
+).trim().toUpperCase();
+const bookingDetailHasCheckedIn = (detail: BookingDetail) => {
+  const status = bookingDetailStatusOf(detail);
+  const statusIsCheckedIn = ["CHECKED_IN", "CHECKEDIN", "IN_HOUSE", "INHOUSE", "ARRIVED"].includes(status);
+  const checkedInFlag = [detail.isCheckedIn, detail.checkedIn, detail.checkInCompleted, detail.hasCheckedIn]
+    .some((value) => value === true || String(value).toLowerCase() === "true");
+  const actualCheckIn = [detail.actualCheckInTime, detail.actualCheckIn, detail.realCheckInTime, detail.checkInActualTime, detail.checkedInAt]
+    .some((value) => value !== undefined && value !== null && value !== false && value !== 0 && String(value).trim() !== "" && String(value).toLowerCase() !== "false");
+  return statusIsCheckedIn || checkedInFlag || actualCheckIn;
+};
+const canModifyBookingDetailRoom = (detail: BookingDetail) => bookingDetailStatusOf(detail) === "PENDING" && !bookingDetailHasCheckedIn(detail);
 
 const serviceDetailIdOf = (service: BookingDetail) => String(
   service.bookingServiceDetailId
@@ -80,7 +99,7 @@ export default function BookingEditWorkspace() {
   // 3. Phục vụ ĐỔI PHÒNG (roomsToChange: { bookingDetailId, newRoomId })
   const [roomChanges, setRoomChanges] = useState<Record<string, string>>({});
 
-  // 4. Phục vụ CẬP NHẬT NGÀY LƯU TRÚ (roomsToUpdateDates: { bookingDetailId, newCheckInTime, newCheckoutTime })
+  // 4. Phục vụ CẬP NHẬT NGÀY LƯU TRÚ qua roomsToChange
   const [dateUpdates, setDateUpdates] = useState<Record<string, { checkIn: string; checkOut: string }>>({});
 
   // 5. Phục vụ THÊM DỊCH VỤ MỚI CHO PHÒNG HIỆN CÓ (servicesToAddForExistingRooms)
@@ -236,32 +255,52 @@ export default function BookingEditWorkspace() {
   const currentPayload = useMemo<ManagementBookingModificationRequest>(() => {
     const currentEmployeeId = String(employeeId ?? localStorage.getItem("id") ?? localStorage.getItem("employeeId") ?? "");
 
-    const roomsToChangeFormatted = Object.entries(roomChanges)
+    const roomUpdatesByDetailId = new Map<string, ManagementBookingModificationRequest["roomsToChange"][number]>();
+    Object.entries(roomChanges)
       .filter(([detailIdStr, newRoomId]) => Boolean(newRoomId) && !cancelledDetailIds.includes(detailIdStr))
-      .map(([detailIdStr, newRoomId]) => ({
-        bookingDetailId: detailIdStr,
-        newRoomId,
-      }));
+      .forEach(([bookingDetailId, newRoomId]) => {
+        roomUpdatesByDetailId.set(bookingDetailId, {
+          bookingDetailId,
+          newRoomId,
+          newCheckInTime: null,
+          newCheckoutTime: null,
+          numAdults: null,
+          numChildren: null,
+          numInfants: null,
+        });
+      });
 
-    const roomsToUpdateDatesFormatted = Object.entries(dateUpdates)
+    Object.entries(dateUpdates)
       .filter(([detailIdStr, dates]) => Boolean(dates.checkIn || dates.checkOut) && !cancelledDetailIds.includes(detailIdStr))
       .map(([detailIdStr, dates]) => {
         const detailId = detailIdStr;
         const detail = details.find((d) => detailIdOf(d) === detailId);
-        const defaultIn = String(detail?.checkInTime ?? "").slice(0, 10);
-        const defaultOut = String(detail?.checkOutTime ?? "").slice(0, 10);
-        const checkIn = dates.checkIn || defaultIn;
-        const checkOut = dates.checkOut || defaultOut;
+        const originalCheckIn = String(detail?.checkInTime ?? "").slice(0, 10);
+        const originalCheckOut = String(detail?.checkOutTime ?? "").slice(0, 10);
         return {
           bookingDetailId: detailId,
-          newCheckInTime: checkIn ? `${checkIn}T14:00:00` : "",
-          newCheckoutTime: checkOut ? `${checkOut}T12:00:00` : "",
-          newCheckOutTime: checkOut ? `${checkOut}T12:00:00` : "",
-          numAdults: Number(detail?.numAdults ?? detail?.adults ?? 1),
-          numChildren: Number(detail?.numChildren ?? detail?.children ?? 0),
-          numInfants: Number(detail?.numInfants ?? detail?.infants ?? 0),
+          newCheckInTime: dates.checkIn && dates.checkIn !== originalCheckIn ? `${dates.checkIn}T14:00:00` : null,
+          newCheckoutTime: dates.checkOut && dates.checkOut !== originalCheckOut ? `${dates.checkOut}T12:00:00` : null,
+          numAdults: null,
+          numChildren: null,
+          numInfants: null,
         };
+      })
+      .forEach((dateUpdate) => {
+        if (!dateUpdate.newCheckInTime && !dateUpdate.newCheckoutTime) return;
+        const existing = roomUpdatesByDetailId.get(dateUpdate.bookingDetailId);
+        roomUpdatesByDetailId.set(dateUpdate.bookingDetailId, {
+          bookingDetailId: dateUpdate.bookingDetailId,
+          newRoomId: existing?.newRoomId ?? null,
+          newCheckInTime: dateUpdate.newCheckInTime ?? existing?.newCheckInTime ?? null,
+          newCheckoutTime: dateUpdate.newCheckoutTime ?? existing?.newCheckoutTime ?? null,
+          numAdults: existing?.numAdults ?? null,
+          numChildren: existing?.numChildren ?? null,
+          numInfants: existing?.numInfants ?? null,
+        });
       });
+
+    const roomsToChangeFormatted = Array.from(roomUpdatesByDetailId.values());
 
     const servicesToAddForExistingRoomsFormatted: { bookingDetailId: string; services: any[] }[] = [];
     const serviceQuantityUpdatesFormatted: { bookingDetailId: string; services: { serviceId: string; quantity: number }[] }[] = [];
@@ -353,7 +392,6 @@ export default function BookingEditWorkspace() {
       servicesToCancel: servicesToCancelFormatted,
       roomsToAdd: newRoomsToAdd,
       roomsToChange: roomsToChangeFormatted,
-      roomsToUpdateDates: roomsToUpdateDatesFormatted,
       servicesToAddForExistingRooms: servicesToAddForExistingRoomsFormatted,
       serviceQuantityUpdates: serviceQuantityUpdatesFormatted,
     };
@@ -510,12 +548,13 @@ export default function BookingEditWorkspace() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleToggleCancelRoom(detailId)}
+                    disabled={!canModifyBookingDetailRoom(detail)}
+                    onClick={() => { if (canModifyBookingDetailRoom(detail)) handleToggleCancelRoom(detailId); }}
                     className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                       isCancelled
                         ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
                         : "bg-rose-100 text-rose-700 hover:bg-rose-200"
-                    }`}
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
                     {isCancelled ? <RefreshCw size={14} /> : <Trash2 size={14} />}
                     {isCancelled ? "Khôi phục phòng" : "Hủy phòng này"}
@@ -558,8 +597,9 @@ export default function BookingEditWorkspace() {
                       </label>
                       <select
                         value={roomChanges[detailId] ?? rId}
+                        disabled={!canModifyBookingDetailRoom(detail)}
                         onChange={(e) => handleRoomChange(detailId, String(e.target.value))}
-                        className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                       >
                         <option value={rId}>Giữ phòng hiện tại (#{rId})</option>
                         {hotelRooms

@@ -45,21 +45,22 @@ export type ManagementBookingUpdateServiceQuantityRequest = {
   services: ManagementBookingServiceQuantityItem[];
 };
 
+export type ManagementBookingRoomUpdateRequest = {
+  bookingDetailId: string;
+  newRoomId: string | null;
+  newCheckInTime: string | null;
+  newCheckoutTime: string | null;
+  numAdults: number | null;
+  numChildren: number | null;
+  numInfants: number | null;
+};
+
 export type ManagementBookingModificationRequest = {
   employeeId: string;
   bookingDetailIdsToCancel: string[];
   servicesToCancel: ManagementBookingServiceCancellation[];
   roomsToAdd: ManagementBookingRoomToAdd[];
-  roomsToChange: { bookingDetailId: string; newRoomId: string }[];
-  roomsToUpdateDates: {
-    bookingDetailId: string;
-    newCheckInTime: string;
-    newCheckoutTime?: string;
-    newCheckOutTime?: string;
-    numAdults: number;
-    numChildren: number;
-    numInfants: number;
-  }[];
+  roomsToChange: ManagementBookingRoomUpdateRequest[];
   servicesToAddForExistingRooms: ManagementBookingRoomServiceAddition[];
   serviceQuantityUpdates: ManagementBookingUpdateServiceQuantityRequest[];
 };

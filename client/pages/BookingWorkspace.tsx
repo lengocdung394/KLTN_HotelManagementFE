@@ -3,7 +3,7 @@ import DatePickerPopover from "../components/DatePickerPopover";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
+import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, QrCode, RefreshCw, Search, UserRound, UsersRound, Wallet } from "lucide-react";
 import GuestRoomForms, { bookingCache, clearRoomGuestCache, isBookingGuestValid, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
@@ -41,6 +41,33 @@ const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"]
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 const serviceDetailIdOf = (service: Record<string, unknown>) => String(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? service.serviceId ?? "");
 const isCancelledBookingDetail = (detail: Record<string, unknown>) => String(detail.bookingStatusType ?? "").toUpperCase() === "CANCELLED";
+const bookingDetailIdOf = (detail: Record<string, unknown>) => String(detail.bookingDetailId ?? detail.bookingDetailsId ?? detail.bookingDetailID ?? detail.detailId ?? detail.detailID ?? detail.id ?? "");
+const bookingDetailStatusOf = (detail: Record<string, unknown>) => {
+  const rawStatus = detail.bookingDetailStatusType
+    ?? detail.bookingDetailsStatusType
+    ?? detail.bookingDetailStatus
+    ?? detail.bookingDetailsStatus
+    ?? detail.bookingStatusType
+    ?? detail.detailStatus
+    ?? detail.status
+    ?? detail.bookingStatus;
+  if (rawStatus && typeof rawStatus === "object") {
+    const statusObject = rawStatus as Record<string, unknown>;
+    return String(statusObject.code ?? statusObject.name ?? statusObject.status ?? "").trim().toUpperCase();
+  }
+  return String(rawStatus ?? "").trim().toUpperCase();
+};
+const hasActualCheckIn = (detail: Record<string, unknown>) => {
+  const checkInStatus = String(detail.checkInStatus ?? detail.checkinStatus ?? detail.arrivalStatus ?? "").trim().toUpperCase();
+  const checkedInStatuses = ["CHECKED_IN", "CHECKEDIN", "CHECKED-IN", "CHECK_IN", "IN_HOUSE", "INHOUSE", "ARRIVED", "IN_PROGRESS"];
+  const checkedInStatus = checkedInStatuses.includes(bookingDetailStatusOf(detail))
+    || checkedInStatuses.includes(checkInStatus);
+  const checkedInFlag = [detail.isCheckedIn, detail.checkedIn, detail.checkInCompleted, detail.hasCheckedIn]
+    .some((value) => value === true || String(value).toLowerCase() === "true");
+  const hasCheckInTime = [detail.actualCheckInTime, detail.actualCheckIn, detail.realCheckInTime, detail.checkInActualTime, detail.checkedInAt]
+    .some((value) => value !== undefined && value !== null && value !== false && value !== 0 && String(value).trim() !== "" && String(value).toLowerCase() !== "false");
+  return checkedInStatus || checkedInFlag || hasCheckInTime;
+};
 const isCancelledService = (service: Record<string, unknown>) => {
   const status = String(service.status ?? service.serviceStatus ?? service.bookingServiceStatus ?? service.state ?? "").trim().toUpperCase();
   const cancelled = [service.isCancelled, service.isCanceled, service.cancelled, service.canceled, service.isDeleted, service.deleted]
@@ -304,6 +331,14 @@ function DesktopCalendar({
   onDailyPricesChange,
   editingBookingId,
   editingBookingRanges,
+  isChangingRoom,
+  roomChangeTargetRoomId,
+  roomChangeTargetRange,
+  onReplaceRoom,
+  onReplaceRoomUnavailable,
+  showRoomChangeAction,
+  canChangeRoom,
+  onStartRoomChange,
 }: {
   visibleRooms: BookingRoom[];
   selected: string[];
@@ -320,6 +355,14 @@ function DesktopCalendar({
   onDailyPricesChange?: (prices: RoomDailyPricesResponse) => void;
   editingBookingId?: string;
   editingBookingRanges: Map<string, BookingRoomRange[]>;
+  isChangingRoom?: boolean;
+  roomChangeTargetRoomId?: string | null;
+  roomChangeTargetRange?: RoomDateRange;
+  onReplaceRoom?: (room: BookingRoom, range?: RoomDateRange) => void;
+  onReplaceRoomUnavailable?: () => void;
+  showRoomChangeAction?: boolean;
+  canChangeRoom?: (room: BookingRoom) => boolean;
+  onStartRoomChange?: (room: BookingRoom) => void;
 }) {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
@@ -405,10 +448,26 @@ function DesktopCalendar({
   const isAvailableWithMatrix = (room: BookingRoom, start: string, end: string) => {
     if (!isAvailableForRange(room, start, end)) return false;
     for (let day = start; day < end; day = shiftDay(day, 1)) {
+      const dateIsPast = new Date(`${day}T00:00:00`) < today;
+      const isOwnBookingDate = isBookingRoomDate(editingBookingRanges, roomKeysOf(room), day);
+      if (dateIsPast && !isOwnBookingDate) return false;
       if (isMatrixReserved(room, day)) return false;
     }
     return true;
   };
+  const rangeForRoom = (room: BookingRoom) =>
+    selectedRanges[room.id]
+    ?? (room.databaseId ? selectedRanges[room.databaseId] : undefined)
+    ?? (room.roomNumber ? selectedRanges[room.roomNumber] : undefined);
+  const firstSelectedRoomRange = selected
+    .map((roomId) => {
+      const selectedRoom = visibleRooms.find((room) => room.id === roomId);
+      return selectedRoom ? rangeForRoom(selectedRoom) : selectedRanges[roomId];
+    })
+    .find((range): range is RoomDateRange => Boolean(range));
+  const rangeForRoomSelection = (room: BookingRoom) => selected.includes(room.id)
+    ? rangeForRoom(room) ?? firstSelectedRoomRange ?? (checkIn && checkOut ? { checkIn, checkOut } : undefined)
+    : firstSelectedRoomRange ?? (checkIn && checkOut ? { checkIn, checkOut } : undefined);
 
   const [dragSelection, setDragSelection] = useState<{ roomId: string; startDayIndex: number; currentDayIndex: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -447,6 +506,8 @@ function DesktopCalendar({
     if (e.button !== 0) return;
     const dayValue = stableTimeline[dayIndex].value;
     const room = visibleRooms.find((item) => item.id === roomId);
+    if (isChangingRoom && roomId === roomChangeTargetRoomId) return;
+    if (room && showRoomChangeAction && selected.includes(roomId) && !canChangeRoom?.(room)) return;
     const isOwnBookingDate = room && isBookingRoomDate(editingBookingRanges, roomKeysOf(room), dayValue);
     if ((isPastDate(dayValue) && !isOwnBookingDate) || (room && isReservedCell(room, dayValue)) || (room && isMatrixReserved(room, dayValue))) return;
     
@@ -479,6 +540,20 @@ function DesktopCalendar({
     const isSingleClick = startDayIndex === currentDayIndex;
     const clickedDate = stableTimeline[startDayIndex].value;
     const currentRange = selectedRanges[roomId];
+    const clickedRoom = visibleRooms.find((item) => item.id === roomId);
+
+    if (isChangingRoom && clickedRoom && clickedRoom.id !== roomChangeTargetRoomId && isSingleClick) {
+      const originalRange = roomChangeTargetRange ?? { checkIn, checkOut };
+      const originalNights = Math.max(1, Math.round((new Date(originalRange.checkOut).getTime() - new Date(originalRange.checkIn).getTime()) / 86400000));
+      const nextRange = { checkIn: clickedDate, checkOut: shiftDay(clickedDate, originalNights) };
+      if (isAvailableWithMatrix(clickedRoom, nextRange.checkIn, nextRange.checkOut)) {
+        onReplaceRoom?.(clickedRoom, nextRange);
+      } else {
+        onReplaceRoomUnavailable?.();
+      }
+      setDragSelection(null);
+      return;
+    }
     
     if (isSingleClick && currentRange) {
       const checkInDate = currentRange.checkIn;
@@ -546,6 +621,15 @@ function DesktopCalendar({
     
     const room = visibleRooms.find((item) => item.id === roomId);
     if (isValid && room && isAvailableWithMatrix(room, newCheckIn, newCheckOut)) {
+      if (isChangingRoom) {
+        if (room.id !== roomChangeTargetRoomId) {
+          onReplaceRoom?.(room, { checkIn: newCheckIn, checkOut: newCheckOut });
+        } else {
+          onReplaceRoomUnavailable?.();
+        }
+        setDragSelection(null);
+        return;
+      }
       setSelected(prev => prev.includes(roomId) ? prev : [...prev, roomId]);
       setSelectedRanges(prev => ({ ...prev, [roomId]: { checkIn: newCheckIn, checkOut: newCheckOut } }));
     }
@@ -758,9 +842,23 @@ function DesktopCalendar({
               <div className="sticky left-0 top-0 z-20 flex items-stretch gap-1 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
-                  disabled={Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, selectedRanges[room.id]?.checkIn ?? checkIn, selectedRanges[room.id]?.checkOut ?? checkOut)}
+                  disabled={!isChangingRoom && Boolean(rangeForRoomSelection(room)) && !isAvailableWithMatrix(
+                    room,
+                    rangeForRoomSelection(room)?.checkIn ?? checkIn,
+                    rangeForRoomSelection(room)?.checkOut ?? checkOut,
+                  )}
                   onClick={() => {
+                    if (isChangingRoom) {
+                      const range = roomChangeTargetRange ?? { checkIn, checkOut };
+                      if (range.checkIn && range.checkOut && isAvailableWithMatrix(room, range.checkIn, range.checkOut)) {
+                        onReplaceRoom?.(room, range);
+                      } else {
+                        onReplaceRoomUnavailable?.();
+                      }
+                      return;
+                    }
                     if (selected.includes(room.id)) {
+                      if (showRoomChangeAction && !canChangeRoom?.(room)) return;
                       const remainingRooms = selected.filter((id) => id !== room.id);
                       setSelected(remainingRooms);
                       setSelectedRanges((prev) => {
@@ -771,18 +869,23 @@ function DesktopCalendar({
                       return;
                     }
 
-                    const defaultRange = selected
-                      .map((id) => selectedRanges[id])
-                      .find((range): range is RoomDateRange => Boolean(range))
-                      ?? (checkIn && checkOut ? { checkIn, checkOut } : undefined);
+                    const defaultRange = rangeForRoomSelection(room);
                     setSelected((current) => [...current, room.id]);
                     if (defaultRange) {
-                      setSelectedRanges((prev) => ({ ...prev, [room.id]: defaultRange }));
+                      setSelectedRanges((prev) => ({
+                        ...prev,
+                        [room.id]: defaultRange,
+                        ...(room.databaseId ? { [room.databaseId]: defaultRange } : {}),
+                      }));
                     }
                   }}
                   className={`flex h-full min-w-0 flex-1 items-center gap-3 p-3.5 text-left transition-all duration-200 ${
                     selected.includes(room.id) ? "bg-blue-50/70" : "bg-white hover:bg-slate-50"
-                  } ${Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, checkIn, checkOut) ? "cursor-not-allowed opacity-60" : ""}`}
+                  } ${!isChangingRoom && Boolean(rangeForRoomSelection(room)) && !isAvailableWithMatrix(
+                    room,
+                    rangeForRoomSelection(room)?.checkIn ?? checkIn,
+                    rangeForRoomSelection(room)?.checkOut ?? checkOut,
+                  ) ? "cursor-not-allowed opacity-60" : ""}`}
                 >
                   <span
                     className={`grid h-10 min-w-[54px] shrink-0 place-items-center rounded-xl px-2 text-[11px] font-extrabold whitespace-nowrap transition-all ${
@@ -798,7 +901,22 @@ function DesktopCalendar({
                     <small className="mt-0.5 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
                   </span>
                 </button>
-                <button type="button" title={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} aria-label={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} onClick={() => setRoomDetails({
+                <div className="my-auto mr-2 flex shrink-0 items-center gap-1">
+                  {showRoomChangeAction && selected.includes(room.id) && (
+                    <button
+                      type="button"
+                      disabled={!canChangeRoom?.(room)}
+                      title={!canChangeRoom?.(room) ? "Chỉ được đổi phòng khi booking-detail còn PENDING và chưa check-in." : isChangingRoom && room.id === roomChangeTargetRoomId ? "Đang chọn phòng thay thế" : "Đổi phòng"}
+                      aria-label={`Đổi phòng ${room.roomNumber ?? room.id}`}
+                      onClick={() => onStartRoomChange?.(room)}
+                      aria-pressed={isChangingRoom && room.id === roomChangeTargetRoomId}
+                      className={`flex h-8 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent ${isChangingRoom && room.id === roomChangeTargetRoomId ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 shadow-sm" : "text-blue-600 hover:bg-blue-50"}`}
+                    >
+                      <RefreshCw size={13} />
+                      <span>Đổi</span>
+                    </button>
+                  )}
+                  <button type="button" title={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} aria-label={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} onClick={() => setRoomDetails({
                   id: room.id,
                   name: room.type,
                   images: room.images ?? [],
@@ -818,9 +936,10 @@ function DesktopCalendar({
                   description: room.description,
                   buildingId: room.buildingId,
                   buildingName: room.buildingName,
-                })} className="my-auto mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                  <Eye size={16} />
-                </button>
+                  })} className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                    <Eye size={16} />
+                  </button>
+                </div>
               </div>
 
               {/* Day Cell Slots */}
@@ -882,6 +1001,10 @@ function DesktopCalendar({
 export default function BookingWorkspace() {
   const location = useLocation();
   const initialBooking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
+  const initialBookingDetails = useMemo(
+    () => (Array.isArray(initialBooking?.bookingDetails) ? initialBooking.bookingDetails : []).filter((detail) => !isCancelledBookingDetail(detail)),
+    [initialBooking],
+  );
   const editingBookingId = initialBooking ? String(initialBooking.bookingId ?? initialBooking.orderId ?? "") : undefined;
   const editingBookingRanges = useMemo(() => buildBookingRoomRanges(initialBooking), [initialBooking]);
   const initialCustomerId = String(initialBooking?.customerId ?? initialBooking?.customerID ?? "");
@@ -908,7 +1031,11 @@ export default function BookingWorkspace() {
   const [building, setBuilding] = useState("Tất cả các tòa");
   const [floor, setFloor] = useState("Tất cả các tầng");
   const [showFull, setShowFull] = useState(false);
+  const [showSelectedRoomsOnly, setShowSelectedRoomsOnly] = useState(false);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
+  const [roomChangeTargetBookingDetailId, setRoomChangeTargetBookingDetailId] = useState<string | null>(null);
+  const [roomChangeTargetRoomId, setRoomChangeTargetRoomId] = useState<string | null>(null);
+  const [roomChangeTargets, setRoomChangeTargets] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [bookingGuest, setBookingGuest] = useState<BookingGuest>({ name: "", phone: "", identityNumber: "" });
@@ -947,8 +1074,7 @@ export default function BookingWorkspace() {
   const [dailyRoomPrices, setDailyRoomPrices] = useState<RoomDailyPricesResponse>({});
   useEffect(() => {
     if (!initialBooking) return;
-    const details = (Array.isArray(initialBooking.bookingDetails) ? initialBooking.bookingDetails : [])
-      .filter((detail) => !isCancelledBookingDetail(detail));
+    const details = initialBookingDetails;
     const roomKey = (detail: Record<string, unknown>) => String(detail.roomId ?? detail.roomID ?? "");
     const selectedRoomKeys = details.map(roomKey);
     const matchedRooms = rooms.filter((room) => selectedRoomKeys.includes(String(room.databaseId ?? room.id)) || selectedRoomKeys.includes(room.id));
@@ -1087,7 +1213,7 @@ export default function BookingWorkspace() {
     setCheckIn(firstRange?.checkIn ?? todayLocal());
     setCheckOut(firstRange?.checkOut ?? shiftDay(todayLocal(), 1));
     setStep("guest");
-  }, [initialBooking, rooms, customerById]);
+  }, [initialBooking, initialBookingDetails, rooms, customerById]);
   const buildings = useMemo(() => (apiBuildings ?? []).map((item) => {
     const id = getApiValue(item, ["id", "buildingId", "buildingID"]);
     const name = getApiValue(item, ["name", "buildingName", "buildingCode", "code"]);
@@ -1139,8 +1265,11 @@ export default function BookingWorkspace() {
 
   const hasRoomFilter = Boolean(query.trim() || roomType !== allRoomTypesLabel || building !== allBuildingsLabel || floor !== allFloorsLabel);
   const visibleRooms = useMemo(
-    () => filteredRooms.filter((room) => selected.includes(room.id) || showFull || !hasDates || isAvailable(room)),
-    [filteredRooms, showFull, checkIn, checkOut, hasDates, selected]
+    () => filteredRooms.filter((room) =>
+      (!showSelectedRoomsOnly || selected.includes(room.id))
+      && (roomChangeTargetRoomId !== null || selected.includes(room.id) || showFull || !hasDates || isAvailable(room))
+    ),
+    [filteredRooms, showSelectedRoomsOnly, selected, roomChangeTargetRoomId, showFull, checkIn, checkOut, hasDates]
   );
   const totalPages = Math.max(1, Math.ceil(visibleRooms.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -1155,6 +1284,161 @@ export default function BookingWorkspace() {
   }, [page, totalPages]);
 
   const selectedRooms = [...rooms, ...loadedBookingRooms].filter((room, index, allRooms) => selected.includes(room.id) && allRooms.findIndex((candidate) => candidate.id === room.id) === index);
+  const detailRoomKeysOf = (detail: Record<string, unknown>) => [detail.roomId, detail.roomID, detail.roomNumber, detail.roomNo, detail.roomCode]
+    .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
+    .map(String);
+  const findBookingDetailForRoom = (room: BookingRoom) => {
+    const roomKeys = roomKeysOf(room);
+    const replacement = Object.entries(roomChangeTargets).find(([, targetRoomId]) => roomKeys.includes(targetRoomId));
+    if (replacement) return initialBookingDetails.find((detail) => bookingDetailIdOf(detail) === replacement[0]);
+    return initialBookingDetails.find((detail) => detailRoomKeysOf(detail).some((key) => roomKeys.includes(key)));
+  };
+  const findCurrentRoomForBookingDetail = (bookingDetailId: string) => {
+    const detail = initialBookingDetails.find((item) => bookingDetailIdOf(item) === bookingDetailId);
+    if (!detail) return undefined;
+    const currentRoomId = roomChangeTargets[bookingDetailId];
+    const roomKeys = currentRoomId ? [currentRoomId] : detailRoomKeysOf(detail);
+    return selectedRooms.find((room) => roomKeys.some((key) => roomKeysOf(room).includes(key)));
+  };
+  const roomChangeTargetDetail = roomChangeTargetBookingDetailId
+    ? initialBookingDetails.find((detail) => bookingDetailIdOf(detail) === roomChangeTargetBookingDetailId)
+    : undefined;
+  const roomChangeTargetRoom = roomChangeTargetRoomId
+    ? selectedRooms.find((room) => room.id === roomChangeTargetRoomId)
+    : undefined;
+  const roomChangeTargetRange = roomChangeTargetRoom
+    ? selectedRanges[roomChangeTargetRoom.id]
+      ?? (roomChangeTargetRoom.databaseId ? selectedRanges[roomChangeTargetRoom.databaseId] : undefined)
+      ?? {
+        checkIn: String(roomChangeTargetDetail?.checkInTime ?? roomChangeTargetDetail?.checkInDate ?? "").slice(0, 10),
+        checkOut: String(roomChangeTargetDetail?.checkOutTime ?? roomChangeTargetDetail?.checkOutDate ?? "").slice(0, 10),
+      }
+    : undefined;
+  const canChangeBookingRoom = (detail: Record<string, unknown> | undefined) => Boolean(
+    detail
+    && bookingDetailStatusOf(detail) === "PENDING"
+    && !hasActualCheckIn(detail)
+  );
+  const beginRoomReplacement = (room: BookingRoom) => {
+    const detail = findBookingDetailForRoom(room);
+    if (initialBooking && !canChangeBookingRoom(detail)) return;
+    setRoomChangeTargetBookingDetailId(detail ? bookingDetailIdOf(detail) : null);
+    setRoomChangeTargetRoomId(room.id);
+    setIsAddingRoom(true);
+    setShowFull(true);
+    setQuery("");
+    setRoomType(allRoomTypesLabel);
+    setBuilding(allBuildingsLabel);
+    setFloor(allFloorsLabel);
+    setShowSelectedRoomsOnly(false);
+    setPage(1);
+    setPaymentError("");
+    setStep("rooms");
+  };
+  const replaceBookingRoom = (newRoom: BookingRoom, replacementRange?: RoomDateRange) => {
+    const bookingDetailId = roomChangeTargetBookingDetailId;
+    const currentRoomId = roomChangeTargetRoomId;
+    if (!currentRoomId || (bookingDetailId && !canChangeBookingRoom(roomChangeTargetDetail))) return;
+    const oldRoom = selectedRooms.find((room) => room.id === currentRoomId);
+    if (!oldRoom || oldRoom.id === newRoom.id) {
+      setRoomChangeTargetBookingDetailId(null);
+      setRoomChangeTargetRoomId(null);
+      setIsAddingRoom(false);
+      return;
+    }
+    if (selected.includes(newRoom.id)) {
+      setPaymentError("Phòng này đang được chọn trong booking.");
+      return;
+    }
+
+    const oldRoomKeys = [oldRoom.id, oldRoom.databaseId].filter((value): value is string => Boolean(value));
+    const newRange = replacementRange
+      ?? selectedRanges[oldRoom.id]
+      ?? (oldRoom.databaseId ? selectedRanges[oldRoom.databaseId] : undefined)
+      ?? roomChangeTargetRange
+      ?? { checkIn, checkOut };
+    setSelected((current) => [...current.filter((roomId) => roomId !== oldRoom.id), newRoom.id]);
+    setSelectedRanges((current) => {
+      const next = { ...current };
+      oldRoomKeys.forEach((key) => { delete next[key]; });
+      next[newRoom.id] = newRange;
+      if (newRoom.databaseId) next[newRoom.databaseId] = newRange;
+      return next;
+    });
+    setRoomServices((current) => {
+      const previousServices = oldRoomKeys.map((key) => current[key]).find(Boolean) ?? [];
+      const next = { ...current };
+      oldRoomKeys.forEach((key) => { delete next[key]; });
+      next[newRoom.id] = previousServices;
+      if (newRoom.databaseId) next[newRoom.databaseId] = previousServices;
+      return next;
+    });
+    setRoomGuestCounts((current) => {
+      const previousCounts = oldRoomKeys.map((key) => current[key]).find(Boolean);
+      if (!previousCounts) return current;
+      const next = { ...current };
+      oldRoomKeys.forEach((key) => { delete next[key]; });
+      next[newRoom.id] = previousCounts;
+      if (newRoom.databaseId) next[newRoom.databaseId] = previousCounts;
+      return next;
+    });
+    setRoomGuestSurcharges((current) => {
+      const previousSurcharge = oldRoomKeys.map((key) => current[key]).find((value) => value !== undefined);
+      if (previousSurcharge === undefined) return current;
+      const next = { ...current };
+      oldRoomKeys.forEach((key) => { delete next[key]; });
+      next[newRoom.id] = previousSurcharge;
+      if (newRoom.databaseId) next[newRoom.databaseId] = previousSurcharge;
+      return next;
+    });
+    setRoomGuestSurchargeDetails((current) => {
+      const previousDetails = oldRoomKeys.map((key) => current[key]).find(Boolean);
+      if (!previousDetails) return current;
+      const next = { ...current };
+      oldRoomKeys.forEach((key) => { delete next[key]; });
+      next[newRoom.id] = previousDetails;
+      if (newRoom.databaseId) next[newRoom.databaseId] = previousDetails;
+      return next;
+    });
+    if (bookingDetailId) {
+      setRoomChangeTargets((current) => ({ ...current, [bookingDetailId]: String(newRoom.databaseId ?? newRoom.id) }));
+    }
+    setRoomChangeTargetBookingDetailId(null);
+    setRoomChangeTargetRoomId(null);
+    setIsAddingRoom(false);
+    setPaymentError("");
+  };
+  const removeSelectedRoom = (room: BookingRoom) => {
+    if (initialBooking && !canChangeBookingRoom(findBookingDetailForRoom(room))) return;
+    const roomKeys = roomKeysOf(room);
+    setSelected((current) => current.filter((roomId) => roomId !== room.id));
+    setSelectedRanges((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !roomKeys.includes(key))));
+    setRoomServices((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !roomKeys.includes(key))));
+    setRoomGuestCounts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !roomKeys.includes(key))));
+    setRoomGuestSurcharges((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !roomKeys.includes(key))));
+    setRoomGuestSurchargeDetails((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !roomKeys.includes(key))));
+    setCollapsedSummaryRooms((current) => current.filter((roomId) => roomId !== room.id));
+    setExpandedServiceRoom((current) => current === room.id ? null : current);
+  };
+  const updateStayDate = (field: "checkIn" | "checkOut", value: string) => {
+    if (!roomChangeTargetRoomId || !roomChangeTargetRoom) {
+      if (field === "checkIn") setCheckIn(value);
+      else setCheckOut(value);
+      return;
+    }
+    const currentRange = roomChangeTargetRange ?? { checkIn, checkOut };
+    if (field === "checkOut" && value <= currentRange.checkIn) return;
+    const nextRange = field === "checkIn"
+      ? { checkIn: value, checkOut: value >= currentRange.checkOut ? shiftDay(value, 1) : currentRange.checkOut }
+      : { ...currentRange, checkOut: value };
+    const keys = [roomChangeTargetRoom.id, roomChangeTargetRoom.databaseId].filter((key): key is string => Boolean(key));
+    setSelectedRanges((current) => keys.reduce((next, key) => ({ ...next, [key]: nextRange }), current));
+  };
+  const displayedCheckIn = roomChangeTargetRoomId ? roomChangeTargetRange?.checkIn ?? checkIn : checkIn;
+  const displayedCheckOut = roomChangeTargetRoomId ? roomChangeTargetRange?.checkOut ?? checkOut : checkOut;
+  const displayedNights = displayedCheckIn && displayedCheckOut
+    ? Math.max(1, Math.round((new Date(displayedCheckOut).getTime() - new Date(displayedCheckIn).getTime()) / 86400000))
+    : 0;
   const getRoomPrice = (room: BookingRoom) => bookingRoomPrices[room.id] ?? (room.databaseId === undefined ? undefined : bookingRoomPrices[String(room.databaseId)]) ?? room.price;
   const getRoomPriceForDate = (room: BookingRoom, date: string) => {
     const prices = dailyRoomPrices[room.id] ?? (room.databaseId ? dailyRoomPrices[String(room.databaseId)] : undefined);
@@ -1269,23 +1553,32 @@ export default function BookingWorkspace() {
         ?? detail.id
         ?? "",
       );
+      const bookingDetailForRoom = (room: BookingRoom) => {
+        const roomKeys = roomKeysOf(room);
+        const mappedDetailId = Object.entries(roomChangeTargets).find(([, targetRoomId]) => roomKeys.includes(targetRoomId))?.[0];
+        return mappedDetailId
+          ? initialDetails.find((detail) => detailIdOf(detail) === mappedDetailId)
+          : undefined;
+      };
       const servicesToAddForExistingRooms: { bookingDetailId: string; services: any[] }[] = [];
       const serviceQuantityUpdates: { bookingDetailId: string; services: { serviceId: string; quantity: number }[] }[] = [];
-      const roomsToUpdateDates: ManagementBookingModificationRequest["roomsToUpdateDates"] = [];
+      const roomsToChange: ManagementBookingModificationRequest["roomsToChange"] = [];
       const roomsToAdd: ManagementBookingModificationRequest["roomsToAdd"] = [];
       const servicesToCancelMap: Record<string, string[]> = {};
       const selectedRoomKeys = new Set(selectedRooms.flatMap((room) => [String(room.id), room.databaseId ? String(room.databaseId) : ""]));
       const bookingDetailIdsToCancel = initialDetails
         .filter((detail) => {
           const detailRoomId = String(detail.roomId ?? detail.roomID ?? "");
-          return detailRoomId && !selectedRoomKeys.has(detailRoomId);
+          const replacementRoomId = roomChangeTargets[detailIdOf(detail)];
+          const replacementIsSelected = replacementRoomId && selectedRooms.some((room) => roomKeysOf(room).includes(replacementRoomId));
+          return detailRoomId && !selectedRoomKeys.has(detailRoomId) && !replacementIsSelected;
         })
         .map((detail) => detailIdOf(detail))
         .filter(Boolean);
-
       selectedRooms.forEach((room) => {
         const roomKeyValue = String(room.databaseId ?? room.id);
-        const isExistingRoom = initialDetails.some((detail) => {
+        const isReplacementRoom = Boolean(bookingDetailForRoom(room));
+        const isExistingRoom = isReplacementRoom || initialDetails.some((detail) => {
           const detailRoomId = String(detail.roomId ?? detail.roomID ?? "");
           return detailRoomId === roomKeyValue || detailRoomId === room.id;
         });
@@ -1313,7 +1606,8 @@ export default function BookingWorkspace() {
 
       selectedRooms.forEach((room, roomIdx) => {
         const roomKeyValue = String(room.databaseId ?? room.id);
-        const initialDetail = initialDetails.find((detail, idx) => {
+        const mappedReplacementDetail = bookingDetailForRoom(room);
+        const initialDetail = mappedReplacementDetail ?? initialDetails.find((detail, idx) => {
           const dId = detailIdOf(detail);
           const rId = roomKey(detail);
           const targetDbId = String(room.databaseId ?? room.id);
@@ -1337,21 +1631,23 @@ export default function BookingWorkspace() {
           children: Number(initialDetail?.numChildren ?? initialDetail?.children ?? 0),
           infants: Number(initialDetail?.numInfants ?? initialDetail?.infants ?? 0),
         };
-        if (
-          currentRange.checkIn !== originalCheckIn
-          || currentRange.checkOut !== originalCheckOut
-          || currentCounts.adults !== originalCounts.adults
-          || currentCounts.children !== originalCounts.children
-          || currentCounts.infants !== originalCounts.infants
-        ) {
-          roomsToUpdateDates.push({
+        const originalRoomId = String(initialDetail.roomId ?? initialDetail.roomID ?? "");
+        const requestedRoomId = roomChangeTargets[bookingDetailId] ?? null;
+        const roomChanged = Boolean(requestedRoomId && requestedRoomId !== originalRoomId);
+        const checkInChanged = currentRange.checkIn !== originalCheckIn;
+        const checkOutChanged = currentRange.checkOut !== originalCheckOut;
+        const adultsChanged = currentCounts.adults !== originalCounts.adults;
+        const childrenChanged = currentCounts.children !== originalCounts.children;
+        const infantsChanged = currentCounts.infants !== originalCounts.infants;
+        if (roomChanged || checkInChanged || checkOutChanged || adultsChanged || childrenChanged || infantsChanged) {
+          roomsToChange.push({
             bookingDetailId,
-            newCheckInTime: `${currentRange.checkIn}T14:00:00`,
-            newCheckoutTime: `${currentRange.checkOut}T12:00:00`,
-            newCheckOutTime: `${currentRange.checkOut}T12:00:00`,
-            numAdults: currentCounts.adults,
-            numChildren: currentCounts.children,
-            numInfants: currentCounts.infants,
+            newRoomId: roomChanged ? requestedRoomId : null,
+            newCheckInTime: checkInChanged ? `${currentRange.checkIn}T14:00:00` : null,
+            newCheckoutTime: checkOutChanged ? `${currentRange.checkOut}T12:00:00` : null,
+            numAdults: adultsChanged ? currentCounts.adults : null,
+            numChildren: childrenChanged ? currentCounts.children : null,
+            numInfants: infantsChanged ? currentCounts.infants : null,
           });
         }
 
@@ -1436,8 +1732,7 @@ export default function BookingWorkspace() {
         bookingDetailIdsToCancel,
         servicesToCancel,
         roomsToAdd,
-        roomsToChange: [],
-        roomsToUpdateDates,
+        roomsToChange,
         servicesToAddForExistingRooms,
         serviceQuantityUpdates,
       };
@@ -1568,7 +1863,7 @@ export default function BookingWorkspace() {
                 : `${selected.length} ${t("booking.rooms")} · ${nights} ${t("booking.nights")} · ${checkIn} → ${checkOut}`}
             </p>
           </div>
-          {step === "guest" && <button onClick={() => setStep("rooms")} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />{t("booking.changeRoom")}</button>}
+          {step === "guest" && <button onClick={() => { setShowSelectedRoomsOnly(false); setIsAddingRoom(true); setStep("rooms"); }} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />{t("booking.addAnotherRoom")}</button>}
           {step === "services" && <button onClick={() => setStep("guest")} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />{t("booking.guestInformation")}</button>}
           {step === "promotion" && <button onClick={() => setStep("services")} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />Dịch vụ</button>}
         </div>
@@ -1576,10 +1871,14 @@ export default function BookingWorkspace() {
 
       {step === "rooms" ? (
         <div className="p-5">
+          {roomChangeTargetRoomId && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <span>Đang đổi phòng {roomChangeTargetRoom?.id ?? String(roomChangeTargetDetail?.roomNumber ?? "")} · dịch vụ sẽ được giữ lại.</span>
+            <button type="button" onClick={() => { setRoomChangeTargetBookingDetailId(null); setRoomChangeTargetRoomId(null); setIsAddingRoom(false); }} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Hủy đổi phòng</button>
+          </div>}
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
-            <DatePicker label={t("booking.checkInDate")} value={checkIn} onChange={setCheckIn} hotelId={hotelId} />
-            <DatePicker label={t("booking.checkOutDate")} value={checkOut} min={checkIn || undefined} onChange={setCheckOut} hotelId={hotelId} />
-            <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{hasDates ? `${nights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
+            <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} />
+            <DatePicker label={t("booking.checkOutDate")} value={displayedCheckOut} min={displayedCheckIn || undefined} onChange={(value) => updateStayDate("checkOut", value)} hotelId={hotelId} />
+            <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{displayedCheckIn && displayedCheckOut ? `${displayedNights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
           </div>
 
           <div className="mt-5 flex flex-col gap-3">
@@ -1625,6 +1924,14 @@ export default function BookingWorkspace() {
               onDailyPricesChange={setDailyRoomPrices}
               editingBookingId={editingBookingId}
               editingBookingRanges={editingBookingRanges}
+              isChangingRoom={Boolean(roomChangeTargetRoomId)}
+              roomChangeTargetRoomId={roomChangeTargetRoomId}
+              roomChangeTargetRange={roomChangeTargetRange}
+              onReplaceRoom={replaceBookingRoom}
+              onReplaceRoomUnavailable={() => toast({ variant: "destructive", title: "Phòng chưa trống", description: "Khoảng ngày hiện tại không khả dụng cho phòng này. Hãy chọn ngày hoặc khoảng ngày còn trống trên lịch." })}
+              showRoomChangeAction
+              canChangeRoom={(room) => !initialBooking || canChangeBookingRoom(findBookingDetailForRoom(room))}
+              onStartRoomChange={beginRoomReplacement}
             />
             {visibleRooms.length > 0 && (
               <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
@@ -1676,19 +1983,29 @@ export default function BookingWorkspace() {
               {t("booking.selectedRooms")} <strong className="text-slate-900">{selected.length} {t("booking.rooms")}</strong>
               {selected.length > 0 && <span> · {t("booking.estimatedTotal")} <strong className="text-violet-700">{money(bookingEstimate.total)}</strong></span>}
               </p>
-              {isAddingRoom && <p className="mt-1 text-xs text-blue-600">{t("booking.selectDateToAddRoom")}</p>}
+              {isAddingRoom && <p className="mt-1 text-xs text-blue-600">{roomChangeTargetRoomId ? "Chọn phòng trống để thay thế phòng hiện tại." : t("booking.selectDateToAddRoom")}</p>}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               {selected.length > 0 && <button type="button" onClick={() => {
-                if (checkIn && checkOut) {
-                  setSelectedRanges((prev) => Object.fromEntries(selected.map((roomId) => [roomId, prev[roomId] ?? { checkIn, checkOut }])));
+                if (showSelectedRoomsOnly) {
+                  setShowSelectedRoomsOnly(false);
+                } else {
+                  setSelectedRanges((current) => ({
+                    ...current,
+                    ...Object.fromEntries(selectedRooms.map((room) => [
+                      room.id,
+                      current[room.id] ?? (room.databaseId ? current[room.databaseId] : undefined) ?? { checkIn, checkOut },
+                    ])),
+                  }));
+                  setShowSelectedRoomsOnly(true);
+                  setIsAddingRoom(false);
+                  setQuery("");
+                  setRoomType(allRoomTypesLabel);
+                  setBuilding(allBuildingsLabel);
+                  setFloor(allFloorsLabel);
                 }
-                setIsAddingRoom(false);
-                setQuery("");
-                setRoomType(allRoomTypesLabel);
-                setBuilding(allBuildingsLabel);
-                setFloor(allFloorsLabel);
-              }} className="flex items-center justify-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-50">{t("booking.viewBookedRooms")}</button>}
+                setPage(1);
+              }} className="flex items-center justify-center gap-2 rounded-lg border border-violet-200 px-4 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-50">{t(showSelectedRoomsOnly ? "booking.showAllRooms" : "booking.viewBookedRooms")}</button>}
               <button disabled={!canContinue} onClick={() => setStep("guest")} className="flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
               {t("booking.continue")} <ChevronRight size={16} />
               </button>
@@ -1783,6 +2100,7 @@ export default function BookingWorkspace() {
               {summaryRanges.map(({ room, range }) => {
                 const roomSelections = getRoomServiceSelections(room);
                 const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
+                const roomBookingDetail = findBookingDetailForRoom(room);
                 const roomServiceTotal = getServiceTotal(selections) * (roomSelections.length > 0 || serviceMode !== "all" ? 1 : selectedGuestsForRoom(room));
                 const roomRange = selectedRanges[room.id] ?? { checkIn, checkOut };
                 const roomBaseTotal = getRoomBaseRangeTotal(room, roomRange);
@@ -1798,6 +2116,7 @@ export default function BookingWorkspace() {
                     </div>
                     <span className="flex shrink-0 items-center gap-2"><strong className="text-sm text-blue-700">{money(roomSubtotal)}</strong><ChevronDown size={16} className={`text-blue-500 transition-transform ${isSummaryRoomCollapsed ? "-rotate-90" : ""}`} /></span>
                   </button>
+                  <button type="button" onClick={() => removeSelectedRoom(room)} disabled={Boolean(initialBooking) && !canChangeBookingRoom(roomBookingDetail)} title={initialBooking ? canChangeBookingRoom(roomBookingDetail) ? "Phòng sẽ được hủy khi lưu booking." : "Không thể bỏ phòng sau khi check-in hoặc khi booking-detail không còn PENDING." : undefined} className="mx-3 mt-2 rounded-md border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300 disabled:hover:bg-white">Bỏ chọn phòng</button>
                   {!isSummaryRoomCollapsed && <div className="space-y-2 px-3 py-3 text-slate-600">
                     <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkInDate", "Nhận")}: {formatDateLabel(range.checkIn, "", i18n.language)}</span></div>
                     <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkOutDate", "Trả")}: {formatDateLabel(range.checkOut, "", i18n.language)}</span></div>
@@ -1807,6 +2126,13 @@ export default function BookingWorkspace() {
                     {(roomGuestSurcharges[room.id] ?? 0) > 0 && <><div className="flex justify-between gap-3"><span>Phụ thu người lớn</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.adult ?? 0) * (nightsForRoom(room.id) || 1))}</span></div><div className="flex justify-between gap-3"><span>Phụ thu trẻ em</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.child ?? 0) * (nightsForRoom(room.id) || 1))}</span></div></>}
                     <div className="flex justify-between gap-3"><span>Dịch vụ</span><span className="text-right font-medium text-slate-800">{roomServiceTotal ? money(roomServiceTotal) : "Chưa chọn"}</span></div>
                     <div className="mt-2 flex items-center justify-between gap-3 border-t border-blue-100 pt-2 font-bold text-blue-700"><span>Tạm tính phòng</span><span>{money(roomSubtotal)}</span></div>
+                    {(!initialBooking || canChangeBookingRoom(roomBookingDetail)) && <button
+                      type="button"
+                      onClick={() => beginRoomReplacement(room)}
+                      className="mt-2 flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                    >
+                      <RefreshCw size={13} />Đổi phòng
+                    </button>}
                   </div>}
                 </div>
               })}
