@@ -2,8 +2,8 @@ import { baseApi } from "./baseApi";
 import type { BookingResponse } from "./bookingApi";
 
 export type ManagementBookingServiceCancellation = {
-  bookingDetailId: number;
-  serviceDetailIds: number[];
+  bookingDetailId: string;
+  serviceDetailIds: string[];
 };
 
 export type ManagementBookingServiceAddition = {
@@ -15,7 +15,7 @@ export type ManagementBookingServiceAddition = {
 };
 
 export type ManagementBookingRoomServiceAddition = {
-  bookingDetailId: number;
+  bookingDetailId: string;
   services: ManagementBookingServiceAddition[];
 };
 
@@ -41,25 +41,26 @@ export type ManagementBookingServiceQuantityItem = {
 };
 
 export type ManagementBookingUpdateServiceQuantityRequest = {
-  bookingDetailId: number;
+  bookingDetailId: string;
   services: ManagementBookingServiceQuantityItem[];
+};
+
+export type ManagementBookingRoomUpdateRequest = {
+  bookingDetailId: string;
+  newRoomId: string | null;
+  newCheckInTime: string | null;
+  newCheckoutTime: string | null;
+  numAdults: number | null;
+  numChildren: number | null;
+  numInfants: number | null;
 };
 
 export type ManagementBookingModificationRequest = {
   employeeId: string;
-  bookingDetailIdsToCancel: number[];
+  bookingDetailIdsToCancel: string[];
   servicesToCancel: ManagementBookingServiceCancellation[];
   roomsToAdd: ManagementBookingRoomToAdd[];
-  roomsToChange: { bookingDetailId: number; newRoomId: string }[];
-  roomsToUpdateDates: {
-    bookingDetailId: number;
-    newCheckInTime: string;
-    newCheckoutTime?: string;
-    newCheckOutTime?: string;
-    numAdults: number;
-    numChildren: number;
-    numInfants: number;
-  }[];
+  roomsToChange: ManagementBookingRoomUpdateRequest[];
   servicesToAddForExistingRooms: ManagementBookingRoomServiceAddition[];
   serviceQuantityUpdates: ManagementBookingUpdateServiceQuantityRequest[];
 };
