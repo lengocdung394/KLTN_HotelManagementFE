@@ -29,6 +29,7 @@ import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
 const valueOf = (item: BookingListItem, keys: string[]) => {
+  if (!item || typeof item !== "object") return undefined;
   const normalizedMap = new Map<string, unknown>();
   Object.entries(item).forEach(([key, value]) => {
     normalizedMap.set(String(key).toLowerCase(), value);
@@ -203,7 +204,7 @@ export default function BookingListWorkspace() {
   }, [dispatch, hotelId]);
 
   // Merge API bookings with local overrides
-  const bookings = fetchedBookings.map((b) => {
+  const bookings = fetchedBookings.filter((b) => Boolean(b) && typeof b === "object").map((b) => {
     const id = bookingId(b);
     return localOverrides[id] ? { ...b, ...localOverrides[id] } : b;
   });
@@ -346,7 +347,11 @@ export default function BookingListWorkspace() {
         return;
       }
       const totalDue = Number(selectedBooking.finalAmount) || 0;
-      const fallbackChange = Math.max(0, amountPaid - totalDue);
+      const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+      const remainingDue = Math.max(0, totalDue - paidSoFar);
+      const totalPaidAfterPayment = paidSoFar + amountPaid;
+      const isFullyPaid = totalPaidAfterPayment >= totalDue;
+      const fallbackChange = Math.max(0, amountPaid - remainingDue);
       try {
         const paymentResponse = await payWithCash({ orderId, amountPaid, note: "Thanh toán tiền mặt tại quầy" }).unwrap();
         const responseChange = Number(
@@ -360,9 +365,10 @@ export default function BookingListWorkspace() {
         setLocalOverrides((prev) => ({
           ...prev,
           [id]: {
-            bookingStatus: "CONFIRMED",
-            paymentStatus: "PAID",
-            invoiceStatus: "PAID",
+            ...prev[id],
+            paidAmount: totalPaidAfterPayment,
+            remainingAmount: Math.max(0, totalDue - totalPaidAfterPayment),
+            ...(isFullyPaid ? { bookingStatus: "CONFIRMED", paymentStatus: "PAID", invoiceStatus: "PAID" } : {}),
           },
         }));
         dispatch(baseApi.util.invalidateTags(["Booking"]));
@@ -410,7 +416,9 @@ export default function BookingListWorkspace() {
   const qrTimeLabel = `${String(Math.floor(qrSecondsLeft / 60)).padStart(2, "0")}:${String(qrSecondsLeft % 60).padStart(2, "0")}`;
   const cashBillTotal = Number(selectedBooking?.finalAmount) || 0;
   const enteredCashAmount = Number(cashAmountPaid) || 0;
-  const computedCashChange = Math.max(0, enteredCashAmount - cashBillTotal);
+  const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+  const cashRemainingDue = Math.max(0, cashBillTotal - paidSoFar);
+  const computedCashChange = Math.max(0, enteredCashAmount - cashRemainingDue);
   const displayCashChange = cashChangeAmount ?? computedCashChange;
   const paymentBlocked = !!selectedBooking && (() => {
     const finalAmount = Number(selectedBooking.finalAmount ?? 0);
@@ -904,16 +912,10 @@ export default function BookingListWorkspace() {
                     </div>
                   )}
 
-                  {paymentMethod === "cash" && (cashAmountPaid !== "" || cashChangeAmount !== null) && (
+                  {paymentMethod === "cash" && (cashAmountPaid !== "" || cashChangeAmount !== null) && enteredCashAmount > cashRemainingDue && (
                     <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4">
-                      <span className="text-sm font-semibold text-amber-800">
-                        {enteredCashAmount >= cashBillTotal ? "Tiền trả lại khách" : "Còn thiếu"}
-                      </span>
-                      <span className="text-lg font-bold text-amber-900">
-                        {enteredCashAmount >= cashBillTotal
-                          ? money(displayCashChange)
-                          : money(Math.max(0, cashBillTotal - enteredCashAmount))}
-                      </span>
+                      <span className="text-sm font-semibold text-amber-800">Tiền trả lại khách</span>
+                      <span className="text-lg font-bold text-amber-900">{money(displayCashChange)}</span>
                     </div>
                   )}
                 </div>

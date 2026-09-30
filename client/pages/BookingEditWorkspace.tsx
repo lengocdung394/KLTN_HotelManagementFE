@@ -17,22 +17,24 @@ import { useAppSelector } from "../store/hooks";
 type BookingDetail = Record<string, unknown>;
 
 const roomIdOf = (detail: BookingDetail) => String(detail.roomId ?? detail.roomID ?? detail.id ?? "");
-const detailIdOf = (detail: BookingDetail) => Number(
+const detailIdOf = (detail: BookingDetail) => String(
   detail.bookingDetailId
   ?? detail.bookingDetailsId
   ?? detail.bookingDetailID
   ?? detail.detailId
   ?? detail.detailID
-  ?? detail.id,
+  ?? detail.id
+  ?? "",
 );
 
-const serviceDetailIdOf = (service: BookingDetail) => Number(
+const serviceDetailIdOf = (service: BookingDetail) => String(
   service.bookingServiceDetailId
   ?? service.serviceDetailId
   ?? service.bookingServiceDetailID
   ?? service.serviceDetailID
   ?? service.id
-  ?? service.serviceId,
+  ?? service.serviceId
+  ?? "",
 );
 
 const servicesOf = (detail: BookingDetail) => ([
@@ -70,16 +72,16 @@ export default function BookingEditWorkspace() {
   const [success, setSuccess] = useState(false);
 
   // 1. Phục vụ HỦY PHÒNG (bookingDetailIdsToCancel)
-  const [cancelledDetailIds, setCancelledDetailIds] = useState<number[]>([]);
+  const [cancelledDetailIds, setCancelledDetailIds] = useState<string[]>([]);
 
   // 2. Phục vụ HỦY DỊCH VỤ LẺ (servicesToCancel: { bookingDetailId, serviceDetailIds })
-  const [cancelledServiceDetailIds, setCancelledServiceDetailIds] = useState<Record<number, number[]>>({});
+  const [cancelledServiceDetailIds, setCancelledServiceDetailIds] = useState<Record<string, string[]>>({});
 
   // 3. Phục vụ ĐỔI PHÒNG (roomsToChange: { bookingDetailId, newRoomId })
-  const [roomChanges, setRoomChanges] = useState<Record<number, string>>({});
+  const [roomChanges, setRoomChanges] = useState<Record<string, string>>({});
 
   // 4. Phục vụ CẬP NHẬT NGÀY LƯU TRÚ (roomsToUpdateDates: { bookingDetailId, newCheckInTime, newCheckoutTime })
-  const [dateUpdates, setDateUpdates] = useState<Record<number, { checkIn: string; checkOut: string }>>({});
+  const [dateUpdates, setDateUpdates] = useState<Record<string, { checkIn: string; checkOut: string }>>({});
 
   // 5. Phục vụ THÊM DỊCH VỤ MỚI CHO PHÒNG HIỆN CÓ (servicesToAddForExistingRooms)
   const [roomServices, setRoomServices] = useState<Record<string, ServiceSelection[]>>({});
@@ -172,13 +174,13 @@ export default function BookingEditWorkspace() {
     }];
   })), [details, dateUpdates]);
 
-  const handleToggleCancelRoom = (detailId: number) => {
+  const handleToggleCancelRoom = (detailId: string) => {
     setCancelledDetailIds((prev) =>
       prev.includes(detailId) ? prev.filter((id) => id !== detailId) : [...prev, detailId],
     );
   };
 
-  const handleToggleCancelService = (bookingDetailId: number, serviceDetailId: number) => {
+  const handleToggleCancelService = (bookingDetailId: string, serviceDetailId: string) => {
     setCancelledServiceDetailIds((prev) => {
       const currentList = prev[bookingDetailId] ?? [];
       const newList = currentList.includes(serviceDetailId)
@@ -188,11 +190,11 @@ export default function BookingEditWorkspace() {
     });
   };
 
-  const handleRoomChange = (bookingDetailId: number, newRoomId: string) => {
+  const handleRoomChange = (bookingDetailId: string, newRoomId: string) => {
     setRoomChanges((prev) => ({ ...prev, [bookingDetailId]: newRoomId }));
   };
 
-  const handleDateChange = (bookingDetailId: number, field: "checkIn" | "checkOut", value: string) => {
+  const handleDateChange = (bookingDetailId: string, field: "checkIn" | "checkOut", value: string) => {
     setDateUpdates((prev) => {
       const existing = prev[bookingDetailId] ?? { checkIn: "", checkOut: "" };
       return {
@@ -235,16 +237,16 @@ export default function BookingEditWorkspace() {
     const currentEmployeeId = String(employeeId ?? localStorage.getItem("id") ?? localStorage.getItem("employeeId") ?? "");
 
     const roomsToChangeFormatted = Object.entries(roomChanges)
-      .filter(([detailIdStr, newRoomId]) => Boolean(newRoomId) && !cancelledDetailIds.includes(Number(detailIdStr)))
+      .filter(([detailIdStr, newRoomId]) => Boolean(newRoomId) && !cancelledDetailIds.includes(detailIdStr))
       .map(([detailIdStr, newRoomId]) => ({
-        bookingDetailId: Number(detailIdStr),
+        bookingDetailId: detailIdStr,
         newRoomId,
       }));
 
     const roomsToUpdateDatesFormatted = Object.entries(dateUpdates)
-      .filter(([detailIdStr, dates]) => Boolean(dates.checkIn || dates.checkOut) && !cancelledDetailIds.includes(Number(detailIdStr)))
+      .filter(([detailIdStr, dates]) => Boolean(dates.checkIn || dates.checkOut) && !cancelledDetailIds.includes(detailIdStr))
       .map(([detailIdStr, dates]) => {
-        const detailId = Number(detailIdStr);
+        const detailId = detailIdStr;
         const detail = details.find((d) => detailIdOf(d) === detailId);
         const defaultIn = String(detail?.checkInTime ?? "").slice(0, 10);
         const defaultOut = String(detail?.checkOutTime ?? "").slice(0, 10);
@@ -261,14 +263,14 @@ export default function BookingEditWorkspace() {
         };
       });
 
-    const servicesToAddForExistingRoomsFormatted: { bookingDetailId: number; services: any[] }[] = [];
-    const serviceQuantityUpdatesFormatted: { bookingDetailId: number; services: { serviceId: string; quantity: number }[] }[] = [];
-    const servicesToCancelMap: Record<number, number[]> = { ...cancelledServiceDetailIds };
+    const servicesToAddForExistingRoomsFormatted: { bookingDetailId: string; services: any[] }[] = [];
+    const serviceQuantityUpdatesFormatted: { bookingDetailId: string; services: { serviceId: string; quantity: number }[] }[] = [];
+    const servicesToCancelMap: Record<string, string[]> = { ...cancelledServiceDetailIds };
 
     editRooms.forEach((room, index) => {
       const detail = activeDetails[index];
       const bookingDetailId = detailIdOf(detail);
-      if (!Number.isFinite(bookingDetailId)) return;
+      if (!bookingDetailId) return;
 
       const currentSelections = roomServices[room.id] ?? roomServices[String(room.databaseId)] ?? [];
       const origSelections = initialServices[room.id] ?? initialServices[String(room.databaseId)] ?? initialServices[String(roomIdOf(detail))] ?? [];
@@ -341,7 +343,7 @@ export default function BookingEditWorkspace() {
     const servicesToCancelFormatted = Object.entries(servicesToCancelMap)
       .filter(([_, serviceIds]) => serviceIds.length > 0)
       .map(([detailIdStr, serviceDetailIds]) => ({
-        bookingDetailId: Number(detailIdStr),
+        bookingDetailId: detailIdStr,
         serviceDetailIds,
       }));
 

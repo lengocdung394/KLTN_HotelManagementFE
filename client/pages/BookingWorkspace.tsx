@@ -39,7 +39,7 @@ const booked: Record<string, { start: string; end: string; guest: string }[]> = 
 
 const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"];
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
-const serviceDetailIdOf = (service: Record<string, unknown>) => Number(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? service.serviceId);
+const serviceDetailIdOf = (service: Record<string, unknown>) => String(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? service.serviceId ?? "");
 const isCancelledBookingDetail = (detail: Record<string, unknown>) => String(detail.bookingStatusType ?? "").toUpperCase() === "CANCELLED";
 const isCancelledService = (service: Record<string, unknown>) => {
   const status = String(service.status ?? service.serviceStatus ?? service.bookingServiceStatus ?? service.state ?? "").trim().toUpperCase();
@@ -109,7 +109,37 @@ const addMatrixRange = (busy: Map<string, Set<string>>, roomKey: string | undefi
   busy.set(roomKey, dates);
 };
 
-const buildMatrixBusyMap = (matrix: RoomMatrixResponse[]) => {
+type BookingRoomRange = { start: string; end: string };
+
+const roomKeysOf = (room: BookingRoom) => [room.databaseId, room.id, room.roomNumber].filter(Boolean).map(String);
+
+const buildBookingRoomRanges = (booking?: BookingListItem) => {
+  const ranges = new Map<string, BookingRoomRange[]>();
+  const details = Array.isArray(booking?.bookingDetails) ? booking.bookingDetails.filter((detail) => !isCancelledBookingDetail(detail)) : [];
+
+  details.forEach((detail) => {
+    const keys = [
+      matrixValue(detail, ["roomId", "roomID", "room_id"]),
+      matrixValue(detail, ["roomNumber", "roomNo", "roomCode"]),
+    ].filter((value): value is string | number => typeof value === "string" || typeof value === "number").map(String);
+    const start = matrixDate(matrixValue(detail, ["checkInTime", "checkInDate", "startDate"]));
+    const end = matrixDate(matrixValue(detail, ["checkOutTime", "checkOutDate", "endDate"]));
+    if (!start || !end || start >= end) return;
+
+    keys.forEach((key) => {
+      const roomRanges = ranges.get(key) ?? [];
+      roomRanges.push({ start, end });
+      ranges.set(key, roomRanges);
+    });
+  });
+
+  return ranges;
+};
+
+const isBookingRoomDate = (ranges: Map<string, BookingRoomRange[]>, roomKeys: string[], date: string) =>
+  roomKeys.some((key) => ranges.get(key)?.some((range) => date >= range.start && date < range.end));
+
+const buildMatrixBusyMap = (matrix: RoomMatrixResponse[], excludedBookingId?: string) => {
   const busy = new Map<string, Set<string>>();
   const walk = (value: unknown, inheritedRoomKey?: string) => {
     if (Array.isArray(value)) {
@@ -118,6 +148,8 @@ const buildMatrixBusyMap = (matrix: RoomMatrixResponse[]) => {
     }
     if (!value || typeof value !== "object") return;
     const item = value as Record<string, unknown>;
+    const bookingId = matrixValue(item, ["bookingId", "bookingID", "booking_id", "orderId", "orderID"]);
+    if (excludedBookingId && bookingId !== undefined && String(bookingId) === excludedBookingId) return;
     const roomKey = matrixRoomKey(item) ?? inheritedRoomKey;
     const bookingStatus = String(item.bookingStatus ?? item.status ?? "").toUpperCase();
     if (bookingStatus === "CANCELLED" || bookingStatus === "CANCELED") return;
@@ -270,6 +302,8 @@ function DesktopCalendar({
   isAvailableForRange,
   hotelId,
   onDailyPricesChange,
+  editingBookingId,
+  editingBookingRanges,
 }: {
   visibleRooms: BookingRoom[];
   selected: string[];
@@ -281,9 +315,11 @@ function DesktopCalendar({
   selectedRanges: Record<string, RoomDateRange>;
   setSelectedRanges: React.Dispatch<React.SetStateAction<Record<string, RoomDateRange>>>;
   isAddingRoom: boolean;
-  isAvailableForRange: (roomId: string, start: string, end: string) => boolean;
+  isAvailableForRange: (room: BookingRoom, start: string, end: string) => boolean;
   hotelId: number;
   onDailyPricesChange?: (prices: RoomDailyPricesResponse) => void;
+  editingBookingId?: string;
+  editingBookingRanges: Map<string, BookingRoomRange[]>;
 }) {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
@@ -354,7 +390,7 @@ function DesktopCalendar({
     });
   }, [dispatch, hotelId]);
 
-  const matrixBusyDays = useMemo(() => buildMatrixBusyMap(roomMatrix), [roomMatrix]);
+  const matrixBusyDays = useMemo(() => buildMatrixBusyMap(roomMatrix, editingBookingId), [roomMatrix, editingBookingId]);
   useEffect(() => {
     onDailyPricesChange?.(dailyRoomPrices);
   }, [dailyRoomPrices, onDailyPricesChange]);
@@ -364,11 +400,10 @@ function DesktopCalendar({
     return typeof value === "number" ? value : room.price;
   };
   const isMatrixReserved = (room: BookingRoom, day: string) => {
-    const keys = [room.databaseId, room.id, room.roomNumber].filter(Boolean).map(String);
-    return keys.some((key) => matrixBusyDays.get(key)?.has(day));
+    return roomKeysOf(room).some((key) => matrixBusyDays.get(key)?.has(day));
   };
   const isAvailableWithMatrix = (room: BookingRoom, start: string, end: string) => {
-    if (!isAvailableForRange(room.id, start, end)) return false;
+    if (!isAvailableForRange(room, start, end)) return false;
     for (let day = start; day < end; day = shiftDay(day, 1)) {
       if (isMatrixReserved(room, day)) return false;
     }
@@ -398,8 +433,10 @@ function DesktopCalendar({
   const previousStart = shiftDay(timelineStart, -7) < todayValue ? todayValue : shiftDay(timelineStart, -7);
   const canGoPrevious = previousStart !== timelineStart;
 
-  const isReservedCell = (roomId: string, dayValue: string) => {
-    return (booked[roomId] || []).some((item) => dayValue >= item.start && dayValue < item.end);
+  const isReservedCell = (room: BookingRoom, dayValue: string) => {
+    const roomKeys = roomKeysOf(room);
+    if (isBookingRoomDate(editingBookingRanges, roomKeys, dayValue)) return false;
+    return roomKeys.some((roomKey) => (booked[roomKey] || []).some((item) => dayValue >= item.start && dayValue < item.end));
   };
 
   const isPastDate = (dayValue: string) => {
@@ -410,7 +447,8 @@ function DesktopCalendar({
     if (e.button !== 0) return;
     const dayValue = stableTimeline[dayIndex].value;
     const room = visibleRooms.find((item) => item.id === roomId);
-    if (isPastDate(dayValue) || isReservedCell(roomId, dayValue) || (room && isMatrixReserved(room, dayValue))) return;
+    const isOwnBookingDate = room && isBookingRoomDate(editingBookingRanges, roomKeysOf(room), dayValue);
+    if ((isPastDate(dayValue) && !isOwnBookingDate) || (room && isReservedCell(room, dayValue)) || (room && isMatrixReserved(room, dayValue))) return;
     
     setDragSelection({ roomId, startDayIndex: dayIndex, currentDayIndex: dayIndex });
   };
@@ -498,7 +536,9 @@ function DesktopCalendar({
     let isValid = true;
     for (let i = minDay; i <= maxDay; i++) {
       const room = visibleRooms.find((item) => item.id === roomId);
-      if (isReservedCell(roomId, stableTimeline[i].value) || (room && isMatrixReserved(room, stableTimeline[i].value))) {
+      const date = stableTimeline[i].value;
+      const isOwnBookingDate = room && isBookingRoomDate(editingBookingRanges, roomKeysOf(room), date);
+      if ((isPastDate(date) && !isOwnBookingDate) || (room && isReservedCell(room, date)) || (room && isMatrixReserved(room, date))) {
          isValid = false;
          break;
        }
@@ -786,11 +826,14 @@ function DesktopCalendar({
               {/* Day Cell Slots */}
               {stableTimeline.map((date, dayIndex) => {
                 const day = date.value;
-                const reservation = (booked[room.id] || []).find((item) => day >= item.start && day < item.end);
+                const reservation = isReservedCell(room, day)
+                  ? roomKeysOf(room).flatMap((key) => booked[key] ?? []).find((item) => day >= item.start && day < item.end)
+                  : undefined;
                 const matrixReserved = isMatrixReserved(room, day);
                 const roomRange = selectedRanges[room.id];
                 const inRange = Boolean(roomRange) && day >= roomRange.checkIn && day < roomRange.checkOut;
-                const pastDay = isPastDate(day);
+                const isOwnBookingDate = isBookingRoomDate(editingBookingRanges, roomKeysOf(room), day);
+                const pastDay = isPastDate(day) && !isOwnBookingDate;
                 
                 let isDraggingCell = false;
                 if (dragSelection && dragSelection.roomId === room.id) {
@@ -839,6 +882,8 @@ function DesktopCalendar({
 export default function BookingWorkspace() {
   const location = useLocation();
   const initialBooking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
+  const editingBookingId = initialBooking ? String(initialBooking.bookingId ?? initialBooking.orderId ?? "") : undefined;
+  const editingBookingRanges = useMemo(() => buildBookingRoomRanges(initialBooking), [initialBooking]);
   const initialCustomerId = String(initialBooking?.customerId ?? initialBooking?.customerID ?? "");
   const { data: customerById } = useGetCustomerByIdQuery(initialCustomerId, { skip: !initialCustomerId });
   const { t, i18n } = useTranslation();
@@ -1071,10 +1116,16 @@ export default function BookingWorkspace() {
   const nights = hasDates ? Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : 0;
 
   // Phòng có trống trong khoảng [start, end) hay không
-  const isAvailableForRange = (id: string, start: string, end: string) =>
-    !(booked[id] || []).some((item) => item.start < end && item.end > start);
+  const isAvailableForRange = (room: BookingRoom, start: string, end: string) => {
+    const roomKeys = roomKeysOf(room);
+    for (let date = start; date < end; date = shiftDay(date, 1)) {
+      if (isBookingRoomDate(editingBookingRanges, roomKeys, date)) continue;
+      if (roomKeys.some((key) => (booked[key] || []).some((item) => date >= item.start && date < item.end))) return false;
+    }
+    return true;
+  };
 
-  const isAvailable = (id: string) => !hasDates || isAvailableForRange(id, checkIn, checkOut);
+  const isAvailable = (room: BookingRoom) => !hasDates || isAvailableForRange(room, checkIn, checkOut);
 
   const filteredRooms = useMemo(
     () =>
@@ -1088,7 +1139,7 @@ export default function BookingWorkspace() {
 
   const hasRoomFilter = Boolean(query.trim() || roomType !== allRoomTypesLabel || building !== allBuildingsLabel || floor !== allFloorsLabel);
   const visibleRooms = useMemo(
-    () => filteredRooms.filter((room) => selected.includes(room.id) || showFull || !hasDates || isAvailable(room.id)),
+    () => filteredRooms.filter((room) => selected.includes(room.id) || showFull || !hasDates || isAvailable(room)),
     [filteredRooms, showFull, checkIn, checkOut, hasDates, selected]
   );
   const totalPages = Math.max(1, Math.ceil(visibleRooms.length / pageSize));
@@ -1209,19 +1260,20 @@ export default function BookingWorkspace() {
       const initialDetails = (Array.isArray(initialBooking.bookingDetails) ? initialBooking.bookingDetails : [])
         .filter((detail) => !isCancelledBookingDetail(detail));
       const roomKey = (detail: Record<string, unknown>) => String(detail.roomId ?? detail.roomID ?? "");
-      const detailIdOf = (detail: Record<string, unknown>) => Number(
+      const detailIdOf = (detail: Record<string, unknown>) => String(
         detail.bookingDetailId
         ?? detail.bookingDetailsId
         ?? detail.bookingDetailID
         ?? detail.detailId
         ?? detail.detailID
-        ?? detail.id,
+        ?? detail.id
+        ?? "",
       );
-      const servicesToAddForExistingRooms: { bookingDetailId: number; services: any[] }[] = [];
-      const serviceQuantityUpdates: { bookingDetailId: number; services: { serviceId: string; quantity: number }[] }[] = [];
+      const servicesToAddForExistingRooms: { bookingDetailId: string; services: any[] }[] = [];
+      const serviceQuantityUpdates: { bookingDetailId: string; services: { serviceId: string; quantity: number }[] }[] = [];
       const roomsToUpdateDates: ManagementBookingModificationRequest["roomsToUpdateDates"] = [];
       const roomsToAdd: ManagementBookingModificationRequest["roomsToAdd"] = [];
-      const servicesToCancelMap: Record<number, number[]> = {};
+      const servicesToCancelMap: Record<string, string[]> = {};
       const selectedRoomKeys = new Set(selectedRooms.flatMap((room) => [String(room.id), room.databaseId ? String(room.databaseId) : ""]));
       const bookingDetailIdsToCancel = initialDetails
         .filter((detail) => {
@@ -1229,7 +1281,7 @@ export default function BookingWorkspace() {
           return detailRoomId && !selectedRoomKeys.has(detailRoomId);
         })
         .map((detail) => detailIdOf(detail))
-        .filter((detailId) => Number.isFinite(detailId));
+        .filter(Boolean);
 
       selectedRooms.forEach((room) => {
         const roomKeyValue = String(room.databaseId ?? room.id);
@@ -1273,8 +1325,8 @@ export default function BookingWorkspace() {
             (selectedRooms.length === initialDetails.length && idx === roomIdx)
           );
         });
-        const bookingDetailId = initialDetail ? detailIdOf(initialDetail) : NaN;
-        if (!Number.isFinite(bookingDetailId)) return;
+        const bookingDetailId = initialDetail ? detailIdOf(initialDetail) : "";
+        if (!bookingDetailId) return;
 
         const currentRange = selectedRanges[room.id] ?? (room.databaseId ? selectedRanges[String(room.databaseId)] : undefined) ?? { checkIn, checkOut };
         const originalCheckIn = String(initialDetail?.checkInTime ?? initialDetail?.checkInDate ?? "").slice(0, 10);
@@ -1376,7 +1428,7 @@ export default function BookingWorkspace() {
       });
 
       const servicesToCancel = Object.entries(servicesToCancelMap).map(([bId, sIds]) => ({
-        bookingDetailId: Number(bId),
+        bookingDetailId: bId,
         serviceDetailIds: sIds,
       }));
       const modificationRequest: ManagementBookingModificationRequest = {
@@ -1571,6 +1623,8 @@ export default function BookingWorkspace() {
               isAvailableForRange={isAvailableForRange}
               hotelId={Number(hotelId)}
               onDailyPricesChange={setDailyRoomPrices}
+              editingBookingId={editingBookingId}
+              editingBookingRanges={editingBookingRanges}
             />
             {visibleRooms.length > 0 && (
               <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
