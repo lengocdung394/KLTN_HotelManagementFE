@@ -255,11 +255,14 @@ export default function BookingEditWorkspace() {
           newCheckInTime: checkIn ? `${checkIn}T14:00:00` : "",
           newCheckoutTime: checkOut ? `${checkOut}T12:00:00` : "",
           newCheckOutTime: checkOut ? `${checkOut}T12:00:00` : "",
+          numAdults: Number(detail?.numAdults ?? detail?.adults ?? 1),
+          numChildren: Number(detail?.numChildren ?? detail?.children ?? 0),
+          numInfants: Number(detail?.numInfants ?? detail?.infants ?? 0),
         };
       });
 
     const servicesToAddForExistingRoomsFormatted: { bookingDetailId: number; services: any[] }[] = [];
-    const serviceQuantityUpdatesFormatted: { bookingDetailId: number; services: { serviceId: number; quantity: number }[] }[] = [];
+    const serviceQuantityUpdatesFormatted: { bookingDetailId: number; services: { serviceId: string; quantity: number }[] }[] = [];
     const servicesToCancelMap: Record<number, number[]> = { ...cancelledServiceDetailIds };
 
     editRooms.forEach((room, index) => {
@@ -271,11 +274,11 @@ export default function BookingEditWorkspace() {
       const origSelections = initialServices[room.id] ?? initialServices[String(room.databaseId)] ?? initialServices[String(roomIdOf(detail))] ?? [];
 
       const additionsForRoom: any[] = [];
-      const quantityUpdatesForRoom: { serviceId: number; quantity: number }[] = [];
+      const quantityUpdatesForRoom: { serviceId: string; quantity: number }[] = [];
 
       currentSelections.forEach((curr) => {
-        const sIdNum = Number(curr.serviceId);
-        if (!Number.isFinite(sIdNum) || curr.quantity <= 0) return;
+        const serviceId = String(curr.serviceId ?? "").trim();
+        if (!serviceId || curr.quantity <= 0) return;
 
         const orig = origSelections.find((o) => String(o.serviceId) === String(curr.serviceId));
         const currentQty = Number(curr.quantity) || 0;
@@ -284,7 +287,7 @@ export default function BookingEditWorkspace() {
         if (origQty === 0) {
           const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
           additionsForRoom.push({
-            serviceId: sIdNum,
+            serviceId,
             quantity: currentQty,
             name: curr.name ?? serviceObj?.name,
             price: curr.price ?? serviceObj?.price,
@@ -294,7 +297,7 @@ export default function BookingEditWorkspace() {
           const extraQty = currentQty - origQty;
           const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
           additionsForRoom.push({
-            serviceId: sIdNum,
+            serviceId,
             quantity: extraQty,
             name: curr.name ?? serviceObj?.name,
             price: curr.price ?? serviceObj?.price,
@@ -302,15 +305,15 @@ export default function BookingEditWorkspace() {
           });
         } else if (currentQty < origQty) {
           quantityUpdatesForRoom.push({
-            serviceId: sIdNum,
+            serviceId,
             quantity: currentQty,
           });
         }
       });
 
       origSelections.forEach((orig) => {
-        const sIdNum = Number(orig.serviceId);
-        if (!Number.isFinite(sIdNum)) return;
+        const serviceId = String(orig.serviceId ?? "").trim();
+        if (!serviceId) return;
         const origQty = Number(orig.originalQuantity ?? orig.quantity ?? 0);
         if (origQty <= 0) return;
 
@@ -318,9 +321,9 @@ export default function BookingEditWorkspace() {
         const currentQty = curr ? Number(curr.quantity) || 0 : 0;
 
         if (currentQty === 0) {
-          if (!quantityUpdatesForRoom.some((q) => q.serviceId === sIdNum)) {
+          if (!quantityUpdatesForRoom.some((q) => q.serviceId === serviceId)) {
             quantityUpdatesForRoom.push({
-              serviceId: sIdNum,
+              serviceId,
               quantity: 0,
             });
           }
@@ -385,7 +388,7 @@ export default function BookingEditWorkspace() {
       const res = await modifyBooking({ bookingId, request: currentPayload }).unwrap();
       console.log("===> [MODIFY BOOKING BE RESPONSE SUCCESS]:", res);
       toast({
-        variant: "success",
+        variant: "default",
         title: "Cập nhật booking thành công!",
         description: `Đã lưu các chỉnh sửa phòng và dịch vụ cho booking #${bookingId}.`,
       });
@@ -495,7 +498,7 @@ export default function BookingEditWorkspace() {
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-900">
-                      Phòng #{rId || detail.roomNumber || index + 1} ({String(detail.roomType ?? detail.roomName ?? "Phòng")})
+                      Phòng #{String(rId || detail.roomNumber || index + 1)} ({String(detail.roomType ?? detail.roomName ?? "Phòng")})
                     </span>
                     {isCancelled && (
                       <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">

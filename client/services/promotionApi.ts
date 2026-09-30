@@ -16,6 +16,15 @@ export type Promotion = {
   startDate: string;
   endDate: string;
   active: boolean;
+  status?: string;
+  type?: string;
+  maxDiscountAmount?: number;
+  minBookingValue?: number;
+  minRoomValue?: number;
+  minServiceValue?: number;
+  usageLimit?: number;
+  isExclusive?: boolean;
+  imageUrl?: string;
   minimumOrderAmount?: number;
   hotelId?: number;
   hotelName?: string;
@@ -25,6 +34,27 @@ export type CustomerPromotion = Promotion & {
   customerId?: string;
   claimedAt?: string;
   used?: boolean;
+};
+
+export type PromotionScope = "ROOM" | "SERVICE" | "TOTAL";
+export type PromotionDiscountType = "PERCENTAGE" | "FIXED_AMOUNT";
+export type PromotionStatus = "DRAFT" | "ACTIVE" | "INACTIVE" | "EXPIRED";
+
+export type CreatePromotionRequest = {
+  name: string;
+  description?: string;
+  type: PromotionScope;
+  discountType: PromotionDiscountType;
+  discountValue: number;
+  maxDiscountAmount?: number;
+  minBookingValue?: number;
+  minRoomValue?: number;
+  minServiceValue?: number;
+  startDate: string;
+  endDate: string;
+  usageLimit?: number;
+  status: PromotionStatus;
+  isExclusive: boolean;
 };
 
 type PromotionApiResponse = Record<string, unknown>;
@@ -50,6 +80,8 @@ const normalizePromotion = (item: PromotionApiResponse): Promotion => {
     ? nestedPromotion as PromotionApiResponse
     : item;
   const description = valueOf(source, ["description", "detail", "content"]);
+  const status = String(valueOf(source, ["status"]) ?? "").toUpperCase();
+  const activeValue = valueOf(source, ["active", "isActive", "available"]);
   const minimumValue = valueOf(source, ["minimumOrderAmount", "minOrderAmount", "minimumTotal", "minTotal", "minimumAmount", "minAmount", "minimumBookingAmount", "minBookingValue"])
     ?? valueOf(item, ["minimumOrderAmount", "minOrderAmount", "minimumTotal", "minTotal", "minimumAmount", "minAmount", "minimumBookingAmount", "minBookingValue"]);
 
@@ -59,10 +91,23 @@ const normalizePromotion = (item: PromotionApiResponse): Promotion => {
     code: String(valueOf(source, ["code", "promotionCode", "voucherCode"]) ?? ""),
     description: String(description ?? ""),
     value: parseNumber(valueOf(source, ["value", "discountValue", "discount", "percent"])),
-    valueType: String(valueOf(source, ["valueType", "discountType", "type"]) ?? "PERCENTAGE"),
+    valueType: String(valueOf(source, ["discountType", "valueType"]) ?? "PERCENTAGE"),
+    type: String(valueOf(source, ["type", "scope", "promotionScope"]) ?? "TOTAL"),
     startDate: String(valueOf(source, ["startDate", "fromDate", "validFrom", "startAt"]) ?? ""),
     endDate: String(valueOf(source, ["endDate", "toDate", "validTo", "endAt"]) ?? ""),
-    active: Boolean(valueOf(source, ["active", "isActive", "available"]) ?? true),
+    active: typeof activeValue === "boolean"
+      ? activeValue
+      : typeof activeValue === "string"
+        ? ["TRUE", "1", "ACTIVE"].includes(activeValue.toUpperCase())
+        : status === "ACTIVE",
+    status: status || undefined,
+    maxDiscountAmount: valueOf(source, ["maxDiscountAmount"]) == null ? undefined : parseNumber(valueOf(source, ["maxDiscountAmount"])),
+    minBookingValue: valueOf(source, ["minBookingValue"]) == null ? undefined : parseNumber(valueOf(source, ["minBookingValue"])),
+    minRoomValue: valueOf(source, ["minRoomValue"]) == null ? undefined : parseNumber(valueOf(source, ["minRoomValue"])),
+    minServiceValue: valueOf(source, ["minServiceValue"]) == null ? undefined : parseNumber(valueOf(source, ["minServiceValue"])),
+    usageLimit: valueOf(source, ["usageLimit"]) == null ? undefined : parseNumber(valueOf(source, ["usageLimit"])),
+    isExclusive: Boolean(valueOf(source, ["isExclusive"])),
+    imageUrl: valueOf(source, ["imageUrl", "imageURL"]) == null ? undefined : String(valueOf(source, ["imageUrl", "imageURL"])),
     minimumOrderAmount: minimumValue == null ? minimumFromDescription(description) : parseNumber(minimumValue),
     hotelId: valueOf(source, ["hotelId", "hotelID"]) == null ? undefined : parseNumber(valueOf(source, ["hotelId", "hotelID"])),
     hotelName: valueOf(source, ["hotelName"]) == null ? undefined : String(valueOf(source, ["hotelName"])),
@@ -95,7 +140,22 @@ export const promotionApi = baseApi.injectEndpoints({
         method: "GET",
         params: params && params.activeOnly ? { ...params, status: "ACTIVE", page: 0, size: 100 } : params ?? undefined,
       }),
-      transformResponse: (response: ApiResponse<unknown>) => extractList(response).map(normalizePromotion).filter((promotion) => promotion.id && promotion.code),
+      transformResponse: (response: ApiResponse<unknown>) => extractList(response).map(normalizePromotion).filter((promotion) => promotion.id),
+      providesTags: ["Promotion"],
+    }),
+    createPromotion: builder.mutation<Promotion, { promotionInfo: CreatePromotionRequest; image?: File }>({
+      query: ({ promotionInfo, image }) => {
+        const formData = new FormData();
+        formData.append("promotionInfo", new Blob([JSON.stringify(promotionInfo)], { type: "application/json" }));
+        if (image) formData.append("image", image);
+        return {
+          url: "/promotions",
+          method: "POST",
+          data: formData,
+        };
+      },
+      transformResponse: (response: ApiResponse<PromotionApiResponse>) => normalizePromotion(response?.result ?? {}),
+      invalidatesTags: ["Promotion"],
     }),
     getCustomerPromotions: builder.query<CustomerPromotion[], string>({
       query: (customerId) => ({ url: `/customer-promotions/customer/${customerId}`, method: "GET" }),
@@ -104,4 +164,4 @@ export const promotionApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useGetPromotionsQuery, useGetCustomerPromotionsQuery } = promotionApi;
+export const { useGetPromotionsQuery, useCreatePromotionMutation, useGetCustomerPromotionsQuery } = promotionApi;

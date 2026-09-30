@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, UserRound } from "lucide-react";
+import { emitCustomerCreated } from "../lib/socket";
 import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazyGetCustomerByIdQuery, type CustomerResponse } from "../services/customerApi";
 import { useAppSelector } from "../store/hooks";
 
@@ -19,6 +20,11 @@ type GuestRoom = {
 };
 export type BookingGuest = { name: string; phone: string; identityNumber: string; customerId?: string };
 export type RoomGuestCounts = { adults: number; children: number; infants: number };
+export const isBookingGuestValid = (guest: BookingGuest) => Boolean(
+  guest.name.trim()
+  && /^\d{10}$/.test(guest.phone)
+  && /^\d{12}$/.test(guest.identityNumber),
+);
 type Customer = CustomerResponse;
 
 const countOptions = (max: number, value: number) => Array.from({ length: Math.max(max, value) + 1 }, (_, index) => index);
@@ -70,7 +76,14 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
 
   const search = customerQuery.trim().toLowerCase();
   const matches = search ? customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email} ${customer.identityNumber}`.toLowerCase().includes(search)).slice(0, 5) : [];
-  const updateGuest = (field: keyof BookingGuest, value: string) => onGuestChange({ ...guest, [field]: value, customerId: undefined });
+  const updateGuest = (field: keyof BookingGuest, value: string) => {
+    const normalizedValue = field === "phone"
+      ? value.replace(/\D/g, "").slice(0, 10)
+      : field === "identityNumber"
+        ? value.replace(/\D/g, "").slice(0, 12)
+        : value;
+    onGuestChange({ ...guest, [field]: normalizedValue, customerId: undefined });
+  };
   const chooseCustomer = (customer: Customer) => { onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, customerId: customer.id }); setCustomerQuery(""); };
   const findCustomerByCode = async () => {
     const code = customerQuery.trim();
@@ -85,10 +98,18 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     }
   };
   const createCustomer = async () => {
-    if (!guest.name.trim() || !guest.phone.trim() || !guest.identityNumber.trim() || guest.customerId || isCreatingCustomer) return;
+    if (!isBookingGuestValid(guest) || guest.customerId || isCreatingCustomer) return;
     try {
       const customer = await createWalkInCustomer({ fullName: guest.name.trim(), phone: guest.phone.trim(), cccd: guest.identityNumber.trim() }).unwrap();
       onGuestChange({ ...guest, customerId: String(customer.id) });
+      emitCustomerCreated(hotelId, {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        identityNumber: customer.identityNumber,
+        tier: customer.tier,
+      });
     } catch (error) {
       const message = getCustomerErrorMessage(error);
       console.error("[booking] create walk-in customer failed", error);

@@ -59,7 +59,6 @@ const App = () => {
             <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={handleLogout} />} />
              <Route path="/services" element={<ModulePage path="/services" onLogout={handleLogout} />} />
             <Route path="/rooms" element={<ModulePage path="/rooms" onLogout={handleLogout} />} />
-            <Route path="/tasks" element={<ModulePage path="/tasks" onLogout={handleLogout} />} />
             <Route path="/invoices" element={<ModulePage path="/invoices" onLogout={handleLogout} />} />
             <Route path="/staff" element={<ModulePage path="/staff" onLogout={handleLogout} />} />
             <Route path="/permissions" element={<ModulePage path="/permissions" onLogout={handleLogout} />} />

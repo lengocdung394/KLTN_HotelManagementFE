@@ -10,7 +10,7 @@ html {
   scrollbar-gutter: stable;
 }
 
-section:has(input[type="file"]) label > span:first-child::after {
+section:has(input[type="file"]) label > span:first-child:not(.text-rose-500)::after {
   content: " *";
   color: #ef4444;
 }

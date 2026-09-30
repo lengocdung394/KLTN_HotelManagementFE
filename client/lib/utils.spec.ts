@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { cn } from "./utils";
 import { sumRoomPriceForRange } from "./bookingPricing";
+import { CUSTOMER_REFRESH_EVENTS, buildCustomerSocketPayload, buildSeasonalRateSocketPayload, SEASONAL_RATE_UPDATE_EVENT } from "./socket";
+import { extractRoomSeasonalRatePage } from "../services/roomApi";
 
 describe("sumRoomPriceForRange", () => {
   it("should sum room price for each day including nightly surcharge", () => {
@@ -9,6 +11,71 @@ describe("sumRoomPriceForRange", () => {
     const getPriceForDate = (entry: typeof room, date: string) => date === "2026-09-22" ? 100000 : 150000;
 
     expect(sumRoomPriceForRange(room, range, getPriceForDate, 20000)).toBe(290000);
+  });
+});
+
+describe("customer socket refresh payload", () => {
+  it("should include hotel id and customer details for customer creation updates", () => {
+    const payload = buildCustomerSocketPayload(12, { id: "c-1", name: "Nguyễn Văn A", phone: "0901234567" });
+
+    expect(CUSTOMER_REFRESH_EVENTS).toContain("customer_created");
+    expect(payload).toMatchObject({
+      hotelId: 12,
+      customer: { id: "c-1", name: "Nguyễn Văn A", phone: "0901234567" },
+    });
+    expect(payload.createdAt).toBeTypeOf("string");
+  });
+});
+
+describe("seasonal rate socket update payload", () => {
+  it("should build a normalized array payload for seasonal rate announcements", () => {
+    const payload = buildSeasonalRateSocketPayload(12, [
+      {
+        roomType: "STANDARD",
+        rateName: "Lễ 2/9",
+        startDate: "2026-09-28",
+        endDate: "2026-09-30",
+        price: 1200000,
+      },
+    ]);
+
+    expect(SEASONAL_RATE_UPDATE_EVENT).toBe("seasonal_rate_announcement_update");
+    expect(payload).toMatchObject({
+      hotelId: 12,
+      event: "seasonal_rate_announcement_update",
+      data: [
+        {
+          roomType: "STANDARD",
+          rateName: "Lễ 2/9",
+          startDate: "2026-09-28",
+          endDate: "2026-09-30",
+          price: 1200000,
+        },
+      ],
+    });
+    expect(payload.createdAt).toBeTypeOf("string");
+  });
+});
+
+describe("room seasonal rate response parsing", () => {
+  it("should parse array result payloads from the backend", () => {
+    const payload = {
+      code: 200,
+      message: "OK",
+      result: [
+        {
+          id: 5,
+          rateName: "Lễ 2/9",
+          startDate: "2026-09-28",
+          endDate: "2026-09-30",
+          roomType: "STANDARD",
+          price: 1200000,
+        },
+      ],
+    };
+
+    expect(extractRoomSeasonalRatePage(payload).content).toHaveLength(1);
+    expect(extractRoomSeasonalRatePage(payload).content[0].rateName).toBe("Lễ 2/9");
   });
 });
 

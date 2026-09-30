@@ -28,11 +28,31 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
-const valueOf = (item: BookingListItem, keys: string[]) =>
-  keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
+const valueOf = (item: BookingListItem, keys: string[]) => {
+  const normalizedMap = new Map<string, unknown>();
+  Object.entries(item).forEach(([key, value]) => {
+    normalizedMap.set(String(key).toLowerCase(), value);
+  });
+
+  for (const key of keys) {
+    const directValue = item[key];
+    if (directValue !== undefined && directValue !== null && directValue !== "") return directValue;
+
+    const normalizedValue = normalizedMap.get(String(key).toLowerCase());
+    if (normalizedValue !== undefined && normalizedValue !== null && normalizedValue !== "") return normalizedValue;
+  }
+
+  return undefined;
+};
 
 const textOf = (item: BookingListItem, keys: string[], fallback = "-") =>
   String(valueOf(item, keys) ?? fallback);
+
+const bookingAmount = (item: BookingListItem, keys: string[], fallback = 0) => {
+  const value = valueOf(item, keys);
+  const numericValue = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
 
 const money = (value: unknown) => {
   const numericValue = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
@@ -392,6 +412,11 @@ export default function BookingListWorkspace() {
   const enteredCashAmount = Number(cashAmountPaid) || 0;
   const computedCashChange = Math.max(0, enteredCashAmount - cashBillTotal);
   const displayCashChange = cashChangeAmount ?? computedCashChange;
+  const paymentBlocked = !!selectedBooking && (() => {
+    const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+    const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+    return paidAmount >= finalAmount;
+  })();
 
   return (
     <section className="booking-list-workspace mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -453,6 +478,8 @@ export default function BookingListWorkspace() {
                   <th className="px-5 py-3 text-right">Tiền phòng</th>
                   <th className="px-5 py-3 text-right">Tiền dịch vụ</th>
                   <th className="px-5 py-3 text-right">Giảm giá</th>
+                  <th className="px-5 py-3 text-right">Đã thu</th>
+                  <th className="px-5 py-3 text-right">Còn thiếu</th>
                   <th className="px-5 py-3 text-right">Tổng bill</th>
                   <th className="px-5 py-3">Trạng thái</th>
                   <th className="px-5 py-3">Thao tác</th>
@@ -463,6 +490,14 @@ export default function BookingListWorkspace() {
                   const status = textOf(booking, ["bookingStatus"], "PENDING");
                   const isPaid = status === "PAID" || status === "Đã thanh toán";
                   const isCancelled = isCancelledBooking(booking);
+                  const bookingDiscount = valueOf(booking, ["discountAmountTotal", "discountTotal", "totalDiscountAmount"]) ?? valueOf(booking, ["discountRoomAmount", "discountServiceAmount"]);
+                  const bookingPaid = valueOf(booking, ["paidAmount", "amountPaid", "totalPaidAmount"]);
+                  const finalAmountNumber = Number(booking.finalAmount ?? 0);
+                  const paidAmountNumber = Number(bookingPaid ?? 0);
+                  const guestDue = finalAmountNumber - paidAmountNumber;
+                  const isFullyPaid = guestDue === 0;
+                  const isHotelOwesCustomer = guestDue < 0;
+                  const displayRemaining = Math.abs(guestDue);
                   return (
                     <tr key={`${bookingId(booking)}-${index}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-5 py-4 font-semibold text-blue-700">#{bookingId(booking)}</td>
@@ -470,7 +505,11 @@ export default function BookingListWorkspace() {
                       <td className="px-5 py-4 font-medium text-slate-800">{textOf(booking, ["customerName"])}</td>
                       <td className="px-5 py-4 text-right text-slate-700">{money(booking.roomTotal)}</td>
                       <td className="px-5 py-4 text-right text-slate-700">{money(booking.serviceTotal)}</td>
-                      <td className="px-5 py-4 text-right text-rose-600">{money(booking.discountTotal)}</td>
+                      <td className="px-5 py-4 text-right text-rose-600">{money(bookingDiscount)}</td>
+                      <td className="px-5 py-4 text-right text-emerald-700">{money(bookingPaid ?? booking.paidAmount ?? booking.finalAmount)}</td>
+                      <td className={`px-5 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
+                        {isFullyPaid ? "0 đ" : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
+                      </td>
                       <td className="px-5 py-4 text-right font-bold text-blue-700">{money(booking.finalAmount)}</td>
                       <td className="px-5 py-4">
                         <span
@@ -631,10 +670,52 @@ export default function BookingListWorkspace() {
                       <span>Tiền dịch vụ:</span>
                       <span className="font-semibold text-slate-900">{money(selectedBooking.serviceTotal)}</span>
                     </div>
-                    <div className="flex justify-between text-rose-600">
-                      <span>Giảm giá:</span>
-                      <span className="font-semibold">{money(selectedBooking.discountTotal)}</span>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Giảm giá phòng:</span>
+                      <span className="font-semibold text-rose-600">{money(valueOf(selectedBooking, ["discountRoomAmount", "roomDiscountAmount"]))}</span>
                     </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Giảm giá dịch vụ:</span>
+                      <span className="font-semibold text-rose-600">{money(valueOf(selectedBooking, ["discountServiceAmount", "serviceDiscountAmount"]))}</span>
+                    </div>
+                    <div className="flex justify-between text-rose-600">
+                      <span>Tổng giảm giá:</span>
+                      <span className="font-semibold">{money(valueOf(selectedBooking, ["discountAmountTotal", "discountTotal", "totalDiscountAmount"]))}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Đã thanh toán:</span>
+                      <span className="font-semibold">{money(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]))}</span>
+                    </div>
+                    {(() => {
+                      const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+                      const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+                      const diff = finalAmount - paidAmount;
+
+                      if (diff === 0) {
+                        return (
+                          <div className="flex justify-between rounded-lg bg-emerald-50/80 p-2.5 text-emerald-800 border border-emerald-200">
+                            <span className="font-semibold">Trạng thái thanh toán:</span>
+                            <span className="font-bold text-emerald-700">Đã thanh toán đủ số tiền</span>
+                          </div>
+                        );
+                      }
+
+                      if (diff > 0) {
+                        return (
+                          <div className="flex justify-between rounded-lg bg-amber-50/80 p-2.5 text-amber-900 border border-amber-200">
+                            <span className="font-semibold">Khách hàng phải thanh toán thêm:</span>
+                            <span className="font-bold text-amber-700">{money(diff)}</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="flex justify-between rounded-lg bg-purple-50/80 p-2.5 text-purple-900 border border-purple-200">
+                          <span className="font-semibold">Phải thanh toán cho khách hàng:</span>
+                          <span className="font-bold text-purple-700">{money(Math.abs(diff))}</span>
+                        </div>
+                      );
+                    })()}
                     <div className="flex justify-between border-t border-blue-200/60 pt-2.5 text-base font-bold text-blue-900">
                       <span>Tổng bill:</span>
                       <span>{money(selectedBooking.finalAmount)}</span>
@@ -652,6 +733,18 @@ export default function BookingListWorkspace() {
                         const roomName = String(detail.roomName ?? detail.roomTypeName ?? detail.roomType ?? "");
                         const roomSubtotal = detail.roomSubTotal ?? detail.roomSubtotal;
                         const roomPricePerNight = detail.baseRoomPricePerNight ?? detail.roomPrice;
+                        const actualCheckInTime = detail.actualCheckInTime ?? detail.actualCheckIn ?? detail.realCheckInTime ?? detail.checkInActualTime ?? null;
+                        const actualCheckOutTime = detail.actualCheckOutTime ?? detail.actualCheckOut ?? detail.realCheckOutTime ?? detail.checkOutActualTime ?? null;
+                        const bookingCheckInTime = detail.checkInTime ?? null;
+                        const bookingCheckOutTime = detail.checkOutTime ?? null;
+                        const extraFeeValue = detail.extraAdultFeePerNight ?? detail.extraAdultFee ?? detail.extraCharge ?? detail.surcharge ?? detail.additionalFee ?? 0;
+                        const earlyCheckinFee = detail.earlyCheckInFee ?? 0;
+                        const hasValue = (value: unknown) => Boolean(value !== null && value !== undefined && String(value).trim() && String(value).toUpperCase() !== "NULL");
+                        const hasActualCheckInValue = hasValue(actualCheckInTime);
+                        const hasActualCheckOutValue = hasValue(actualCheckOutTime);
+                        const hasBookingCheckInValue = hasValue(bookingCheckInTime);
+                        const hasBookingCheckOutValue = hasValue(bookingCheckOutTime);
+                        const hasEarlyCheckinFeeValue = Number(earlyCheckinFee) > 0;
                         return <div key={idx} className="rounded-lg border border-slate-200 p-3 text-xs text-slate-700 bg-white">
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -660,10 +753,18 @@ export default function BookingListWorkspace() {
                             </div>
                             {roomSubtotal !== undefined && <strong className="shrink-0 text-blue-700">Tạm tính: {money(roomSubtotal)}</strong>}
                           </div>
-                          <div className="mt-1 flex justify-between text-slate-500">
-                            <span>Nhận: {formatDate(detail.checkInTime)}</span>
-                            <span>Trả: {formatDate(detail.checkOutTime)}</span>
+                          <div className="mt-1 flex flex-wrap justify-between gap-2 text-slate-500">
+                            {hasBookingCheckInValue && <span>Nhận: {formatDate(bookingCheckInTime)}</span>}
+                            {hasBookingCheckOutValue && <span>Trả: {formatDate(bookingCheckOutTime)}</span>}
                           </div>
+                          {(hasActualCheckInValue || hasActualCheckOutValue || Number(extraFeeValue) > 0 || hasEarlyCheckinFeeValue) && (
+                            <div className="mt-1 grid gap-1 text-slate-500">
+                              {hasActualCheckInValue && <div className="flex justify-between gap-3"><span>Check-in thực tế: {formatDate(actualCheckInTime)}</span></div>}
+                              {hasActualCheckOutValue && <div className="flex justify-between gap-3"><span>Check-out thực tế: {formatDate(actualCheckOutTime)}</span></div>}
+                              {Number(extraFeeValue) > 0 && <div className="flex justify-between gap-3"><span>Phụ thu: {money(extraFeeValue)}</span></div>}
+                              {hasEarlyCheckinFeeValue && <div className="flex justify-between gap-3"><span>Phí check-in sớm: {money(earlyCheckinFee)}</span></div>}
+                            </div>
+                          )}
                           {roomPricePerNight !== undefined && <p className="mt-1 text-slate-500">Giá phòng/đêm: {money(roomPricePerNight)}</p>}
                           <div className="mt-3 border-t border-slate-100 pt-2">
                             <p className="font-semibold text-slate-600">Dịch vụ ({serviceRequests.length})</p>
@@ -741,7 +842,12 @@ export default function BookingListWorkspace() {
                       type="button"
                       onClick={() => {
                         setPaymentMethod("cash");
-                        if (!cashAmountPaid) setCashAmountPaid(String(Number(selectedBooking?.finalAmount) || 0));
+                        if (!cashAmountPaid && selectedBooking) {
+                          const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+                          const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+                          const due = Math.max(0, finalAmount - paidAmount);
+                          setCashAmountPaid(String(due));
+                        }
                         setPaymentError("");
                         setPaymentSuccess("");
                       }}
@@ -770,7 +876,14 @@ export default function BookingListWorkspace() {
                             <input type="number" min="1" step="1000" value={cashAmountPaid} onChange={(event) => setCashAmountPaid(event.target.value)} placeholder="Nhập số tiền khách đưa" className="h-10 w-full rounded-lg border border-emerald-200 bg-white px-3 pr-10 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
                             <span className="pointer-events-none absolute right-3 top-2.5 text-sm text-slate-400">đ</span>
                           </div>
-                          <span className="mt-1 block text-xs font-normal text-slate-500">Tổng cần thu: {money(selectedBooking?.finalAmount)}</span>
+                          <span className="mt-1 block text-xs font-normal text-slate-500">
+                            {(() => {
+                              const finalAmount = Number(selectedBooking?.finalAmount ?? 0);
+                              const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+                              const remainingToCollect = Math.max(0, finalAmount - paidAmount);
+                              return `Tổng cần thu: ${money(remainingToCollect)}`;
+                            })()}
+                          </span>
                         </label>
                       </div>
                     )}
@@ -818,12 +931,22 @@ export default function BookingListWorkspace() {
                   <button
                     type="button"
                     onClick={() => void handlePayBooking()}
-                    disabled={isCreatingQr || isPayingCash || isCancelledBooking(selectedBooking)}
-                    className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-50 ${
-                      paymentMethod === "cash" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"
+                    disabled={paymentBlocked || isCreatingQr || isPayingCash || isCancelledBooking(selectedBooking)}
+                    className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold shadow-sm transition-all ${
+                      paymentBlocked
+                        ? "bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300"
+                        : paymentMethod === "cash"
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "bg-blue-600 hover:bg-blue-700 text-white"
                     }`}
                   >
-                    {paymentMethod === "cash" ? (
+                    {paymentBlocked ? (
+                      (() => {
+                        const finalAmount = Number(selectedBooking?.finalAmount ?? 0);
+                        const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+                        return paidAmount > finalAmount ? "Phải thanh toán cho khách hàng" : "Đã thanh toán đủ số tiền";
+                      })()
+                    ) : paymentMethod === "cash" ? (
                       <>
                         <Banknote size={16} />
                         Xác nhận thu tiền mặt

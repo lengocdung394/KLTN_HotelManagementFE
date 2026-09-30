@@ -1,4 +1,4 @@
-import { Building2, BriefcaseBusiness, CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardList, Eye, EyeOff, Mail, Pencil, Search, UserRound, X, Sparkles } from "lucide-react";
+import { Building2, BriefcaseBusiness, CalendarDays, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Mail, Pencil, Search, UserRound, X, Sparkles } from "lucide-react";
 import { useLocation} from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +7,6 @@ import BookingWorkspaceNew from "./BookingWorkspace";
 import BookingListWorkspace from "./BookingListWorkspace";
 import RoomWorkspace from "./RoomWorkspace";
 import InvoiceWorkspace from "./InvoiceWorkspace";
-import TaskWorkspace from "./TaskWorkspace";
 import ReportWorkspace from "./ReportWorkspace";
 import StaffTabsWorkspace from "./StaffTabsWorkspace";
 import PermissionsWorkspace from "./PermissionsWorkspace";
@@ -19,18 +18,18 @@ import AppHeader from "../components/AppHeader";
 import AppSidebar from "../components/AppSidebar";
 import ScrollControls from "../components/ScrollControls";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { useSidebar } from "../hooks/useSidebar";
 import { updateProfile } from "../store/authSlice";
 import type { BookingListItem } from "../services/bookingApi";
 
 const content: Record<string, { eyebrow: string; title: string; description: string; stats: [string, string][] }> = {
-  "/bookings": { eyebrow: "Vận hành lưu trú", title: "Đặt phòng", description: "Quản lý lịch đặt phòng, khách lưu trú và lịch check-in / check-out.", stats: [["Đặt phòng hôm nay", "12"], ["Đang chờ xác nhận", "04"], ["Check-in hôm nay", "08"], ["Doanh thu dự kiến", "18.650.000đ"]] },
+  "/bookings": { eyebrow: "Vận hành lưu trú", title: "Quản lý đặt phòng", description: "Quản lý lịch đặt phòng, khách lưu trú và lịch check-in / check-out.", stats: [["Đặt phòng hôm nay", "12"], ["Đang chờ xác nhận", "04"], ["Check-in hôm nay", "08"], ["Doanh thu dự kiến", "18.650.000đ"]] },
   "/booking-list": { eyebrow: "Vận hành lưu trú", title: "Danh sách booking", description: "Tra cứu và theo dõi toàn bộ đơn đặt phòng của chi nhánh.", stats: [["Tổng booking", "12"], ["Chờ xác nhận", "04"], ["Đang lưu trú", "02"], ["Đã hoàn tất", "06"]] },
   "/customers": { eyebrow: "Quan hệ khách hàng", title: "Quản lý khách hàng", description: "Quản lý hồ sơ, lịch sử lưu trú và chăm sóc khách quay lại.", stats: [["Tổng khách hàng", "04"], ["Khách thân thiết", "02"], ["Khách quay lại tháng này", "12"], ["Chi tiêu trung bình", "5,8tr"]] },
   "/check-in-out": { eyebrow: "Vận hành lễ tân", title: "Check-in / Check-out", description: "Quản lý nhận phòng, trả phòng và trạng thái lưu trú của khách trong ngày.", stats: [["Chờ check-in", "02"], ["Đang lưu trú", "02"], ["Chờ check-out", "02"], ["Đã hoàn tất", "01"]] },
   "/promotions": { eyebrow: "Kinh doanh & chăm sóc khách", title: "Khuyến mãi", description: "Tạo ưu đãi và quản lý mã giảm giá cho khách lưu trú tại chi nhánh.", stats: [["Đang hoạt động", "02"], ["Lượt sử dụng tháng này", "128"], ["Tiết kiệm cho khách", "18,6tr"], ["Sắp hết hạn", "01"]] },
   "/services": { eyebrow: "Vận hành lưu trú", title: "Dịch vụ", description: "Quản lý các dịch vụ bổ sung dành cho khách lưu trú.", stats: [["Dịch vụ đang bán", "06"], ["Đã sử dụng hôm nay", "18"], ["Doanh thu dịch vụ", "4,8tr"]] },
-  "/rooms": { eyebrow: "Quản lý tài sản", title: "Phòng", description: "Theo dõi tình trạng phòng, loại phòng và phân công dọn dẹp tại chi nhánh.", stats: [["Tổng số phòng", "24"], ["Sẵn sàng", "16"], ["Đang sử dụng", "05"], ["Bảo trì", "03"]] },
-  "/tasks": { eyebrow: "Đội ngũ vận hành", title: "Công việc", description: "Phân công dọn phòng, xử lý yêu cầu và theo dõi tiến độ theo ca.", stats: [["Việc cần làm", "09"], ["Đang xử lý", "04"], ["Đã hoàn tất", "27"]] },
+  "/rooms": { eyebrow: "Quản lý tài sản", title: "Quản lý phòng", description: "Theo dõi tình trạng phòng, loại phòng và phân công dọn dẹp tại chi nhánh.", stats: [["Tổng số phòng", "24"], ["Sẵn sàng", "16"], ["Đang sử dụng", "05"], ["Bảo trì", "03"]] },
   "/invoices": { eyebrow: "Tài chính chi nhánh", title: "Hoá đơn", description: "Tra cứu hoá đơn, thanh toán và đối soát giao dịch của khách hàng.", stats: [["Doanh thu tháng này", "426,5tr"], ["Đã thanh toán", "38"], ["Chờ thanh toán", "06"], ["Hoàn tiền", "02"]] },
   "/staff": { eyebrow: "Quản trị nhân sự", title: "Nhân viên & ca làm", description: "Quản lý nhân viên, chức vụ, lịch làm việc và phân công trong chi nhánh.", stats: [["Tổng nhân viên", "18"], ["Đang làm việc", "08"], ["Ca hôm nay", "03"], ["Nghỉ phép", "02"]] },
   "/permissions": { eyebrow: "Quản trị hệ thống", title: "Phân quyền", description: "Thiết lập vai trò và quyền truy cập cho từng nhóm nhân viên trong chi nhánh.", stats: [["Vai trò", "04"], ["Nhân viên", "18"], ["Quyền truy cập", "06"], ["Cập nhật gần nhất", "Hôm nay"]] },
@@ -252,9 +251,9 @@ function PersonalInfoSettings({ fullName, email, position, hotelName }: { fullNa
 export default function ModulePage({ path: routePath, onLogout }: { path: string; onLogout: () => void }) {
   const { t } = useTranslation();
   const location = useLocation();
+  const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
   const { hotelName, fullName, email, position } = useAppSelector((state) => state.auth);
   const branchLabel = hotelName || "Tất cả chi nhánh";
-  const [mobile, setMobile] = useState(false);
   const editBooking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
   const [bookingOpen, setBookingOpen] = useState(Boolean(editBooking));
   const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
@@ -267,7 +266,6 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     "/promotions": "/khuyen-mai",
     "/rooms": "/phong",
     "/invoices": "/hoa-don",
-    "/tasks": "/cong-viec",
     "/staff": "/nhan-vien",
     "/permissions": "/phan-quyen",
     "/reports": "/bao-cao",
@@ -281,7 +279,6 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     "/booking-list": "bookingList",
     "/customers": "customers",
     "/rooms": "rooms",
-    "/tasks": "tasks",
     "/invoices": "invoices",
     "/promotions": "promotions",
     "/services": "services",
@@ -298,12 +295,21 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     stats: basePage.stats.map(([label, value], index) => [t(`pages.${pageKey}.stats.${index}`, label), routePath === "/settings" && index === 0 ? branchLabel : value] as [string, string]),
   };
   return <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
-    <AppSidebar mobile={mobile} onCloseMobile={() => setMobile(false)} onLogout={onLogout} fullName={fullName || email} position={position} />
-    {mobile && <div className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden" onClick={() => setMobile(false)} />}
-    <main className="min-w-0 lg:pl-64"><AppHeader onMenuClick={() => setMobile(true)} />
-        <div className="mx-auto min-w-0 max-w-7xl px-5 py-7 lg:px-9"><p className="mb-1 text-sm font-semibold text-blue-600">{page.eyebrow}</p><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-[28px] font-bold tracking-[-.03em] text-slate-900">{page.title}</h2>{path !== "/nhan-vien" && <p className="mt-2 max-w-xl text-sm text-slate-500">{page.description}</p>}</div>{path !== "/nhan-vien" && <button onClick={() => path === "/dat-phong" && setBookingOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><Sparkles size={16} />{path === "/dat-phong" ? t("common.newBookingEyebrow") : t("common.newAction")}</button>}</div>
+    <AppSidebar
+      mobile={mobileOpen}
+      onCloseMobile={closeMobile}
+      onLogout={onLogout}
+      fullName={fullName || email}
+      position={position}
+      collapsed={collapsed}
+      onToggleCollapse={toggleSidebar}
+    />
+    {mobileOpen && <div className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden" onClick={closeMobile} />}
+    <main className={`min-w-0 transition-[padding] duration-300 ease-in-out ${collapsed ? "lg:pl-0" : "lg:pl-72"}`}>
+      <AppHeader onMenuClick={toggleSidebar} collapsed={collapsed} />
+        <div className={`mx-auto min-w-0 px-4 py-6 sm:px-6 lg:px-8 transition-[max-width] duration-300 ease-in-out ${collapsed ? "max-w-[1650px]" : "max-w-7xl"}`}><p className="mb-1 text-sm font-semibold text-blue-600">{page.eyebrow}</p><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-[28px] font-bold tracking-[-.03em] text-slate-900">{page.title}</h2>{path !== "/nhan-vien" && <p className="mt-2 max-w-xl text-sm text-slate-500">{page.description}</p>}</div>{path !== "/nhan-vien" && <button onClick={() => path === "/dat-phong" && setBookingOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><Sparkles size={16} />{path === "/dat-phong" ? t("common.newBookingEyebrow") : t("common.newAction")}</button>}</div>
         {path !== "/dat-phong" && <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{page.stats.map(([label, value], i) => <div key={label} className={`rounded-2xl border border-slate-200/80 p-5 shadow-sm ${i === 0 ? "bg-[#28233f] text-white" : "bg-white"}`}><p className={`text-sm font-medium ${i === 0 ? "text-blue-200" : "text-slate-500"}`}>{label}</p><p className="mt-4 text-2xl font-bold tracking-tight">{value}</p><p className={`mt-1 text-xs ${i === 0 ? "text-blue-200" : "text-slate-400"}`}>Cập nhật hôm nay</p></div>)}</section>}
-        {path === "/settings" ? <LanguageSettings /> : path === "/check-in-out" ? <CheckInOutWorkspace /> : path === "/services" ? <ServiceWorkspace /> : path === "/khuyen-mai" ? <PromotionWorkspace /> : path === "/phong" ? <RoomWorkspace /> : path === "/hoa-don" ? <InvoiceWorkspace /> : path === "/cong-viec" ? <TaskWorkspace /> : path === "/bao-cao" ? <ReportWorkspace /> : path === "/nhan-vien" ? <StaffTabsWorkspace /> : path === "/phan-quyen" ? <PermissionsWorkspace /> : path === "/danh-sach-booking" ? <BookingListWorkspace /> : path === "/dat-phong" ? (bookingOpen ? <BookingWorkspaceNew /> : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Lịch đặt phòng hôm nay</h3><p className="mt-1 text-sm text-slate-500">12 đặt phòng · 8 khách đến · 5 khách rời đi</p></div></div><button onClick={() => setBookingOpen(true)} className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Sparkles size={16} />Đặt phòng mới</button></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Hôm nay · 14/10</p><p className="mt-2 text-2xl font-bold text-slate-900">08 <span className="text-xs font-medium text-slate-400">check-in</span></p></div><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Đang chờ xác nhận</p><p className="mt-2 text-2xl font-bold text-amber-600">04 <span className="text-xs font-medium text-slate-400">đặt phòng</span></p></div><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Sẵn sàng đón khách</p><p className="mt-2 text-2xl font-bold text-emerald-600">16 <span className="text-xs font-medium text-slate-400">phòng</span></p></div></div></section>) : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><ClipboardList size={20} /></div><div><h3 className="font-bold text-slate-900">Không gian {page.title.toLowerCase()}</h3><p className="mt-1 text-sm text-slate-500">Các công cụ chi tiết cho {page.title.toLowerCase()} sẽ được hiển thị tại đây.</p></div></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Danh sách & bộ lọc</p><p className="mt-1 text-xs text-slate-400">Tra cứu nhanh dữ liệu theo chi nhánh.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Theo dõi trạng thái</p><p className="mt-1 text-xs text-slate-400">Cập nhật tiến độ theo thời gian thực.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Báo cáo & hành động</p><p className="mt-1 text-xs text-slate-400">Xuất dữ liệu hoặc thực hiện thao tác mới.</p></div></div></section>}
+        {path === "/settings" ? <LanguageSettings /> : path === "/check-in-out" ? <CheckInOutWorkspace /> : path === "/services" ? <ServiceWorkspace /> : path === "/khuyen-mai" ? <PromotionWorkspace /> : path === "/phong" ? <RoomWorkspace /> : path === "/hoa-don" ? <InvoiceWorkspace /> : path === "/bao-cao" ? <ReportWorkspace /> : path === "/nhan-vien" ? <StaffTabsWorkspace /> : path === "/phan-quyen" ? <PermissionsWorkspace /> : path === "/danh-sach-booking" ? <BookingListWorkspace /> : path === "/dat-phong" ? (bookingOpen ? <BookingWorkspaceNew /> : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Lịch đặt phòng hôm nay</h3><p className="mt-1 text-sm text-slate-500">12 đặt phòng · 8 khách đến · 5 khách rời đi</p></div></div><button onClick={() => setBookingOpen(true)} className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Sparkles size={16} />Đặt phòng mới</button></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Hôm nay · 14/10</p><p className="mt-2 text-2xl font-bold text-slate-900">08 <span className="text-xs font-medium text-slate-400">check-in</span></p></div><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Đang chờ xác nhận</p><p className="mt-2 text-2xl font-bold text-amber-600">04 <span className="text-xs font-medium text-slate-400">đặt phòng</span></p></div><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Sẵn sàng đón khách</p><p className="mt-2 text-2xl font-bold text-emerald-600">16 <span className="text-xs font-medium text-slate-400">phòng</span></p></div></div></section>) : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Không gian {page.title.toLowerCase()}</h3><p className="mt-1 text-sm text-slate-500">Các công cụ chi tiết cho {page.title.toLowerCase()} sẽ được hiển thị tại đây.</p></div></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Danh sách & bộ lọc</p><p className="mt-1 text-xs text-slate-400">Tra cứu nhanh dữ liệu theo chi nhánh.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Theo dõi trạng thái</p><p className="mt-1 text-xs text-slate-400">Cập nhật tiến độ theo thời gian thực.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Báo cáo & hành động</p><p className="mt-1 text-xs text-slate-400">Xuất dữ liệu hoặc thực hiện thao tác mới.</p></div></div></section>}
         <ScrollControls />
       </div></main>
   </div>;

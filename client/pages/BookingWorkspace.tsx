@@ -1,13 +1,15 @@
 import { toast } from "@/components/ui/use-toast";
+import DatePickerPopover from "../components/DatePickerPopover";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
-import GuestRoomForms, { bookingCache, clearRoomGuestCache, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
+import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, QrCode, Search, UserRound, UsersRound, Wallet } from "lucide-react";
+import GuestRoomForms, { bookingCache, clearRoomGuestCache, isBookingGuestValid, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
-import { useGetBranchRoomDailyPricesQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomDailyPricesResponse } from "../services/roomApi";
-import { useGetBuildingsByHotelIdQuery } from "../services/buildingApi";
+import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
+import { useGetBranchRoomDailyPricesQuery, useGetRoomSeasonalRatesByMonthQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomDailyPricesResponse, type RoomSeasonalRate } from "../services/roomApi";
+import { useGetBuildingsByCurrentHotelQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrixQuery, type RoomMatrixResponse } from "../services/bookingApi";
@@ -18,7 +20,7 @@ import { sumRoomPriceForRange } from "../lib/bookingPricing";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
-type BookingRoom = { id: string; databaseId?: string; roomNumber?: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string };
+type BookingRoom = { id: string; databaseId?: string; roomNumber?: string; type: string; beds: string; size: string; guests: number; price: number; standardAdults: number; maxAdults: number; maxChildren: number; maxInfants: number; maxExtraGuests: number; extraAdultFee: number; extraChildFee: number; buildingId?: string; buildingName?: string; floor?: string; images?: string[]; services?: string[]; status?: string; description?: string };
 
 const roomTypes = {
   1: { type: "Standard Room", beds: "1 giường đơn", size: "25 m²", guests: 1, price: 1000000, amenity: "Điều hòa · TV · Phòng tắm riêng" },
@@ -75,6 +77,17 @@ const matrixDate = (value: unknown) => {
   if (typeof value !== "string") return undefined;
   const match = value.match(/^\d{4}-\d{2}-\d{2}/);
   return match?.[0];
+};
+
+const getSeasonalEventDates = (events: RoomSeasonalRate[]) => {
+  const dates = new Set<string>();
+  events.forEach((event) => {
+    const startDate = matrixDate(event.startDate);
+    const endDate = matrixDate(event.endDate);
+    if (!startDate || !endDate || startDate > endDate) return;
+    for (let date = startDate; date <= endDate; date = shiftDay(date, 1)) dates.add(date);
+  });
+  return [...dates];
 };
 
 const matrixValue = (item: Record<string, unknown>, keys: string[]) => {
@@ -144,6 +157,25 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
   const floorValue = String(getApiValue(item, ["floorNumber", "floorLevel", "floorName", "floorId", "floorID"]) ?? "");
   const rawSize = getApiValue(item, ["roomSize", "size", "area", "roomArea", "acreage"]);
   const size = rawSize === undefined ? fallback.size : `${rawSize}`.includes("m²") ? String(rawSize) : `${rawSize} m²`;
+  const rawImages = getApiValue(item, ["avatarUrl", "imageUrls", "images"]);
+  const imageEntries = Array.isArray(rawImages) ? rawImages : rawImages ? [rawImages] : [];
+  const defaultImage = getApiValue(item, ["defaultImageUrl", "imageUrl"]);
+  const images = [
+    ...(typeof defaultImage === "string" ? [defaultImage] : []),
+    ...imageEntries.map((image) => typeof image === "string" ? image : String((image as Record<string, unknown>).url ?? "")),
+  ].filter((image, imageIndex, values) => image && values.indexOf(image) === imageIndex);
+  const rawServices = getApiValue(item, ["amenities", "roomAmenities", "amenityList", "amenityResponses", "roomAmenityResponses", "services", "amenityNames"]);
+  const serviceEntries = Array.isArray(rawServices) ? rawServices : typeof rawServices === "string" ? rawServices.split(/[;,|]/) : [];
+  const services = serviceEntries.map((service) => {
+    if (typeof service === "string") return service.trim();
+    if (!service || typeof service !== "object") return "";
+    const amenity = service as Record<string, unknown>;
+    const nestedAmenity = amenity.amenity && typeof amenity.amenity === "object" ? amenity.amenity as Record<string, unknown> : amenity;
+    return String(nestedAmenity.name ?? nestedAmenity.amenityName ?? nestedAmenity.serviceName ?? nestedAmenity.title ?? "").trim();
+  }).filter(Boolean);
+  const rawStatus = String(getApiValue(item, ["roomStatus", "status"]) ?? "");
+  const status = ({ READY: "Sẵn sàng", MAINTENANCE: "Bảo trì", IN_USE: "Đang ở", CLEANING: "Đang dọn" } as Record<string, string>)[rawStatus.toUpperCase()] ?? (rawStatus || undefined);
+  const description = getApiValue(item, ["description", "roomDescription"]);
   const price = Number(getApiValue(item, ["totalPrice", "basePrice", "price"]) ?? fallback.price);
   const guests = Number(getApiValue(item, ["standardCapacity", "capacity", "maxGuests", "guestCapacity"]) ?? fallback.guests);
   const maxExtraGuests = Number(getApiValue(item, ["maxExtraGuests"]) ?? 0);
@@ -173,35 +205,55 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
     buildingId: buildingId === undefined ? undefined : String(buildingId),
     buildingName: buildingName || undefined,
     floor: floorValue.toLowerCase().startsWith("tầng") ? floorValue : floorValue ? `Tầng ${floorValue}` : undefined,
+    images,
+    services,
+    status,
+    description: description == null ? undefined : String(description),
   };
 };
 
-function DatePicker({ label, value, min, onChange }: { label: string; value: string; min?: string; onChange: (value: string) => void }) {
+function DatePicker({ label, value, min, onChange, hotelId }: { label: string; value: string; min?: string; onChange: (value: string) => void; hotelId?: string | number | null }) {
   const { t, i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const [viewDate, setViewDate] = useState(() => value ? new Date(`${value}T00:00:00`) : new Date(2026, 8, 1));
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const monthLabel = viewDate.toLocaleDateString(i18n.language === "en" ? "en-US" : "vi-VN", { month: "long", year: "numeric" });
-  const pickerId = label === t("booking.checkInDate") ? "check-in" : "check-out";
-  useEffect(() => { const openPicker = () => setOpen(true); window.addEventListener(`open-${pickerId}`, openPicker); return () => window.removeEventListener(`open-${pickerId}`, openPicker); }, [pickerId]);
+  const [pickerMonth, setPickerMonth] = useState(() => value ? new Date(`${value}T00:00:00`) : new Date());
+  const { data: monthlyRates } = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId: Number(hotelId), month: pickerMonth.getMonth() + 1, year: pickerMonth.getFullYear() },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+  const eventDates = useMemo(() => getSeasonalEventDates(monthlyRates?.content ?? []), [monthlyRates?.content]);
+
   useEffect(() => {
-    const handleOutsidePointerDown = (event: PointerEvent) => {
-      if (open && pickerRef.current && !pickerRef.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", handleOutsidePointerDown);
-    return () => document.removeEventListener("pointerdown", handleOutsidePointerDown);
-  }, [open]);
-  const today = todayLocal();
-  const selectDay = (day: number) => {
-    const next = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    if (!min || next >= min) onChange(next);
+    if (value) setPickerMonth(new Date(`${value}T00:00:00`));
+  }, [value]);
+
+  const formatDateForInput = (date: Date | undefined) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
-  const selectToday = () => { const current = new Date(); const date = current.toISOString().slice(0, 10); if (!min || date >= min) { onChange(date); setViewDate(new Date(current.getFullYear(), current.getMonth(), 1)); } };
-  return <div className="relative z-50"><p className="text-xs font-bold text-slate-700">{label}</p><button type="button" onClick={() => setOpen((current) => !current)} className="mt-1.5 flex h-11 w-full items-center justify-between rounded-lg border border-violet-100 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none transition hover:border-violet-300 focus:border-violet-400"><span>{formatDateLabel(value, t("booking.noDateSelected"), i18n.language)}</span><CalendarDays size={16} className="text-violet-500" /></button>{open && <div className="absolute left-0 top-[4.5rem] z-50 w-[min(19rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"><div className="flex items-center justify-between"><button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-violet-50"><ChevronLeft size={16} /></button><p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p><button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} className="rounded-lg p-1.5 text-slate-500 hover:bg-violet-50"><ChevronRight size={16} /></button></div><div className="mt-3 grid grid-cols-7 text-center text-[10px] font-bold uppercase text-slate-400">{["sunShort", "monShort", "tueShort", "wedShort", "thuShort", "friShort", "satShort"].map((day) => <span key={day} className="py-1">{t(`calendar.${day}`)}</span>)}</div><div className="grid grid-cols-7 gap-1">{Array.from({ length: firstDay }, (_, index) => <span key={`empty-${index}`} />)}{Array.from({ length: daysInMonth }, (_, index) => { const day = index + 1; const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; const disabled = Boolean(min && date < min); return <button type="button" key={date} disabled={disabled} onClick={() => selectDay(day)} className={`grid aspect-square place-items-center rounded-lg text-xs transition ${disabled ? "cursor-not-allowed text-slate-300" : date === value ? "bg-violet-600 font-bold text-white" : date === today ? "border border-violet-300 font-bold text-violet-700" : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"}`}>{day}</button>; })}</div><button type="button" onClick={selectToday} className="mt-3 w-full rounded-lg bg-slate-50 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50">{t("booking.today")}</button></div>}</div>;
+
+  return (
+    <div className="relative z-50">
+      <p className="text-xs font-bold text-slate-700">{label}</p>
+      <div className="mt-1.5">
+        <DatePickerPopover
+          value={value ? new Date(`${value}T00:00:00`) : undefined}
+          onMonthChange={setPickerMonth}
+          highlightDates={eventDates}
+          onChange={(nextDate) => {
+            if (!nextDate) return;
+            const nextValue = formatDateForInput(nextDate);
+            if (!min || nextValue >= min) {
+              onChange(nextValue);
+            }
+          }}
+          placeholder={t("booking.noDateSelected", "Chọn ngày")}
+          buttonClassName="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 text-left text-xs font-semibold text-slate-800 outline-none transition duration-150 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+        />
+      </div>
+    </div>
+  );
 }
 
 function DesktopCalendar({
@@ -242,6 +294,10 @@ function DesktopCalendar({
   const todayValue = todayLocal();
   const [timelineStart, setTimelineStart] = useState(todayValue);
   const [timelinePickerOpen, setTimelinePickerOpen] = useState(false);
+  const [timelinePickerMonth, setTimelinePickerMonth] = useState(() => new Date(`${todayValue}T00:00:00`));
+  useEffect(() => {
+    setTimelinePickerMonth(new Date(`${timelineStart}T00:00:00`));
+  }, [timelineStart]);
   const stableTimeline = useMemo(() => {
     const start = new Date(`${timelineStart}T00:00:00`);
 
@@ -256,6 +312,20 @@ function DesktopCalendar({
     });
   }, [timelineStart]);
   const timelineEnd = stableTimeline[stableTimeline.length - 1]?.value ?? timelineStart;
+  const timelineStartDate = new Date(`${timelineStart}T00:00:00`);
+  const timelineEndDate = new Date(`${timelineEnd}T00:00:00`);
+  const { data: startMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId, month: timelineStartDate.getMonth() + 1, year: timelineStartDate.getFullYear() },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+  const { data: endMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
+    { hotelId, month: timelineEndDate.getMonth() + 1, year: timelineEndDate.getFullYear() },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+  const seasonalEventDates = useMemo(
+    () => new Set(getSeasonalEventDates([...(startMonthEvents?.content ?? []), ...(endMonthEvents?.content ?? [])])),
+    [startMonthEvents?.content, endMonthEvents?.content],
+  );
   const { data: dailyRoomPrices = {} } = useGetBranchRoomDailyPricesQuery(
     { hotelId, startDate: timelineStart, endDate: timelineEnd },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
@@ -270,10 +340,16 @@ function DesktopCalendar({
 
     bindHotelSocketEvents({
       onRoomMatrixUpdated: () => {
-        dispatch(baseApi.util.invalidateTags(["Booking"]));
+        dispatch(baseApi.util.invalidateTags(["Booking", "Room", "BranchRoomPolicy"]));
+      },
+      onRoomPolicyUpdated: () => {
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking", "BranchRoomPolicy"]));
       },
       onNewBookingNotification: () => {
-        dispatch(baseApi.util.invalidateTags(["Booking"]));
+        dispatch(baseApi.util.invalidateTags(["Booking", "Room"]));
+      },
+      onSeasonalRateAnnouncementUpdate: () => {
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking", "BranchRoomPolicy"]));
       },
     });
   }, [dispatch, hotelId]);
@@ -301,6 +377,7 @@ function DesktopCalendar({
 
   const [dragSelection, setDragSelection] = useState<{ roomId: string; startDayIndex: number; currentDayIndex: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [roomDetails, setRoomDetails] = useState<RoomDetailsData | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
@@ -445,44 +522,200 @@ function DesktopCalendar({
   }, [dragSelection]);
 
   return (
-    <div className="relative z-0 mt-5 flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="relative z-20 flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-3">
-        <div className="text-[11px] font-semibold text-slate-500" aria-hidden="true" />
-        <div className="relative flex items-center gap-1.5">
-          <button type="button" disabled={!canGoPrevious} onClick={() => scrollByDays(-7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40">
-            <ChevronLeft size={14} /> {formatRange(timelineStart)}
+    <div className="relative z-0 mt-5 flex w-full flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+      {/* Matrix Header Toolbar */}
+      <div className="relative z-20 flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+        {/* Status Legend Pills */}
+        <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
+          <span className="flex items-center gap-1.5 text-slate-700">
+            <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 shadow-2xs" />
+            Đang chọn đặt
+          </span>
+          <span className="flex items-center gap-1.5 text-slate-700">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-2xs" />
+            Đã đặt / Giữ chỗ
+          </span>
+          <span className="flex items-center gap-1.5 text-slate-700">
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-200 border border-sky-400 shadow-2xs" />
+            Phòng trống
+          </span>
+          <span className="flex items-center gap-1.5 text-slate-400">
+            <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+            Đã qua
+          </span>
+        </div>
+
+        {/* Date Navigation Controls */}
+        <div className="relative flex items-center gap-2">
+          <button
+            type="button"
+            disabled={!canGoPrevious}
+            onClick={() => scrollByDays(-7)}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition hover:bg-slate-100 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronLeft size={15} /> {formatRange(timelineStart)}
           </button>
-          <button type="button" onClick={scrollToToday} aria-label={t("booking.today", "Hôm nay")} title={t("booking.today", "Hôm nay")} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900">
-            <CalendarDays size={16} />
+
+          <button
+            type="button"
+            onClick={scrollToToday}
+            aria-label={t("booking.today", "Hôm nay")}
+            title={t("booking.today", "Hôm nay")}
+            className="grid h-8.5 w-8.5 place-items-center rounded-xl border border-slate-200 bg-white text-blue-600 shadow-2xs transition hover:bg-blue-50"
+          >
+            <CalendarDays size={17} />
           </button>
-          <button type="button" onClick={() => scrollByDays(7)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900">
-            {formatRange(shiftDay(timelineStart, 7))} <ChevronRight size={14} />
+
+          <button
+            type="button"
+            onClick={() => scrollByDays(7)}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition hover:bg-slate-100 hover:text-blue-700"
+          >
+            {formatRange(shiftDay(timelineStart, 7))} <ChevronRight size={15} />
           </button>
-          {timelinePickerOpen && <div className="absolute right-0 top-12 z-50 rounded-xl border border-slate-200 bg-white p-3 shadow-xl"><label className="block text-xs font-semibold text-slate-600">{t("booking.selectDate", "Chọn ngày")}</label><input type="date" min={todayValue} value={timelineStart} onChange={(event) => { setTimelineStart(event.target.value); setTimelinePickerOpen(false); }} className="mt-2 h-9 rounded-lg border border-slate-200 px-2 text-sm text-slate-700 outline-none focus:border-violet-400" /></div>}
+
+          {timelinePickerOpen && (() => {
+            const pickerYear = timelinePickerMonth.getFullYear();
+            const pickerMonth = timelinePickerMonth.getMonth();
+            const firstDayOfMonth = new Date(pickerYear, pickerMonth, 1).getDay();
+            const daysInMonth = new Date(pickerYear, pickerMonth + 1, 0).getDate();
+            const monthLabel = timelinePickerMonth.toLocaleDateString("vi-VN", { month: "long", year: "numeric" });
+            const selectedDate = new Date(`${timelineStart}T00:00:00`);
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0);
+
+            return (
+              <div className="absolute right-0 top-12 z-50 w-[min(19rem,calc(100vw-2rem))] rounded-[1.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_18px_45px_rgba(15,23,42,0.12)]">
+                <div className="flex items-center justify-between pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setTimelinePickerMonth(new Date(pickerYear, pickerMonth - 1, 1))}
+                    className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Tháng trước"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p>
+
+                  <button
+                    type="button"
+                    onClick={() => setTimelinePickerMonth(new Date(pickerYear, pickerMonth + 1, 1))}
+                    className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Tháng sau"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                  {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map((day) => (
+                    <span key={day} className="py-1">{day}</span>
+                  ))}
+                </div>
+
+                <div className="mt-1 grid grid-cols-7 gap-1">
+                  {Array.from({ length: firstDayOfMonth }, (_, index) => (
+                    <span key={`empty-${index}`} className="h-9 w-9" />
+                  ))}
+
+                  {Array.from({ length: daysInMonth }, (_, index) => {
+                    const day = index + 1;
+                    const date = new Date(pickerYear, pickerMonth, day);
+                    const isSelected = date.toDateString() === selectedDate.toDateString();
+                    const isToday = date.toDateString() === todayDate.toDateString();
+                    const isDisabled = date < todayDate;
+
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => {
+                          const nextDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                          setTimelineStart(nextDate);
+                          setTimelinePickerOpen(false);
+                        }}
+                        className={`grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
+                          isSelected
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : isDisabled
+                              ? "cursor-not-allowed text-slate-300"
+                              : isToday
+                                ? "border border-blue-200 bg-blue-50 font-bold text-blue-700"
+                                : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = new Date();
+                    const nextDate = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+                    setTimelineStart(nextDate);
+                    setTimelinePickerOpen(false);
+                  }}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                >
+                  <Check size={14} />
+                  Hôm nay
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
+      {/* Interactive Matrix Grid Area */}
       <div 
         ref={scrollRef}
         className="relative z-10 w-full touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
         onPointerLeave={handlePointerUpContainer}
       >
         <div className="min-w-fit" style={{ width: `${260 + totalDays * 96}px` }}>
-          <div className="grid border-b border-slate-200 bg-slate-50 relative" style={{ gridTemplateColumns: `260px repeat(${totalDays}, minmax(96px, 1fr))` }}>
-            <div className="sticky left-0 top-0 z-30 flex items-center border-r border-slate-200 bg-slate-50 p-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-              {t("booking.roomTypeLabel")}
+          {/* Days Header Row */}
+          <div className="grid border-b border-slate-200 bg-slate-50/90 relative" style={{ gridTemplateColumns: `260px repeat(${totalDays}, minmax(96px, 1fr))` }}>
+            <div className="sticky left-0 top-0 z-30 flex items-center border-r border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+              {t("booking.roomTypeLabel", "Phòng & Loại phòng")}
             </div>
-            {stableTimeline.map((date) => (
-              <div key={date.value} className="border-l border-slate-200 p-3 text-center">
-                <p className="text-[10px] font-bold uppercase text-slate-400">{date.day}</p>
-                <p className={`mt-1 text-sm font-bold ${isPastDate(date.value) ? "text-slate-400" : "text-slate-700"}`}>{date.label}</p>
-              </div>
-            ))}
+            {stableTimeline.map((date) => {
+              const isWeekend = date.day === "T7" || date.day === "CN";
+              const isToday = date.value === todayValue;
+              const hasEvent = seasonalEventDates.has(date.value);
+
+              return (
+                <div
+                  key={date.value}
+                  className={`border-l border-slate-200/80 px-2 py-2.5 text-center transition ${
+                    isToday
+                      ? "bg-blue-50/80 text-blue-900 border-b-2 border-b-blue-600 font-bold"
+                      : isWeekend
+                      ? "bg-amber-50/60 text-amber-900 font-semibold"
+                      : ""
+                  }`}
+                >
+                  <p className={`text-[10px] font-extrabold uppercase ${isWeekend ? "text-amber-700" : isToday ? "text-blue-700" : "text-slate-400"}`}>
+                    {date.day}
+                  </p>
+                  <p className={`mt-0.5 text-xs font-extrabold ${isPastDate(date.value) ? "text-slate-400" : isToday ? "text-blue-900" : "text-slate-800"}`}>
+                    {date.label}
+                  </p>
+                  {hasEvent && <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span>}
+                </div>
+              );
+            })}
           </div>
 
+          {/* Room Matrix Rows */}
           {visibleRooms.map((room) => (
-            <div key={room.id} className="grid min-h-[106px] border-b border-slate-100 last:border-0 relative hover:bg-slate-50/30 transition-colors" style={{ gridTemplateColumns: `260px repeat(${totalDays}, minmax(96px, 1fr))` }}>
-              <div className="sticky left-0 top-0 z-20 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+            <div key={room.id} className="grid min-h-[100px] border-b border-slate-100 last:border-0 relative hover:bg-slate-50/40 transition-colors" style={{ gridTemplateColumns: `260px repeat(${totalDays}, minmax(96px, 1fr))` }}>
+              {/* Left Room Title Column */}
+              <div className="sticky left-0 top-0 z-20 flex items-stretch gap-1 border-r border-slate-100 bg-white p-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                 <button
                   type="button"
                   disabled={Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, selectedRanges[room.id]?.checkIn ?? checkIn, selectedRanges[room.id]?.checkOut ?? checkOut)}
@@ -507,16 +740,50 @@ function DesktopCalendar({
                       setSelectedRanges((prev) => ({ ...prev, [room.id]: defaultRange }));
                     }
                   }}
-                  className={`flex h-full w-full items-center gap-3 p-4 text-left transition-all duration-200 ${selected.includes(room.id) ? "bg-violet-50" : "bg-white hover:bg-slate-50"} ${Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, checkIn, checkOut) ? "cursor-not-allowed opacity-60" : ""}`}
+                  className={`flex h-full min-w-0 flex-1 items-center gap-3 p-3.5 text-left transition-all duration-200 ${
+                    selected.includes(room.id) ? "bg-blue-50/70" : "bg-white hover:bg-slate-50"
+                  } ${Boolean(checkIn && checkOut) && !isAvailableWithMatrix(room, checkIn, checkOut) ? "cursor-not-allowed opacity-60" : ""}`}
                 >
-                  <span className={`grid h-11 min-w-[58px] shrink-0 place-items-center rounded-xl px-2 text-[11px] font-bold whitespace-nowrap transition-all ${selected.includes(room.id) ? "bg-violet-600 text-white shadow-sm shadow-violet-200" : "bg-slate-100 text-slate-600"}`}>{room.id}</span>
-                  <span className="min-w-0 flex-1 text-center">
-                    <strong className="block truncate text-xs font-semibold text-slate-800">{room.type}</strong>
-                    <small className="mt-1 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
+                  <span
+                    className={`grid h-10 min-w-[54px] shrink-0 place-items-center rounded-xl px-2 text-[11px] font-extrabold whitespace-nowrap transition-all ${
+                      selected.includes(room.id)
+                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs shadow-blue-300"
+                        : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {room.id}
                   </span>
+                  <span className="min-w-0 flex-1 text-left">
+                    <strong className="block truncate text-xs font-bold text-slate-800">{room.type}</strong>
+                    <small className="mt-0.5 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
+                  </span>
+                </button>
+                <button type="button" title={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} aria-label={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} onClick={() => setRoomDetails({
+                  id: room.id,
+                  name: room.type,
+                  images: room.images ?? [],
+                  floor: room.floor ?? roomFloor(room),
+                  size: room.size,
+                  beds: room.beds,
+                  capacity: room.guests,
+                  standardCapacity: room.guests,
+                  maxExtraGuests: room.maxExtraGuests,
+                  extraAdultFee: room.extraAdultFee,
+                  extraChildFee: room.extraChildFee,
+                  guestPolicy: `Tiêu chuẩn ${room.guests} người · Ghép thêm tối đa ${room.maxExtraGuests} người`,
+                  price: room.price,
+                  status: room.status ?? "Chưa cập nhật",
+                  cleaner: "",
+                  services: room.services ?? [],
+                  description: room.description,
+                  buildingId: room.buildingId,
+                  buildingName: room.buildingName,
+                })} className="my-auto mr-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                  <Eye size={16} />
                 </button>
               </div>
 
+              {/* Day Cell Slots */}
               {stableTimeline.map((date, dayIndex) => {
                 const day = date.value;
                 const reservation = (booked[room.id] || []).find((item) => day >= item.start && day < item.end);
@@ -538,21 +805,24 @@ function DesktopCalendar({
                     onPointerDown={handlePointerDown(room.id, dayIndex)}
                     onPointerEnter={handlePointerEnter(room.id, dayIndex)}
                     title={reservation ? `${reservation.guest} · đã đặt` : undefined}
+                    className="p-1"
                   >
-                    <div className={`flex h-full min-h-[76px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-sm transition-all duration-200 ${
+                    <div className={`flex h-full min-h-[72px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-2xs transition-all duration-150 ${
                       pastDay
-                        ? "border-slate-200 bg-slate-200 text-slate-500"
-                          : reservation || matrixReserved
-                          ? "border-emerald-300 bg-emerald-500 text-white shadow-emerald-100"
-                          : isDraggingCell
-                            ? "border-violet-300 bg-violet-500 text-white shadow-violet-200"
-                            : inRange && selected.includes(room.id)
-                              ? "border-violet-300 bg-violet-600 text-white shadow-violet-100"
-                              : inRange
-                                ? "border-violet-200 bg-violet-100 text-violet-700"
-                                : "border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:bg-sky-100"
+                        ? "border-slate-200 bg-slate-100/70 text-slate-400 opacity-60 cursor-not-allowed"
+                        : reservation || matrixReserved
+                        ? "border-emerald-300/80 bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-xs shadow-emerald-200/50 font-bold"
+                        : isDraggingCell
+                        ? "border-blue-400 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-300/50 animate-pulse font-extrabold"
+                        : inRange && selected.includes(room.id)
+                        ? "border-blue-400 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-300/50 font-extrabold"
+                        : inRange
+                        ? "border-blue-200 bg-blue-100/80 text-blue-900 font-bold"
+                        : "border-slate-200/90 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50/80 hover:text-blue-900 shadow-2xs"
                     }`}>
-                      <span className="truncate text-center text-[10px] font-bold">{reservation || matrixReserved ? "Đã đặt" : `${money(roomPriceForDay(room, day))}/đêm`}</span>
+                      <span className="truncate text-center text-[10px] font-extrabold">
+                        {reservation || matrixReserved ? "Đã đặt" : `${money(roomPriceForDay(room, day))}/đêm`}
+                      </span>
                     </div>
                   </div>
                 );
@@ -561,6 +831,7 @@ function DesktopCalendar({
           ))}
         </div>
       </div>
+      {roomDetails && <RoomDetailModal room={roomDetails} onClose={() => setRoomDetails(null)} />}
     </div>
   );
 }
@@ -577,7 +848,7 @@ export default function BookingWorkspace() {
   const [createCounterBooking, { isLoading: isCreatingBooking, error: bookingError }] = useCreateCounterBookingMutation();
   const [modifyBooking, { isLoading: isModifyingBooking }] = useModifyBookingMutation();
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
-  const { data: apiBuildings } = useGetBuildingsByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { data: apiBuildings } = useGetBuildingsByCurrentHotelQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const { data: apiRoomTypes } = useGetRoomTypesQuery();
   const { data: apiRooms, isLoading: isRoomsLoading, isError: isRoomsError } = useGetRoomsByCurrentHotelQuery();
   const [step, setStep] = useState<"rooms" | "guest" | "services" | "promotion" | "success">("rooms");
@@ -593,6 +864,8 @@ export default function BookingWorkspace() {
   const [floor, setFloor] = useState("Tất cả các tầng");
   const [showFull, setShowFull] = useState(false);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [bookingGuest, setBookingGuest] = useState<BookingGuest>({ name: "", phone: "", identityNumber: "" });
   const createCustomerFromGuest = () => undefined;
   const isCreatingCustomer = false;
@@ -818,6 +1091,17 @@ export default function BookingWorkspace() {
     () => filteredRooms.filter((room) => selected.includes(room.id) || showFull || !hasDates || isAvailable(room.id)),
     [filteredRooms, showFull, checkIn, checkOut, hasDates, selected]
   );
+  const totalPages = Math.max(1, Math.ceil(visibleRooms.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedVisibleRooms = visibleRooms.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, roomType, building, floor, showFull, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const selectedRooms = [...rooms, ...loadedBookingRooms].filter((room, index, allRooms) => selected.includes(room.id) && allRooms.findIndex((candidate) => candidate.id === room.id) === index);
   const getRoomPrice = (room: BookingRoom) => bookingRoomPrices[room.id] ?? (room.databaseId === undefined ? undefined : bookingRoomPrices[String(room.databaseId)]) ?? room.price;
@@ -1114,10 +1398,11 @@ export default function BookingWorkspace() {
         const res = await modifyBooking({ bookingId: id, request: modificationRequest }).unwrap();
         console.log("===> [BOOKING WORKSPACE MODIFY SUCCESS]:", res);
         toast({
-          variant: "success",
+          variant: "default",
           title: "Cập nhật booking thành công!",
           description: `Đã cập nhật các thay đổi cho booking #${id}.`,
         });
+        dispatch(baseApi.util.invalidateTags(["Customer"]));
         clearRoomGuestCache();
         setStep("success");
       } catch (error) {
@@ -1133,7 +1418,7 @@ export default function BookingWorkspace() {
       }
       return;
     }
-    const hasGuestDetails = Boolean(bookingGuest.name.trim() && bookingGuest.phone.trim() && bookingGuest.identityNumber.trim());
+    const hasGuestDetails = isBookingGuestValid(bookingGuest);
     if (!hasGuestDetails || (!initialBooking && !customerId) || !counterEmployeeId.trim()) {
       console.warn("[booking] blocked: guest details, customer id, or employeeId are incomplete", { guest: bookingGuest, employeeId: counterEmployeeId });
       return;
@@ -1146,10 +1431,11 @@ export default function BookingWorkspace() {
       const res = await createCounterBooking({ employeeId: counterEmployeeId, request }).unwrap();
       const newBookingId = (res as any)?.bookingId ?? (res as any)?.id;
       toast({
-        variant: "booking",
+        variant: "success",
         title: "Đặt phòng thành công!",
         description: newBookingId ? `Đã hoàn tất tạo đơn đặt phòng #${newBookingId}.` : "Đã hoàn tất tạo đơn đặt phòng cho khách hàng.",
       });
+      dispatch(baseApi.util.invalidateTags(["Customer"]));
       clearRoomGuestCache();
       setStep("success");
     } catch (error) {
@@ -1166,7 +1452,7 @@ export default function BookingWorkspace() {
   };
   const storedEmployeeId = localStorage.getItem("id");
   const bookingEmployeeId = storedEmployeeId ?? employeeId ?? "";
-  const hasGuestDetails = Boolean(bookingGuest.name.trim() && bookingGuest.phone.trim() && bookingGuest.identityNumber.trim());
+  const hasGuestDetails = isBookingGuestValid(bookingGuest);
   const goToServices = () => {
     if (!hasGuestDetails) {
       setPaymentError("Vui lòng nhập đủ họ tên, số điện thoại và CCCD của khách hàng.");
@@ -1239,8 +1525,8 @@ export default function BookingWorkspace() {
       {step === "rooms" ? (
         <div className="p-5">
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
-            <DatePicker label={t("booking.checkInDate")} value={checkIn} onChange={setCheckIn} />
-            <DatePicker label={t("booking.checkOutDate")} value={checkOut} min={checkIn || undefined} onChange={setCheckOut} />
+            <DatePicker label={t("booking.checkInDate")} value={checkIn} onChange={setCheckIn} hotelId={hotelId} />
+            <DatePicker label={t("booking.checkOutDate")} value={checkOut} min={checkIn || undefined} onChange={setCheckOut} hotelId={hotelId} />
             <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{hasDates ? `${nights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
           </div>
 
@@ -1270,21 +1556,65 @@ export default function BookingWorkspace() {
             </div>
           </div>
 
-          {isRoomsLoading ? <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách phòng...</p> : isRoomsError ? <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách phòng.</p> : <DesktopCalendar
-            visibleRooms={visibleRooms}
-            selected={selected}
-            setSelected={setSelected}
-            checkIn={checkIn}
-            checkOut={checkOut}
-            setCheckIn={setCheckIn}
-            setCheckOut={setCheckOut}
-            selectedRanges={selectedRanges}
-            setSelectedRanges={setSelectedRanges}
-            isAddingRoom={isAddingRoom}
-            isAvailableForRange={isAvailableForRange}
-            hotelId={Number(hotelId)}
-            onDailyPricesChange={setDailyRoomPrices}
-          />}
+          {isRoomsLoading ? <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách phòng...</p> : isRoomsError ? <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách phòng.</p> : <>
+            <DesktopCalendar
+              visibleRooms={paginatedVisibleRooms}
+              selected={selected}
+              setSelected={setSelected}
+              checkIn={checkIn}
+              checkOut={checkOut}
+              setCheckIn={setCheckIn}
+              setCheckOut={setCheckOut}
+              selectedRanges={selectedRanges}
+              setSelectedRanges={setSelectedRanges}
+              isAddingRoom={isAddingRoom}
+              isAvailableForRange={isAvailableForRange}
+              hotelId={Number(hotelId)}
+              onDailyPricesChange={setDailyRoomPrices}
+            />
+            {visibleRooms.length > 0 && (
+              <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, visibleRooms.length)} trên {visibleRooms.length} phòng
+                </span>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2">
+                    Số dòng
+                    <select
+                      value={pageSize}
+                      onChange={(event) => setPageSize(Number(event.target.value))}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={safePage === 1}
+                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Trang trước"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="min-w-12 text-center font-semibold text-slate-700">
+                    {safePage} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                    disabled={safePage === totalPages}
+                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Trang sau"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>}
 
           <div className="mt-5 flex flex-col items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
             <div>

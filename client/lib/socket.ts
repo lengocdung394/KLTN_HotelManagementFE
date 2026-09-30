@@ -6,13 +6,55 @@ const SOCKET_URL = "http://localhost:8085";
 
 let socket: Socket | null = null;
 
+export const CUSTOMER_REFRESH_EVENTS = ["customer_created", "customer_booking_updated"] as const;
+export const SEASONAL_RATE_UPDATE_EVENT = "seasonal_rate_announcement_update";
+
+export const buildCustomerSocketPayload = (
+  hotelId: string | number | null | undefined,
+  customer: Record<string, unknown> | null | undefined,
+) => ({
+  hotelId: hotelId === null || hotelId === undefined || hotelId === "" ? null : Number(hotelId),
+  customer: customer ?? null,
+  createdAt: new Date().toISOString(),
+});
+
+export const buildSeasonalRateSocketPayload = (
+  hotelId: string | number | null | undefined,
+  rateData: Record<string, unknown> | Record<string, unknown>[] | null | undefined,
+) => ({
+  hotelId: hotelId === null || hotelId === undefined || hotelId === "" ? null : Number(hotelId),
+  event: SEASONAL_RATE_UPDATE_EVENT,
+  data: Array.isArray(rateData) ? rateData : rateData ? [rateData] : [],
+  createdAt: new Date().toISOString(),
+});
+
 type HotelSocketHandlers = {
+  onRoomCreated?: (data: unknown) => void;
+  onRoomUpdated?: (data: unknown) => void;
   onRoomMatrixUpdated?: (data: unknown) => void;
+  onRoomPolicyUpdated?: (data: unknown) => void;
   onNewBookingNotification?: (data: unknown) => void;
   onCustomerBookingUpdated?: (data: unknown) => void;
+  onCustomerCreated?: (data: unknown) => void;
+  onSeasonalRateAnnouncement?: (data: unknown) => void;
+  onSeasonalRateAnnouncementUpdate?: (data: unknown) => void;
+  onPromotionUpdate?: (data: unknown) => void;
+  onPromotionCreate?: (data: unknown) => void;
 };
 
 let hotelSocketHandlers: HotelSocketHandlers = {};
+const pendingCustomerEvents: Array<{ event: "customer_created"; payload: Record<string, unknown> }> = [];
+
+const flushPendingCustomerEvents = () => {
+  if (!socket || !socket.connected) return;
+
+  while (pendingCustomerEvents.length > 0) {
+    const queuedEvent = pendingCustomerEvents.shift();
+    if (!queuedEvent) continue;
+    socket.emit(queuedEvent.event, queuedEvent.payload);
+    console.log("📦 [Socket] flushed queued customer event:", queuedEvent.event, queuedEvent.payload);
+  }
+};
 
 const decodeJwtPayload = (token: string) => {
   try {
@@ -63,32 +105,89 @@ const getCurrentHotelId = () => {
 };
 
 export const bindHotelSocketEvents = ({
+  onRoomCreated,
+  onRoomUpdated,
   onRoomMatrixUpdated,
+  onRoomPolicyUpdated,
   onNewBookingNotification,
   onCustomerBookingUpdated,
+  onCustomerCreated,
+  onSeasonalRateAnnouncement,
+  onSeasonalRateAnnouncementUpdate,
+  onPromotionUpdate,
+  onPromotionCreate,
 }: HotelSocketHandlers = {}) => {
   hotelSocketHandlers = {
-    onRoomMatrixUpdated,
-    onNewBookingNotification,
-    onCustomerBookingUpdated,
+    ...hotelSocketHandlers,
+    ...(onRoomCreated ? { onRoomCreated } : {}),
+    ...(onRoomUpdated ? { onRoomUpdated } : {}),
+    ...(onRoomMatrixUpdated ? { onRoomMatrixUpdated } : {}),
+    ...(onRoomPolicyUpdated ? { onRoomPolicyUpdated } : {}),
+    ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
+    ...(onCustomerBookingUpdated ? { onCustomerBookingUpdated } : {}),
+    ...(onCustomerCreated ? { onCustomerCreated } : {}),
+    ...(onSeasonalRateAnnouncement ? { onSeasonalRateAnnouncement } : {}),
+    ...(onSeasonalRateAnnouncementUpdate ? { onSeasonalRateAnnouncementUpdate } : {}),
+    ...(onPromotionUpdate ? { onPromotionUpdate } : {}),
+    ...(onPromotionCreate ? { onPromotionCreate } : {}),
   };
 
   if (!socket) return;
 
+  socket.off("room_create");
+  socket.off("room_update");
   socket.off("room_matrix_updated");
+  socket.off("room_policy_updated");
   socket.off("new_booking_notification");
   socket.off("customer_booking_updated");
+  socket.off("customer_created");
+  socket.off("seasonal_rate_announcement");
+  socket.off(SEASONAL_RATE_UPDATE_EVENT);
+  socket.off("update_promotion_notification");
+  socket.off("new_promotion_notification");
 
-  if (onRoomMatrixUpdated) {
-    socket.on("room_matrix_updated", onRoomMatrixUpdated);
+  if (hotelSocketHandlers.onRoomCreated) {
+    socket.on("room_create", hotelSocketHandlers.onRoomCreated);
   }
 
-  if (onNewBookingNotification) {
-    socket.on("new_booking_notification", onNewBookingNotification);
+  if (hotelSocketHandlers.onRoomUpdated) {
+    socket.on("room_update", hotelSocketHandlers.onRoomUpdated);
   }
 
-  if (onCustomerBookingUpdated) {
-    socket.on("customer_booking_updated", onCustomerBookingUpdated);
+  if (hotelSocketHandlers.onRoomMatrixUpdated) {
+    socket.on("room_matrix_updated", hotelSocketHandlers.onRoomMatrixUpdated);
+  }
+
+  if (hotelSocketHandlers.onRoomPolicyUpdated) {
+    socket.on("room_policy_updated", hotelSocketHandlers.onRoomPolicyUpdated);
+  }
+
+  if (hotelSocketHandlers.onNewBookingNotification) {
+    socket.on("new_booking_notification", hotelSocketHandlers.onNewBookingNotification);
+  }
+
+  if (hotelSocketHandlers.onCustomerBookingUpdated) {
+    socket.on("customer_booking_updated", hotelSocketHandlers.onCustomerBookingUpdated);
+  }
+
+  if (hotelSocketHandlers.onCustomerCreated) {
+    socket.on("customer_created", hotelSocketHandlers.onCustomerCreated);
+  }
+
+  if (hotelSocketHandlers.onSeasonalRateAnnouncement) {
+    socket.on("seasonal_rate_announcement", hotelSocketHandlers.onSeasonalRateAnnouncement);
+  }
+
+  if (hotelSocketHandlers.onSeasonalRateAnnouncementUpdate) {
+    socket.on(SEASONAL_RATE_UPDATE_EVENT, hotelSocketHandlers.onSeasonalRateAnnouncementUpdate);
+  }
+
+  if (hotelSocketHandlers.onPromotionUpdate) {
+    socket.on("update_promotion_notification", hotelSocketHandlers.onPromotionUpdate);
+  }
+
+  if (hotelSocketHandlers.onPromotionCreate) {
+    socket.on("new_promotion_notification", hotelSocketHandlers.onPromotionCreate);
   }
 };
 
@@ -129,6 +228,8 @@ export const initSocket = (token: string | null) => {
       socket?.emit("join_hotel_room", String(hotelId));
       console.log("🏢 [Socket] join_hotel_room emitted:", hotelId);
     }
+
+    flushPendingCustomerEvents();
   });
 
   socket.on("room_matrix_updated", (data) => {
@@ -138,6 +239,10 @@ export const initSocket = (token: string | null) => {
     } catch (e) {
       console.error(e);
     }
+  });
+
+  socket.on("room_policy_updated", (data) => {
+    console.log("💰 [Socket] room_policy_updated:", data);
   });
 
   socket.on("new_booking_notification", (data) => {
@@ -158,6 +263,21 @@ export const initSocket = (token: string | null) => {
     }
   });
 
+  socket.on("customer_created", (data) => {
+    console.log("👤 [Socket] customer_created:", data);
+    const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const roomName = payload.hotelId != null ? `hotel_${payload.hotelId}` : "global";
+    console.log("👤 [Socket] customer_created matched room:", roomName);
+  });
+
+  socket.on("seasonal_rate_announcement", (data) => {
+    console.log("📢 [Socket] seasonal_rate_announcement:", data);
+  });
+
+  socket.on(SEASONAL_RATE_UPDATE_EVENT, (data) => {
+    console.log("📢 [Socket] seasonal_rate_announcement_update:", data);
+  });
+
   attachHotelSocketHandlers();
 
   socket.on("connect_error", (error) => {
@@ -176,6 +296,28 @@ export const disconnectSocket = () => {
     socket.disconnect();
     socket = null;
   }
+};
+
+export const emitCustomerCreated = (
+  hotelId: string | number | null | undefined,
+  customer: Record<string, unknown> | null | undefined,
+) => {
+  const payload = buildCustomerSocketPayload(hotelId, customer);
+
+  if (!socket) {
+    pendingCustomerEvents.push({ event: "customer_created", payload });
+    console.log("👤 [Socket] queued customer_created until socket connects:", payload);
+    return;
+  }
+
+  if (!socket.connected) {
+    pendingCustomerEvents.push({ event: "customer_created", payload });
+    console.log("👤 [Socket] queued customer_created while offline:", payload);
+    return;
+  }
+
+  socket.emit("customer_created", payload);
+  console.log("👤 [Socket] customer_created emitted:", payload);
 };
 
 export const joinUserRoom = (userId: string | number | null) => {

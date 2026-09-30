@@ -10,15 +10,14 @@ interface ApiResponse<T> {
 
 export const buildingApi = baseApi.injectEndpoints({
 	endpoints: (builder) => ({
-		getBuildingsByHotelId: builder.query<BuildingResponse[], number>({
-			query: (hotelId) => ({
+		getBuildingsByCurrentHotel: builder.query<BuildingResponse[], void>({
+			query: () => ({
 				url: "/branch/getBuildingByHotelId",
 				method: "GET",
-				params: { hotelId },
 			}),
 			transformResponse: (response: ApiResponse<BuildingResponse[]>) => response?.result ?? [],
 		}),
 	}),
 });
 
-export const { useGetBuildingsByHotelIdQuery } = buildingApi;
+export const { useGetBuildingsByCurrentHotelQuery } = buildingApi;
