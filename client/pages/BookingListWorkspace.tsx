@@ -640,6 +640,17 @@ export default function BookingListWorkspace() {
               </button>
             </div>
 
+            {/* Cancelled Booking Warning Banner */}
+            {isCancelledBooking(selectedBooking) && (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <div>
+                  <p className="font-bold">Đơn đặt phòng này đã bị hủy (Cancelled)</p>
+                  <p className="text-xs text-rose-600 mt-0.5">Không thể tạo mã thanh toán QR hoặc thu tiền cho đơn phòng đã bị hủy.</p>
+                </div>
+              </div>
+            )}
+
             {/* Modal Body: Single Column */}
             <div className="mt-6 grid gap-6 grid-cols-1">
               {/* Booking Details */}
@@ -936,14 +947,16 @@ export default function BookingListWorkspace() {
                     onClick={() => void handlePayBooking()}
                     disabled={paymentBlocked || isCreatingQr || isPayingCash || isCancelledBooking(selectedBooking)}
                     className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold shadow-sm transition-all ${
-                      paymentBlocked
+                      paymentBlocked || isCancelledBooking(selectedBooking)
                         ? "bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300"
                         : paymentMethod === "cash"
                         ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                         : "bg-blue-600 hover:bg-blue-700 text-white"
                     }`}
                   >
-                    {paymentBlocked ? (
+                    {isCancelledBooking(selectedBooking) ? (
+                      "Đơn đặt phòng đã bị hủy"
+                    ) : paymentBlocked ? (
                       (() => {
                         const finalAmount = Number(selectedBooking?.finalAmount ?? 0);
                         const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
