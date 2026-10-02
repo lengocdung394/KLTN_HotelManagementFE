@@ -1239,12 +1239,18 @@ export default function BookingWorkspace() {
   const hasDates = Boolean(checkIn && checkOut);
   const nights = hasDates ? Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)) : 0;
 
+  const { data: bookingRoomMatrix = [] } = useGetRoomMatrixQuery(
+    { startDate: checkIn || todayLocal(), endDate: checkOut || shiftDay(todayLocal(), 1) },
+    { skip: !hasDates || !hotelId || Number.isNaN(Number(hotelId)) }
+  );
+  const matrixBusyDays = useMemo(() => buildMatrixBusyMap(bookingRoomMatrix, editingBookingId), [bookingRoomMatrix, editingBookingId]);
+
   // Phòng có trống trong khoảng [start, end) hay không
   const isAvailableForRange = (room: BookingRoom, start: string, end: string) => {
     const roomKeys = roomKeysOf(room);
     for (let date = start; date < end; date = shiftDay(date, 1)) {
       if (isBookingRoomDate(editingBookingRanges, roomKeys, date)) continue;
-      if (roomKeys.some((key) => matrixBusyDays.get(key)?.has(date))) return false;
+      if (matrixBusyDays?.size && roomKeys.some((key) => matrixBusyDays.get(key)?.has(date))) return false;
       if (roomKeys.some((key) => (booked[key] || []).some((item) => date >= item.start && date < item.end))) return false;
     }
     return true;
