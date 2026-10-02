@@ -70,19 +70,30 @@ export default function OverviewCalendarNew() {
       const rNum = String(room.roomNumber || room.roomId || room.id);
       const rType = String(room.roomTypeName || room.roomType || "Phòng Tiêu Chuẩn");
 
-      // Tìm booking tương ứng với phòng này
-      const relatedBooking = apiBookings.find((b: any) => {
-        const details = b.bookingDetails || b.details || [];
-        return details.some((d: any) => String(d.roomId || d.roomNumber) === rNum);
-      });
+      // Tìm booking và chi tiết phòng tương ứng với phòng này
+      let matchedDetail: any = null;
+      let matchedBooking: any = null;
 
-      let guest = relatedBooking?.customerName || (room.roomStatus === "OCCUPIED" ? "Khách đang ở" : "Trống");
+      for (const b of apiBookings as any[]) {
+        const details = b.bookingDetails || b.details || [];
+        const d = details.find((item: any) => {
+          const detailRoomId = String(item.roomId || item.roomNumber || item.id || "");
+          return detailRoomId === rNum || String(room.databaseId) === detailRoomId || String(room.id) === detailRoomId;
+        });
+        if (d && d.bookingStatusType !== "CANCELLED") {
+          matchedDetail = d;
+          matchedBooking = b;
+          break;
+        }
+      }
+
+      let guest = matchedBooking?.customerName || (room.roomStatus === "OCCUPIED" ? "Khách đang ở" : "Trống");
       let start = -1;
       let end = -1;
 
-      if (relatedBooking) {
-        const checkIn = String(relatedBooking.checkInDate || "").slice(0, 10);
-        const checkOut = String(relatedBooking.checkOutDate || "").slice(0, 10);
+      if (matchedDetail) {
+        const checkIn = String(matchedDetail.checkInTime || matchedDetail.checkInDate || matchedBooking?.checkInDate || "").slice(0, 10);
+        const checkOut = String(matchedDetail.checkOutTime || matchedDetail.checkOutDate || matchedBooking?.checkOutDate || "").slice(0, 10);
         days.forEach((d, idx) => {
           if (d.date >= checkIn && d.date < checkOut) {
             if (start === -1) start = idx;
