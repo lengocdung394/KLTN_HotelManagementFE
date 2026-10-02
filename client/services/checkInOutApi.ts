@@ -88,20 +88,20 @@ const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => 
 
 export const checkInOutApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
-      query: ({ date, status, bookingStatus }) => ({
+    getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery | void>({
+      query: (arg) => ({
         url: "/hotels/today-checkins",
         method: "GET",
-        params: { date, status, bookingStatus },
+        params: arg ? { date: arg.date, status: arg.status, bookingStatus: arg.bookingStatus } : undefined,
       }),
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),
-    getTodayCheckOuts: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
-      query: ({ date, status, bookingStatus }) => ({
+    getTodayCheckOuts: builder.query<CheckInOutBookingDetail[], CheckInOutQuery | void>({
+      query: (arg) => ({
         url: "/hotels/today-checkouts",
         method: "GET",
-        params: { date, status, bookingStatus },
+        params: arg ? { date: arg.date, status: arg.status, bookingStatus: arg.bookingStatus } : undefined,
       }),
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
