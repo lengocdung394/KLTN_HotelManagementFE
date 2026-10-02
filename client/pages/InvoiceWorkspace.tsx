@@ -23,6 +23,7 @@ import {
   useCloseOrderMutation,
   type OrderResponse,
 } from "../services/orderApi";
+import { useGetEmployeesByHotelQuery } from "../services/employeeApi";
 
 type InvoiceItem = {
   id: string;
@@ -64,16 +65,36 @@ export default function InvoiceWorkspace() {
 
   // API Backend kết nối thực tế
   const { data: realOrders = [], isLoading: isOrdersLoading, refetch } = useGetOrdersQuery();
+  const { data: apiEmployees = [] } = useGetEmployeesByHotelQuery(1);
   const [closeOrder] = useCloseOrderMutation();
+
+  const cleaningStaffList = useMemo(() => {
+    if (apiEmployees && apiEmployees.length > 0) {
+      const hk = apiEmployees
+        .filter((e) => {
+          const pos = (e.position || "").toLowerCase();
+          return pos.includes("buồng") || pos.includes("phòng") || pos.includes("housekeeping");
+        })
+        .map((e) => e.fullName);
+      return hk.length > 0 ? hk : apiEmployees.map((e) => e.fullName);
+    }
+    return cleaningStaff;
+  }, [apiEmployees]);
 
   const [invoices, setInvoices] = useState<InvoiceItem[]>(initialInvoices);
   const [query, setQuery] = useState("");
   const [payment, setPayment] = useState("all");
   const [checkoutInvoice, setCheckoutInvoice] = useState<InvoiceItem | null>(null);
   const [detailInvoice, setDetailInvoice] = useState<InvoiceItem | null>(null);
-  const [cleaner, setCleaner] = useState(cleaningStaff[0]);
+  const [cleaner, setCleaner] = useState(cleaningStaffList[0] || "Đặng Thị Cẩm Tú");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    if (cleaningStaffList.length > 0 && !cleaningStaffList.includes(cleaner)) {
+      setCleaner(cleaningStaffList[0]);
+    }
+  }, [cleaningStaffList]);
 
   const label = (key: string) => t(`invoice.${key}`);
 
@@ -399,8 +420,8 @@ export default function InvoiceWorkspace() {
                 onChange={(event) => setCleaner(event.target.value)}
                 className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"
               >
-                {cleaningStaff.map((person) => (
-                  <option key={person}>{person}</option>
+                {cleaningStaffList.map((person) => (
+                  <option key={person} value={person}>{person}</option>
                 ))}
               </select>
             </label>

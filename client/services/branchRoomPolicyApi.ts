@@ -19,8 +19,12 @@ const extractPolicies = (response: unknown): BranchRoomPolicy[] => {
 
 export const branchRoomPolicyApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getBranchRoomPolicies: builder.query<BranchRoomPolicy[], void>({
-      query: () => ({ url: "/branch_room_policys/hotel", method: "GET" }),
+    getBranchRoomPolicies: builder.query<BranchRoomPolicy[], number | void>({
+      query: (hotelId) => ({
+        url: "/branch_room_policys/hotel",
+        method: "GET",
+        params: hotelId ? { hotelId } : undefined,
+      }),
       transformResponse: extractPolicies,
       providesTags: ["BranchRoomPolicy"],
     }),

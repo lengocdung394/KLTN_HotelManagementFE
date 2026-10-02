@@ -31,13 +31,8 @@ const roomTypes = {
   4: { type: "Suite Room", beds: "1 giường King Size + 1 giường đơn", size: "60 m²", guests: 3, price: 2500000, amenity: "Phòng khách riêng · Bồn tắm · Baby Cot" },
 } as const;
 
-const booked: Record<string, { start: string; end: string; guest: string }[]> = {
-  "A-1-1": [{ start: "2026-09-03", end: "2026-09-06", guest: "Nguyễn Minh Anh" }, { start: "2026-09-14", end: "2026-09-17", guest: "Lê Hoàng Nam" }],
-  "A-1-2": [{ start: "2026-09-08", end: "2026-09-12", guest: "Trần Thùy Dương" }],
-  "A-2-1": [{ start: "2026-09-05", end: "2026-09-07", guest: "Công ty VinaTech" }],
-  "B-3-2": [{ start: "2026-09-08", end: "2026-09-10", guest: "Đỗ Khánh Linh" }],
-  "C-4-1": [{ start: "2026-09-10", end: "2026-09-13", guest: "Phạm Gia đình" }],
-};
+const booked: Record<string, { start: string; end: string; guest: string }[]> = {};
+
 
 const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"];
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
@@ -1249,6 +1244,7 @@ export default function BookingWorkspace() {
     const roomKeys = roomKeysOf(room);
     for (let date = start; date < end; date = shiftDay(date, 1)) {
       if (isBookingRoomDate(editingBookingRanges, roomKeys, date)) continue;
+      if (roomKeys.some((key) => matrixBusyDays.get(key)?.has(date))) return false;
       if (roomKeys.some((key) => (booked[key] || []).some((item) => date >= item.start && date < item.end))) return false;
     }
     return true;

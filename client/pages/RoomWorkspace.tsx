@@ -196,8 +196,8 @@ export default function RoomWorkspace() {
   const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing" | "amenities">(defaultRoomTab);
   const [pricingMode, setPricingMode] = useState<"branch" | "event">("branch");
   const [editingPricingType, setEditingPricingType] = useState<string | null>(null);
-  const [pricingSaveError, setPricingSaveError] = useState<string | null>(null);
-  const { data: branchRoomPolicies = [], isLoading: isBranchPoliciesLoading, isError: isBranchPoliciesError } = useGetBranchRoomPoliciesQuery();
+  const { data: branchRoomPolicies = [], isLoading: isBranchPoliciesLoading, isError: isBranchPoliciesError, refetch: refetchBranchPolicies } = useGetBranchRoomPoliciesQuery(hotelId ? Number(hotelId) : undefined);
+
   const [updateBranchRoomPolicy, { isLoading: isUpdatingPolicy }] = useUpdateBranchRoomPolicyMutation();
   useEffect(() => {
     if (!hotelId || Number.isNaN(Number(hotelId))) return;
@@ -228,6 +228,7 @@ export default function RoomWorkspace() {
       return initialBuildings;
     }
   });
+  const [pricingSaveError, setPricingSaveError] = useState<string | null>(null);
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, { price: string; extraAdultFee: string; extraChildFee: string; standardCapacity: string; maxExtraGuests: string }>>({});
   const [floors, setFloors] = useState<string[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
@@ -1062,7 +1063,18 @@ export default function RoomWorkspace() {
           </div>
         </div>
         {pricingMode === "branch" && isBranchPoliciesLoading && <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Đang tải cấu hình giá chi nhánh...</p>}
-        {pricingMode === "branch" && isBranchPoliciesError && <p className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">Không thể tải cấu hình giá chi nhánh.</p>}
+        {pricingMode === "branch" && isBranchPoliciesError && (
+          <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700">
+            <span>Không thể tải cấu hình giá chi nhánh. Vui lòng kiểm tra kết nối Backend!</span>
+            <button
+              type="button"
+              onClick={() => refetchBranchPolicies()}
+              className="ml-3 rounded-md bg-rose-600 px-3 py-1 font-semibold text-white shadow-xs hover:bg-rose-700 transition"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
         {pricingMode === "branch" && pricingSaveError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{pricingSaveError}</p>}
         <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-1">
           <button type="button" onClick={() => setPricingMode("branch")} className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold transition ${pricingMode === "branch" ? "bg-white text-blue-700 shadow-xs" : "text-slate-500 hover:text-slate-800"}`}>

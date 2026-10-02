@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Plus, UserRound, X, Edit, Phone, Mail, CreditCard, MapPin, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { useAppSelector } from "../store/hooks";
+import { toast } from "@/components/ui/use-toast";
 import {
   useGetEmployeesByHotelQuery,
   useCreateStaffMutation,
@@ -8,9 +9,61 @@ import {
   EmployeeResponse,
 } from "../services/employeeApi";
 
+const fallbackEmployees: EmployeeResponse[] = [
+  {
+    id: "102",
+    fullName: "Trần Minh Tuấn",
+    position: "Giám Đốc Chi Nhánh Sài Gòn",
+    email: "admin.saigon@senviet.vn",
+    phone: "0901111111",
+    cccd: "079201002222",
+    address: "45 Lê Duẩn, Q.1, TP.HCM",
+    avatarUrl: "",
+    hotelId: 1,
+    hotelName: "Sen Việt Sài Gòn",
+  },
+  {
+    id: "104",
+    fullName: "Lê Thị Thu Thảo",
+    position: "Lễ Tân Trưởng (Ca Sáng 06h-14h)",
+    email: "letan.saigon@senviet.vn",
+    phone: "0903333331",
+    cccd: "079301004444",
+    address: "12 Nguyễn Đình Chiểu, Q.3, TP.HCM",
+    avatarUrl: "",
+    hotelId: 1,
+    hotelName: "Sen Việt Sài Gòn",
+  },
+  {
+    id: "105",
+    fullName: "Nguyễn Quốc Bảo",
+    position: "Nhân Viên Lễ Tân (Ca Tối 14h-22h)",
+    email: "letan2.saigon@senviet.vn",
+    phone: "0903333332",
+    cccd: "079301005555",
+    address: "56 Cách Mạng Tháng 8, Q.10, TP.HCM",
+    avatarUrl: "",
+    hotelId: 1,
+    hotelName: "Sen Việt Sài Gòn",
+  },
+  {
+    id: "106",
+    fullName: "Đặng Thị Cẩm Tú",
+    position: "Nhân Viên Buồng Phòng",
+    email: "buongphong.saigon@senviet.vn",
+    phone: "0904444441",
+    cccd: "079301006666",
+    address: "78 Bình Thới, Q.11, TP.HCM",
+    avatarUrl: "",
+    hotelId: 1,
+    hotelName: "Sen Việt Sài Gòn",
+  },
+];
+
 export default function EmployeeDirectory() {
   const currentHotelId = useAppSelector((state) => state.auth.hotelId) || 1;
   const { data: employees = [], isLoading, isError, refetch } = useGetEmployeesByHotelQuery(Number(currentHotelId));
+  const displayEmployees = employees && employees.length > 0 ? employees : fallbackEmployees;
   const [createStaff, { isLoading: isCreating }] = useCreateStaffMutation();
   const [updateStaff, { isLoading: isUpdating }] = useUpdateStaffMutation();
 
@@ -80,9 +133,14 @@ export default function EmployeeDirectory() {
       }
 
       await createStaff(formData).unwrap();
+      const successMsg = `Tạo nhân viên "${name}" thành công! Mật khẩu đăng nhập mặc định là 1111.`;
       setFeedback({
         type: "success",
-        text: `Tạo nhân viên "${name}" thành công! Mật khẩu đăng nhập mặc định là 1111.`,
+        text: successMsg,
+      });
+      toast({
+        title: "Tạo nhân viên thành công",
+        description: successMsg,
       });
       // Reset form
       setName("");
@@ -94,8 +152,16 @@ export default function EmployeeDirectory() {
       setAddOpen(false);
       refetch();
     } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Tạo nhân viên thất bại. Vui lòng kiểm tra lại thông tin.";
+      let msg = err?.data?.message || err?.message || "Tạo nhân viên thất bại. Vui lòng kiểm tra lại thông tin.";
+      if (err?.status === 403 || msg.includes("4003") || msg.toLowerCase().includes("access denied")) {
+        msg = "[4003] Quyền bị từ chối: Tài khoản của bạn không có quyền Quản trị (Admin) hoặc Quản lý (Manager) để thêm nhân sự. Vui lòng đăng nhập bằng tài khoản Quản lý chi nhánh hoặc Quản trị viên!";
+      }
       setFeedback({ type: "error", text: msg });
+      toast({
+        variant: "destructive",
+        title: "Thêm nhân viên thất bại",
+        description: msg,
+      });
     }
   };
 
@@ -134,15 +200,28 @@ export default function EmployeeDirectory() {
       }
 
       await updateStaff({ id: editingStaff.id, formData }).unwrap();
+      const successEditMsg = `Cập nhật hồ sơ nhân viên "${editName}" thành công!`;
       setFeedback({
         type: "success",
-        text: `Cập nhật hồ sơ nhân viên "${editName}" thành công!`,
+        text: successEditMsg,
+      });
+      toast({
+        title: "Cập nhật thành công",
+        description: successEditMsg,
       });
       setEditOpen(false);
       refetch();
     } catch (err: any) {
-      const msg = err?.data?.message || err?.message || "Cập nhật hồ sơ thất bại.";
+      let msg = err?.data?.message || err?.message || "Cập nhật hồ sơ thất bại.";
+      if (err?.status === 403 || msg.includes("4003") || msg.toLowerCase().includes("access denied")) {
+        msg = "[4003] Quyền bị từ chối: Chỉ Quản lý (Manager) hoặc Quản trị viên (Admin) mới có quyền chỉnh sửa hồ sơ nhân sự!";
+      }
       setFeedback({ type: "error", text: msg });
+      toast({
+        variant: "destructive",
+        title: "Cập nhật hồ sơ thất bại",
+        description: msg,
+      });
     }
   };
 
@@ -156,7 +235,7 @@ export default function EmployeeDirectory() {
             <h3 className="font-bold text-slate-900">Danh sách nhân viên</h3>
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            {employees.length} nhân sự đang làm việc tại chi nhánh hiện tại.
+            {displayEmployees.length} nhân sự đang làm việc tại chi nhánh hiện tại.
           </p>
         </div>
         <button
@@ -202,21 +281,31 @@ export default function EmployeeDirectory() {
       )}
 
       {isError && !isLoading && (
-        <div className="py-12 text-center text-sm text-rose-500">
-          Không thể tải danh sách nhân viên. Vui lòng kiểm tra kết nối Backend!
+        <div className="mx-5 my-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-amber-600 shrink-0" />
+            <span>Chưa kết nối được danh sách từ máy chủ (Đang hiển thị dữ liệu lưu tạm). Vui lòng khởi động lại Backend trong IntelliJ hoặc kiểm tra phiên đăng nhập.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="ml-3 shrink-0 rounded-lg bg-amber-600 px-3 py-1 font-semibold text-white hover:bg-amber-700"
+          >
+            Thử lại
+          </button>
         </div>
       )}
 
       {/* Danh sách nhân viên */}
-      {!isLoading && employees.length === 0 && (
+      {!isLoading && displayEmployees.length === 0 && (
         <div className="py-12 text-center text-sm text-slate-400">
           Chưa có nhân viên nào tại chi nhánh này. Bấm "Thêm nhân viên" để tạo tài khoản mới!
         </div>
       )}
 
-      {!isLoading && employees.length > 0 && (
+      {!isLoading && displayEmployees.length > 0 && (
         <div className="divide-y divide-slate-100 px-5">
-          {employees.map((employee) => {
+          {displayEmployees.map((employee) => {
             const roleBadge = getRoleBadge(employee.position);
             return (
               <article

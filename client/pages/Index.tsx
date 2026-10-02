@@ -105,38 +105,35 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const { data: rooms = [] } = useGetRoomsByCurrentHotelQuery();
   const { data: orders = [] } = useGetOrdersQuery();
 
-  // Tính toán số liệu thực tế
-  const checkInsCount = todayCheckIns.length > 0 ? todayCheckIns.length : 8;
-  const checkOutsCount = todayCheckOuts.length > 0 ? todayCheckOuts.length : 5;
+  // Tính toán số liệu thực tế từ Backend
+  const checkInsCount = todayCheckIns.length;
+  const checkOutsCount = todayCheckOuts.length;
   const earlyCheckInsCount = todayCheckIns.filter(
     (item) => Boolean(item.isEarly) || (item.earlyHours ?? 0) > 0
-  ).length || 3;
+  ).length;
 
-  const totalRooms = rooms.length > 0 ? rooms.length : 24;
+  const totalRooms = rooms.length;
   const occupiedRooms = rooms.filter((r) => r.roomStatus === "OCCUPIED").length;
-  const occupancyRate = rooms.length > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 78;
-  const guestCount = occupiedRooms > 0 ? occupiedRooms * 2 + 6 : 42;
+  const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
+  const guestCount = occupiedRooms * 2;
 
-  const todayRevenueNumber = orders.length > 0
-    ? orders.reduce((sum, ord) => sum + Number(ord.paidAmount ?? ord.totalAmount ?? 0), 0)
-    : 18650000;
+  const todayRevenueNumber = orders.reduce((sum, ord) => sum + Number(ord.paidAmount ?? ord.totalAmount ?? 0), 0);
   const todayRevenueStr = todayRevenueNumber.toLocaleString("vi-VN") + "đ";
 
-  const roomDisplayList = rooms.length > 0
-    ? rooms.slice(0, 4).map((r) => ({
-        number: String(r.roomNumber || r.roomId || r.id),
-        status: r.roomStatus === "AVAILABLE" || r.roomStatus === "READY"
-          ? t("room.ready")
-          : r.roomStatus === "OCCUPIED"
-          ? "Đang sử dụng"
-          : "Cần dọn",
-      }))
-    : [
-        { number: "101", status: t("room.ready") },
-        { number: "102", status: t("room.ready") },
-        { number: "103", status: t("room.ready") },
-        { number: "104", status: t("room.ready") },
-      ];
+  const roomDisplayList = rooms.slice(0, 4).map((r) => ({
+    number: String(r.roomNumber || r.roomId || r.id),
+    status: r.roomStatus === "AVAILABLE" || r.roomStatus === "READY"
+      ? t("room.ready")
+      : r.roomStatus === "OCCUPIED"
+      ? "Đang sử dụng"
+      : r.roomStatus === "CLEANING"
+      ? "Đang dọn"
+      : "Bảo trì",
+  }));
+
+  const pendingCleaningRooms = rooms.filter(
+    (r) => r.roomStatus === "CLEANING" || r.roomStatus === "MAINTENANCE" || r.roomStatus === "DIRTY"
+  );
 
   return (
     <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
@@ -212,7 +209,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                {occupiedRooms > 0 ? occupiedRooms : 12} {t("common.roomsInUse")}
+                {occupiedRooms} {t("common.roomsInUse")}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
@@ -258,24 +255,39 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 </span>
               </div>
               <div className="space-y-3">
-                <div className="flex items-center gap-3 rounded-xl bg-amber-50/70 p-3">
-                  <Sparkles size={16} className="text-amber-600" />
-                  <p className="flex-1 text-xs font-semibold text-slate-800">
-                    {t("dashboard.roomStatus")} 102
-                  </p>
-                  <span className="text-[10px] font-semibold text-amber-700">
-                    {t("common.pendingTask")}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 rounded-xl bg-blue-50/70 p-3">
-                  <UserRound size={16} className="text-blue-600" />
-                  <p className="flex-1 text-xs font-semibold text-slate-800">
-                    {t("common.earlyCheckInRequests")} · Nguyễn Minh Anh
-                  </p>
-                  <span className="text-[10px] font-semibold text-blue-700">
-                    {t("common.upcoming")}
-                  </span>
-                </div>
+                {pendingCleaningRooms.length > 0 ? (
+                  pendingCleaningRooms.slice(0, 2).map((room) => (
+                    <div key={room.id} className="flex items-center gap-3 rounded-xl bg-amber-50/70 p-3">
+                      <Sparkles size={16} className="text-amber-600" />
+                      <p className="flex-1 text-xs font-semibold text-slate-800">
+                        {t("dashboard.roomStatus")} {room.roomNumber} - Cần dọn dẹp
+                      </p>
+                      <span className="text-[10px] font-semibold text-amber-700">
+                        {t("common.pendingTask")}
+                      </span>
+                    </div>
+                  ))
+                ) : null}
+
+                {todayCheckIns.length > 0 ? (
+                  todayCheckIns.slice(0, 2).map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 rounded-xl bg-blue-50/70 p-3">
+                      <UserRound size={16} className="text-blue-600" />
+                      <p className="flex-1 text-xs font-semibold text-slate-800">
+                        Check-in · {item.customerName || item.guestName || "Khách hàng"}
+                      </p>
+                      <span className="text-[10px] font-semibold text-blue-700">
+                        {t("common.upcoming")}
+                      </span>
+                    </div>
+                  ))
+                ) : null}
+
+                {pendingCleaningRooms.length === 0 && todayCheckIns.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                    Không có công việc cần xử lý. Tất cả đã hoàn tất!
+                  </div>
+                ) : null}
               </div>
             </section>
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5">
