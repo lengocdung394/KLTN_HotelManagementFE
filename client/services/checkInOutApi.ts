@@ -89,20 +89,36 @@ const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => 
 export const checkInOutApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery | void>({
-      query: (arg) => ({
-        url: "/hotels/today-checkins",
-        method: "GET",
-        params: arg ? { date: arg.date, status: arg.status, bookingStatus: arg.bookingStatus } : undefined,
-      }),
+      query: (arg?: CheckInOutQuery | void) => {
+        const params: Record<string, unknown> = {};
+        if (arg && typeof arg === "object") {
+          if (arg.date) params.date = arg.date;
+          if (arg.status) params.status = arg.status;
+          if (arg.bookingStatus) params.bookingStatus = arg.bookingStatus;
+        }
+        return {
+          url: "/hotels/today-checkins",
+          method: "GET",
+          params: Object.keys(params).length > 0 ? params : undefined,
+        };
+      },
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),
     getTodayCheckOuts: builder.query<CheckInOutBookingDetail[], CheckInOutQuery | void>({
-      query: (arg) => ({
-        url: "/hotels/today-checkouts",
-        method: "GET",
-        params: arg ? { date: arg.date, status: arg.status, bookingStatus: arg.bookingStatus } : undefined,
-      }),
+      query: (arg?: CheckInOutQuery | void) => {
+        const params: Record<string, unknown> = {};
+        if (arg && typeof arg === "object") {
+          if (arg.date) params.date = arg.date;
+          if (arg.status) params.status = arg.status;
+          if (arg.bookingStatus) params.bookingStatus = arg.bookingStatus;
+        }
+        return {
+          url: "/hotels/today-checkouts",
+          method: "GET",
+          params: Object.keys(params).length > 0 ? params : undefined,
+        };
+      },
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),

@@ -100,8 +100,8 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const { fullName, email, position, hotelName } = useAppSelector((state) => state.auth);
 
   // Live API Hooks từ Backend
-  const { data: todayCheckIns = [] } = useGetTodayCheckInsQuery();
-  const { data: todayCheckOuts = [] } = useGetTodayCheckOutsQuery();
+  const { data: todayCheckIns = [] } = useGetTodayCheckInsQuery(undefined);
+  const { data: todayCheckOuts = [] } = useGetTodayCheckOutsQuery(undefined);
   const { data: rooms = [] } = useGetRoomsByCurrentHotelQuery();
   const { data: orders = [] } = useGetOrdersQuery();
 
