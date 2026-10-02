@@ -4,9 +4,12 @@ import { useTranslation } from "react-i18next";
 import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "../components/CheckoutSummary";
+import CheckInOutBookingDetailModal from "../components/CheckInOutBookingDetailModal";
+import LateCheckoutPreview, { type LateCheckoutRecord } from "../components/LateCheckoutPreview";
 import DatePickerPopover from "../components/DatePickerPopover";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import EarlyLateStayNotice from "../components/EarlyLateStayNotice";
+import CheckInOutRecordList, { type DailyRecord, type ServiceCharge } from "../components/CheckInOutRecordList";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import {
   useBulkCheckInMutation,
@@ -15,49 +18,20 @@ import {
   useGetTodayCheckOutsQuery,
   type CheckInOutBookingDetail,
 } from "../services/checkInOutApi";
-import { useAppSelector } from "../store/hooks";
-import { useGetRoomMatrixQuery } from "../services/bookingApi";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { useGetBookingsByHotelQuery, useGetRoomMatrixQuery } from "../services/bookingApi";
+import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
+import { bindHotelSocketEvents } from "../lib/socket";
+import { baseApi } from "../services/baseApi";
 import {
   AlertTriangle,
-  CalendarCheck,
   CalendarDays,
   Check,
-  ChevronDown,
-  Clock3,
   CreditCard,
   LogIn,
   LogOut,
   Search,
-  ClipboardCheck,
-  UserRound,
 } from "lucide-react";
-
-type ServiceCharge = { serviceId?: string; name: string; quantity: number; amount: number; usedAt?: string };
-
-type CleaningTask = {
-  room: string;
-  type: string;
-  detail: string;
-  assignee: string;
-};
-type FlowFilter = "all" | "check-in" | "check-out";
-type DailyRecord = {
-  id: string;
-  bookingId?: string;
-  guest: string;
-  phone?: string;
-  room: string;
-  time: string;
-  status: string;
-  flow: "check-in" | "check-out";
-  guests?: number;
-  roomPaid?: boolean;
-  paymentStatus?: string;
-  roomAmount?: number;
-  services?: ServiceCharge[];
-  lateFee?: number;
-  identityNumber?: string;
-};
 
 const toDateParam = (value?: Date) => value
   ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
@@ -69,6 +43,21 @@ const shiftDay = (dateStr: string, delta: number) => {
   return d.toISOString().slice(0, 10);
 };
 
+const formatOverdueDuration = (scheduledValue: string, currentValue: string) => {
+  const scheduledTime = new Date(scheduledValue).getTime();
+  const currentTime = new Date(currentValue).getTime();
+  if (!Number.isFinite(scheduledTime) || !Number.isFinite(currentTime)) return "-";
+
+  const overdueMinutes = Math.max(0, Math.floor((currentTime - scheduledTime) / 60_000));
+  const totalHours = Math.floor(overdueMinutes / 60);
+  const overdueDays = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const minutes = overdueMinutes % 60;
+  if (overdueDays > 0) return `${overdueDays} ngày ${hours} giờ ${minutes} phút`;
+  if (totalHours > 0) return `${totalHours} giờ ${minutes} phút`;
+  return `${minutes} phút`;
+};
+
 const matrixValue = (item: Record<string, unknown>, keys: string[]) => {
   const key = keys.find((candidate) => item[candidate] !== undefined && item[candidate] !== null && item[candidate] !== "");
   return key ? item[key] : undefined;
@@ -77,6 +66,25 @@ const matrixValue = (item: Record<string, unknown>, keys: string[]) => {
 const matrixRoomKey = (item: Record<string, unknown>) => {
   const value = matrixValue(item, ["roomId", "roomID", "room_id", "roomNumber", "roomNo", "roomCode"]);
   return value === undefined ? undefined : String(value);
+};
+
+const collectServiceEntries = (value: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(value)) return value.flatMap(collectServiceEntries);
+  if (!value || typeof value !== "object") return [];
+
+  const service = value as Record<string, unknown>;
+  const nestedService = service.service && typeof service.service === "object"
+    ? service.service as Record<string, unknown>
+    : undefined;
+  const hasServiceId = [service.serviceId, service.serviceID, service.service_id, service.bookingServiceId, service.id, nestedService?.id, nestedService?.serviceId]
+    .some((id) => id !== undefined && id !== null && id !== "");
+  const hasServiceName = [service.name, service.serviceName, service.nameService, nestedService?.name, nestedService?.serviceName]
+    .some((name) => typeof name === "string" && name.trim() !== "");
+  const hasServiceQuantity = [service.quantity, service.serviceQuantity, service.quantityService, service.amount, service.count]
+    .some((quantity) => quantity !== undefined && quantity !== null);
+
+  if (hasServiceId || (hasServiceName && (nestedService || hasServiceQuantity))) return [service];
+  return Object.values(service).flatMap(collectServiceEntries);
 };
 
 type MatrixBusyItem = {
@@ -134,40 +142,83 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
   const identityNumber = String(detail.cccd ?? detail.identityNumber ?? "");
   const timestamp = flow === "check-in" ? detail.checkInTime : detail.checkOutTime;
   const time = timestamp ? new Date(timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "-";
-  const rawServices = detail.bookingServiceResponseForHotel
-    ?? detail.bookingServiceResponsesForHotels
-    ?? detail.bookingServiceDetails
-    ?? detail.services
-    ?? [];
-  const services = rawServices.map((service) => {
-    const serviceId = service.serviceId === undefined ? undefined : String(service.serviceId);
-    const quantity = Number(service.quantity ?? 0);
-    const price = Number(service.price ?? 0);
-    return {
-      serviceId,
-      name: service.name ?? service.serviceName ?? service.nameService ?? (serviceId ? `Dịch vụ #${serviceId}` : "Dịch vụ"),
-      quantity,
-      amount: price * quantity,
-      usedAt: service.usedAt,
-    };
+  const serviceValues = Object.entries(detail)
+    .filter(([key]) => key.toLowerCase().includes("service"))
+    .map(([, value]) => value);
+  const rawServices = serviceValues
+    .map(collectServiceEntries)
+    .find((entries) => entries.length > 0) ?? [];
+  const groupedServices = new Map<string, ServiceCharge>();
+  collectServiceEntries(rawServices).forEach((service) => {
+    const nestedService = service.service && typeof service.service === "object"
+      ? service.service as Record<string, unknown>
+      : {};
+    const rawServiceId = service.serviceId ?? service.serviceID ?? service.service_id ?? service.bookingServiceId ?? nestedService.serviceId ?? nestedService.serviceID ?? nestedService.id ?? service.id;
+    const serviceId = rawServiceId === undefined || rawServiceId === null ? undefined : String(rawServiceId);
+    const name = String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? nestedService.name ?? nestedService.serviceName ?? (serviceId ? `Dịch vụ #${serviceId}` : "Dịch vụ"));
+    const rawQuantity = service.quantity ?? service.serviceQuantity ?? service.quantityService ?? service.amount ?? service.count ?? 1;
+    const parsedQuantity = Number(rawQuantity);
+    const quantity = Number.isFinite(parsedQuantity) ? parsedQuantity : 1;
+    const rawPrice = service.price ?? service.unitPrice ?? service.servicePrice ?? nestedService.price ?? 0;
+    const parsedPrice = Number(rawPrice);
+    const price = Number.isFinite(parsedPrice) ? parsedPrice : 0;
+    const key = serviceId ?? name.toLocaleLowerCase();
+    const existing = groupedServices.get(key);
+    if (existing) {
+      existing.quantity += quantity;
+      existing.amount += price * quantity;
+    } else {
+      groupedServices.set(key, { serviceId, name, quantity, amount: price * quantity, usedAt: typeof service.usedAt === "string" ? service.usedAt : undefined });
+    }
   });
+  const services = [...groupedServices.values()];
   const rawPaymentStatus = detail.paymentStatus ?? detail.bookingPaymentStatus ?? detail.paymentStatusType;
   const paymentStatus = String(rawPaymentStatus ?? "").toUpperCase();
+  const rawRemainingAmount = detail.remainingAmount ?? detail.remainAmount ?? detail.remain;
+  const parsedRemainingAmount = rawRemainingAmount === undefined || rawRemainingAmount === null || rawRemainingAmount === ""
+    ? undefined
+    : Number(rawRemainingAmount);
+  const remainingAmount = parsedRemainingAmount !== undefined && Number.isFinite(parsedRemainingAmount)
+    ? parsedRemainingAmount
+    : undefined;
+  const rawPaidAmount = detail.paidAmount ?? detail.amountPaid ?? detail.totalPaidAmount;
+  const parsedPaidAmount = rawPaidAmount === undefined || rawPaidAmount === null || rawPaidAmount === ""
+    ? undefined
+    : Number(rawPaidAmount);
+  const paidAmount = parsedPaidAmount !== undefined && Number.isFinite(parsedPaidAmount)
+    ? parsedPaidAmount
+    : undefined;
+  const parsedEarlyCheckInFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
+  const earlyCheckInFee = Number.isFinite(parsedEarlyCheckInFee) ? parsedEarlyCheckInFee : 0;
+  const roomAmount = Number(detail.roomSubTotal ?? detail.roomSubtotal ?? detail.roomAmount ?? detail.roomTotal ?? detail.baseRoomPricePerNight ?? detail.roomPrice ?? detail.totalPrice ?? 0);
+  const serviceTotal = services.reduce((total, service) => total + service.amount, 0);
+  const totalAmount = Number(detail.totalPrice ?? roomAmount + serviceTotal) + earlyCheckInFee;
   const paidValue = detail.roomPaid ?? detail.isPaid ?? detail.paid;
-  const roomPaid = typeof paidValue === "boolean"
-    ? paidValue
-    : ["PAID", "PAYMENT_COMPLETED", "COMPLETED", "DA_THANH_TOAN"].includes(paymentStatus);
+  const roomPaid = remainingAmount !== undefined
+    ? remainingAmount <= 0
+    : paidAmount !== undefined
+      ? paidAmount >= totalAmount
+    : typeof paidValue === "boolean"
+      ? paidValue
+      : ["PAID", "PAYMENT_COMPLETED", "COMPLETED", "DA_THANH_TOAN"].includes(paymentStatus);
   return {
     id: String(detail.bookingDetailId ?? `${detail.bookingId ?? "booking"}-${roomNumber}`),
     bookingId: detail.bookingId,
     guest: customerName,
+    phone: String(detail.phone ?? detail.phoneNumber ?? detail.customerPhone ?? ""),
     room: `${roomNumber} · ${detail.roomName ?? detail.roomTypeName ?? "Phòng"}`,
     time,
+    checkInAt: detail.checkInTime,
+    checkOutAt: detail.checkOutTime,
     status: flow === "check-in" ? "Chờ check-in" : "Đang ở",
     flow,
     guests: Number(detail.numAdults ?? 0) + Number(detail.numChildren ?? 0) + Number(detail.numInfants ?? 0),
-    roomAmount: Number(detail.roomSubTotal ?? detail.baseRoomPricePerNight ?? detail.totalPrice ?? 0),
+    roomAmount,
+    totalAmount,
+    earlyCheckInFee,
     roomPaid,
+    paidAmount,
+    remainingAmount,
     paymentStatus: paymentStatus || undefined,
     services,
     identityNumber,
@@ -189,12 +240,14 @@ type RoomDetail = {
 
 export default function CheckInOutWorkspace() {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const employeeId = useAppSelector((state) => state.auth.employeeId);
+  const dispatch = useAppDispatch();
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
-  const { t, i18n } = useTranslation();
-  const [flowFilter, setFlowFilter] = useState<FlowFilter>("all");
+  const [modifyBooking] = useModifyBookingMutation();
+  const { t } = useTranslation();
+  const [activeFlow, setActiveFlow] = useState<DailyRecord["flow"]>("check-in");
   const [query, setQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
-  const currentDate = new Date().toLocaleDateString(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const date = toDateParam(selectedDate);
   const checkInQuery = useGetTodayCheckInsQuery(
     { date, status: "PENDING", bookingStatus: "CONFIRMED" },
@@ -202,6 +255,21 @@ export default function CheckInOutWorkspace() {
   const checkOutQuery = useGetTodayCheckOutsQuery(
     { date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
   );
+  const { data: hotelBookings = [] } = useGetBookingsByHotelQuery(Number(hotelId), {
+    skip: !hotelId || Number.isNaN(Number(hotelId)),
+  });
+  const earlyCheckInFeesByDetailId = useMemo(() => {
+    const fees = new Map<string, number>();
+    hotelBookings.forEach((booking) => {
+      (booking.bookingDetails ?? []).forEach((detail) => {
+        const detailId = String(detail.bookingDetailId ?? detail.bookingDetailID ?? detail.bookingDetailsId ?? "");
+        const rawFee = detail.earlyCheckInFee ?? detail.earlyCheckinFee;
+        const fee = Number(rawFee ?? 0);
+        if (detailId && Number.isFinite(fee)) fees.set(detailId, fee);
+      });
+    });
+    return fees;
+  }, [hotelBookings]);
 
   const todayStr = date ?? toDateParam(new Date()) ?? new Date().toISOString().slice(0, 10);
   const matrixStart = shiftDay(todayStr, -3);
@@ -263,11 +331,8 @@ export default function CheckInOutWorkspace() {
   });
   const [checkedInGroupRooms, setCheckedInGroupRooms] = useState<string[]>([]);
   const [departureState, setDepartureState] = useState<DailyRecord[]>([]);
-  const [cleaningTasks, setCleaningTasks] = useState<CleaningTask[]>([]);
-  const [pendingCleaning, setPendingCleaning] = useState<{
-    room: string;
-    type: string;
-  } | null>(null);
+  const [lateCheckoutEventRecords, setLateCheckoutEventRecords] = useState<Record<string, LateCheckoutRecord[]>>({});
+  const [bookingDetailRecords, setBookingDetailRecords] = useState<DailyRecord[] | null>(null);
   const [roomPreview, setRoomPreview] = useState<{
     record: DailyRecord;
     detail: RoomDetail;
@@ -303,15 +368,70 @@ export default function CheckInOutWorkspace() {
   const [serviceSelectorRooms, setServiceSelectorRooms] = useState<Array<{ id: string; type: string; guests: number; price: number }>>([]);
   const [serviceModalMode, setServiceModalMode] = useState<"all" | "per-room">("per-room");
   const [serviceAllSelections, setServiceAllSelections] = useState<ServiceSelection[]>([]);
+  const [serviceRecordIdsByRoom, setServiceRecordIdsByRoom] = useState<Record<string, string> | null>(null);
   const [recordServices, setRecordServices] = useState<Record<string, ServiceCharge[]>>({});
+  const [checkoutClock, setCheckoutClock] = useState(() => Date.now());
 
   useEffect(() => {
-    if (checkInQuery.data) setArrivalState(checkInQuery.data.map((detail) => mapCheckInOutRecord(detail, "check-in")));
-  }, [checkInQuery.data]);
+    const timer = window.setInterval(() => setCheckoutClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
-    if (checkOutQuery.data) setDepartureState(checkOutQuery.data.map((detail) => mapCheckInOutRecord(detail, "check-out")));
-  }, [checkOutQuery.data]);
+    if (checkInQuery.data) {
+      setArrivalState(checkInQuery.data.map((detail) => {
+        const record = mapCheckInOutRecord(detail, "check-in");
+        return { ...record, earlyCheckInFee: earlyCheckInFeesByDetailId.get(record.id) ?? record.earlyCheckInFee };
+      }));
+    }
+  }, [checkInQuery.data, earlyCheckInFeesByDetailId]);
+
+  useEffect(() => {
+    if (checkOutQuery.data) {
+      setDepartureState(checkOutQuery.data.map((detail) => {
+        const record = mapCheckInOutRecord(detail, "check-out");
+        return { ...record, earlyCheckInFee: earlyCheckInFeesByDetailId.get(record.id) ?? record.earlyCheckInFee };
+      }));
+    }
+  }, [checkOutQuery.data, earlyCheckInFeesByDetailId]);
+  useEffect(() => {
+    if (!hotelId) return;
+    bindHotelSocketEvents({
+      onLateCheckOutCalendar: (data) => {
+        const notification = data && typeof data === "object" ? data as Record<string, unknown> : {};
+        const bookingId = String(notification.bookingId ?? "");
+        const customerName = String(notification.customerName ?? "Chưa cập nhật");
+        const lateRoomDetails = Array.isArray(notification.lateRoomDetails) ? notification.lateRoomDetails : [];
+        if (bookingId) {
+          const records = lateRoomDetails.flatMap((value): LateCheckoutRecord[] => {
+            if (!value || typeof value !== "object") return [];
+            const detail = value as Record<string, unknown>;
+            const recordId = String(detail.bookingDetailId ?? "");
+            if (!recordId) return [];
+            const scheduledCheckout = String(detail.scheduledCheckOut ?? "");
+            const currentTime = String(detail.currentTime ?? "");
+            const surcharge = Number(detail.currentSurcharge);
+            return [{
+              recordId,
+              room: String(detail.roomNumber ?? "-"),
+              guest: customerName,
+              bookingId,
+              scheduledCheckout,
+              currentTime,
+              overdueDuration: formatOverdueDuration(scheduledCheckout, currentTime),
+              level: String(detail.surchargeLevel ?? "Chưa phân loại"),
+              currentSurcharge: Number.isFinite(surcharge) ? surcharge : undefined,
+            }];
+          });
+          setLateCheckoutEventRecords((current) => ({ ...current, [bookingId]: records }));
+        }
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+      },
+    });
+  }, [dispatch, hotelId]);
+  useEffect(() => {
+    setLateCheckoutEventRecords({});
+  }, [date]);
   const dailyRecords = useMemo<DailyRecord[]>(() => {
     const checkInRecords = arrivalState.map((record) => ({
       ...record,
@@ -325,13 +445,46 @@ export default function CheckInOutWorkspace() {
       a.time.localeCompare(b.time),
     );
   }, [arrivalState, departureState]);
+  const lateCheckoutRecords = useMemo<LateCheckoutRecord[]>(() => {
+    const now = new Date(checkoutClock);
+    const notificationRecords = new Map(
+      Object.values(lateCheckoutEventRecords).flat().map((record) => [record.recordId, record]),
+    );
+    return departureState.flatMap((record) => {
+      if (record.status !== "Đang ở") return [];
+      const notificationRecord = notificationRecords.get(record.id);
+      if (notificationRecord) return [notificationRecord];
+      if (!record.checkOutAt) return [];
+      const scheduledCheckout = new Date(record.checkOutAt);
+      if (Number.isNaN(scheduledCheckout.getTime()) || scheduledCheckout.getTime() >= checkoutClock) return [];
+
+      const currentTime = new Date(checkoutClock).toISOString();
+      const passedDays = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        - new Date(scheduledCheckout.getFullYear(), scheduledCheckout.getMonth(), scheduledCheckout.getDate()).getTime();
+      const level = passedDays > 0 || now.getHours() >= 18
+        ? "Sau 18:00"
+        : now.getHours() >= 15
+          ? "15:00–trước 18:00"
+          : "12:30–15:00";
+
+      return [{
+        recordId: record.id,
+        room: record.room,
+        guest: record.guest,
+        bookingId: String(record.bookingId ?? record.id),
+        scheduledCheckout: record.checkOutAt,
+        currentTime,
+        overdueDuration: formatOverdueDuration(record.checkOutAt, currentTime),
+        level,
+      }];
+    });
+  }, [departureState, checkoutClock, lateCheckoutEventRecords]);
   const filtered = dailyRecords
     .filter((record) => {
       const matchesQuery = `${record.guest} ${record.room}`
         .toLowerCase()
         .includes(query.toLowerCase());
-      const matchesFlow = flowFilter === "all" || record.flow === flowFilter;
-      return matchesQuery && matchesFlow;
+      return matchesQuery && record.flow === activeFlow;
     })
     .sort((a, b) => a.time.localeCompare(b.time));
 
@@ -344,228 +497,48 @@ export default function CheckInOutWorkspace() {
   ).filter((records) => records.length > 1);
   const groupedArrivalIds = new Set(groupedArrivalRecords.flatMap((records) => records.map((record) => record.id)));
 
-  const pendingRecords = filtered.filter(
-    (record) => !groupedArrivalIds.has(record.id) && (record.status === "Chờ check-in" || record.status === "Đang ở"),
-  );
-  const completedRecords = filtered.filter(
-    (record) =>
-      !groupedArrivalIds.has(record.id) && (record.status === "Đã check-in" || record.status === "Đã trả phòng"),
-  );
+  const handleRecordAction = (record: DailyRecord) => {
+    const now = new Date();
+    const [hours, minutes] = record.time.split(":").map(Number);
+    const scheduled = new Date(now);
+    scheduled.setHours(hours, minutes, 0, 0);
+    const isEarly = record.flow === "check-in" && now < scheduled;
+    const isLate = record.flow === "check-out" && now > scheduled;
 
-  const renderRecord = (record: (typeof filtered)[number]) => {
-    const isCheckIn = record.flow === "check-in";
-    const canComplete =
-      (isCheckIn && record.status === "Chờ check-in") ||
-      (!isCheckIn && record.status === "Đang ở");
-    const canUndo =
-      (isCheckIn && record.status === "Đã check-in") ||
-      (!isCheckIn && record.status === "Đã trả phòng");
-    const services = recordServices[record.id] ?? record.services ?? [];
-    const serviceTotal =
-      services.reduce(
-        (total, service) => total + service.amount,
-        0,
-      ) + (record.lateFee || 0);
-    const statusLabel =
-      record.status === "Chờ check-in"
-        ? t("frontDesk.waitingCheckIn")
-        : record.status === "Đang ở"
-          ? "Đang lưu trú"
-          : record.status === "Đã check-in"
-            ? "Đã check-in"
-            : "Đã check-out";
-    const addServiceButton = <button type="button" onClick={() => openServiceSelector(record)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50">Thêm dịch vụ</button>;
-    const matrixConflict = isCheckIn && record.status === "Chờ check-in" ? checkMatrixCheckInConflict(record) : null;
+    if (record.flow === "check-in" && isEarly) {
+      const conflict = checkMatrixCheckInConflict(record);
+      if (conflict) {
+        toast({
+          variant: "destructive",
+          title: "Chặn check-in sớm (Trùng ma trận phòng)",
+          description: conflict.message,
+        });
+        setMatrixBlockedNotice({ roomNumber: conflict.roomNumber, message: conflict.message });
+        return;
+      }
+    }
 
-    return (
-      <article
-        key={record.id}
-        className={`relative mx-4 my-3 flex flex-col gap-4 overflow-hidden rounded-xl border bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
-          matrixConflict ? "border-rose-300 ring-1 ring-rose-200" : isCheckIn ? "border-blue-200" : "border-amber-200"
-        }`}
-      >
-        <span className={`absolute right-0 top-0 h-0 w-0 border-b-28 border-l-28 border-b-transparent ${record.roomPaid ? "border-l-emerald-500" : "border-l-rose-500"}`} title={record.roomPaid ? "Đã thanh toán" : "Chưa thanh toán"} aria-label={record.roomPaid ? "Đã thanh toán" : "Chưa thanh toán"} />
-        <div className="flex items-center gap-3">
-          <div
-            className={`grid h-10 w-10 place-items-center rounded-full ${matrixConflict ? "bg-rose-100 text-rose-700" : isCheckIn ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}
-          >
-            {isCheckIn ? <LogIn size={18} /> : <LogOut size={18} />}
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-slate-500">Tên:</span>
-              <h4 className="text-sm font-bold text-slate-900">{record.guest}</h4>
-              <span className="text-sm text-slate-500">CCCD: <strong className="text-slate-700">{record.identityNumber || "Chưa cập nhật"}</strong></span>
-              {record.roomPaid && (
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  Đã thanh toán tiền phòng
-                </span>
-              )}
-            </div>
-            {matrixConflict && (
-              <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/80 p-2.5 text-xs font-semibold text-rose-800 shadow-2xs">
-                <AlertTriangle size={16} className="shrink-0 text-rose-600" />
-                <span>{matrixConflict.message}</span>
-              </div>
-            )}
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Thông tin phòng</p>
-              <div className="mt-2 grid gap-1.5 text-xs text-slate-500 sm:grid-cols-3">
-                <span>Mã booking: <strong className="text-slate-700">#{record.bookingId ?? record.id}</strong></span>
-                <span>Số phòng: <strong className="text-blue-700">{record.room.split(" · ")[0]}</strong></span>
-                <span>Tổng tiền: <strong className="text-slate-900">{(Number(record.roomAmount ?? 0) + serviceTotal).toLocaleString("vi-VN")}đ</strong></span>
-              </div>
-            </div>
-            {services.length > 0 && (
-              <div className="mt-3 max-w-xl rounded-xl border border-sky-100 bg-sky-50/60 px-3.5 py-3 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-sky-700">Thông tin dịch vụ</p>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-600 shadow-sm">
-                    {services.length} dịch vụ
-                  </span>
-                </div>
-                <div className="mt-2 divide-y divide-sky-100/80">
-                  {services.map((service, index) => (
-                    <div key={`${service.serviceId ?? service.name}-${index}`} className="flex items-center justify-between gap-4 py-1.5 first:pt-0 last:pb-0">
-                      <span className="min-w-0 truncate text-xs text-slate-600">
-                        <span className="font-semibold text-slate-800">{service.name}</span>
-                        <span className="ml-1.5 text-slate-400">x{service.quantity}</span>
-                      </span>
-                      <span className="shrink-0 text-xs font-bold text-sky-700">
-                        {service.amount.toLocaleString("vi-VN")}đ
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {!isCheckIn && serviceTotal > 0 && (
-              <p className="mt-1 text-xs font-semibold text-amber-700">
-                Dịch vụ / phụ thu: {serviceTotal.toLocaleString("vi-VN")}đ
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-4 sm:justify-end">
-          {!isCheckIn && (
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === "Đã check-in" || record.status === "Đã trả phòng" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
-            >
-              {statusLabel}
-            </span>
-          )}
-          {canComplete && (
-            <button
-              onClick={() => {
-                const now = new Date();
-                const [hours, minutes] = record.time.split(":").map(Number);
-                const scheduled = new Date(now);
-                scheduled.setHours(hours, minutes, 0, 0);
-                const isEarly = isCheckIn && now < scheduled;
-                const isLate = !isCheckIn && now > scheduled;
-
-                if (isCheckIn && isEarly) {
-                  const conflict = checkMatrixCheckInConflict(record);
-                  if (conflict) {
-                    toast({
-                      variant: "destructive",
-                      title: "Chặn check-in sớm (Trùng ma trận phòng)",
-                      description: conflict.message,
-                    });
-                    setMatrixBlockedNotice({
-                      roomNumber: conflict.roomNumber,
-                      message: conflict.message,
-                    });
-                    return;
-                  }
-                }
-
-                if (isLate || isEarly) {
-                  setWarningAction({ id: record.id, flow: record.flow, fee: isEarly ? 150000 : 200000, message: isEarly ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.` : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.` });
-                } else if (isCheckIn) {
-                  void handleBulkCheckIn([record]);
-                } else {
-                  setCheckoutRecord(record);
-                }
-              }}
-              className={`flex w-36 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:shadow-md ${
-                matrixConflict ? "bg-rose-600 hover:bg-rose-700" : isCheckIn ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"
-              }`}
-            >
-              {isCheckIn ? "Check-in" : "Check-out"}
-            </button>
-          )}
-          {isCheckIn && record.status === "Chờ check-in" && addServiceButton}
-          {!isCheckIn && record.status === "Đang ở" && addServiceButton}
-          {canUndo && (
-            <button
-              type="button"
-              onClick={() => {
-                if (isCheckIn) {
-                  setArrivalState((current) =>
-                    current.map((item) =>
-                      item.id === record.id ? { ...item, status: "Chờ check-in" } : item,
-                    ),
-                  );
-                } else {
-                  setDepartureState((current) =>
-                    current.map((item) =>
-                      item.id === record.id ? { ...item, status: "Đang ở" } : item,
-                    ),
-                  );
-                }
-              }}
-              className={`w-36 shrink-0 rounded-lg border px-4 py-2.5 text-xs font-bold transition ${isCheckIn ? "border-blue-200 text-blue-700 hover:bg-blue-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}
-            >
-              {isCheckIn ? "Bỏ check-in" : "Bỏ check-out"}
-            </button>
-          )}
-        </div>
-      </article>
-    );
+    if (isLate || isEarly) {
+      setWarningAction({
+        id: record.id,
+        flow: record.flow,
+        fee: isEarly ? Number(record.earlyCheckInFee ?? 0) : 200000,
+        message: isEarly
+          ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.`
+          : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.`,
+      });
+    } else if (record.flow === "check-in") {
+      void handleBulkCheckIn([record]);
+    } else {
+      setCheckoutRecord(record);
+    }
   };
 
-  const renderStatusGroup = (
-    title: string,
-    records: typeof filtered,
-    isCompleted: boolean,
-  ) => {
-    if (records.length === 0) return null;
-    return (
-      <div className="border-b border-slate-100 last:border-0">
-        <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
-            {title} ({records.length})
-          </p>
-          <span
-            className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
-              isCompleted
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-amber-50 text-amber-700"
-            }`}
-          >
-            {isCompleted ? "Đã xử lý" : "Chờ xử lý"}
-          </span>
-        </div>
-        {records.map(renderRecord)}
-      </div>
-    );
-  };
-
-  const assignCleaner = (room: string, assignee: string) => {
-    setCleaningTasks((current) =>
-      current.map((task) =>
-        task.room === room ? { ...task, assignee } : task,
-      ),
-    );
-    if (typeof window !== "undefined") {
-      const stored = window.localStorage.getItem("staywise-cleaning-rooms");
-      const assignments = stored ? JSON.parse(stored) : {};
-      assignments[room] = { status: "Đang dọn", cleaner: assignee };
-      window.localStorage.setItem(
-        "staywise-cleaning-rooms",
-        JSON.stringify(assignments),
-      );
+  const undoRecordAction = (record: DailyRecord) => {
+    if (record.flow === "check-in") {
+      setArrivalState((current) => current.map((item) => item.id === record.id ? { ...item, status: "Chờ check-in" } : item));
+    } else {
+      setDepartureState((current) => current.map((item) => item.id === record.id ? { ...item, status: "Đang ở" } : item));
     }
   };
 
@@ -583,29 +556,11 @@ export default function CheckInOutWorkspace() {
         ),
       );
     } else {
-      const record = departureState.find((item) => item.id === id);
       setDepartureState((current) =>
         current.map((item) =>
           item.id === id ? { ...item, status: "Đã trả phòng" } : item,
         ),
       );
-      if (record) {
-        const [room, type] = record.room.split(" · ");
-        setCleaningTasks((current) =>
-          current.some((task) => task.room === room)
-            ? current
-            : [
-                ...current,
-                {
-                  room,
-                  type,
-                  detail: `Khách vừa trả phòng · ${record.time}`,
-                  assignee: "",
-                },
-              ],
-        );
-        setPendingCleaning({ room, type });
-      }
     }
   };
 
@@ -641,7 +596,7 @@ export default function CheckInOutWorkspace() {
       );
       records.forEach((record) => completeRecord(record.id, "check-in"));
       const first = records[0];
-      const bookingLine = `Mã booking: #${first?.bookingId ?? first?.id ?? "-"}`;
+      const bookingLine = `Mã booking: ${first?.bookingId ?? first?.id ?? "-"}`;
       const guestLine = `Khách hàng: ${first?.guest ?? "-"}`;
 
       toast({
@@ -665,6 +620,17 @@ export default function CheckInOutWorkspace() {
   };
 
   const handleBulkCheckOut = async (records: DailyRecord[]) => {
+    if (records.length === 0) return;
+    const invalidRecord = records.find((record) => !record.bookingId || normalizeDetailId(record.id) === null);
+    if (invalidRecord) {
+      toast({
+        variant: "destructive",
+        title: "Không thể check-out",
+        description: "Thiếu mã booking hoặc mã chi tiết phòng nên chưa gửi được yêu cầu.",
+      });
+      return;
+    }
+
     const grouped = records.reduce<Record<string, string[]>>((result, record) => {
       const detailId = normalizeDetailId(record.id);
       if (!record.bookingId || detailId === null) return result;
@@ -686,6 +652,12 @@ export default function CheckInOutWorkspace() {
       });
     } catch (error) {
       console.error("Bulk check-out failed", error);
+      const responseError = error as { data?: { message?: string; error?: string }; error?: string };
+      toast({
+        variant: "destructive",
+        title: "Check-out thất bại",
+        description: responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? "Không thể hoàn tất check-out. Vui lòng thử lại.",
+      });
     }
   };
 
@@ -743,7 +715,6 @@ export default function CheckInOutWorkspace() {
     }
     setSelectedDepartureIds([]);
     setBatchCheckoutOpen(false);
-    setPendingCleaning(null);
   };
 
   const toggleGroupDepartureRoom = (room: string) => {
@@ -818,15 +789,18 @@ export default function CheckInOutWorkspace() {
     setCheckoutRecord(null);
   };
 
-  const cleaningStaff = useMemo(
-    () => {
-      const assigned = cleaningTasks
-        .map((task) => task.assignee)
-        .filter(Boolean);
-      return assigned.length > 0 ? Array.from(new Set(assigned)) : ["Nhân viên dọn phòng"];
-    },
-    [cleaningTasks],
-  );
+  const handleLateCheckout = (lateCheckout: LateCheckoutRecord) => {
+    const record = departureState.find((item) => item.id === lateCheckout.recordId);
+    if (record) {
+      setCheckoutRecord(record);
+      return;
+    }
+    toast({
+      variant: "destructive",
+      title: "Không tìm thấy booking",
+      description: "Danh sách check-out vừa được cập nhật. Vui lòng thử lại.",
+    });
+  };
 
   const pendingArrivals =
     arrivalState.filter((item) => item.status === "Chờ check-in").length +
@@ -835,22 +809,69 @@ export default function CheckInOutWorkspace() {
     (item) => item.status === "Đang ở",
   ).length;
 
-  const openServiceSelector = (record: DailyRecord) => {
+  const serviceSelectionsForRecord = (record: DailyRecord) => {
     const currentServices = recordServices[record.id] ?? record.services ?? [];
-    setServiceSelections(currentServices.map((service) => ({
-      serviceId: service.serviceId ?? services.find((item) => item.name === service.name)?.id ?? "",
-      quantity: service.quantity,
-    })).filter((selection) => selection.serviceId));
+    const selectionsByServiceId = new Map<string, ServiceSelection>();
+    currentServices.forEach((service) => {
+      const serviceName = service.name.trim().toLocaleLowerCase();
+      const catalogService = services.find((item) => item.name.trim().toLocaleLowerCase() === serviceName);
+      const serviceId = String(catalogService?.id ?? service.serviceId ?? "");
+      if (!serviceId) return;
+      const existing = selectionsByServiceId.get(serviceId);
+      if (existing) {
+        existing.quantity += service.quantity;
+        existing.originalQuantity = (existing.originalQuantity ?? 0) + service.quantity;
+      } else {
+        selectionsByServiceId.set(serviceId, {
+          serviceId,
+          quantity: service.quantity,
+          originalQuantity: service.quantity,
+          isExisting: true,
+          name: service.name,
+          price: service.quantity > 0 ? service.amount / service.quantity : undefined,
+        });
+      }
+    });
+    return [...selectionsByServiceId.values()];
+  };
+
+  const openServiceSelector = (record: DailyRecord) => {
+    const roomSelections = serviceSelectionsForRecord(record);
+    setServiceSelections(roomSelections);
     const roomId = record.room.split(" · ")[0];
     setServiceSelectorRooms([{ id: roomId, type: record.room.split(" · ")[1] ?? "Phòng", guests: record.guests ?? 1, price: record.roomAmount ?? 0 }]);
-    setServiceRoomSelections({ [roomId]: currentServices.map((service) => ({
-      serviceId: service.serviceId ?? services.find((item) => item.name === service.name)?.id ?? "",
-      quantity: service.quantity,
-      applyToRoom: false,
-    })).filter((selection) => selection.serviceId) });
+    setServiceRoomSelections({ [roomId]: roomSelections.map((selection) => ({ ...selection, applyToRoom: false })) });
+    setServiceRecordIdsByRoom({ [roomId]: record.id });
     setServiceAllSelections([]);
     setServiceModalMode("per-room");
     setServiceRecord(record);
+  };
+
+  const openGroupedRecordsServiceSelector = (records: DailyRecord[]) => {
+    const firstRecord = records[0];
+    if (!firstRecord) return;
+    const selectorRooms = records.map((record) => ({
+      id: record.room.split(" · ")[0],
+      type: record.room.split(" · ")[1] ?? "Phòng",
+      guests: record.guests ?? 1,
+      price: record.roomAmount ?? 0,
+    }));
+    const roomSelections = Object.fromEntries(records.map((record) => {
+      const roomId = record.room.split(" · ")[0];
+      return [roomId, serviceSelectionsForRecord(record).map((selection) => ({ ...selection, applyToRoom: false }))];
+    }));
+    setServiceRecord({
+      ...firstRecord,
+      id: String(firstRecord.bookingId ?? firstRecord.id),
+      room: `${selectorRooms.map((room) => room.id).join(", ")} · Đoàn`,
+      guests: records.reduce((total, record) => total + (record.guests ?? 0), 0),
+    });
+    setServiceSelectorRooms(selectorRooms);
+    setServiceRoomSelections(roomSelections);
+    setServiceRecordIdsByRoom(Object.fromEntries(records.map((record) => [record.room.split(" · ")[0], record.id])));
+    setServiceSelections(Object.values(roomSelections).flat());
+    setServiceAllSelections([]);
+    setServiceModalMode("per-room");
   };
 
   const openGroupServiceSelector = (id: string, guest: string, rooms: string[], guests: number) => {
@@ -858,28 +879,138 @@ export default function CheckInOutWorkspace() {
     const guestsPerRoom = Math.max(1, Math.ceil(guests / rooms.length));
     setServiceSelectorRooms(rooms.map((room) => ({ id: room, type: "Phòng đoàn", guests: guestsPerRoom, price: 0 })));
     setServiceRoomSelections({});
+    setServiceRecordIdsByRoom(null);
     setServiceAllSelections([]);
     setServiceModalMode("per-room");
   };
 
-  const saveRecordServices = () => {
-    if (!serviceRecord) return;
+  const serviceModeSelections = () => {
     const selections = serviceModalMode === "all"
       ? serviceSelectorRooms.flatMap((room) => serviceRoomSelections[room.id] ?? serviceAllSelections.map((selection) => ({ ...selection, quantity: room.guests })))
       : Object.values(serviceRoomSelections).flat().length > 0 ? Object.values(serviceRoomSelections).flat() : serviceSelections;
-    const mergedSelections = selections.reduce<ServiceSelection[]>((current, selection) => {
+    return selections.reduce<ServiceSelection[]>((current, selection) => {
       const existing = current.find((item) => item.serviceId === selection.serviceId);
-      return existing ? current.map((item) => item.serviceId === selection.serviceId ? { ...item, quantity: item.quantity + selection.quantity } : item) : [...current, selection];
+      return existing
+        ? current.map((item) => item.serviceId === selection.serviceId ? { ...item, quantity: item.quantity + selection.quantity } : item)
+        : [...current, selection];
     }, []);
-    setRecordServices((current) => ({
-      ...current,
-      [serviceRecord.id]: mergedSelections.map((selection) => ({
-        serviceId: selection.serviceId,
-        name: services.find((service) => service.id === selection.serviceId)?.name ?? "Dịch vụ",
-        quantity: selection.quantity,
-        amount: (services.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity,
-      })),
+  };
+
+  const saveRecordServices = async () => {
+    if (!serviceRecord) return;
+    const toServiceCharges = (roomSelections: ServiceSelection[]) => roomSelections.map((selection) => ({
+      serviceId: selection.serviceId,
+      name: services.find((service) => service.id === selection.serviceId)?.name ?? "Dịch vụ",
+      quantity: selection.quantity,
+      amount: (selection.price ?? services.find((service) => service.id === selection.serviceId)?.price ?? 0) * selection.quantity,
     }));
+
+    if (!serviceRecordIdsByRoom) {
+      const localSelections = serviceModeSelections();
+      setRecordServices((current) => ({ ...current, [serviceRecord.id]: toServiceCharges(localSelections) }));
+      setServiceRecord(null);
+      return;
+    }
+
+    const linkedRecords = Object.values(serviceRecordIdsByRoom).map((recordId) =>
+      [...arrivalState, ...departureState].find((record) => record.id === recordId),
+    );
+    const bookingId = String(linkedRecords.find((record) => record?.bookingId)?.bookingId ?? serviceRecord.bookingId ?? "");
+    const requestEmployeeId = String(employeeId ?? localStorage.getItem("id") ?? localStorage.getItem("employeeId") ?? "");
+    if (!bookingId || !requestEmployeeId) {
+      toast({
+        variant: "destructive",
+        title: "Không thể cập nhật dịch vụ",
+        description: !bookingId ? "Không tìm thấy mã booking." : "Không tìm thấy mã nhân viên đăng nhập.",
+      });
+      return;
+    }
+
+    const additionsByDetail = new Map<string, ManagementBookingModificationRequest["servicesToAddForExistingRooms"][number]["services"]>();
+    const quantityUpdatesByDetail = new Map<string, ManagementBookingModificationRequest["serviceQuantityUpdates"][number]["services"]>();
+    const updatedServicesByRecordId: Record<string, ServiceCharge[]> = {};
+
+    serviceSelectorRooms.forEach((room) => {
+      const bookingDetailId = serviceRecordIdsByRoom[room.id];
+      const originalRecord = linkedRecords.find((record) => record?.id === bookingDetailId);
+      if (!bookingDetailId || !originalRecord) return;
+
+      const originalSelections = serviceSelectionsForRecord(originalRecord);
+      const selectedForRoom = serviceModalMode === "all"
+        ? serviceRoomSelections[room.id] ?? serviceAllSelections.map((selection) => ({ ...selection, quantity: room.guests }))
+        : serviceRoomSelections[room.id] ?? [];
+      const currentByServiceId = new Map<string, ServiceSelection>();
+      selectedForRoom.forEach((selection) => {
+        const serviceId = String(selection.serviceId ?? "").trim();
+        if (!serviceId || selection.quantity <= 0) return;
+        const existing = currentByServiceId.get(serviceId);
+        if (existing) existing.quantity += selection.quantity;
+        else currentByServiceId.set(serviceId, { ...selection, serviceId });
+      });
+      const originalByServiceId = new Map(originalSelections.map((selection) => [selection.serviceId, selection]));
+
+      currentByServiceId.forEach((selection, serviceId) => {
+        const originalQuantity = originalByServiceId.get(serviceId)?.quantity ?? 0;
+        const addedQuantity = selection.quantity - originalQuantity;
+        if (addedQuantity <= 0) return;
+        const catalogService = services.find((service) => String(service.id) === serviceId);
+        const additions = additionsByDetail.get(bookingDetailId) ?? [];
+        additions.push({
+          serviceId,
+          quantity: addedQuantity,
+          name: selection.name ?? catalogService?.name,
+          price: selection.price ?? catalogService?.price,
+          usedAt: selection.usedAt ?? new Date().toISOString().slice(0, 19),
+        });
+        additionsByDetail.set(bookingDetailId, additions);
+      });
+
+      originalByServiceId.forEach((original, serviceId) => {
+        const currentQuantity = currentByServiceId.get(serviceId)?.quantity ?? 0;
+        if (currentQuantity >= original.quantity) return;
+        const updates = quantityUpdatesByDetail.get(bookingDetailId) ?? [];
+        updates.push({ serviceId, quantity: currentQuantity });
+        quantityUpdatesByDetail.set(bookingDetailId, updates);
+      });
+
+      updatedServicesByRecordId[bookingDetailId] = toServiceCharges([...currentByServiceId.values()]);
+    });
+
+    const servicesToAddForExistingRooms = [...additionsByDetail].map(([bookingDetailId, roomServices]) => ({ bookingDetailId, services: roomServices }));
+    const serviceQuantityUpdates = [...quantityUpdatesByDetail].map(([bookingDetailId, roomServices]) => ({ bookingDetailId, services: roomServices }));
+    if (servicesToAddForExistingRooms.length === 0 && serviceQuantityUpdates.length === 0) {
+      setServiceRecordIdsByRoom(null);
+      setServiceRecord(null);
+      return;
+    }
+
+    const request: ManagementBookingModificationRequest = {
+      employeeId: requestEmployeeId,
+      bookingDetailIdsToCancel: [],
+      servicesToCancel: [],
+      roomsToAdd: [],
+      roomsToChange: [],
+      servicesToAddForExistingRooms,
+      serviceQuantityUpdates,
+      promotionRequest: null,
+      customerPromotionRequest: null,
+    };
+
+    try {
+      await modifyBooking({ bookingId, request }).unwrap();
+      setRecordServices((current) => ({ ...current, ...updatedServicesByRecordId }));
+      toast({ variant: "default", title: "Cập nhật dịch vụ thành công", description: `Dịch vụ đã được cập nhật cho booking ${bookingId}.` });
+    } catch (error) {
+      const responseError = error as { data?: { message?: string; error?: string }; error?: string };
+      toast({
+        variant: "destructive",
+        title: "Cập nhật dịch vụ thất bại",
+        description: responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? "Không thể cập nhật dịch vụ.",
+      });
+      return;
+    }
+
+    setServiceRecordIdsByRoom(null);
     setServiceRecord(null);
   };
 
@@ -905,85 +1036,45 @@ export default function CheckInOutWorkspace() {
 
   return (
     <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
-            <CalendarCheck size={20} />
-          </div>
-          <div>
-            <h3 className="font-bold text-slate-900">
-              {t("frontDesk.todayTitle")}
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              {t("frontDesk.todayDescription")}
-            </p>
-          </div>
+      <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div role="tablist" aria-label="Loại thủ tục" className="flex w-fit shrink-0 gap-5 border-b border-slate-200">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFlow === "check-in"}
+            onClick={() => setActiveFlow("check-in")}
+            className={`flex items-center gap-2 border-b-2 px-2 py-3 text-sm font-semibold transition ${activeFlow === "check-in" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          >
+            <LogIn size={15} />
+            {t("frontDesk.onlyCheckIn")}
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{pendingArrivals}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeFlow === "check-out"}
+            onClick={() => setActiveFlow("check-out")}
+            className={`flex items-center gap-2 border-b-2 px-2 py-3 text-sm font-semibold transition ${activeFlow === "check-out" ? "border-amber-600 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          >
+            <LogOut size={15} />
+            {t("frontDesk.onlyCheckOut")}
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">{pendingDepartures}</span>
+          </button>
         </div>
-        <span className="flex w-fit items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-          <Clock3 size={14} />
-          {currentDate}
-        </span>
-      </div>
-      <div className="border-b border-slate-100 p-4">
-        <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div className="flex items-center justify-between rounded-xl bg-blue-50/70 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <LogIn size={16} className="text-blue-600" />
-                <p className="text-sm font-semibold text-slate-800">
-                  {t("frontDesk.waitingCheckIn")}
-                </p>
-              </div>
-              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-blue-700">
-                {pendingArrivals}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-xl bg-amber-50/70 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <LogOut size={16} className="text-amber-600" />
-                <p className="text-sm font-semibold text-slate-800">
-                  {t("frontDesk.waitingCheckOut")}
-                </p>
-              </div>
-              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-700">
-                {pendingDepartures}
-              </span>
-            </div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="hidden items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-500 xl:flex">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Đã thanh toán đủ</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" />Chưa thanh toán đủ</span>
           </div>
-          <div className="flex items-center gap-2 sm:justify-end">
-            <div className="hidden items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-500 xl:flex">
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Đã thanh toán</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" />Chưa thanh toán</span>
-            </div>
-            <DatePickerPopover
-              value={selectedDate}
-              onChange={setSelectedDate}
-              placeholder="Chọn ngày"
-              buttonClassName="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
-            />
-            <label className="relative flex items-center">
-              <span className="sr-only">
-                {t("frontDesk.filterList", "Filter list type")}
-              </span>
-              <select
-                value={flowFilter}
-                onChange={(event) =>
-                  setFlowFilter(event.target.value as FlowFilter)
-                }
-                className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm font-medium text-slate-700 outline-none focus:border-blue-400 sm:w-52"
-              >
-                <option value="all">{t("frontDesk.allToday")}</option>
-                <option value="check-in">{t("frontDesk.onlyCheckIn")}</option>
-                <option value="check-out">{t("frontDesk.onlyCheckOut")}</option>
-              </select>
-              <ChevronDown
-                size={14}
-                className="pointer-events-none absolute right-3 text-slate-400"
-              />
-            </label>
-          </div>
+          <DatePickerPopover
+            value={selectedDate}
+            onChange={setSelectedDate}
+            placeholder="Chọn ngày"
+            buttonClassName="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+          />
         </div>
       </div>
+      {activeFlow === "check-out" && <LateCheckoutPreview records={lateCheckoutRecords} isLoading={checkOutQuery.isLoading} isError={checkOutQuery.isError} onCheckout={handleLateCheckout} />}
       <div className="border-b border-slate-100 bg-slate-50/60 p-4">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
@@ -1001,32 +1092,33 @@ export default function CheckInOutWorkspace() {
           if (pendingGroup.length === 0) return null;
           const firstRecord = records[0];
           const groupLabel = `${firstRecord.guest} ${firstRecord.bookingId ?? firstRecord.id} ${records.map((record) => record.room).join(" ")}`;
-          if ((flowFilter !== "all" && flowFilter !== "check-in") || !groupLabel.toLowerCase().includes(query.toLowerCase())) return null;
-          const recordIds = records.map((record) => record.id);
+          if (activeFlow !== "check-in" || !groupLabel.toLowerCase().includes(query.toLowerCase())) return null;
           const completedIds = records.filter((record) => record.status === "Đã check-in").map((record) => record.id);
           return (
             <BatchStayCard
               key={`group-${firstRecord.bookingId ?? firstRecord.id}`}
               mode="check-in"
               title={firstRecord.guest}
+              bookingCode={firstRecord.bookingId}
+              identityNumber={firstRecord.identityNumber}
               description={`${records.length} phòng · ${records.reduce((total, record) => total + (record.guests ?? 0), 0)} khách · Nhận lúc ${firstRecord.time}`}
               items={records.map((record) => ({
                 id: record.id,
                 title: record.room,
-                subtitle: `Booking detail #${record.id}`,
+                subtitle: "",
                 status: record.status === "Đã check-in" ? "complete" as const : "pending" as const,
+                roomPaid: record.roomPaid,
               }))}
               selectedIds={completedIds}
               draftSelectedIds={completedIds}
               actionLabel="Check-in các phòng"
               actionCount={pendingGroup.length}
               actionDisabled={false}
-              onAddService={() => openGroupServiceSelector(
-                String(firstRecord.bookingId ?? firstRecord.id),
-                firstRecord.guest,
-                pendingGroup.map((record) => record.room.split(" · ")[0]),
-                pendingGroup.reduce((total, record) => total + (record.guests ?? 0), 0),
-              )}
+              onViewBooking={() => setBookingDetailRecords(records.map((record) => ({
+                ...record,
+                services: recordServices[record.id] ?? record.services,
+              })))}
+              onAddService={() => openGroupedRecordsServiceSelector(records)}
               onAction={async (nextSelected) => {
                 const nextRecords = records.filter((record) => nextSelected.includes(record.id));
                 if (nextRecords.length > 0) {
@@ -1037,7 +1129,7 @@ export default function CheckInOutWorkspace() {
           );
         })}
         {!groupArrivalComplete && groupArrivalState.status === "Chờ check-in" &&
-          (flowFilter === "all" || flowFilter === "check-in") &&
+          activeFlow === "check-in" &&
           `${groupArrivalState.guest} ${groupArrivalState.id} ${groupArrivalState.rooms.join(" ")}`
             .toLowerCase()
             .includes(query.toLowerCase()) && (
@@ -1065,7 +1157,7 @@ export default function CheckInOutWorkspace() {
             />
           )}
         {!groupDepartureComplete && groupDepartureState.status === "Đang ở" &&
-          (flowFilter === "all" || flowFilter === "check-out") &&
+          activeFlow === "check-out" &&
           `${groupDepartureState.guest} ${groupDepartureState.id} ${groupDepartureState.rooms.join(" ")}`
             .toLowerCase()
             .includes(query.toLowerCase()) && (
@@ -1092,10 +1184,16 @@ export default function CheckInOutWorkspace() {
               }}
             />
           )}
-        <>
-          {renderStatusGroup("Chờ xử lý", pendingRecords, false)}
-          {renderStatusGroup("Đã check-in / Đã trả phòng", completedRecords, true)}
-        </>
+        <CheckInOutRecordList
+          records={filtered}
+          groupedRecordIds={groupedArrivalIds}
+          recordServices={recordServices}
+          checkMatrixCheckInConflict={checkMatrixCheckInConflict}
+          onRecordAction={handleRecordAction}
+          onAddService={openServiceSelector}
+          onUndo={undoRecordAction}
+          onViewBooking={(record) => setBookingDetailRecords([{ ...record, services: recordServices[record.id] ?? record.services }])}
+        />
       </div>
       {filtered.length === 0 && (
         <div className="p-8 text-center">
@@ -1103,9 +1201,15 @@ export default function CheckInOutWorkspace() {
             Không có lượt phù hợp trong hôm nay
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            Thử đổi từ khoá tìm kiếm hoặc bộ lọc check-in/check-out.
+            Thử đổi từ khoá tìm kiếm hoặc chuyển sang tab còn lại.
           </p>
         </div>
+      )}
+      {bookingDetailRecords && (
+        <CheckInOutBookingDetailModal
+          records={bookingDetailRecords}
+          onClose={() => setBookingDetailRecords(null)}
+        />
       )}
       {warningAction && (
         <EarlyLateStayNotice
@@ -1185,61 +1289,6 @@ export default function CheckInOutWorkspace() {
           </div>
         </div>
       )}
-      <div className="border-t border-slate-100 bg-slate-50/60 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <ClipboardCheck size={18} className="text-amber-500" />
-              <h3 className="font-bold text-slate-900">
-                {t("frontDesk.cleaningAssignment")}
-              </h3>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {t("frontDesk.cleaningDescription")}
-            </p>
-          </div>
-          <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-            {cleaningTasks.filter((task) => task.assignee).length}/
-            {cleaningTasks.length} {t("frontDesk.assigned")}
-          </span>
-        </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          {cleaningTasks.map((task) => (
-            <div
-              key={task.room}
-              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-bold text-slate-900">
-                    {t("room.roomLabel", "Room")} {task.room}
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">{task.type}</p>
-                </div>
-                <span className="rounded-md bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
-                  {t("frontDesk.needsCleaning")}
-                </span>
-              </div>
-              <p className="mt-3 text-xs text-slate-500">{task.detail}</p>
-              <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-600">
-                <UserRound size={14} className="text-slate-400" />
-                <select
-                  value={task.assignee}
-                  onChange={(event) =>
-                    assignCleaner(task.room, event.target.value)
-                  }
-                  className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-normal outline-none focus:border-blue-400"
-                >
-                  <option value="">{t("frontDesk.chooseEmployee")}</option>
-                  {cleaningStaff.map((employee) => (
-                    <option key={employee}>{employee}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ))}
-        </div>
-      </div>
       {selectingGroupRoom && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
@@ -1578,76 +1627,7 @@ export default function CheckInOutWorkspace() {
           </div>
         </div>
       )}
-      {pendingCleaning && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4"
-          onMouseDown={() => setPendingCleaning(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-amber-600">
-                  Check-out hoàn tất
-                </p>
-                <h3 className="mt-1 text-lg font-bold text-slate-900">
-                  Phân công dọn phòng {pendingCleaning.room}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Chọn một trong hai nhân viên để bắt đầu dọn{" "}
-                  {pendingCleaning.type}.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPendingCleaning(null)}
-                className="text-2xl leading-none text-slate-400"
-              >
-                ×
-              </button>
-            </div>
-            <div className="mt-5 space-y-2">
-              {cleaningStaff.slice(0, 2).map((employee) => (
-                <button
-                  type="button"
-                  key={employee}
-                  onClick={() => {
-                    assignCleaner(pendingCleaning.room, employee);
-                    setPendingCleaning(null);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition hover:border-amber-300 hover:bg-amber-50"
-                >
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">
-                    {employee
-                      .split(" ")
-                      .map((part) => part[0])
-                      .slice(-2)
-                      .join("")}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold text-slate-800">
-                      {employee}
-                    </span>
-                    <span className="mt-0.5 block text-xs text-slate-500">
-                      Housekeeping · Có thể nhận ca
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setPendingCleaning(null)}
-              className="mt-5 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              Để sau
-            </button>
-          </div>
-        </div>
-      )}
-      {checkedInGroupRooms.length > 0 && (flowFilter === "all" || flowFilter === "check-in") && (
+      {checkedInGroupRooms.length > 0 && activeFlow === "check-in" && (
         <div className="border-t border-slate-100 bg-blue-50/40 p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1677,7 +1657,7 @@ export default function CheckInOutWorkspace() {
           </div>
         </div>
       )}
-      {selectedGroupDepartureRooms.length > 0 && (flowFilter === "all" || flowFilter === "check-out") && (
+      {selectedGroupDepartureRooms.length > 0 && activeFlow === "check-out" && (
         <div className="border-t border-slate-100 bg-amber-50/40 p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>

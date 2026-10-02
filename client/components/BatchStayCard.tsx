@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronUp, LogIn, LogOut } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Eye, LogIn, LogOut } from "lucide-react";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "./CheckoutSummary";
 
 type BatchStayItem = {
@@ -9,12 +9,15 @@ type BatchStayItem = {
   subtitle: string;
   status?: string;
   amount?: string;
+  roomPaid?: boolean;
 };
 
 type BatchStayCardProps = {
   mode: "check-in" | "check-out";
   title: string;
   description: string;
+  bookingCode?: string;
+  identityNumber?: string;
   items: BatchStayItem[];
   selectedIds: string[];
   draftSelectedIds?: string[];
@@ -23,10 +26,11 @@ type BatchStayCardProps = {
   actionDisabled?: boolean;
   checkoutSummaryRooms?: CheckoutSummaryRoom[];
   onAddService?: () => void;
+  onViewBooking?: () => void;
   onAction: (selected: string[]) => void;
 };
 
-export default function BatchStayCard({ mode, title, description, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, checkoutSummaryRooms, onAddService, onAction }: BatchStayCardProps) {
+export default function BatchStayCard({ mode, title, description, bookingCode, identityNumber, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, checkoutSummaryRooms, onAddService, onViewBooking, onAction }: BatchStayCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draftSelected, setDraftSelected] = useState<string[]>(draftSelectedIds ?? selectedIds ?? []);
 
@@ -38,6 +42,8 @@ export default function BatchStayCard({ mode, title, description, items, selecte
   const colors = isCheckIn ? { border: "border-blue-200", background: "bg-blue-50/45", icon: "bg-blue-100 text-blue-700", button: "bg-blue-600 hover:bg-blue-700", selected: "border-blue-400 ring-blue-100", hover: "hover:border-blue-300", badge: "bg-blue-50 text-blue-700" } : { border: "border-amber-200", background: "bg-amber-50/45", icon: "bg-amber-100 text-amber-700", button: "bg-amber-600 hover:bg-amber-700", selected: "border-amber-400 ring-amber-100", hover: "hover:border-amber-300", badge: "bg-amber-50 text-amber-700" };
 
   const confirmedIds = new Set(selectedIds ?? []);
+  const paymentStates = items.flatMap((item) => item.roomPaid === undefined ? [] : [item.roomPaid]);
+  const groupRoomPaid = paymentStates.length > 0 ? paymentStates.every(Boolean) : undefined;
   const availableIds = items
     .map((item) => item.id)
     .filter((id) => !confirmedIds.has(id) && !draftSelected.includes(id));
@@ -90,17 +96,28 @@ export default function BatchStayCard({ mode, title, description, items, selecte
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-slate-500">Tên:</span>
-            <h3 className="font-bold text-slate-900">{title}</h3>
+            <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+            {identityNumber && <span className="text-sm text-slate-500">CCCD: <strong className="text-slate-700">{identityNumber}</strong></span>}
           </div>
-          <p className="mt-1 text-sm text-slate-600">{description}</p>
+          {bookingCode && <p className="mt-1 text-sm font-medium text-slate-500">Mã booking: <strong className="text-slate-700">{bookingCode}</strong></p>}
+          <p className={`${bookingCode ? "mt-0.5" : "mt-1"} text-sm text-slate-600`}>{description}</p>
         </div>
       </div>
-      <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-        {onAddService && <button type="button" onClick={onAddService} className="w-56 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-50">Thêm dịch vụ</button>}
-        <button type="button" disabled={actionDisabled ?? availableIds.length === 0} onClick={toggleSelectAll} className={`flex w-56 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}>
+      <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+        {onViewBooking && <button type="button" onClick={onViewBooking} aria-label="Xem chi tiết booking nhóm" title="Xem chi tiết booking" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"><Eye size={16} /></button>}
+        {onAddService && <button type="button" onClick={onAddService} className="inline-flex h-10 w-56 items-center justify-center rounded-lg border border-blue-200 bg-white px-4 text-xs font-bold text-blue-700 hover:bg-blue-50">Thêm dịch vụ</button>}
+        <button type="button" disabled={actionDisabled ?? availableIds.length === 0} onClick={toggleSelectAll} className={`flex h-10 w-56 items-center justify-center gap-1.5 rounded-lg px-4 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}>
           <Check size={14} />
           {actionLabel} ({actionCount ?? availableIds.length})
         </button>
+        {groupRoomPaid !== undefined && (
+          <span
+            role="img"
+            aria-label={groupRoomPaid ? "Cả nhóm đã thanh toán đủ" : "Còn phòng chưa thanh toán đủ"}
+            title={groupRoomPaid ? "Cả nhóm đã thanh toán đủ" : "Còn phòng chưa thanh toán đủ"}
+            className={`h-3 w-3 shrink-0 rounded-full ring-2 ring-white ${groupRoomPaid ? "bg-emerald-500" : "bg-rose-500"}`}
+          />
+        )}
       </div>
     </div>
     {isOpen && (
@@ -119,15 +136,17 @@ export default function BatchStayCard({ mode, title, description, items, selecte
               <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${alreadyConfirmed ? "bg-emerald-100 text-emerald-700" : colors.badge}`}>{item.badge || item.id.slice(-2)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-slate-800">{item.title}</span>
-                <span className="mt-0.5 block truncate text-xs text-slate-500">{item.subtitle}</span>
+                {item.subtitle && <span className="mt-0.5 block truncate text-xs text-slate-500">{item.subtitle}</span>}
               </span>
-              {alreadyConfirmed ? (
-                <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-semibold text-emerald-700">Đã xác nhận</span>
-              ) : isCheckIn ? (
-                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{selected ? "Đã chọn" : "Chờ check-in"}</span>
-              ) : (
-                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{selected ? "Đã chọn" : "Chờ check-out"}</span>
-              )}
+              <span className="ml-auto flex shrink-0 items-center gap-2">
+                {alreadyConfirmed ? (
+                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-semibold text-emerald-700">Đã xác nhận</span>
+                ) : isCheckIn ? (
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{selected ? "Đã chọn" : "Chờ check-in"}</span>
+                ) : (
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{selected ? "Đã chọn" : "Chờ check-out"}</span>
+                )}
+              </span>
             </button>;
             })}
           </div>
@@ -141,7 +160,7 @@ export default function BatchStayCard({ mode, title, description, items, selecte
         <p className="text-xs text-slate-500">
           {hasDraftSelection ? `${selectedCount} phòng đã chọn` : "Chưa chọn phòng nào"}
         </p>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${groupRoomPaid !== undefined ? "pr-5" : ""}`}>
           <button
             type="button"
             disabled={!hasDraftSelection}
@@ -154,7 +173,7 @@ export default function BatchStayCard({ mode, title, description, items, selecte
             type="button"
             disabled={!hasDraftSelection}
             onClick={handleConfirm}
-            className={`flex w-56 shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
+            className={`flex h-10 w-56 shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <Check size={14} />
             {isCheckIn ? "Xác nhận" : "Thanh toán & Check-out"} ({selectedCount})

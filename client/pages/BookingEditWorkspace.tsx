@@ -430,7 +430,7 @@ export default function BookingEditWorkspace() {
       toast({
         variant: "default",
         title: "Cập nhật booking thành công!",
-        description: `Đã lưu các chỉnh sửa phòng và dịch vụ cho booking #${bookingId}.`,
+        description: `Đã lưu các chỉnh sửa phòng và dịch vụ cho booking ${bookingId}.`,
       });
       setSuccess(true);
     } catch (requestError) {
@@ -453,7 +453,7 @@ export default function BookingEditWorkspace() {
   if (success) {
     return (
       <section className="mt-6 rounded-2xl border border-emerald-200 bg-white p-8 text-center">
-        <h2 className="text-lg font-bold text-emerald-700">Cập nhật booking #{booking.bookingId ?? booking.orderId} thành công</h2>
+        <h2 className="text-lg font-bold text-emerald-700">Cập nhật booking {booking.bookingId ?? booking.orderId} thành công</h2>
         <p className="mt-2 text-sm text-slate-600">Mọi thay đổi phòng, dịch vụ và thời gian lưu trú đã được lưu vào hệ thống.</p>
         <button
           type="button"
@@ -469,6 +469,31 @@ export default function BookingEditWorkspace() {
   const displayCustomerName = customerById?.name ?? String(booking.customerName ?? booking.nameCustomer ?? bookingCustomer.name ?? bookingCustomer.fullName ?? "");
   const displayCustomerPhone = customerById?.phone ?? String(booking.customerPhone ?? booking.phone ?? booking.phoneNumber ?? bookingCustomer.phone ?? bookingCustomer.phoneNumber ?? bookingCustomer.customerPhone ?? "");
   const displayCustomerIdentity = customerById?.identityNumber ?? String(booking.customerIdentityNumber ?? booking.identityNumber ?? booking.identityCard ?? bookingCustomer.identityNumber ?? bookingCustomer.identityCard ?? bookingCustomer.identityCardNumber ?? bookingCustomer.citizenId ?? bookingCustomer.cccd ?? "");
+  const bookingDetailsForDiscount = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
+  const readAmount = (item: Record<string, unknown>, keys: string[]) => {
+    const value = keys.map((key) => item[key]).find((candidate) => candidate !== undefined && candidate !== null && candidate !== "");
+    if (value === undefined) return undefined;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? amount : undefined;
+  };
+  const sumDetailAmounts = (keys: string[]) => bookingDetailsForDiscount.reduce((total, detail) => total + (readAmount(detail, keys) ?? 0), 0);
+  const discountRoomAmount = Math.max(
+    readAmount(booking, ["discountRoomAmount", "roomDiscountAmount"]) ?? 0,
+    sumDetailAmounts(["discountRoomAmount", "roomDiscountAmount"]),
+  );
+  const discountServiceAmount = Math.max(
+    readAmount(booking, ["discountServiceAmount", "serviceDiscountAmount"]) ?? 0,
+    sumDetailAmounts(["discountServiceAmount", "serviceDiscountAmount"]),
+  );
+  const discountTotal = Math.max(
+    readAmount(booking, ["discountAmountTotal", "discountTotal", "totalDiscountAmount"]) ?? 0,
+    sumDetailAmounts(["discountAmountTotal", "discountTotal", "totalDiscountAmount"]),
+    discountRoomAmount + discountServiceAmount,
+  );
+  const rawPromotion = booking.promotion ?? booking.promotionInfo ?? booking.customerPromotion ?? booking.appliedPromotion;
+  const promotion = rawPromotion && typeof rawPromotion === "object" ? rawPromotion as Record<string, unknown> : {};
+  const promotionName = String(booking.promotionName ?? booking.customerPromotionName ?? promotion.name ?? "");
+  const promotionCode = String(booking.promotionCode ?? booking.customerPromotionCode ?? promotion.code ?? "");
 
   return (
     <section className="mt-6 space-y-6">
@@ -476,7 +501,7 @@ export default function BookingEditWorkspace() {
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Chỉnh sửa booking #{booking.bookingId ?? booking.orderId}</h2>
+            <h2 className="text-xl font-bold text-slate-900">Chỉnh sửa booking {booking.bookingId ?? booking.orderId}</h2>
             <p className="mt-1 text-sm text-slate-500">
               Quản lý đổi phòng, cập nhật thời gian, thêm/hủy phòng và dịch vụ cho đơn đặt phòng.
             </p>
@@ -508,6 +533,32 @@ export default function BookingEditWorkspace() {
             Căn cước công dân
             <input readOnly value={isCustomerLoading ? "Đang tải..." : displayCustomerIdentity} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
           </label>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 shadow-sm">
+        <h3 className="text-base font-bold text-slate-900">Khuyến mãi và giảm giá hiện tại</h3>
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-xs text-slate-500">Khuyến mãi</p>
+            <p className="mt-0.5 font-semibold text-slate-900">{promotionName || "Không có thông tin"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Mã khuyến mãi</p>
+            <p className="mt-0.5 font-semibold text-slate-900">{promotionCode || "Không có thông tin"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Tổng giảm giá phòng</p>
+            <p className="mt-0.5 font-semibold text-rose-700">{discountRoomAmount.toLocaleString("vi-VN")}đ</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Tổng giảm giá dịch vụ</p>
+            <p className="mt-0.5 font-semibold text-rose-700">{discountServiceAmount.toLocaleString("vi-VN")}đ</p>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-4">
+            <p className="text-xs text-slate-500">Tổng tiền giảm giá</p>
+            <p className="mt-0.5 text-base font-bold text-rose-700">{discountTotal.toLocaleString("vi-VN")}đ</p>
+          </div>
         </div>
       </div>
 

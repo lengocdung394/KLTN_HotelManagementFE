@@ -17,6 +17,8 @@ import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { sumRoomPriceForRange } from "../lib/bookingPricing";
+import { promotionEligibilityMessage } from "../lib/promotionPricing";
+import { calculatePromotionDiscount } from "../lib/promotionPricing";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
@@ -1502,7 +1504,9 @@ export default function BookingWorkspace() {
   }, 0);
   const serviceTotal = calculatedServiceTotal;
   const subtotal = roomTotal + serviceTotal;
-  const discountAmount = appliedPromotion ? Math.round(subtotal * appliedPromotion.value / 100) : 0;
+  const discountAmount = appliedPromotion
+    ? calculatePromotionDiscount(appliedPromotion, roomTotal, serviceTotal, subtotal)
+    : 0;
   const total = subtotal - discountAmount;
   const bookingEstimate = useMemo(() => ({ roomTotal, serviceTotal, subtotal, discountAmount, total }), [roomTotal, serviceTotal, subtotal, discountAmount, total]);
   useEffect(() => {
@@ -1546,8 +1550,18 @@ export default function BookingWorkspace() {
       };
     });
 
-    const cachedRoomTotal = bookingCache.roomTotal;
-    const promotionEligible = Boolean(appliedPromotion) && (!appliedPromotion?.minimumOrderAmount || cachedRoomTotal >= appliedPromotion.minimumOrderAmount);
+    const isPersistedPromotion = Boolean(appliedPromotion && initialBooking && (
+      appliedPromotion.id === initialBooking.promotionId
+      || appliedPromotion.id === initialBooking.customerPromotionId
+      || (appliedPromotion as SelectedPromotion & { customerPromotionId?: string }).customerPromotionId === initialBooking.customerPromotionId
+    ));
+    const promotionEligible = Boolean(appliedPromotion)
+      && !promotionEligibilityMessage(
+        isPersistedPromotion ? { ...appliedPromotion, used: false } : appliedPromotion,
+        subtotal,
+        roomTotal,
+        serviceTotal,
+      );
     const isCustomerPromotion = Boolean((appliedPromotion as SelectedPromotion & { customerId?: string } | null)?.customerId);
 
     const request = {
@@ -1763,6 +1777,12 @@ export default function BookingWorkspace() {
         roomsToChange,
         servicesToAddForExistingRooms,
         serviceQuantityUpdates,
+        promotionRequest: promotionEligible && !isCustomerPromotion && appliedPromotion?.id
+          ? { promotionId: appliedPromotion.id }
+          : null,
+        customerPromotionRequest: promotionEligible && isCustomerPromotion && appliedPromotion?.id
+          ? { customerPromotionId: (appliedPromotion as SelectedPromotion & { customerPromotionId?: string }).customerPromotionId ?? appliedPromotion.id }
+          : null,
       };
 
       console.log("===> [BOOKING WORKSPACE MODIFY PAYLOAD SENT TO BE]:");
@@ -2106,7 +2126,7 @@ export default function BookingWorkspace() {
         </div>
       ) : (
         <div className="grid gap-6 p-5 lg:grid-cols-[1fr_360px]">
-          {step === "promotion" && <PromotionSelector customerId={bookingGuest.customerId} orderTotal={roomTotal} onApply={setAppliedPromotion} onEligibilityChange={setPromotionBlocked} />}
+          {step === "promotion" && <PromotionSelector customerId={bookingGuest.customerId} initialPromotionId={initialBooking?.promotionId} initialCustomerPromotionId={initialBooking?.customerPromotionId} orderTotal={subtotal} roomTotal={roomTotal} serviceTotal={serviceTotal} onApply={setAppliedPromotion} onEligibilityChange={setPromotionBlocked} />}
           <div className={step === "promotion" ? "hidden" : "payment-column"}>
             {false && <div className="payment-heading flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3"><CreditCard size={16} className="text-blue-600" /><div><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-0.5 text-xs text-slate-500">{t("booking.paymentRequired")}</p></div></div>}
             {step === "guest" ? <><div className="mb-4 grid gap-2 sm:grid-cols-2">{selectedRooms.map((room) => <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600"><strong className="text-blue-700">Phòng {room.id}</strong><span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span></div>)}</div><GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} /></> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}

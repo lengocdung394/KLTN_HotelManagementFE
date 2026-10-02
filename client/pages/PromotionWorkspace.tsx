@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Tag, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { useCreatePromotionMutation, useGetPromotionsQuery, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
@@ -30,7 +30,7 @@ const initialForm: PromotionFormValues = {
   description: "",
   type: "TOTAL",
   discountType: "PERCENTAGE",
-  discountValue: "10",
+  discountValue: "",
   maxDiscountAmount: "",
   minBookingValue: "",
   minRoomValue: "",
@@ -90,6 +90,8 @@ const promotionErrorMessage = (error: unknown) => {
   return "Không thể tạo khuyến mãi. Vui lòng thử lại.";
 };
 
+const isPercentageDiscount = (valueType: unknown) => String(valueType ?? "").toUpperCase().includes("PERCENT");
+
 export default function PromotionWorkspace() {
   const { t, i18n } = useTranslation();
   const dispatch = useAppDispatch();
@@ -108,6 +110,7 @@ export default function PromotionWorkspace() {
   const pendingLocalPromotionName = useRef("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [isDateFilterActive, setIsDateFilterActive] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -143,7 +146,7 @@ export default function PromotionWorkspace() {
     const endDate = promotionDateKey(promotion.endDate);
     return startDate && endDate && startDate <= monthEndKey && endDate >= monthStartKey;
   });
-  const visiblePromotions = isDateFilterActive
+  const dateFilteredPromotions = isDateFilterActive
     ? monthlyPromotions.filter((promotion) => {
       const startDate = promotionDateKey(promotion.startDate);
       const endDate = promotionDateKey(promotion.endDate);
@@ -151,6 +154,12 @@ export default function PromotionWorkspace() {
       return startDate <= selectedDateKey && selectedDateKey <= endDate;
     })
     : monthlyPromotions;
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("vi-VN");
+  const visiblePromotions = dateFilteredPromotions.filter((promotion) =>
+    `${promotion.name} ${promotion.code} ${promotion.description} ${promotion.type}`
+      .toLocaleLowerCase("vi-VN")
+      .includes(normalizedSearchQuery),
+  );
   const totalPages = Math.max(1, Math.ceil(visiblePromotions.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedPromotions = visiblePromotions.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -158,7 +167,7 @@ export default function PromotionWorkspace() {
 
   useEffect(() => {
     setPage(1);
-  }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate]);
+  }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate, searchQuery]);
 
   useEffect(() => {
     if (!hasHotelId) return;
@@ -203,8 +212,19 @@ export default function PromotionWorkspace() {
     });
   }, [hotelId, apiPromotions, promotions, displayedPromotions, isError, isLoading]);
   const formatDate = (value: string) => value ? new Date(value).toLocaleDateString("vi-VN") : "Chưa cập nhật";
+  const formatDateTime = (value: string) => {
+    if (!value) return "Chưa cập nhật";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Chưa cập nhật" : date.toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
   const toDateTimeInput = (value: string) => value ? value.replace(" ", "T").slice(0, 16) : "";
-  const formatValue = (promotion: Promotion) => promotion.valueType.toUpperCase().includes("PERCENT") ? `${promotion.value}%` : `${promotion.value.toLocaleString("vi-VN")}đ`;
+  const formatValue = (promotion: Promotion) => isPercentageDiscount(promotion.valueType) ? `${promotion.value}%` : `${promotion.value.toLocaleString("vi-VN")}đ`;
   const copyCode = (code: string) => { navigator.clipboard?.writeText(code); setCopied(code); window.setTimeout(() => setCopied(null), 1500); };
   const label = (key: string, options?: Record<string, string>) => t(`promotion.${key}`, options);
   const openCreatePromotion = () => {
@@ -406,12 +426,18 @@ export default function PromotionWorkspace() {
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
                     {label("discountValue")} <span className="text-rose-500">*</span>
-                    <input required type="number" min="0.01" max={form.discountType === "PERCENTAGE" ? "100" : undefined} step="0.01" value={form.discountValue} onChange={(event) => setForm({ ...form, discountValue: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
+                    <div className="relative mt-1.5">
+                      <input required type="number" min="0.01" max={form.discountType === "PERCENTAGE" ? "100" : undefined} step="0.01" value={form.discountValue} onChange={(event) => setForm({ ...form, discountValue: event.target.value })} className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 text-sm font-normal" />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">{form.discountType === "PERCENTAGE" ? "%" : "đ"}</span>
+                    </div>
                   </label>
-                  <label className="text-sm font-semibold text-slate-700">
-                    {label("maxDiscountAmount")} <span className="text-rose-500">*</span>
-                    <input type="number" min="0" step="0.01" disabled={form.discountType === "FIXED_AMOUNT"} value={form.maxDiscountAmount} onChange={(event) => setForm({ ...form, maxDiscountAmount: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400" />
-                  </label>
+                  {form.discountType === "PERCENTAGE" && <label className="text-sm font-semibold text-slate-700">
+                    {label("maxDiscountAmount")}
+                    <div className="relative mt-1.5">
+                      <input type="number" min="0" step="0.01" value={form.maxDiscountAmount} onChange={(event) => setForm({ ...form, maxDiscountAmount: event.target.value })} className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 text-sm font-normal" />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">đ</span>
+                    </div>
+                  </label>}
                 </div>
               </section>
 
@@ -496,30 +522,61 @@ export default function PromotionWorkspace() {
             {detailPromotion.imageUrl && (
               <img src={detailPromotion.imageUrl} alt={detailPromotion.name} className="mt-5 max-h-56 w-full rounded-lg object-cover" />
             )}
-            <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              {[
-                ["code", detailPromotion.code || label("codeGenerated")],
-                ["status", label(`status${String(detailPromotion.status ?? (detailPromotion.active ? "ACTIVE" : "INACTIVE")).toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
-                ["offerLevel", formatValue(detailPromotion)],
-                ["scope", label(`scope${String(detailPromotion.type ?? "TOTAL").toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
-                ["validity", `${formatDate(detailPromotion.startDate)} – ${formatDate(detailPromotion.endDate)}`],
-                ["maxDiscountAmount", detailPromotion.maxDiscountAmount == null ? "-" : `${detailPromotion.maxDiscountAmount.toLocaleString("vi-VN")}đ`],
-                ["minBookingValue", detailPromotion.minBookingValue == null ? "-" : `${detailPromotion.minBookingValue.toLocaleString("vi-VN")}đ`],
-                ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : `${detailPromotion.minRoomValue.toLocaleString("vi-VN")}đ`],
-                ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : `${detailPromotion.minServiceValue.toLocaleString("vi-VN")}đ`],
-                ["usageLimit", detailPromotion.usageLimit == null ? "-" : detailPromotion.usageLimit.toLocaleString("vi-VN")],
-                ["exclusive", detailPromotion.isExclusive ? label("yes") : label("no")],
-              ].map(([key, value]) => (
+            <div className="mt-5 space-y-4">
+              <section className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+                <h4 className="mb-3 text-sm font-bold text-emerald-900">{label("detailSectionDiscount")}</h4>
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  {[
+                    ["code", detailPromotion.code || label("codeGenerated")],
+                    ["discountType", label(isPercentageDiscount(detailPromotion.valueType) ? "percentage" : "fixedAmount")],
+                    ["offerLevel", formatValue(detailPromotion)],
+                    ...(isPercentageDiscount(detailPromotion.valueType) ? [["maxDiscountAmount", detailPromotion.maxDiscountAmount == null ? "-" : `${detailPromotion.maxDiscountAmount.toLocaleString("vi-VN")}đ`]] : []),
+                  ].map(([key, value]) => (
+                    <div key={key}>
+                      <dt className="text-xs font-semibold text-slate-500">{label(key)}</dt>
+                      <dd className="mt-1 wrap-break-word text-sm font-medium text-slate-900">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+              <section className="rounded-xl border border-slate-200 p-4">
+                <h4 className="mb-3 text-sm font-bold text-slate-900">{label("detailSectionConditions")}</h4>
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  {[
+                    ["scope", label(`scope${String(detailPromotion.type ?? "TOTAL").toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
+                    ["minBookingValue", Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)) > 0 ? `${Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)).toLocaleString("vi-VN")}đ` : "-"],
+                    ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : `${detailPromotion.minRoomValue.toLocaleString("vi-VN")}đ`],
+                    ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : `${detailPromotion.minServiceValue.toLocaleString("vi-VN")}đ`],
+                    ["usageLimit", detailPromotion.usageLimit == null ? "-" : detailPromotion.usageLimit.toLocaleString("vi-VN")],
+                    ["hotelName", detailPromotion.hotelName ?? (detailPromotion.hotelId == null ? "-" : String(detailPromotion.hotelId))],
+                    ["exclusive", detailPromotion.isExclusive ? label("yes") : label("no")],
+                  ].map(([key, value]) => (
+                    <div key={key}>
+                      <dt className="text-xs font-semibold text-slate-500">{label(key)}</dt>
+                      <dd className="mt-1 wrap-break-word text-sm font-medium text-slate-900">{value}</dd>
+                    </div>
+                  ))}
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs font-semibold text-slate-500">{label("description")}</dt>
+                    <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-900">{detailPromotion.description || "-"}</dd>
+                  </div>
+                </dl>
+              </section>
+              <section className="rounded-xl border border-slate-200 p-4">
+                <h4 className="mb-3 text-sm font-bold text-slate-900">{label("detailSectionValidity")}</h4>
+                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                  {[
+                    ["status", label(`status${String(detailPromotion.status ?? (detailPromotion.active ? "ACTIVE" : "INACTIVE")).toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
+                    ["validity", `${formatDateTime(detailPromotion.startDate)} – ${formatDateTime(detailPromotion.endDate)}`],
+                  ].map(([key, value]) => (
                 <div key={key}>
                   <dt className="text-xs font-semibold text-slate-500">{label(key)}</dt>
                   <dd className="mt-1 wrap-break-word text-sm font-medium text-slate-900">{value}</dd>
                 </div>
-              ))}
-              <div className="sm:col-span-2">
-                <dt className="text-xs font-semibold text-slate-500">{label("description")}</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-900">{detailPromotion.description || "-"}</dd>
-              </div>
-            </dl>
+                  ))}
+                </dl>
+              </section>
+            </div>
             <div className="mt-6 flex justify-end">
               <button type="button" onClick={() => setDetailPromotion(null)} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">
                 {label("closeDetails")}
@@ -577,11 +634,25 @@ export default function PromotionWorkspace() {
         </div>
       </section>
       <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-        <div className="border-b border-slate-100 p-5">
-          <h3 className="font-bold text-slate-900">{label("codeList")}</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            {label("codeListDescription")}
-          </p>
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-bold text-slate-900">{label("codeList")}</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {label("codeListDescription")}
+            </p>
+          </div>
+          <label className="relative block w-full sm:max-w-sm">
+            <span className="sr-only">{label("searchPromotion")}</span>
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={label("searchPromotion")}
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+            {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={label("clearSearch")} className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={15} /></button>}
+          </label>
         </div>
         {isLoading ? (
           <p className="p-8 text-center text-sm text-slate-500">
@@ -600,7 +671,7 @@ export default function PromotionWorkspace() {
             Chi nhánh chưa có khuyến mãi.
           </p>
         ) : visiblePromotions.length === 0 ? (
-          <p className="p-8 text-center text-sm text-slate-500">{label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p>
+          <p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery ? label("noPromotionsMatchingSearch") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p>
         ) : (
           <>
             <div className="divide-y divide-slate-100">
@@ -699,7 +770,7 @@ export default function PromotionWorkspace() {
                 <span>
                   {label("showingPromotions", {
                     from: String((safePage - 1) * pageSize + 1),
-                    to: String(Math.min(safePage * pageSize, monthlyPromotions.length)),
+                    to: String(Math.min(safePage * pageSize, visiblePromotions.length)),
                     total: String(visiblePromotions.length),
                   })}
                 </span>

@@ -55,6 +55,14 @@ export type ManagementBookingRoomUpdateRequest = {
   numInfants: number | null;
 };
 
+export type ManagementBookingPromotionRequest = {
+  promotionId: string;
+};
+
+export type ManagementBookingCustomerPromotionRequest = {
+  customerPromotionId: string;
+};
+
 export type ManagementBookingModificationRequest = {
   employeeId: string;
   bookingDetailIdsToCancel: string[];
@@ -63,6 +71,8 @@ export type ManagementBookingModificationRequest = {
   roomsToChange: ManagementBookingRoomUpdateRequest[];
   servicesToAddForExistingRooms: ManagementBookingRoomServiceAddition[];
   serviceQuantityUpdates: ManagementBookingUpdateServiceQuantityRequest[];
+  promotionRequest: ManagementBookingPromotionRequest | null;
+  customerPromotionRequest: ManagementBookingCustomerPromotionRequest | null;
 };
 
 export const managementBookingApi = baseApi.injectEndpoints({
