@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, ChevronLeft, ChevronRight, Copy, Pencil, Plus, Tag } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Tag, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import DatePickerPopover from "../components/DatePickerPopover";
 import { useCreatePromotionMutation, useGetPromotionsQuery, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
@@ -42,12 +43,42 @@ const initialForm: PromotionFormValues = {
 };
 
 const optionalNumber = (value: string) => value.trim() ? Number(value) : undefined;
+const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const promotionDateKey = (value: string) => {
+  const isoDate = value.trim().match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (isoDate) return isoDate;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : dateKey(date);
+};
+
+const isPromotionExpired = (promotion: Promotion) => {
+  const status = String(promotion.status ?? (promotion.active ? "ACTIVE" : "INACTIVE")).toUpperCase();
+  const endDate = new Date(promotion.endDate).getTime();
+  return status === "EXPIRED" || (Number.isFinite(endDate) && endDate < Date.now());
+};
 
 const statusBadgeClass = (promotion: Promotion) => {
   const status = String(promotion.status ?? (promotion.active ? "ACTIVE" : "INACTIVE")).toUpperCase();
   if (status === "ACTIVE") return "bg-emerald-50 text-emerald-700";
   if (status === "DRAFT") return "bg-amber-50 text-amber-700";
   return "bg-slate-100 text-slate-500";
+};
+
+const promotionScopeOf = (promotion: Promotion): PromotionScope => {
+  const scope = String(promotion.type ?? "TOTAL").toUpperCase();
+  return scope === "ROOM" || scope === "SERVICE" || scope === "TOTAL" ? scope : "TOTAL";
+};
+
+const scopeColorClasses: Record<PromotionScope, string> = {
+  ROOM: "bg-blue-50 text-blue-700",
+  SERVICE: "bg-amber-50 text-amber-700",
+  TOTAL: "bg-emerald-50 text-emerald-700",
+};
+
+const scopeLabelKeys: Record<PromotionScope, string> = {
+  ROOM: "scopeRoom",
+  SERVICE: "scopeService",
+  TOTAL: "scopeTotal",
 };
 
 const promotionErrorMessage = (error: unknown) => {
@@ -60,7 +91,7 @@ const promotionErrorMessage = (error: unknown) => {
 };
 
 export default function PromotionWorkspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dispatch = useAppDispatch();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
@@ -69,6 +100,7 @@ export default function PromotionWorkspace() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [detailPromotion, setDetailPromotion] = useState<Promotion | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
   const [form, setForm] = useState<PromotionFormValues>(initialForm);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -76,15 +108,57 @@ export default function PromotionWorkspace() {
   const pendingLocalPromotionName = useRef("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [isDateFilterActive, setIsDateFilterActive] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   const displayedPromotions = promotions.length > 0 ? promotions : apiPromotions;
-  const totalPages = Math.max(1, Math.ceil(displayedPromotions.length / pageSize));
+  const locale = i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN";
+  const monthStartKey = dateKey(calendarMonth);
+  const monthEndKey = dateKey(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0));
+  const promotionDateMarkers = useMemo(() => {
+    const markers: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">> = {};
+    displayedPromotions.forEach((promotion) => {
+      const startDate = promotionDateKey(promotion.startDate);
+      const endDate = promotionDateKey(promotion.endDate);
+      if (!startDate || !endDate || startDate > endDate) return;
+      const scope = String(promotion.type ?? "TOTAL").toUpperCase();
+      if (scope !== "ROOM" && scope !== "SERVICE" && scope !== "TOTAL") return;
+      const cursor = new Date(`${startDate}T00:00:00`);
+      const end = new Date(`${endDate}T00:00:00`);
+      while (cursor <= end) {
+        const key = dateKey(cursor);
+        const dayMarkers = markers[key] ?? [];
+        if (!dayMarkers.includes(scope)) markers[key] = [...dayMarkers, scope];
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+    return markers;
+  }, [displayedPromotions]);
+  const monthlyPromotions = displayedPromotions.filter((promotion) => {
+    const startDate = promotionDateKey(promotion.startDate);
+    const endDate = promotionDateKey(promotion.endDate);
+    return startDate && endDate && startDate <= monthEndKey && endDate >= monthStartKey;
+  });
+  const visiblePromotions = isDateFilterActive
+    ? monthlyPromotions.filter((promotion) => {
+      const startDate = promotionDateKey(promotion.startDate);
+      const endDate = promotionDateKey(promotion.endDate);
+      const selectedDateKey = dateKey(selectedDate);
+      return startDate <= selectedDateKey && selectedDateKey <= endDate;
+    })
+    : monthlyPromotions;
+  const totalPages = Math.max(1, Math.ceil(visiblePromotions.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const paginatedPromotions = displayedPromotions.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paginatedPromotions = visiblePromotions.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const monthLabel = calendarMonth.toLocaleDateString(locale, { month: "long", year: "numeric" });
 
   useEffect(() => {
     setPage(1);
-  }, [displayedPromotions.length, pageSize]);
+  }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate]);
 
   useEffect(() => {
     if (!hasHotelId) return;
@@ -288,7 +362,7 @@ export default function PromotionWorkspace() {
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
                     {label("status")} <span className="text-rose-500">*</span>
-                    <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as PromotionStatus })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal">
+                    <select value={form.status} disabled={Boolean(editingPromotion && isPromotionExpired(editingPromotion))} title={editingPromotion && isPromotionExpired(editingPromotion) ? label("expiredStatusLocked") : undefined} onChange={(event) => setForm({ ...form, status: event.target.value as PromotionStatus })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
                       <option value="DRAFT">{label("statusDraft")}</option>
                       <option value="ACTIVE">{label("statusActive")}</option>
                       <option value="INACTIVE">{label("statusInactive")}</option>
@@ -395,54 +469,110 @@ export default function PromotionWorkspace() {
           </form>
         </div>
       )}
+      {detailPromotion && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="promotion-detail-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="promotion-detail-title" className="text-lg font-bold text-slate-900">
+                  {label("detailTitle")}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">{detailPromotion.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailPromotion(null)}
+                aria-label={t("common.close")}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {detailPromotion.imageUrl && (
+              <img src={detailPromotion.imageUrl} alt={detailPromotion.name} className="mt-5 max-h-56 w-full rounded-lg object-cover" />
+            )}
+            <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              {[
+                ["code", detailPromotion.code || label("codeGenerated")],
+                ["status", label(`status${String(detailPromotion.status ?? (detailPromotion.active ? "ACTIVE" : "INACTIVE")).toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
+                ["offerLevel", formatValue(detailPromotion)],
+                ["scope", label(`scope${String(detailPromotion.type ?? "TOTAL").toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
+                ["validity", `${formatDate(detailPromotion.startDate)} – ${formatDate(detailPromotion.endDate)}`],
+                ["maxDiscountAmount", detailPromotion.maxDiscountAmount == null ? "-" : `${detailPromotion.maxDiscountAmount.toLocaleString("vi-VN")}đ`],
+                ["minBookingValue", detailPromotion.minBookingValue == null ? "-" : `${detailPromotion.minBookingValue.toLocaleString("vi-VN")}đ`],
+                ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : `${detailPromotion.minRoomValue.toLocaleString("vi-VN")}đ`],
+                ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : `${detailPromotion.minServiceValue.toLocaleString("vi-VN")}đ`],
+                ["usageLimit", detailPromotion.usageLimit == null ? "-" : detailPromotion.usageLimit.toLocaleString("vi-VN")],
+                ["exclusive", detailPromotion.isExclusive ? label("yes") : label("no")],
+              ].map(([key, value]) => (
+                <div key={key}>
+                  <dt className="text-xs font-semibold text-slate-500">{label(key)}</dt>
+                  <dd className="mt-1 wrap-break-word text-sm font-medium text-slate-900">{value}</dd>
+                </div>
+              ))}
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold text-slate-500">{label("description")}</dt>
+                <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-900">{detailPromotion.description || "-"}</dd>
+              </div>
+            </dl>
+            <div className="mt-6 flex justify-end">
+              <button type="button" onClick={() => setDetailPromotion(null)} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">
+                {label("closeDetails")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 p-5">
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
               <Tag size={20} />
             </div>
             <div>
               <h3 className="font-bold text-slate-900">{label("programs")}</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {label("programsDescription")}
-              </p>
+              <p className="mt-1 text-sm text-slate-500">{label("programsDescription")}</p>
             </div>
           </div>
-          <button
-            onClick={openCreatePromotion}
-            className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"
-          >
-            <Plus size={16} />
-            {label("create")}
+          <button onClick={openCreatePromotion} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white">
+            <Plus size={16} />{label("create")}
           </button>
         </div>
-        <div className="grid gap-4 p-5 sm:grid-cols-3">
-          <div className="rounded-xl bg-blue-50 p-4">
-            <p className="text-xs font-semibold text-blue-700">
-              {label("active")}
-            </p>
-            <p className="mt-2 text-2xl font-bold text-blue-900">
-              {
-                displayedPromotions.filter((promotion) => promotion.active)
-                  .length
-              }
-            </p>
-          </div>
-          <div className="rounded-xl bg-emerald-50 p-4">
-            <p className="text-xs font-semibold text-emerald-700">
-              {label("usesThisMonth")}
-            </p>
-            <p className="mt-2 text-2xl font-bold text-emerald-900">
-              {displayedPromotions.length}
-            </p>
-          </div>
-          <div className="rounded-xl bg-amber-50 p-4">
-            <p className="text-xs font-semibold text-amber-700">
-              {label("guestSavings")}
-            </p>
-            <p className="mt-2 text-2xl font-bold text-amber-900">
-              Chưa có dữ liệu
-            </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4 sm:px-5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div className="flex items-center gap-2">
+              <DatePickerPopover
+                iconOnly
+                value={selectedDate}
+                placeholder={label("selectDate")}
+                onMonthChange={(nextMonth) => {
+                  setCalendarMonth(nextMonth);
+                  setIsDateFilterActive(false);
+                  setPage(1);
+                }}
+                onChange={(nextDate) => {
+                  if (!nextDate) return;
+                  setSelectedDate(nextDate);
+                  setCalendarMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+                  setIsDateFilterActive(true);
+                  setPage(1);
+                }}
+                highlightDates={Object.keys(promotionDateMarkers)}
+                highlightDateMarkers={promotionDateMarkers}
+                buttonClassName="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white p-0 text-slate-700 shadow-2xs outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+              <span className="text-sm font-semibold capitalize text-slate-700">{monthLabel}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-600" aria-label={label("promotionTypes")}>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-600" />{label("scopeRoom")}</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{label("scopeService")}</span>
+              <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-600" />{label("scopeTotal")}</span>
+            </div>
           </div>
         </div>
       </section>
@@ -469,16 +599,20 @@ export default function PromotionWorkspace() {
           <p className="p-8 text-center text-sm text-slate-500">
             Chi nhánh chưa có khuyến mãi.
           </p>
+        ) : visiblePromotions.length === 0 ? (
+          <p className="p-8 text-center text-sm text-slate-500">{label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p>
         ) : (
           <>
             <div className="divide-y divide-slate-100">
-              {paginatedPromotions.map((promotion) => (
+              {paginatedPromotions.map((promotion) => {
+                const scope = promotionScopeOf(promotion);
+                return (
                 <article
                   key={promotion.id}
                   className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                    <div className={`grid h-10 w-10 place-items-center rounded-xl ${scopeColorClasses[scope]}`}>
                       <Tag size={18} />
                     </div>
                     <div>
@@ -486,6 +620,9 @@ export default function PromotionWorkspace() {
                         <h4 className="font-bold text-slate-900">
                           {promotion.name}
                         </h4>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${scopeColorClasses[scope]}`}>
+                          {label(scopeLabelKeys[scope])}
+                        </span>
                         {promotion.code ? (
                           <button
                             type="button"
@@ -508,7 +645,7 @@ export default function PromotionWorkspace() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between gap-5 lg:justify-end">
+                  <div className="flex flex-wrap items-center justify-between gap-3 lg:justify-end">
                     <div>
                       <p className="text-xs text-slate-400">
                         {label("offerLevel")}
@@ -520,19 +657,30 @@ export default function PromotionWorkspace() {
                     <select
                       aria-label={label("changePromotionStatus", { name: promotion.name })}
                       value={promotion.status ?? (promotion.active ? "ACTIVE" : "INACTIVE")}
+                      disabled={isPromotionExpired(promotion)}
+                      title={isPromotionExpired(promotion) ? label("expiredStatusLocked") : undefined}
                       onChange={(event) => {
+                        if (isPromotionExpired(promotion)) return;
                         const status = event.target.value as PromotionStatus;
                         setPromotions(displayedPromotions.map((item) => item.id === promotion.id
                           ? { ...item, status, active: status === "ACTIVE" }
                           : item));
                       }}
-                      className={`rounded-full border-0 px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 ${statusBadgeClass(promotion)}`}
+                      className={`rounded-full border-0 px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 ${statusBadgeClass(promotion)}`}
                     >
                       <option value="DRAFT">{label("statusDraft")}</option>
                       <option value="ACTIVE">{label("statusActive")}</option>
                       <option value="INACTIVE">{label("statusInactive")}</option>
                       <option value="EXPIRED">{label("statusExpired")}</option>
                     </select>
+                    <button
+                      type="button"
+                      onClick={() => setDetailPromotion(promotion)}
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      <Eye size={14} />
+                      {label("viewDetails")}
+                    </button>
                     <button
                       type="button"
                       onClick={() => openEditPromotion(promotion)}
@@ -543,14 +691,17 @@ export default function PromotionWorkspace() {
                     </button>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
-            {displayedPromotions.length > 0 && (
+            {visiblePromotions.length > 0 && (
               <div className="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                 <span>
-                  Hiển thị {(safePage - 1) * pageSize + 1}-
-                  {Math.min(safePage * pageSize, displayedPromotions.length)}{" "}
-                  trên {displayedPromotions.length} khuyến mãi
+                  {label("showingPromotions", {
+                    from: String((safePage - 1) * pageSize + 1),
+                    to: String(Math.min(safePage * pageSize, monthlyPromotions.length)),
+                    total: String(visiblePromotions.length),
+                  })}
                 </span>
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-2">

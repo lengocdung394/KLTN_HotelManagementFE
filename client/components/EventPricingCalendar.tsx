@@ -674,7 +674,12 @@ export default function EventPricingCalendar() {
             <DatePickerPopover
               iconOnly
               value={selectedDate ? new Date(`${selectedDate}T00:00:00`) : undefined}
-              onMonthChange={setCalendarMonth}
+              onMonthChange={(nextMonth) => {
+                setVisibleMonth(nextMonth);
+                setCalendarMonth(nextMonth);
+                setIsDateFilterActive(false);
+                setCurrentPage(0);
+              }}
               onChange={(nextDate) => {
                 if (!nextDate) return;
                 const nextValue = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}-${String(nextDate.getDate()).padStart(2, "0")}`;

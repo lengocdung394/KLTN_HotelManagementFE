@@ -212,6 +212,7 @@
     ,"selectDateAndRoom": "Select dates and rooms"
     ,"bookingInformation": "Booking information"
     ,"changeRoom": "Change room"
+    ,"addAnotherRoom": "Add another room"
     ,"nights": "nights"
     ,"noDateSelected": "No dates selected"
     ,"searchRooms": "Search room number or type"
@@ -221,6 +222,7 @@
     ,"dragToSelectRooms": "Drag vertically to select rooms"
     ,"showFullRooms": "Show fully booked rooms"
     ,"selectedRooms": "Selected"
+    ,"showAllRooms": "Show all rooms"
     ,"rooms": "rooms"
     ,"estimatedTotal": "Estimated total"
     ,"selectDateToAddRoom": "Select dates on the calendar to add another room."
@@ -462,6 +464,11 @@
     "programsDescription": "Create and manage offers for guests at Sen Viet.",
     "create": "Create promotion",
     "edit": "Edit",
+    "viewDetails": "View details",
+    "detailTitle": "Promotion details",
+    "closeDetails": "Close",
+    "yes": "Yes",
+    "no": "No",
     "update": "Save changes",
     "updatedLocally": "Updated in this view; changes have not been saved to the server.",
     "active": "Active",
@@ -469,6 +476,13 @@
     "guestSavings": "Guest savings",
     "codeList": "Promotion code list",
     "codeListDescription": "Track validity and status for each offer.",
+    "calendarTitle": "Promotion calendar",
+    "calendarDescription": "Promotion dates are marked by their applicable scope.",
+    "selectDate": "Choose a promotion date",
+    "promotionTypes": "Promotion types",
+    "noPromotionsThisMonth": "No promotions are active during this month.",
+    "noPromotionsOnDate": "No promotions are active on this date.",
+    "showingPromotions": "Showing {{from}}-{{to}} of {{total}} promotions this month",
     "copied": "Copied",
     "offerLevel": "Offer",
     "paused": "Paused",
@@ -495,6 +509,7 @@
     "statusActive": "Active",
     "statusInactive": "Inactive",
     "statusExpired": "Expired",
+    "expiredStatusLocked": "Expired promotions cannot change status.",
     "exclusive": "Exclusive promotion",
     "image": "Promotion image",
     "fromDate": "Starts at",

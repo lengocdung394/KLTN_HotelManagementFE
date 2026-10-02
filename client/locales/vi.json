@@ -212,6 +212,7 @@
     ,"selectDateAndRoom": "Chọn ngày và phòng"
     ,"bookingInformation": "Thông tin đặt phòng"
     ,"changeRoom": "Đổi phòng"
+    ,"addAnotherRoom": "Chọn thêm phòng"
     ,"nights": "đêm lưu trú"
     ,"noDateSelected": "Chưa chọn ngày"
     ,"searchRooms": "Tìm số hoặc loại phòng"
@@ -221,6 +222,7 @@
     ,"dragToSelectRooms": "Kéo dọc để chọn nhiều phòng"
     ,"showFullRooms": "Hiện cả phòng đã kín"
     ,"selectedRooms": "Đã chọn"
+    ,"showAllRooms": "Xem tất cả phòng"
     ,"rooms": "phòng"
     ,"estimatedTotal": "Tạm tính"
     ,"selectDateToAddRoom": "Chọn ngày trên lịch để thêm phòng khác."
@@ -462,6 +464,11 @@
     "programsDescription": "Tạo và quản lý ưu đãi cho khách lưu trú tại Sen Việt.",
     "create": "Tạo khuyến mãi",
     "edit": "Sửa",
+    "viewDetails": "Xem chi tiết",
+    "detailTitle": "Chi tiết khuyến mãi",
+    "closeDetails": "Đóng",
+    "yes": "Có",
+    "no": "Không",
     "update": "Lưu chỉnh sửa",
     "updatedLocally": "Đã cập nhật trên giao diện; chưa lưu thay đổi lên máy chủ.",
     "active": "Đang hoạt động",
@@ -469,6 +476,13 @@
     "guestSavings": "Tiết kiệm cho khách",
     "codeList": "Danh sách mã khuyến mãi",
     "codeListDescription": "Theo dõi thời hạn và trạng thái từng ưu đãi.",
+    "calendarTitle": "Lịch khuyến mãi",
+    "calendarDescription": "Ngày có khuyến mãi được đánh dấu theo phạm vi áp dụng.",
+    "selectDate": "Chọn ngày khuyến mãi",
+    "promotionTypes": "Loại khuyến mãi",
+    "noPromotionsThisMonth": "Không có khuyến mãi hiệu lực trong tháng này.",
+    "noPromotionsOnDate": "Không có khuyến mãi hiệu lực trong ngày này.",
+    "showingPromotions": "Hiển thị {{from}}-{{to}} trên {{total}} khuyến mãi trong tháng",
     "copied": "Đã sao chép",
     "offerLevel": "Mức ưu đãi",
     "paused": "Tạm dừng",
@@ -495,6 +509,7 @@
     "statusActive": "Đang hoạt động",
     "statusInactive": "Tạm dừng",
     "statusExpired": "Hết hạn",
+    "expiredStatusLocked": "Khuyến mãi đã hết hạn nên không thể đổi trạng thái.",
     "exclusive": "Khuyến mãi độc quyền",
     "image": "Ảnh khuyến mãi",
     "fromDate": "Bắt đầu",

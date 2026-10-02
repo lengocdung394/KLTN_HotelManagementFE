@@ -11,6 +11,7 @@ interface DatePickerPopoverProps {
   align?: "start" | "center" | "end";
   label?: string;
   highlightDates?: Array<Date | string>;
+  highlightDateMarkers?: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">>;
   iconOnly?: boolean;
 }
 
@@ -52,6 +53,7 @@ export default function DatePickerPopover({
   align = "end",
   label,
   highlightDates = [],
+  highlightDateMarkers = {},
   iconOnly = false,
 }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
@@ -177,7 +179,13 @@ export default function DatePickerPopover({
             const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             const isSelected = value && date.toDateString() === value.toDateString();
             const isToday = date.toDateString() === today.toDateString();
-            const isHighlighted = highlightDateKeys.has(dateKey);
+            const markers = [...new Set(highlightDateMarkers[dateKey] ?? [])];
+            const isHighlighted = highlightDateKeys.has(dateKey) || markers.length > 0;
+            const markerColors = {
+              ROOM: "bg-blue-600",
+              SERVICE: "bg-amber-500",
+              TOTAL: "bg-emerald-600",
+            };
 
             return (
               <button
@@ -188,7 +196,7 @@ export default function DatePickerPopover({
                   setPickerMonth(new Date(date.getFullYear(), date.getMonth(), 1));
                   setOpen(false);
                 }}
-                className={`grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
+                className={`relative grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
                   isSelected
                     ? "bg-blue-600 text-white shadow-sm"
                     : isHighlighted
@@ -199,6 +207,13 @@ export default function DatePickerPopover({
                 }`}
               >
                 {day}
+                {markers.length > 0 && (
+                  <span aria-hidden="true" className="absolute bottom-1 flex items-center gap-0.5">
+                    {markers.map((marker) => (
+                      <span key={marker} className={`h-1 w-1 rounded-full ${markerColors[marker]}`} />
+                    ))}
+                  </span>
+                )}
               </button>
             );
           })}
