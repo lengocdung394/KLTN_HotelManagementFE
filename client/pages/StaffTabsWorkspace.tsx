@@ -1,10 +1,11 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CalendarClock, CheckCircle2, Clock3, Plus, UserRound, Users } from "lucide-react";
 import PermissionsWorkspace from "./PermissionsWorkspace";
 import ShiftScheduleWorkspace from "./ShiftScheduleWorkspace";
 import StaffWorkspace from "./StaffWorkspace";
 import EmployeeDirectory from "../components/EmployeeDirectory";
+import { useGetWeeklyScheduleQuery, useAssignBatchShiftsMutation } from "../services/shiftApi";
 
 const staff = [
   { name: "Nguyễn Thị Mai", initials: "MM", role: "Housekeeping", color: "bg-rose-100 text-rose-700" },
@@ -81,6 +82,32 @@ export default function StaffTabsWorkspace({ initialTab = "staff", initialShiftF
   const [formStaff, setFormStaff] = useState("Phạm Ngọc Anh");
   const [formTask, setFormTask] = useState("Trực quầy lễ tân");
 
+  const { data: weeklyData } = useGetWeeklyScheduleQuery({ hotelId: 1 });
+  const [assignBatchShifts] = useAssignBatchShiftsMutation();
+
+  useEffect(() => {
+    if (weeklyData?.days && weeklyData.days.length > 0) {
+      setSchedule((prev) => {
+        const next = { ...prev };
+        weeklyData.days.forEach((day) => {
+          if (next[day.dayKey] && day.assignments && day.assignments.length > 0) {
+            day.assignments.forEach((asgn) => {
+              const r = asgn.role as Role;
+              const s = asgn.shiftType as Shift;
+              if (next[day.dayKey][r] && next[day.dayKey][r][s]) {
+                next[day.dayKey][r][s] = {
+                  staff: asgn.employeeName || next[day.dayKey][r][s].staff,
+                  task: asgn.task || next[day.dayKey][r][s].task,
+                };
+              }
+            });
+          }
+        });
+        return next;
+      });
+    }
+  }, [weeklyData]);
+
   const current = schedule[selectedDay];
   const roleStaff = staff.filter((person) => person.role === formRole);
 
@@ -107,14 +134,42 @@ export default function StaffTabsWorkspace({ initialTab = "staff", initialShiftF
     setSchedule((currentSchedule) => ({ ...currentSchedule, [formDay]: { ...currentSchedule[formDay], [role]: { ...currentSchedule[formDay][role], [shift]: { ...currentSchedule[formDay][role][shift], [field]: value } } } }));
   };
 
-  const saveShift = (event: FormEvent<HTMLFormElement>) => {
+  const saveShift = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSchedule((currentSchedule) => ({
-      ...currentSchedule,
-      [formDay]: { ...currentSchedule[formDay], [formRole]: { ...currentSchedule[formDay][formRole], [formShift]: { staff: formStaff, task: formTask || "Chưa phân công" } } },
-    }));
+    const updatedSchedule = {
+      ...schedule,
+      [formDay]: {
+        ...schedule[formDay],
+        [formRole]: {
+          ...schedule[formDay][formRole],
+          [formShift]: { staff: formStaff, task: formTask || "Chưa phân công" },
+        },
+      },
+    };
+    setSchedule(updatedSchedule);
     setSelectedDay(formDay);
     setShiftFormOpen(false);
+
+    try {
+      const dayAssignments = updatedSchedule[formDay];
+      const shiftsPayload: any[] = [];
+      (["Lễ tân", "Housekeeping"] as Role[]).forEach((role) => {
+        (["Ca sáng", "Ca tối"] as Shift[]).forEach((shift) => {
+          const item = dayAssignments[role][shift];
+          shiftsPayload.push({
+            hotelId: 1,
+            employeeName: item.staff,
+            role,
+            shiftType: shift,
+            task: item.task,
+            workDate: "2026-10-14",
+          });
+        });
+      });
+      await assignBatchShifts({ hotelId: 1, shifts: shiftsPayload }).unwrap();
+    } catch (e) {
+      console.error("Lỗi khi lưu ca trực vào BE:", e);
+    }
   };
 
   return <div className="staff-tabs-workspace mt-6">
