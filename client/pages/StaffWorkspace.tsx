@@ -17,11 +17,12 @@ export default function StaffWorkspace({ schedule, onEdit }: { schedule: Schedul
   const { t } = useTranslation();
   const [selectedDay, setSelectedDay] = useState("mon");
   const selectedDate = week.find(([key]) => key === selectedDay)?.[1] ?? "";
-  const shifts = Object.entries(schedule[selectedDay]).flatMap(([role, roleShifts]) =>
-    Object.entries(roleShifts).map(([shift, assignment]) => ({
+  const daySchedule = schedule?.[selectedDay] || schedule?.["mon"] || {};
+  const shifts = Object.entries(daySchedule).flatMap(([role, roleShifts]) =>
+    Object.entries(roleShifts || {}).map(([shift, assignment]) => ({
       role,
       shift: shift as ShiftName,
-      assignment,
+      assignment: assignment || { staff: "Chưa phân công", task: "Trực ca" },
     })),
   );
   const dayLabel = (key: string) => t(`staff.days.${key}`, key);
