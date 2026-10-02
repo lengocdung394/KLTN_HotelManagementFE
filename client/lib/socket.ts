@@ -38,6 +38,7 @@ type HotelSocketHandlers = {
   onSeasonalRateAnnouncementUpdate?: (data: unknown) => void;
   onPromotionUpdate?: (data: unknown) => void;
   onPromotionCreate?: (data: unknown) => void;
+  onLateCheckOutCalendar?: (data: unknown) => void;
 };
 
 let hotelSocketHandlers: HotelSocketHandlers = {};
@@ -114,6 +115,7 @@ export const bindHotelSocketEvents = ({
   onSeasonalRateAnnouncementUpdate,
   onPromotionUpdate,
   onPromotionCreate,
+  onLateCheckOutCalendar,
 }: HotelSocketHandlers = {}) => {
   hotelSocketHandlers = {
     ...hotelSocketHandlers,
@@ -128,6 +130,7 @@ export const bindHotelSocketEvents = ({
     ...(onSeasonalRateAnnouncementUpdate ? { onSeasonalRateAnnouncementUpdate } : {}),
     ...(onPromotionUpdate ? { onPromotionUpdate } : {}),
     ...(onPromotionCreate ? { onPromotionCreate } : {}),
+    ...(onLateCheckOutCalendar ? { onLateCheckOutCalendar } : {}),
   };
 
   if (!socket) return;
@@ -143,6 +146,7 @@ export const bindHotelSocketEvents = ({
   socket.off(SEASONAL_RATE_UPDATE_EVENT);
   socket.off("update_promotion_notification");
   socket.off("new_promotion_notification");
+  socket.off("late_check_out_calendar");
 
   if (hotelSocketHandlers.onRoomCreated) {
     socket.on("room_create", hotelSocketHandlers.onRoomCreated);
@@ -186,6 +190,10 @@ export const bindHotelSocketEvents = ({
 
   if (hotelSocketHandlers.onPromotionCreate) {
     socket.on("new_promotion_notification", hotelSocketHandlers.onPromotionCreate);
+  }
+
+  if (hotelSocketHandlers.onLateCheckOutCalendar) {
+    socket.on("late_check_out_calendar", hotelSocketHandlers.onLateCheckOutCalendar);
   }
 };
 
@@ -259,6 +267,10 @@ export const initSocket = (token: string | null) => {
 
   socket.on(SEASONAL_RATE_UPDATE_EVENT, (data) => {
     console.log("📢 [Socket] seasonal_rate_announcement_update:", data);
+  });
+
+  socket.on("late_check_out_calendar", (data) => {
+    console.log("📅 [Socket] late_check_out_calendar:", data);
   });
 
   attachHotelSocketHandlers();

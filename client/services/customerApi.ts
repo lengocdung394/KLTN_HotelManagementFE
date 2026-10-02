@@ -35,7 +35,7 @@ const numberOf = (value: unknown) => {
 	return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const normalizeCustomer = (item: ApiCustomer, index: number): CustomerResponse => {
+const normalizeCustomer = (item: ApiCustomer): CustomerResponse => {
 	const visits = numberOf(valueOf(item, ["visits", "visitCount", "totalVisits", "numberOfBookings", "totalBookings"]));
 	const totalSpend = numberOf(valueOf(item, ["totalSpend", "totalSpending", "spending", "totalAmount", "totalSpent"]));
 	const loyaltyTier = valueOf(item, ["loyaltyTier"]);
@@ -47,7 +47,7 @@ const normalizeCustomer = (item: ApiCustomer, index: number): CustomerResponse =
 			? "loyal"
 			: visits >= 4 ? "loyal" : visits > 0 ? "potential" : "new";
 	return {
-		id: String(valueOf(item, ["id", "customerId", "customerID", "userId"]) ?? `customer-${index + 1}`),
+		id: String(valueOf(item, ["id", "customerId", "customerID", "idCustomer"]) ?? ""),
 		name: String(valueOf(item, ["name", "fullName", "customerName"]) ?? "Chưa cập nhật"),
 		phone: String(valueOf(item, ["phone", "phoneNumber", "customerPhone", "mobile", "mobileNumber"]) ?? ""),
 		email: String(valueOf(item, ["email", "emailAddress"]) ?? ""),
@@ -62,7 +62,17 @@ const normalizeCustomer = (item: ApiCustomer, index: number): CustomerResponse =
 
 const getResult = (response: unknown): ApiCustomer[] => {
 	if (Array.isArray(response)) return response as ApiCustomer[];
-	if (response && typeof response === "object" && Array.isArray((response as { result?: unknown }).result)) return (response as { result: ApiCustomer[] }).result;
+	if (!response || typeof response !== "object") return [];
+	const value = response as Record<string, unknown>;
+	for (const key of ["result", "data", "content", "items", "records", "customers", "customerList"]) {
+		if (Array.isArray(value[key])) return value[key] as ApiCustomer[];
+	}
+	for (const key of ["result", "data"]) {
+		if (value[key] && typeof value[key] === "object") {
+			const nestedResult = getResult(value[key]);
+			if (nestedResult.length > 0) return nestedResult;
+		}
+	}
 	return [];
 };
 
@@ -87,7 +97,7 @@ export const customerApi = baseApi.injectEndpoints({
 					name: customer.name,
 					phone: customer.phone,
 					identityNumber: customer.cccd,
-				}, 0);
+				});
 			},
 			providesTags: ["Customer"],
 		}),
@@ -95,7 +105,7 @@ export const customerApi = baseApi.injectEndpoints({
 			query: (request) => ({ url: "/customer/walk-in", method: "POST", data: request }),
 			transformResponse: (response: unknown) => {
 				const value = response && typeof response === "object" && "result" in response ? (response as { result?: unknown }).result : response;
-				return normalizeCustomer((value ?? {}) as ApiCustomer, 0);
+				return normalizeCustomer((value ?? {}) as ApiCustomer);
 			},
 			invalidatesTags: ["Customer"],
 		}),
@@ -103,7 +113,7 @@ export const customerApi = baseApi.injectEndpoints({
 			query: ({ id, request }) => ({ url: `/customer/${encodeURIComponent(id)}`, method: "PUT", data: request }),
 			transformResponse: (response: unknown) => {
 				const value = response && typeof response === "object" && "result" in response ? (response as { result?: unknown }).result : response;
-				return normalizeCustomer((value ?? {}) as ApiCustomer, 0);
+				return normalizeCustomer((value ?? {}) as ApiCustomer);
 			},
 			invalidatesTags: ["Customer"],
 		}),

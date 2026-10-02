@@ -620,21 +620,6 @@ form.max-w-lg label > textarea {
   .promotion-panel .text-blue-700 { color: rgb(4 120 87) !important; }
   .promotion-panel .hover\:bg-blue-50:hover { background-color: rgb(236 253 245) !important; }
 
-  .promotion-panel > div.grid.gap-3.sm\:grid-cols-2 {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .promotion-panel .grid.gap-3 > div > div.mt-2.space-y-2 {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 0.5rem;
-  }
-
-  .promotion-panel .grid.gap-3 > div > div.mt-2.space-y-2 > * {
-    margin-top: 0;
-    min-width: 0;
-  }
-
   section.mt-7.overflow-hidden > div.border-b > div.flex.items-center.gap-2 {
     gap: 0.25rem;
     border: 0;
