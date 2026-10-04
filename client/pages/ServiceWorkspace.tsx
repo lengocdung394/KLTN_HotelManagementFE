@@ -1,14 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
-import { ConciergeBell, Eye, ImagePlus, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
-import { useGetAllServicesQuery, type HotelService } from "../services/serviceApi";
-import { useAppSelector } from "../store/hooks";
+import { ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
+import { downloadServiceTemplate, parseServiceImportArchive } from "../lib/serviceBulkImport";
+import { baseApi } from "../services/baseApi";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import BulkImportDialog from "../components/BulkImportDialog";
+
+const getSaveErrorMessage = (error: unknown) => {
+  if (typeof error === "object" && error !== null && "data" in error) {
+    const data = error.data;
+    if (typeof data === "object" && data !== null && "message" in data && typeof data.message === "string") {
+      return data.message;
+    }
+  }
+  return "Không thể lưu dịch vụ. Vui lòng kiểm tra thông tin hoặc thử lại.";
+};
 
 export default function ServiceWorkspace() {
+  const dispatch = useAppDispatch();
   const [localServices, setLocalServices] = useState<HotelService[]>([]);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, boolean>>({});
   const [detailService, setDetailService] = useState<HotelService | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [newService, setNewService] = useState({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "" });
+  const [editingService, setEditingService] = useState<HotelService | null>(null);
+  const [newService, setNewService] = useState({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [saveError, setSaveError] = useState("");
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkImportProgress, setBulkImportProgress] = useState("");
+  const [createServiceRequest, { isLoading: isCreating }] = useCreateServiceMutation();
+  const [updateServiceRequest, { isLoading: isUpdating }] = useUpdateServiceMutation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -16,6 +38,7 @@ export default function ServiceWorkspace() {
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
   const { data: services = [], isLoading, isError } = useGetAllServicesQuery(hasHotelId ? { hotelId: Number(hotelId), activeOnly: true } : undefined, { skip: !hasHotelId });
   const allServices = useMemo(() => [...services, ...localServices], [services, localServices]);
+  const isSaving = isCreating || isUpdating;
 
   const totalPages = Math.max(1, Math.ceil(allServices.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -37,26 +60,135 @@ export default function ServiceWorkspace() {
     setLocalServices((current) => current.map((service) => service.id === serviceId ? { ...service, active: !service.active } : service));
   };
 
-  const createService = () => {
+  const openCreateForm = () => {
+    setEditingService(null);
+    setSelectedImage(null);
+    setSaveError("");
+    setNewService({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
+    setShowCreate(true);
+  };
+
+  const openEditForm = (service: HotelService) => {
+    setEditingService(service);
+    setSelectedImage(null);
+    setSaveError("");
+    setNewService({
+      name: service.name,
+      detail: service.detail,
+      price: String(service.price),
+      unit: service.unit,
+      category: service.category,
+      imageUrl: service.imageUrl ?? "",
+      active: service.active,
+    });
+    setShowCreate(true);
+  };
+
+  const saveService = async () => {
     const name = newService.name.trim();
     const detail = newService.detail.trim();
     const category = newService.category.trim();
-    const imageUrl = newService.imageUrl.trim();
     const price = Number(newService.price);
-    if (!name || !detail || !category || !Number.isFinite(price) || price < 0) return;
-    const service: HotelService = {
-      id: `local-service-${Date.now()}`,
-      name,
-      detail,
-      price,
-      unit: newService.unit,
-      category,
-      active: true,
-      imageUrl: imageUrl || undefined,
-    };
-    setLocalServices((current) => [...current, service]);
-    setNewService({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "" });
-    setShowCreate(false);
+    if (!name || !detail || !category || !newService.unit || !Number.isFinite(price) || price < 0) {
+      const message = "Vui lòng kiểm tra và điền đầy đủ thông tin hợp lệ.";
+      setSaveError(message);
+      toast({ variant: "destructive", title: "Thông tin chưa hợp lệ", description: message });
+      return;
+    }
+    if (!editingService && !selectedImage) {
+      const message = "Vui lòng tải ảnh dịch vụ lên.";
+      setSaveError(message);
+      toast({ variant: "destructive", title: "Thiếu ảnh dịch vụ", description: message });
+      return;
+    }
+
+    setSaveError("");
+    const service = { name, description: detail, price, unit: newService.unit, category, active: newService.active };
+    const wasEditing = Boolean(editingService);
+    try {
+      if (editingService) {
+        await updateServiceRequest({ id: editingService.id, service, imageFile: selectedImage }).unwrap();
+      } else {
+        await createServiceRequest({ service, imageFile: selectedImage }).unwrap();
+      }
+      setShowCreate(false);
+      setEditingService(null);
+      setSelectedImage(null);
+      setNewService({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
+      toast({
+        variant: wasEditing ? "default" : "checkin",
+        title: wasEditing ? "Cập nhật dịch vụ thành công" : "Thêm dịch vụ thành công",
+        description: wasEditing ? "Thông tin dịch vụ đã được cập nhật." : "Dịch vụ mới đã được thêm vào danh sách.",
+      });
+    } catch (error) {
+      const message = getSaveErrorMessage(error);
+      setSaveError(message);
+      toast({ variant: "destructive", title: wasEditing ? "Cập nhật dịch vụ thất bại" : "Thêm dịch vụ thất bại", description: message });
+    }
+  };
+
+  const importServicesFromFile = async (archiveFile: File) => {
+    setBulkImportProgress("Đang đọc dữ liệu...");
+    try {
+      const { rows, images } = await parseServiceImportArchive(archiveFile);
+      const resolvedRows = rows.map((row) => {
+        const matches = images.get(row.imageFileName.toLocaleLowerCase()) ?? [];
+        if (matches.length !== 1) {
+          throw new Error(
+            matches.length === 0
+              ? `Không tìm thấy ảnh "${row.imageFileName}" (dòng ${row.rowNumber}).`
+              : `Tên ảnh "${row.imageFileName}" bị trùng trong file ZIP (dòng ${row.rowNumber}).`,
+          );
+        }
+        return { row, imageFile: matches[0] };
+      });
+
+      const failures: string[] = [];
+      let successCount = 0;
+      for (let index = 0; index < resolvedRows.length; index += 1) {
+        const { row, imageFile } = resolvedRows[index];
+        setBulkImportProgress(`Đang tải dịch vụ ${index + 1}/${resolvedRows.length}: ${row.name}`);
+        try {
+          await createServiceRequest({
+            service: {
+              name: row.name,
+              description: row.description,
+              price: row.price,
+              unit: row.unit,
+              category: row.category,
+              active: true,
+            },
+            imageFile,
+            skipInvalidation: true,
+          }).unwrap();
+          successCount += 1;
+        } catch {
+          failures.push(`Dòng ${row.rowNumber}: ${row.name}`);
+        }
+      }
+
+      if (successCount > 0) dispatch(baseApi.util.invalidateTags(["Service"]));
+      if (failures.length > 0) {
+        toast({
+          variant: "destructive",
+          title: `Đã nhập ${successCount}/${resolvedRows.length} dịch vụ`,
+          description: `Không nhập được: ${failures.join("; ")}.`,
+        });
+      } else {
+        toast({
+          variant: "checkin",
+          title: "Nhập dịch vụ thành công",
+          description: `Đã thêm ${successCount} dịch vụ từ file Excel.`,
+        });
+      }
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể đọc dữ liệu nhập.";
+      toast({ variant: "destructive", title: "Nhập dịch vụ thất bại", description: message });
+      return false;
+    } finally {
+      setBulkImportProgress("");
+    }
   };
 
   return (
@@ -67,7 +199,16 @@ export default function ServiceWorkspace() {
           <h3 className="mt-2 text-xl font-bold text-slate-900">Danh sách dịch vụ</h3>
           <p className="mt-1 text-sm text-slate-500">Quản lý thông tin và trạng thái dịch vụ của khách sạn.</p>
         </div>
-        <button type="button" onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />Thêm dịch vụ</button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setIsBulkImportOpen(true)}
+            className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
+          >
+            <Upload size={16} />Tải dữ liệu bằng file
+          </button>
+          <button type="button" onClick={openCreateForm} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />Thêm dịch vụ</button>
+        </div>
       </div>
       {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách dịch vụ...</p>}
       {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách dịch vụ.</p>}
@@ -77,11 +218,10 @@ export default function ServiceWorkspace() {
         {paginatedServices.map((service) => {
           const isActive = statusOverrides[service.id] ?? service.active;
           return <article key={service.id} className="rounded-xl border border-blue-200 bg-blue-100/55 p-4 text-left transition hover:border-blue-400 hover:bg-blue-100/80 hover:shadow-sm">
-            {service.imageUrl && <img src={service.imageUrl} alt={service.name} className="mb-4 h-32 w-full rounded-lg object-cover" />}
             <div className="flex items-start justify-between gap-3"><span className="text-sm font-bold text-slate-900">{service.name}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">{service.category}</span></div>
             <p className="mt-2 min-h-10 text-xs leading-5 text-slate-500">{service.detail}</p>
             <div className="mt-4"><span className="text-sm font-bold text-blue-700">{service.price.toLocaleString("vi-VN")}đ <span className="font-normal text-slate-400">/ {service.unit}</span></span></div>
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><button type="button" onClick={() => setDetailService(service)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><Eye size={14} />Xem chi tiết</button><button type="button" onClick={() => toggleServiceStatus(service.id)} className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</button></div>
+            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><div className="flex items-center gap-3"><button type="button" onClick={() => setDetailService(service)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><Eye size={14} />Xem chi tiết</button><button type="button" onClick={() => openEditForm(service)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800"><Pencil size={14} />Chỉnh sửa</button></div><button type="button" onClick={() => toggleServiceStatus(service.id)} className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</button></div>
           </article>;
         })}
       </div>
@@ -127,8 +267,277 @@ export default function ServiceWorkspace() {
           </div>
         </div>
       )}
-      {detailService && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setDetailService(null)}><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Chi tiết dịch vụ</p><h4 className="mt-1 text-xl font-bold text-slate-900">{detailService.name}</h4></div><button type="button" onClick={() => setDetailService(null)} aria-label="Đóng" className="text-slate-400 hover:text-slate-700"><X size={20} /></button></div><dl className="mt-5 space-y-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-slate-500">Mã dịch vụ</dt><dd className="font-semibold text-slate-800">{detailService.id}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Danh mục</dt><dd className="font-semibold text-slate-800">{detailService.category}</dd></div><div className="flex justify-between gap-4"><dt className="text-slate-500">Đơn giá</dt><dd className="font-semibold text-blue-700">{detailService.price.toLocaleString("vi-VN")}đ / {detailService.unit}</dd></div><div className="border-t border-slate-100 pt-3"><dt className="text-slate-500">Mô tả</dt><dd className="mt-1 text-slate-700">{detailService.detail}</dd></div></dl></div></div>}
-      {showCreate && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setShowCreate(false)}><form className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" onSubmit={(event) => { event.preventDefault(); createService(); }} onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Dịch vụ lưu trú</p><h4 className="mt-1 text-xl font-bold text-slate-900">Thêm dịch vụ</h4></div><button type="button" onClick={() => setShowCreate(false)} aria-label="Đóng" className="text-slate-400 hover:text-slate-700"><X size={20} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-slate-700 sm:col-span-2">Tên dịch vụ<input required value={newService.name} onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" /></label><label className="text-sm font-semibold text-slate-700">Giá<input required type="number" min="0" value={newService.price} onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" /></label><label className="text-sm font-semibold text-slate-700">Đơn vị<select value={newService.unit} onChange={(event) => setNewService((current) => ({ ...current, unit: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"><option>lần</option><option>người</option><option>giờ</option><option>ngày</option></select></label><label className="text-sm font-semibold text-slate-700 sm:col-span-2">Danh mục<input value={newService.category} onChange={(event) => setNewService((current) => ({ ...current, category: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" /></label><label className="text-sm font-semibold text-slate-700 sm:col-span-2">Mô tả<textarea value={newService.detail} onChange={(event) => setNewService((current) => ({ ...current, detail: event.target.value }))} rows={3} className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal" /></label></div><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">Hủy</button><button type="submit" className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"><Plus size={15} />Thêm dịch vụ</button></div></form></div>}
+      {detailService && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          onMouseDown={() => setDetailService(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="service-detail-title"
+            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white shadow-[0_25px_80px_rgba(15,23,42,0.3)]"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="relative">
+              {detailService.imageUrl ? (
+                <img
+                  src={detailService.imageUrl}
+                  alt={detailService.name}
+                  className="h-56 w-full object-cover"
+                />
+              ) : (
+                <div className="grid h-44 w-full place-items-center bg-gradient-to-br from-blue-50 via-slate-50 to-indigo-100 text-blue-300">
+                  <ConciergeBell size={52} strokeWidth={1.25} />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/55 via-transparent to-transparent" />
+              <button
+                type="button"
+                onClick={() => setDetailService(null)}
+                aria-label="Đóng chi tiết dịch vụ"
+                className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-slate-600 shadow-sm backdrop-blur transition hover:bg-white hover:text-slate-900"
+              >
+                <X size={18} />
+              </button>
+              <div className="absolute bottom-4 left-5 right-5">
+                <span className="inline-flex rounded-full border border-white/30 bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+                  {detailService.category}
+                </span>
+                <h4 id="service-detail-title" className="mt-2 text-2xl font-bold text-white">
+                  {detailService.name}
+                </h4>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-blue-50 px-4 py-3">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">Đơn giá</p>
+                  <p className="mt-1 text-xl font-bold text-blue-700">
+                    {detailService.price.toLocaleString("vi-VN")}đ
+                    <span className="ml-1 text-sm font-medium text-slate-500">/ {detailService.unit}</span>
+                  </p>
+                </div>
+                <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${detailService.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                  <span className={`h-2 w-2 rounded-full ${detailService.active ? "bg-emerald-500" : "bg-slate-400"}`} />
+                  {detailService.active ? "Đang hoạt động" : "Tạm ngưng"}
+                </span>
+              </div>
+
+              <dl className="mt-5 space-y-4">
+                <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 text-sm">
+                  <dt className="text-slate-500">Mã dịch vụ</dt>
+                  <dd className="font-semibold text-slate-800">{detailService.id}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mô tả dịch vụ</dt>
+                  <dd className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {detailService.detail || "Chưa có mô tả cho dịch vụ này."}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setDetailService(null)}
+                  className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <BulkImportDialog
+        open={isBulkImportOpen}
+        onOpenChange={setIsBulkImportOpen}
+        eyebrow="Nhập hàng loạt"
+        title="Tải dữ liệu dịch vụ"
+        description="Tải file Excel mẫu, điền thông tin, đặt cùng thư mục ảnh vào một thư mục rồi nén thành ZIP."
+        templateLabel="Tải file Excel mẫu"
+        onDownloadTemplate={downloadServiceTemplate}
+        acceptedFileTypes=".zip,application/zip"
+        fileLabel="File ZIP bộ dữ liệu"
+        instructions={
+          <>
+            <p className="font-bold">Cấu trúc ZIP cần có</p>
+            <p>Tạo thư mục gốc tên <strong>dich-vu</strong>, đặt file Excel mẫu đã điền trong đó và tạo thư mục con tên <strong>images</strong> để chứa ảnh. Nén toàn bộ thư mục <strong>dich-vu</strong> thành ZIP rồi tải lên.</p>
+            <p className="mt-2">Cột “Tên file ảnh” phải trùng với tên file trong thư mục images, ví dụ <strong>massage.jpg</strong>. Các cột gồm: Tên dịch vụ, Mô tả, Giá, Đơn vị, Danh mục, Tên file ảnh.</p>
+          </>
+        }
+        uploadLabel="Nhập dịch vụ"
+        progress={bulkImportProgress}
+        onUpload={importServicesFromFile}
+      />
+      {showCreate && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 p-4" onMouseDown={() => setShowCreate(false)}>
+          <form
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_25px_80px_rgba(15,23,42,0.18)]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveService();
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-600">Dịch vụ lưu trú</p>
+                <h4 className="mt-2 text-[28px] font-bold leading-tight text-slate-900">{editingService ? "Chỉnh sửa dịch vụ" : "Thêm dịch vụ"}</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreate(false)}
+                aria-label="Đóng"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                Tên dịch vụ <span className="text-rose-500">*</span>
+                <input
+                  required
+                  value={newService.name}
+                  onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))}
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  placeholder="Nhập tên dịch vụ"
+                />
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Giá <span className="text-rose-500">*</span>
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  value={newService.price}
+                  onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))}
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  placeholder="0"
+                />
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700">
+                Đơn vị <span className="text-rose-500">*</span>
+                <select
+                  required
+                  value={newService.unit}
+                  onChange={(event) => setNewService((current) => ({ ...current, unit: event.target.value }))}
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="lần">lần</option>
+                  <option value="người">người</option>
+                  <option value="giờ">giờ</option>
+                  <option value="ngày">ngày</option>
+                </select>
+              </label>
+
+              <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                Danh mục <span className="text-rose-500">*</span>
+                <select
+                  required
+                  value={newService.category}
+                  onChange={(event) => setNewService((current) => ({ ...current, category: event.target.value }))}
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="Khác">Khác</option>
+                  <option value="Dịch vụ phòng">Dịch vụ phòng</option>
+                  <option value="Thể thao">Thể thao</option>
+                  <option value="Spa">Spa</option>
+                  <option value="Nhà hàng">Nhà hàng</option>
+                  <option value="Điện tử">Điện tử</option>
+                </select>
+              </label>
+
+              <div className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                Hình ảnh {!editingService && <span className="text-rose-500">*</span>}
+
+                <div className="mt-2 flex flex-col gap-3">
+                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100">
+                    <ImagePlus size={16} />
+                    Tải ảnh lên
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        setSelectedImage(file);
+                        setNewService((current) => ({
+                          ...current,
+                          imageUrl: URL.createObjectURL(file),
+                        }));
+                      }}
+                    />
+                  </label>
+
+                  {newService.imageUrl && (
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
+                      <img src={newService.imageUrl} alt="Preview dịch vụ" className="h-28 w-full rounded-lg object-cover" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                Mô tả
+                <textarea
+                  required
+                  value={newService.detail}
+                  onChange={(event) => setNewService((current) => ({ ...current, detail: event.target.value }))}
+                  rows={3}
+                  placeholder="Nhập mô tả dịch vụ"
+                  className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+
+              <div className="sm:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300">
+                  Đang hoạt động
+                  <input
+                    type="checkbox"
+                    checked={newService.active}
+                    onChange={(event) => setNewService((current) => ({ ...current, active: event.target.checked }))}
+                    className="h-5 w-5 rounded border-slate-300 text-blue-600 shadow-sm focus:ring-blue-500"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {saveError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{saveError}</p>}
+
+            <div className="mt-7 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreate(false);
+                  setEditingService(null);
+                  setSelectedImage(null);
+                }}
+                disabled={isSaving}
+                className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {editingService ? <Pencil size={16} /> : <Plus size={16} />}
+                {isSaving ? "Đang lưu..." : editingService ? "Lưu thay đổi" : "Thêm dịch vụ"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }
+   
