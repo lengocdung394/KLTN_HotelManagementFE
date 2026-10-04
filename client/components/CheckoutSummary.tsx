@@ -5,6 +5,8 @@ export type CheckoutSummaryRoom = {
   label: string;
   roomAmount?: number;
   roomPaid?: boolean;
+  bookingId?: string;
+  remainingAmount?: number;
   services?: { name: string; quantity: number; amount: number }[];
   lateFee?: number;
 };
@@ -17,11 +19,21 @@ type CheckoutSummaryProps = {
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")}đ`;
 
 export default function CheckoutSummary({ rooms, compact = false }: CheckoutSummaryProps) {
-  const total = useMemo(() => rooms.reduce((sum, room) => {
-    const roomAmount = room.roomPaid ? 0 : room.roomAmount || 0;
-    const serviceAmount = (room.services || []).reduce((serviceSum, service) => serviceSum + service.amount, 0);
-    return sum + roomAmount + serviceAmount + (room.lateFee || 0);
-  }, 0), [rooms]);
+  const hasRemainingAmount = rooms.some((room) => room.remainingAmount !== undefined);
+  const total = useMemo(() => {
+    const countedBalances = new Set<string>();
+    return rooms.reduce((sum, room) => {
+      if (room.remainingAmount !== undefined && Number.isFinite(room.remainingAmount)) {
+        const balanceKey = room.bookingId ? `booking:${room.bookingId}` : `room:${room.id}`;
+        if (countedBalances.has(balanceKey)) return sum;
+        countedBalances.add(balanceKey);
+        return sum + Math.max(0, room.remainingAmount);
+      }
+      const roomAmount = room.roomPaid ? 0 : room.roomAmount || 0;
+      const serviceAmount = (room.services || []).reduce((serviceSum, service) => serviceSum + service.amount, 0);
+      return sum + roomAmount + serviceAmount + (room.lateFee || 0);
+    }, 0);
+  }, [rooms]);
 
   return <div className={compact ? "space-y-2" : "space-y-3"}>
     {rooms.map((room) => {
@@ -41,7 +53,7 @@ export default function CheckoutSummary({ rooms, compact = false }: CheckoutSumm
       </div>;
     })}
     <div className="flex items-center justify-between border-t border-slate-200 pt-4">
-      <span className="font-bold text-slate-900">Tổng cần thanh toán</span>
+      <span className="font-bold text-slate-900">{hasRemainingAmount ? "Còn phải thanh toán" : "Tổng cần thanh toán"}</span>
       <strong className="text-lg text-blue-700">{formatMoney(total)}</strong>
     </div>
   </div>;

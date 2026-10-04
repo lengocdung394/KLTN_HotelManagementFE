@@ -87,6 +87,19 @@ const collectServiceEntries = (value: unknown): Record<string, unknown>[] => {
   return Object.values(service).flatMap(collectServiceEntries);
 };
 
+const filterCheckInOutRecords = (
+  records: DailyRecord[],
+  query: string,
+  flow: DailyRecord["flow"],
+) => records
+  .filter((record) => {
+    const matchesQuery = `${record.guest} ${record.room}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    return matchesQuery && record.flow === flow;
+  })
+  .sort((a, b) => a.time.localeCompare(b.time));
+
 type MatrixBusyItem = {
   roomKey: string;
   bookingId?: string;
@@ -190,6 +203,11 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     : undefined;
   const parsedEarlyCheckInFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
   const earlyCheckInFee = Number.isFinite(parsedEarlyCheckInFee) ? parsedEarlyCheckInFee : 0;
+  const rawLateFee = detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee;
+  const parsedLateFee = rawLateFee === undefined || rawLateFee === null || rawLateFee === ""
+    ? undefined
+    : Number(rawLateFee);
+  const lateFee = parsedLateFee !== undefined && Number.isFinite(parsedLateFee) ? parsedLateFee : undefined;
   const roomAmount = Number(detail.roomSubTotal ?? detail.roomSubtotal ?? detail.roomAmount ?? detail.roomTotal ?? detail.baseRoomPricePerNight ?? detail.roomPrice ?? detail.totalPrice ?? 0);
   const serviceTotal = services.reduce((total, service) => total + service.amount, 0);
   const totalAmount = Number(detail.totalPrice ?? roomAmount + serviceTotal) + earlyCheckInFee;
@@ -216,6 +234,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     roomAmount,
     totalAmount,
     earlyCheckInFee,
+    lateFee,
     roomPaid,
     paidAmount,
     remainingAmount,
@@ -258,14 +277,29 @@ export default function CheckInOutWorkspace() {
   const { data: hotelBookings = [] } = useGetBookingsByHotelQuery(Number(hotelId), {
     skip: !hotelId || Number.isNaN(Number(hotelId)),
   });
-  const earlyCheckInFeesByDetailId = useMemo(() => {
-    const fees = new Map<string, number>();
+  const checkoutFeesByDetailId = useMemo(() => {
+    const fees = new Map<string, { earlyCheckInFee?: number; lateFee?: number; remainingAmount?: number }>();
     hotelBookings.forEach((booking) => {
+      const rawRemainingAmount = booking.remainingAmount as unknown;
+      const parsedRemainingAmount = rawRemainingAmount === undefined || rawRemainingAmount === null || rawRemainingAmount === ""
+        ? undefined
+        : Number(rawRemainingAmount);
+      const remainingAmount = parsedRemainingAmount !== undefined && Number.isFinite(parsedRemainingAmount)
+        ? parsedRemainingAmount
+        : undefined;
       (booking.bookingDetails ?? []).forEach((detail) => {
         const detailId = String(detail.bookingDetailId ?? detail.bookingDetailID ?? detail.bookingDetailsId ?? "");
-        const rawFee = detail.earlyCheckInFee ?? detail.earlyCheckinFee;
-        const fee = Number(rawFee ?? 0);
-        if (detailId && Number.isFinite(fee)) fees.set(detailId, fee);
+        const rawEarlyFee = detail.earlyCheckInFee ?? detail.earlyCheckinFee;
+        const rawLateFee = detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee;
+        const earlyFee = Number(rawEarlyFee);
+        const lateFee = Number(rawLateFee);
+        if (detailId) {
+          fees.set(detailId, {
+            earlyCheckInFee: Number.isFinite(earlyFee) ? earlyFee : undefined,
+            lateFee: Number.isFinite(lateFee) ? lateFee : undefined,
+            remainingAmount,
+          });
+        }
       });
     });
     return fees;
@@ -381,19 +415,35 @@ export default function CheckInOutWorkspace() {
     if (checkInQuery.data) {
       setArrivalState(checkInQuery.data.map((detail) => {
         const record = mapCheckInOutRecord(detail, "check-in");
-        return { ...record, earlyCheckInFee: earlyCheckInFeesByDetailId.get(record.id) ?? record.earlyCheckInFee };
+        const fees = checkoutFeesByDetailId.get(record.id);
+        const remainingAmount = record.remainingAmount ?? fees?.remainingAmount;
+        return {
+          ...record,
+          earlyCheckInFee: fees?.earlyCheckInFee ?? record.earlyCheckInFee,
+          lateFee: fees?.lateFee ?? record.lateFee,
+          remainingAmount,
+          roomPaid: remainingAmount !== undefined ? remainingAmount <= 0 : record.roomPaid,
+        };
       }));
     }
-  }, [checkInQuery.data, earlyCheckInFeesByDetailId]);
+  }, [checkInQuery.data, checkoutFeesByDetailId]);
 
   useEffect(() => {
     if (checkOutQuery.data) {
       setDepartureState(checkOutQuery.data.map((detail) => {
         const record = mapCheckInOutRecord(detail, "check-out");
-        return { ...record, earlyCheckInFee: earlyCheckInFeesByDetailId.get(record.id) ?? record.earlyCheckInFee };
+        const fees = checkoutFeesByDetailId.get(record.id);
+        const remainingAmount = record.remainingAmount ?? fees?.remainingAmount;
+        return {
+          ...record,
+          earlyCheckInFee: fees?.earlyCheckInFee ?? record.earlyCheckInFee,
+          lateFee: fees?.lateFee ?? record.lateFee,
+          remainingAmount,
+          roomPaid: remainingAmount !== undefined ? remainingAmount <= 0 : record.roomPaid,
+        };
       }));
     }
-  }, [checkOutQuery.data, earlyCheckInFeesByDetailId]);
+  }, [checkOutQuery.data, checkoutFeesByDetailId]);
   useEffect(() => {
     if (!hotelId) return;
     bindHotelSocketEvents({
@@ -453,7 +503,12 @@ export default function CheckInOutWorkspace() {
     return departureState.flatMap((record) => {
       if (record.status !== "Đang ở") return [];
       const notificationRecord = notificationRecords.get(record.id);
-      if (notificationRecord) return [notificationRecord];
+      if (notificationRecord) {
+        return [{
+          ...notificationRecord,
+          currentSurcharge: notificationRecord.currentSurcharge ?? record.lateFee,
+        }];
+      }
       if (!record.checkOutAt) return [];
       const scheduledCheckout = new Date(record.checkOutAt);
       if (Number.isNaN(scheduledCheckout.getTime()) || scheduledCheckout.getTime() >= checkoutClock) return [];
@@ -476,17 +531,11 @@ export default function CheckInOutWorkspace() {
         currentTime,
         overdueDuration: formatOverdueDuration(record.checkOutAt, currentTime),
         level,
+        currentSurcharge: record.lateFee,
       }];
     });
   }, [departureState, checkoutClock, lateCheckoutEventRecords]);
-  const filtered = dailyRecords
-    .filter((record) => {
-      const matchesQuery = `${record.guest} ${record.room}`
-        .toLowerCase()
-        .includes(query.toLowerCase());
-      return matchesQuery && record.flow === activeFlow;
-    })
-    .sort((a, b) => a.time.localeCompare(b.time));
+  const filtered = filterCheckInOutRecords(dailyRecords, query, activeFlow);
 
   const groupedArrivalRecords = Object.values(
     arrivalState.reduce<Record<string, DailyRecord[]>>((groups, record) => {
@@ -498,12 +547,16 @@ export default function CheckInOutWorkspace() {
   const groupedArrivalIds = new Set(groupedArrivalRecords.flatMap((records) => records.map((record) => record.id)));
 
   const handleRecordAction = (record: DailyRecord) => {
+    if (record.flow === "check-out") {
+      setCheckoutRecord(record);
+      return;
+    }
+
     const now = new Date();
     const [hours, minutes] = record.time.split(":").map(Number);
     const scheduled = new Date(now);
     scheduled.setHours(hours, minutes, 0, 0);
-    const isEarly = record.flow === "check-in" && now < scheduled;
-    const isLate = record.flow === "check-out" && now > scheduled;
+    const isEarly = now < scheduled;
 
     if (record.flow === "check-in" && isEarly) {
       const conflict = checkMatrixCheckInConflict(record);
@@ -518,19 +571,15 @@ export default function CheckInOutWorkspace() {
       }
     }
 
-    if (isLate || isEarly) {
+    if (isEarly) {
       setWarningAction({
         id: record.id,
         flow: record.flow,
-        fee: isEarly ? Number(record.earlyCheckInFee ?? 0) : 200000,
-        message: isEarly
-          ? `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.`
-          : `Khách đang check-out trễ hơn giờ dự kiến ${record.time}.`,
+        fee: Number(record.earlyCheckInFee ?? 0),
+        message: `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.`,
       });
     } else if (record.flow === "check-in") {
       void handleBulkCheckIn([record]);
-    } else {
-      setCheckoutRecord(record);
     }
   };
 
@@ -774,11 +823,13 @@ export default function CheckInOutWorkspace() {
     setGroupCheckoutOpen(false);
     if (merged.length === groupDepartureState.rooms.length) setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
   };
-  const checkoutRoomsFromRecords = (records: Array<Pick<DailyRecord, "id" | "guest" | "room" | "roomAmount" | "roomPaid" | "services" | "lateFee">>): CheckoutSummaryRoom[] => records.map((record) => ({
+  const checkoutRoomsFromRecords = (records: Array<Pick<DailyRecord, "id" | "bookingId" | "guest" | "room" | "roomAmount" | "roomPaid" | "remainingAmount" | "services" | "lateFee">>): CheckoutSummaryRoom[] => records.map((record) => ({
     id: record.id,
+    bookingId: record.bookingId,
     label: `Phòng ${record.room.split(" · ")[0]} · ${record.guest}`,
     roomAmount: record.roomAmount,
     roomPaid: record.roomPaid,
+    remainingAmount: record.remainingAmount,
     services: record.services,
     lateFee: record.lateFee,
   }));
@@ -1387,8 +1438,12 @@ export default function CheckInOutWorkspace() {
             (total, service) => total + service.amount,
             0,
           );
+          const earlyCheckInFee = checkoutRecord.earlyCheckInFee || 0;
           const lateFee = checkoutRecord.lateFee || 0;
-          const totalDue = serviceTotal + lateFee;
+          const overdueDuration = checkoutRecord.checkOutAt && new Date(checkoutRecord.checkOutAt).getTime() < checkoutClock
+            ? formatOverdueDuration(checkoutRecord.checkOutAt, new Date(checkoutClock).toISOString())
+            : null;
+          const totalDue = checkoutRecord.remainingAmount ?? serviceTotal + earlyCheckInFee + lateFee;
           const formatMoney = (amount: number) =>
             `${amount.toLocaleString("vi-VN")}đ`;
           return (
@@ -1431,7 +1486,9 @@ export default function CheckInOutWorkspace() {
                         Đã thanh toán 100% lúc đặt · Mã GD: {checkoutRecord.id}
                       </span>
                     </span>
-                    <strong className="text-emerald-700">0đ</strong>
+                    <strong className="text-emerald-700">
+                      {formatMoney(Number(checkoutRecord.roomAmount ?? 0))}
+                    </strong>
                   </div>
                   <div className="rounded-lg border border-slate-200 p-3">
                     <p className="font-semibold text-slate-700">
@@ -1455,6 +1512,20 @@ export default function CheckInOutWorkspace() {
                         </span>
                       </div>
                     ))}
+                    {earlyCheckInFee > 0 && (
+                      <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-slate-600">
+                        <span>Phụ thu check-in sớm</span>
+                        <span className="font-semibold">
+                          {formatMoney(earlyCheckInFee)}
+                        </span>
+                      </div>
+                    )}
+                    {overdueDuration && (
+                      <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-slate-600">
+                        <span>Thời gian check-out trễ</span>
+                        <span className="font-semibold">{overdueDuration}</span>
+                      </div>
+                    )}
                     {lateFee > 0 && (
                       <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-slate-600">
                         <span>Phụ thu check-out trễ</span>
@@ -1466,7 +1537,7 @@ export default function CheckInOutWorkspace() {
                   </div>
                   <div className="flex items-center justify-between border-t border-slate-200 pt-4">
                     <span className="font-bold text-slate-900">
-                      Tổng tiền cần thanh toán thêm
+                      Còn phải thanh toán
                     </span>
                     <strong className="text-lg text-blue-700">
                       {formatMoney(totalDue)}
