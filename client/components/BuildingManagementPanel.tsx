@@ -22,6 +22,7 @@ export default function BuildingManagementPanel({ buildings, query, filteredBuil
         <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchBuildings", "Tìm tên hoặc mã tòa...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
       </div>
     </div>
+    <p className="mb-3 text-xs text-slate-500">File CSV/Excel cần cột <strong>Tên tòa</strong>; cột <strong>Mã tòa</strong> không bắt buộc.</p>
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {filteredBuildings.map((building) => <div key={building.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
         <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{building.name}</p></div>

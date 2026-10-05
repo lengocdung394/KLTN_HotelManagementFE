@@ -6,6 +6,13 @@ export type ZipFileEntry = {
 export type WorkbookSheet = {
   name: string;
   rows: Array<Array<string | number>>;
+  validations?: Array<{
+    range: string;
+    type: "list" | "whole" | "decimal";
+    formula1: string;
+    operator?: "between" | "greaterThanOrEqual";
+    formula2?: string;
+  }>;
 };
 
 const decodeZipEntries = async (data: Uint8Array): Promise<ZipFileEntry[]> => {
@@ -125,7 +132,7 @@ const crc32 = (bytes: Uint8Array) => {
   return (crc ^ 0xffffffff) >>> 0;
 };
 
-const makeZip = (files: Array<{ name: string; content: string }>, mimeType = "application/zip") => {
+const makeZip = (files: Array<{ name: string; content: string | Uint8Array }>, mimeType = "application/zip") => {
   const encoder = new TextEncoder();
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
@@ -133,7 +140,7 @@ const makeZip = (files: Array<{ name: string; content: string }>, mimeType = "ap
 
   for (const file of files) {
     const name = encoder.encode(file.name);
-    const content = encoder.encode(file.content);
+    const content = typeof file.content === "string" ? encoder.encode(file.content) : file.content;
     const checksum = crc32(content);
     const localHeader = new Uint8Array(30 + name.length);
     const localView = new DataView(localHeader.buffer);
@@ -175,13 +182,23 @@ const makeZip = (files: Array<{ name: string; content: string }>, mimeType = "ap
   endView.setUint16(10, files.length, true);
   endView.setUint32(12, centralSize, true);
   endView.setUint32(16, localOffset, true);
-  return new Blob([...localParts, ...centralParts, endRecord], { type: mimeType });
+  const blobParts = [...localParts, ...centralParts, endRecord].map((part) => {
+    const copy = new Uint8Array(part.byteLength);
+    copy.set(part);
+    return copy.buffer;
+  });
+  return new Blob(blobParts, { type: mimeType });
 };
 
-export const createXlsxWorkbook = (sheets: WorkbookSheet[]) => {
+export const createZipArchive = (files: ZipFileEntry[]) => makeZip(files);
+
+export const createXlsxWorkbook = (
+  sheets: WorkbookSheet[],
+  namedRanges: Array<{ name: string; formula: string }> = [],
+) => {
   if (sheets.length === 0) throw new Error("Workbook phải có ít nhất một sheet.");
 
-  const worksheetContent = sheets.map(({ rows }) => {
+  const worksheetContent = sheets.map(({ rows, validations }) => {
     const sheetRows = rows.map((row, rowIndex) => {
       const rowNumber = rowIndex + 1;
       const cells = row.map((value, columnIndex) => {
@@ -191,7 +208,12 @@ export const createXlsxWorkbook = (sheets: WorkbookSheet[]) => {
       }).join("");
       return `<row r="${rowNumber}">${cells}</row>`;
     }).join("");
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`;
+    const validationXml = validations?.length
+      ? `<dataValidations count="${validations.length}">${validations.map(({ range, type, formula1, operator, formula2 }) =>
+        `<dataValidation type="${type}"${operator ? ` operator="${operator}"` : ""} allowBlank="1" showErrorMessage="1" sqref="${escapeXml(range)}"><formula1>${escapeXml(formula1)}</formula1>${formula2 ? `<formula2>${escapeXml(formula2)}</formula2>` : ""}</dataValidation>`,
+      ).join("")}</dataValidations>`
+      : "";
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData>${validationXml}</worksheet>`;
   });
 
   const contentTypes = sheets.map((_, index) =>
@@ -203,6 +225,9 @@ export const createXlsxWorkbook = (sheets: WorkbookSheet[]) => {
   const relationships = sheets.map((_, index) =>
     `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`,
   ).join("");
+  const definedNames = namedRanges.length
+    ? `<definedNames>${namedRanges.map(({ name, formula }) => `<definedName name="${escapeXml(name)}">${escapeXml(formula)}</definedName>`).join("")}</definedNames>`
+    : "";
   const files = [
     {
       name: "[Content_Types].xml",
@@ -214,7 +239,7 @@ export const createXlsxWorkbook = (sheets: WorkbookSheet[]) => {
     },
     {
       name: "xl/workbook.xml",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>`,
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets>${definedNames}</workbook>`,
     },
     {
       name: "xl/_rels/workbook.xml.rels",

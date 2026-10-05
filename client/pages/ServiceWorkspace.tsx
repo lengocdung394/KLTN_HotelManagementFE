@@ -1,11 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
-import { downloadServiceTemplate, parseServiceImportArchive } from "../lib/serviceBulkImport";
+import { downloadServiceTemplate, validateServiceImportArchive, type ServiceImportRowResult } from "../lib/serviceBulkImport";
+import {
+  getServiceImportErrorMessage,
+  isServiceImportFailed,
+  startServiceImport,
+  type ServiceImportTaskStatus,
+} from "../services/serviceImportApi";
 import { baseApi } from "../services/baseApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import BulkImportDialog from "../components/BulkImportDialog";
+import ServiceImportProgressCard from "../components/ServiceImportProgressCard";
 
 const getSaveErrorMessage = (error: unknown) => {
   if (typeof error === "object" && error !== null && "data" in error) {
@@ -28,7 +35,10 @@ export default function ServiceWorkspace() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [saveError, setSaveError] = useState("");
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
-  const [bulkImportProgress, setBulkImportProgress] = useState("");
+  const [serviceImportTaskId, setServiceImportTaskId] = useState("");
+  const [serviceImportRows, setServiceImportRows] = useState<ServiceImportRowResult[]>([]);
+  const [serviceImportArchiveError, setServiceImportArchiveError] = useState("");
+  const [serviceImportValidationOnly, setServiceImportValidationOnly] = useState(false);
   const [createServiceRequest, { isLoading: isCreating }] = useCreateServiceMutation();
   const [updateServiceRequest, { isLoading: isUpdating }] = useUpdateServiceMutation();
   const [page, setPage] = useState(1);
@@ -128,68 +138,48 @@ export default function ServiceWorkspace() {
   };
 
   const importServicesFromFile = async (archiveFile: File) => {
-    setBulkImportProgress("Đang đọc dữ liệu...");
     try {
-      const { rows, images } = await parseServiceImportArchive(archiveFile);
-      const resolvedRows = rows.map((row) => {
-        const matches = images.get(row.imageFileName.toLocaleLowerCase()) ?? [];
-        if (matches.length !== 1) {
-          throw new Error(
-            matches.length === 0
-              ? `Không tìm thấy ảnh "${row.imageFileName}" (dòng ${row.rowNumber}).`
-              : `Tên ảnh "${row.imageFileName}" bị trùng trong file ZIP (dòng ${row.rowNumber}).`,
-          );
-        }
-        return { row, imageFile: matches[0] };
-      });
-
-      const failures: string[] = [];
-      let successCount = 0;
-      for (let index = 0; index < resolvedRows.length; index += 1) {
-        const { row, imageFile } = resolvedRows[index];
-        setBulkImportProgress(`Đang tải dịch vụ ${index + 1}/${resolvedRows.length}: ${row.name}`);
-        try {
-          await createServiceRequest({
-            service: {
-              name: row.name,
-              description: row.description,
-              price: row.price,
-              unit: row.unit,
-              category: row.category,
-              active: true,
-            },
-            imageFile,
-            skipInvalidation: true,
-          }).unwrap();
-          successCount += 1;
-        } catch {
-          failures.push(`Dòng ${row.rowNumber}: ${row.name}`);
-        }
+      const validation = await validateServiceImportArchive(archiveFile, allServices.map((service) => service.name));
+      setServiceImportRows(validation.rows);
+      setServiceImportArchiveError("");
+      if (validation.validCount === 0) {
+        setServiceImportTaskId("");
+        setServiceImportValidationOnly(true);
+        return true;
       }
-
-      if (successCount > 0) dispatch(baseApi.util.invalidateTags(["Service"]));
-      if (failures.length > 0) {
-        toast({
-          variant: "destructive",
-          title: `Đã nhập ${successCount}/${resolvedRows.length} dịch vụ`,
-          description: `Không nhập được: ${failures.join("; ")}.`,
-        });
-      } else {
-        toast({
-          variant: "checkin",
-          title: "Nhập dịch vụ thành công",
-          description: `Đã thêm ${successCount} dịch vụ từ file Excel.`,
-        });
-      }
+      const taskId = await startServiceImport(archiveFile);
+      setServiceImportTaskId(taskId);
+      setServiceImportValidationOnly(false);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể đọc dữ liệu nhập.";
-      toast({ variant: "destructive", title: "Nhập dịch vụ thất bại", description: message });
-      return false;
-    } finally {
-      setBulkImportProgress("");
+      const message = getServiceImportErrorMessage(error);
+      setServiceImportTaskId("");
+      setServiceImportRows([]);
+      setServiceImportArchiveError(message);
+      setServiceImportValidationOnly(true);
+      return true;
     }
   };
+
+  const handleServiceImportFinished = useCallback((status: ServiceImportTaskStatus) => {
+    dispatch(baseApi.util.invalidateTags(["Service"]));
+    const failed = isServiceImportFailed(status);
+    const addedCount = status.successCount
+      ?? status.importedCount
+      ?? status.totalCount
+      ?? status.total
+      ?? status.processedCount
+      ?? status.processed;
+    toast({
+      variant: failed ? "destructive" : "checkin",
+      title: failed ? "Nhập dịch vụ thất bại" : "Nhập dịch vụ thành công",
+      description: failed
+        ? status.message || "Tiến trình nhập dịch vụ đã thất bại."
+        : serviceImportRows.some((row) => !row.passed)
+          ? `Tiến trình máy chủ hoàn tất. Có ${serviceImportRows.filter((row) => row.passed).length} dòng đạt kiểm tra và ${serviceImportRows.filter((row) => !row.passed).length} dòng cần xem lại trong thông báo góc phải dưới.`
+          : `Đã thêm tất cả${addedCount === undefined ? "" : ` ${addedCount}`} dịch vụ cho bạn thành công!`,
+    });
+  }, [dispatch, serviceImportRows]);
 
   return (
     <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
@@ -210,6 +200,21 @@ export default function ServiceWorkspace() {
           <button type="button" onClick={openCreateForm} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />Thêm dịch vụ</button>
         </div>
       </div>
+      {(serviceImportTaskId || serviceImportRows.length > 0 || serviceImportArchiveError) && (
+        <ServiceImportProgressCard
+          taskId={serviceImportTaskId}
+          onDismiss={() => {
+            setServiceImportTaskId("");
+            setServiceImportRows([]);
+            setServiceImportArchiveError("");
+            setServiceImportValidationOnly(false);
+          }}
+          onFinished={handleServiceImportFinished}
+          validationRows={serviceImportRows}
+          archiveError={serviceImportArchiveError}
+          validationOnly={serviceImportValidationOnly}
+        />
+      )}
       {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách dịch vụ...</p>}
       {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách dịch vụ.</p>}
       {!isLoading && !isError && !hasHotelId && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Chưa xác định được chi nhánh hiện tại.</p>}
@@ -356,20 +361,30 @@ export default function ServiceWorkspace() {
         onOpenChange={setIsBulkImportOpen}
         eyebrow="Nhập hàng loạt"
         title="Tải dữ liệu dịch vụ"
-        description="Tải file Excel mẫu, điền thông tin, đặt cùng thư mục ảnh vào một thư mục rồi nén thành ZIP."
+        description="Đặt file Excel mẫu và thư mục images cùng cấp bên trong một thư mục, sau đó nén thư mục đó thành dichvu.zip."
         templateLabel="Tải file Excel mẫu"
         onDownloadTemplate={downloadServiceTemplate}
         acceptedFileTypes=".zip,application/zip"
-        fileLabel="File ZIP bộ dữ liệu"
+        fileLabel="File ZIP bộ dữ liệu (.zip)"
+        validateFile={(file) =>
+          file.name.toLocaleLowerCase() === "dichvu.zip"
+            ? null
+            : "Vui lòng chọn đúng file dichvu.zip."
+        }
         instructions={
           <>
-            <p className="font-bold">Cấu trúc ZIP cần có</p>
-            <p>Tạo thư mục gốc tên <strong>dich-vu</strong>, đặt file Excel mẫu đã điền trong đó và tạo thư mục con tên <strong>images</strong> để chứa ảnh. Nén toàn bộ thư mục <strong>dich-vu</strong> thành ZIP rồi tải lên.</p>
-            <p className="mt-2">Cột “Tên file ảnh” phải trùng với tên file trong thư mục images, ví dụ <strong>massage.jpg</strong>. Các cột gồm: Tên dịch vụ, Mô tả, Giá, Đơn vị, Danh mục, Tên file ảnh.</p>
+            <p className="font-bold">Cấu trúc file ZIP</p>
+            <pre className="my-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dichvu.zip
+└── dich-vu/
+    ├── mau-nhap-dich-vu.xlsx
+    └── images/
+        ├── massage.jpg
+        └── buffet.png`}</pre>
+            <p>Hãy đặt file Excel mẫu <strong>mau-nhap-dich-vu.xlsx</strong> và thư mục <strong>images</strong> cùng cấp trong một thư mục, rồi nén thư mục đó thành file <strong>dichvu.zip</strong>. ZIP có thể chứa thêm một thư mục bao bên ngoài.</p>
+            <p className="mt-2">Trong Excel, cột “Tên file ảnh” phải khớp với tên ảnh trong thư mục <strong>images</strong>, gồm cả phần đuôi, ví dụ <strong>massage.jpg</strong>. Không đổi tên các cột: Tên dịch vụ, Mô tả, Giá, Đơn vị, Danh mục, Tên file ảnh.</p>
           </>
         }
         uploadLabel="Nhập dịch vụ"
-        progress={bulkImportProgress}
         onUpload={importServicesFromFile}
       />
       {showCreate && (

@@ -13,6 +13,7 @@ type BulkImportDialogProps = {
   fileLabel: string;
   instructions: ReactNode;
   uploadLabel: string;
+  validateFile?: (file: File) => string | null;
   progress?: string;
   onUpload: (file: File) => Promise<boolean>;
 };
@@ -29,6 +30,7 @@ export default function BulkImportDialog({
   fileLabel,
   instructions,
   uploadLabel,
+  validateFile,
   progress,
   onUpload,
 }: BulkImportDialogProps) {
@@ -36,6 +38,17 @@ export default function BulkImportDialog({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+
+  const selectFile = (file: File | undefined) => {
+    if (!file) {
+      setSelectedFile(null);
+      setUploadError("");
+      return;
+    }
+    const validationError = validateFile?.(file) ?? null;
+    setSelectedFile(validationError ? null : file);
+    setUploadError(validationError ?? "");
+  };
 
   useEffect(() => {
     if (!open) {
@@ -104,7 +117,7 @@ export default function BulkImportDialog({
             type="file"
             accept={acceptedFileTypes}
             disabled={isUploading}
-            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => selectFile(event.target.files?.[0])}
             className="mt-3 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
           />
           {selectedFile && <span className="mt-2 block truncate text-xs text-slate-500">{selectedFile.name}</span>}
