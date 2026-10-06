@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 240" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="90" y1="0" x2="810" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DDD6FE"/>
+      <stop offset=".55" stop-color="#BFDBFE"/>
+      <stop offset="1" stop-color="#BBF7D0"/>
+    </linearGradient>
+    <linearGradient id="mountain" x1="450" y1="50" x2="450" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#64748B"/>
+      <stop offset="1" stop-color="#334155"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h900v240H0z"/>
+  <circle cx="729" cy="55" r="25" fill="#FEF3C7"/>
+  <path d="m0 178 161-115 102 70 111-98 180 148v55H0v-60Z" fill="#94A3B8" fill-opacity=".72"/>
+  <path d="m205 178 169-130 173 132v56H205v-58Z" fill="url(#mountain)"/>
+  <path d="m330 83 44-35 45 35-23-3-22 12-22-12-22 3Z" fill="#F8FAFC"/>
+  <path d="m513 181 137-101 126 101v58H513v-58Z" fill="#475569"/>
+  <path d="m607 103 43-23 42 34-22-4-20 11-22-12-21-6Z" fill="#E2E8F0"/>
+  <path d="M0 190c146-24 242 17 361 5 157-16 257-27 539 8v37H0v-50Z" fill="#166534"/>
+  <path d="M0 213c154-31 264 9 395 8 169-2 318-23 505 1v18H0v-27Z" fill="#15803D"/>
+  <path d="M104 176v45m-15-31 15-16 15 16m-15 4-11-12m11 12 12-12" stroke="#14532D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M780 177v46m-16-30 16-18 16 18m-16 4-12-13m12 13 13-13" stroke="#14532D" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M50 200v32m-11-22 11-13 11 13m-11 3-8-9m8 9 9-9" stroke="#166534" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

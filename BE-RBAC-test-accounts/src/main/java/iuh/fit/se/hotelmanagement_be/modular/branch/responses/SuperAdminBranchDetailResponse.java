@@ -20,4 +20,43 @@ public class SuperAdminBranchDetailResponse {
     SuperAdminBranchSummaryResponse branch;
     List<EmployeeResponse> employees;
     List<BookingResponseForHotel> bookings;
+    List<BuildingItem> buildings;
+    List<FloorItem> floors;
+    List<RoomItem> rooms;
+    List<ServiceItem> services;
+    List<PromotionItem> promotions;
+    List<RoomPolicyItem> roomPolicies;
+
+    public record BuildingItem(String id, String name, int floorCount) {
+    }
+
+    public record FloorItem(String id, int floorNumber, String buildingId, String buildingName, int roomCount) {
+    }
+
+    public record RoomItem(
+            String id,
+            String roomNumber,
+            String roomType,
+            String roomStatus,
+            String floorId,
+            int floorNumber,
+            String buildingName) {
+    }
+
+    public record ServiceItem(String id, String name, String category, Double price, String unit, boolean shared) {
+    }
+
+    public record PromotionItem(String id, String code, String name, String status, String startDate, String endDate) {
+    }
+
+    public record RoomPolicyItem(
+            String id,
+            String roomType,
+            Double area,
+            Double basePrice,
+            Double extraAdultFee,
+            Double extraChildFee,
+            Integer standardCapacity,
+            Integer maxExtraGuests) {
+    }
 }

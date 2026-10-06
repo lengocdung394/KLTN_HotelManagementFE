@@ -90,3 +90,22 @@ export const uploadServiceImagesToCloudinary = (
   branchName: string,
   onProgress?: (uploaded: number, total: number) => void,
 ) => uploadImagesToCloudinary(files, branchName, "services", onProgress);
+
+export const uploadProvinceBackgroundToCloudinary = async (file: File, provinceName: string) => {
+  const normalized = provinceName.trim().normalize("NFD");
+  const slug = normalized
+    .replace(/[\u0300-\u036f]+/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  if (!slug) throw new Error("Vui lòng nhập tên tỉnh/thành hợp lệ trước khi tải ảnh.");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    throw new Error("Ảnh nền chỉ chấp nhận định dạng JPG, PNG hoặc WebP.");
+  }
+
+  const { cloudName, uploadPreset } = getCloudinaryConfig();
+  return uploadImage(file, cloudName, uploadPreset, `hotel-management/provinces/${slug}/background`);
+};
