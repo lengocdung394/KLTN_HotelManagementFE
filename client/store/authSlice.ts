@@ -8,9 +8,11 @@ interface AuthState {
   hotelId: string | null;
   hotelName: string | null;
   employeeId: string | null;
+  roles: string[];
 }
 
 type JwtPayload = {
+  roles?: string[];
   hotelId?: number | string | null;
   hotelName?: string | null;
   employeeId?: number | string | null;
@@ -24,6 +26,22 @@ type JwtPayload = {
   accountId?: number | string | null;
   id?: number | string | null;
   sub?: number | string | null;
+};
+
+export const getRolesFromToken = (token: string | null) => {
+  if (!token) return [];
+
+  try {
+    const encodedPayload = token.split(".")[1];
+    if (!encodedPayload) return [];
+    const normalizedPayload = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = normalizedPayload.padEnd(normalizedPayload.length + ((4 - normalizedPayload.length % 4) % 4), "=");
+    const payloadBytes = Uint8Array.from(atob(paddedPayload), (character) => character.charCodeAt(0));
+    const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as JwtPayload;
+    return Array.isArray(payload.roles) ? payload.roles.filter((role): role is string => typeof role === "string") : [];
+  } catch {
+    return [];
+  }
 };
 
 const getHotelFromToken = (token: string | null) => {
@@ -78,6 +96,7 @@ const initialState: AuthState = {
   position: localStorage.getItem("position"),
   ...getHotelFromToken(localStorage.getItem("accessToken")),
   employeeId: getEmployeeIdFromToken(localStorage.getItem("accessToken")) ?? localStorage.getItem("id"),
+  roles: getRolesFromToken(localStorage.getItem("accessToken")),
 };
 
 const authSlice = createSlice({
@@ -94,6 +113,7 @@ const authSlice = createSlice({
       state.hotelId = hotel.hotelId;
       state.hotelName = hotel.hotelName;
       state.employeeId = getEmployeeIdFromToken(action.payload.token);
+      state.roles = getRolesFromToken(action.payload.token);
       if (action.payload.id != null) {
         state.employeeId = String(action.payload.id);
         localStorage.setItem("id", String(action.payload.id));
@@ -119,6 +139,7 @@ const authSlice = createSlice({
       state.hotelId = null;
       state.hotelName = null;
       state.employeeId = null;
+      state.roles = [];
       localStorage.clear();
     },
   },

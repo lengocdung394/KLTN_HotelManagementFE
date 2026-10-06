@@ -1218,7 +1218,7 @@ export default function BookingWorkspace() {
     return { id: String(id ?? ""), name: String(name ?? id ?? "Tòa nhà") };
   }).filter((item) => item.id), [apiBuildings]);
   const selectedBuilding = buildings.find((item) => item.name === building || item.id === building);
-  const { data: apiFloors } = useGetFloorsByBuildingIdQuery(Number(selectedBuilding?.id), { skip: !selectedBuilding?.id || Number.isNaN(Number(selectedBuilding.id)) });
+  const { data: apiFloors } = useGetFloorsByBuildingIdQuery(selectedBuilding?.id ?? "", { skip: !selectedBuilding?.id });
   const apiFloorOptions = useMemo(() => (apiFloors ?? []).map((item) => {
     const id = getApiValue(item, ["id", "floorId", "floorID"]);
     const name = String(getApiValue(item, ["name", "floorName", "floorNumber", "floorLevel", "code", "number"]) ?? id ?? "");

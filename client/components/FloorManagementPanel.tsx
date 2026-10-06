@@ -9,9 +9,10 @@ type FloorManagementPanelProps = {
   selectedBuildingId: string;
   onBuildingChange: (buildingId: string) => void;
   onEdit: (floor: string) => void;
+  canManage: boolean;
 };
 
-export default function FloorManagementPanel({ floors, rooms, buildings, selectedBuildingId, onBuildingChange, onEdit }: FloorManagementPanelProps) {
+export default function FloorManagementPanel({ floors, rooms, buildings, selectedBuildingId, onBuildingChange, onEdit, canManage }: FloorManagementPanelProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -27,10 +28,11 @@ export default function FloorManagementPanel({ floors, rooms, buildings, selecte
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("room.searchFloors", "Tìm tầng nhà...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
       </div>
     </div>
+    {canManage && <p className="mb-3 text-xs text-slate-500">File CSV/Excel cần cột <strong>Tên tầng</strong>. Các tầng sẽ được thêm vào tòa nhà đang chọn.</p>}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     {filteredFloors.map((floor) => <div key={floor} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 p-4">
       <div><p className="text-sm font-bold text-slate-800">{t("room.floorLabel", "Tầng: {{floor}}", { floor })}</p><p className="mt-1 text-xs text-slate-500">{rooms.filter((room) => room.floor === floor).length} {t("room.rooms")}</p></div>
-      <button type="button" onClick={() => onEdit(floor)} aria-label={`${t("room.editFloor")} ${floor}`} className="rounded-lg p-2 text-slate-400 transition hover:bg-white hover:text-blue-600"><Pencil size={15} /></button>
+      {canManage && <button type="button" onClick={() => onEdit(floor)} aria-label={`${t("room.editFloor")} ${floor}`} className="rounded-lg p-2 text-slate-400 transition hover:bg-white hover:text-blue-600"><Pencil size={15} /></button>}
     </div>)}
     </div>
     {filteredFloors.length === 0 && <p className="py-4 text-center text-xs text-slate-400">{t("room.noFloorsFound", "Không tìm thấy tầng nhà phù hợp.")}</p>}

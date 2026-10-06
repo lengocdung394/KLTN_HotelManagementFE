@@ -33,7 +33,8 @@ const adminItems = [
 
 export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, position, collapsed, onToggleCollapse }: AppSidebarProps) {
   const { t } = useTranslation();
-  const { hotelName } = useAppSelector((state) => state.auth);
+  const { hotelName, roles } = useAppSelector((state) => state.auth);
+  const isEmployee = roles.includes("ROLE_EMPLOYEE") && !roles.includes("ROLE_MANAGER");
   const location = useLocation();
   const [bookingMenuOpen, setBookingMenuOpen] = useState(() => location.pathname === "/bookings" || location.pathname === "/booking-list");
   const [roomsMenuOpen, setRoomsMenuOpen] = useState(() => location.pathname === "/rooms");
@@ -102,15 +103,24 @@ export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, 
               <Link to="/rooms?tab=rooms" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${location.pathname === "/rooms" && currentRoomTab !== "pricing" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
                 {t("navigation.roomList", "Quản lý danh sách phòng")}
               </Link>
-              <Link to="/rooms?tab=pricing" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${location.pathname === "/rooms" && currentRoomTab === "pricing" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+              {!isEmployee && <Link to="/rooms?tab=pricing" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${location.pathname === "/rooms" && currentRoomTab === "pricing" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
                 {t("navigation.pricingConfig", "Quản lý cấu hình giá")}
-              </Link>
+              </Link>}
             </div>
           )}
         </div>
         {items.slice(2).filter(([href]) => href !== "/rooms").map(([href, label, Icon]) => <Link key={href} to={href} onClick={onCloseMobile} className={`flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><span className="flex shrink-0 items-center gap-3 whitespace-nowrap"><Icon size={17} />{t(`navigation.${label}`)}</span></Link>)}
       </nav>
-      <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">{t("common.administration")}</p><nav className="space-y-1">{adminItems.map(([href, label, Icon]) => <Link key={href} to={href} onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon size={17} />{t(`navigation.${label}`)}</Link>)}</nav>
+      <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">{t("common.administration")}</p>
+      <nav className="space-y-1">
+        {isEmployee ? (
+          <>
+            <Link to="/staff?tab=shifts" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/staff" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><CalendarDays size={17} />{t("staff.assignmentTab", "Lịch trực")}</Link>
+            <Link to="/reports" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/reports" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><FileText size={17} />{t("navigation.reports")}</Link>
+            <Link to="/settings" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/settings" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Settings size={17} />{t("navigation.settings")}</Link>
+          </>
+        ) : adminItems.map(([href, label, Icon]) => <Link key={href} to={href} onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon size={17} />{t(`navigation.${label}`)}</Link>)}
+      </nav>
     </div>
     <UserProfileCard onLogout={onLogout} fullName={fullName} position={position} />
   </aside>;

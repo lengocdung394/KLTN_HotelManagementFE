@@ -10,7 +10,7 @@ interface ApiResponse<T> {
 
 export const floorApi = baseApi.injectEndpoints({
 	endpoints: (builder) => ({
-		getFloorsByBuildingId: builder.query<FloorResponse[], number>({
+		getFloorsByBuildingId: builder.query<FloorResponse[], string>({
 			query: (buildingId) => ({
 				url: "/floor/getFloorsByBuildingId",
 				method: "GET",

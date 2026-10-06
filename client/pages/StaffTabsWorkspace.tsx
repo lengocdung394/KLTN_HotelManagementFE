@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useAppSelector } from "../store/hooks";
+import EmployeeShiftSchedule from "./EmployeeShiftSchedule";
 import { CalendarClock, CheckCircle2, Clock3, Plus, UserRound, Users } from "lucide-react";
 import PermissionsWorkspace from "./PermissionsWorkspace";
 import ShiftScheduleWorkspace from "./ShiftScheduleWorkspace";
@@ -72,6 +74,12 @@ function TimetablePicker({ schedule, week, selectedDay, onSelect }: { schedule: 
 }
 
 export default function StaffTabsWorkspace({ initialTab = "staff", initialShiftFormOpen = false }: { initialTab?: "staff" | "employees" | "permissions" | "shifts"; initialShiftFormOpen?: boolean }) {
+  const roles = useAppSelector((state) => state.auth.roles);
+  if (roles.includes("ROLE_EMPLOYEE")) return <EmployeeShiftSchedule />;
+  return <ManagerStaffTabsWorkspace initialTab={initialTab} initialShiftFormOpen={initialShiftFormOpen} />;
+}
+
+function ManagerStaffTabsWorkspace({ initialTab = "staff", initialShiftFormOpen = false }: { initialTab?: "staff" | "employees" | "permissions" | "shifts"; initialShiftFormOpen?: boolean }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"staff" | "employees" | "permissions" | "shifts">(initialTab);
   const week = baseWeek.map(({ key, label, date }) => ({ key, label: t(`staff.days.${key}`, label), date }));

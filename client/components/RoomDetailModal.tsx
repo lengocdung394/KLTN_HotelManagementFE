@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 
 export type RoomDetailsData = {
   id: string;
+  databaseId?: string;
   buildingName?: string;
   buildingId?: string;
   floorId?: string;
