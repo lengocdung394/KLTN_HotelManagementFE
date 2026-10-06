@@ -513,6 +513,8 @@
     "usageLimit": "Số lượt sử dụng tối đa",
     "hotelName": "Khách sạn áp dụng",
     "status": "Trạng thái",
+    "allPromotionStatuses": "Tất cả trạng thái",
+    "noPromotionsMatchingFilters": "Không tìm thấy khuyến mãi phù hợp với bộ lọc.",
     "statusDraft": "Bản nháp",
     "statusActive": "Đang hoạt động",
     "statusInactive": "Tạm dừng",

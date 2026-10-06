@@ -6,6 +6,18 @@ export type StartRoomImportResponse = {
   taskId: string;
 };
 
+export type RoomImportBatchRequest = {
+  rooms: Array<{
+    rowNumber: number;
+    roomNumber: string;
+    floorId: string;
+    roomType: string;
+    roomStatus: string;
+    amenityIds: number[];
+    imageUrls: string[];
+  }>;
+};
+
 export type RoomImportTaskStatus = Record<string, unknown> & {
   taskId?: string;
   status?: string;
@@ -33,10 +45,8 @@ export const getRoomImportErrorMessage = (error: unknown) => {
   return error instanceof Error ? error.message : "Không thể nhập phòng.";
 };
 
-export const startRoomImport = async (file: File) => {
-  const formData = new FormData();
-  formData.append("file", file);
-  const response = await axiosClient.post<StartRoomImportResponse>("/roomsExcel/importRooms", formData);
+export const startRoomImport = async (request: RoomImportBatchRequest) => {
+  const response = await axiosClient.post<StartRoomImportResponse>("/roomsExcel/importRooms", request);
   if (!response.data?.taskId) {
     throw new Error(response.data?.message || "Máy chủ không trả về mã tiến trình nhập phòng.");
   }

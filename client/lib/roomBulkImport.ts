@@ -77,9 +77,18 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
     .filter((item) => item.id.trim() && item.name.trim())
     .map((item) => [item.id.trim(), { ...item, id: item.id.trim(), name: item.name.trim() }])).values()];
   const buildings = options.buildings.filter((item) => item.id && item.name.trim());
-  const floors = options.floors.filter((item) => item.id && item.name.trim() && buildings.some((building) => building.id === item.buildingId));
+  const floors = options.floors.filter((item) =>
+    item.id && /^-?\d+$/.test(item.name.trim()) && buildings.some((building) => building.id === item.buildingId),
+  );
+  const floorNumbers = [...new Set(floors.map((item) => item.name.trim()))];
   const selectedBuilding = buildings[0];
   const selectedFloor = floors.find((floor) => floor.buildingId === selectedBuilding?.id && /^-?\d+$/.test(floor.name.trim()));
+  if (buildings.length === 0) {
+    throw new Error("Không tải được danh sách tòa nhà từ máy chủ. Vui lòng thử lại sau.");
+  }
+  if (floorNumbers.length === 0) {
+    throw new Error("Không tải được danh sách số tầng hợp lệ của các tòa nhà từ máy chủ. Vui lòng thử lại sau.");
+  }
   const exampleValues: Record<string, string | number> = {
     "Số phòng": 101,
     "Loại phòng": roomTypes[0] ?? "",
@@ -91,7 +100,9 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
     ...Object.fromEntries(IMAGE_HEADERS.map((header, index) => [header, index < 4 ? `101-${index + 1}.jpg` : ""])),
   };
   const example = ROOM_HEADERS.map((header) => exampleValues[header] ?? "");
-  const catalogRows: Array<Array<string | number>> = [["Danh mục", "ID / Giá trị", "Tên tiện ích"]];
+  const catalogRows: Array<Array<string | number>> = [[
+    "Danh mục", "ID / Giá trị", "Tên tiện ích", "Tòa nhà", "ID tòa nhà", "ID tầng", "floorNumber",
+  ]];
   const namedRanges: Array<{ name: string; formula: string }> = [];
   const addCatalog = (label: string, rangeName: string, values: string[]) => {
     if (values.length === 0) return;
@@ -103,9 +114,13 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
   addCatalog("Loại phòng", "RoomTypes", roomTypes);
   addCatalog("Trạng thái", "RoomStatuses", statuses);
   addCatalog("Tòa", "BuildingList", buildings.map((item) => item.name));
-  addCatalog("Số tầng (floorNumber)", "FloorNumbers", [...new Set(
-    floors.filter((item) => /^-?\d+$/.test(item.name.trim())).map((item) => item.name.trim()),
-  )]);
+  addCatalog("Số tầng (floorNumber)", "FloorNumbers", floorNumbers);
+  floors.forEach((floor) => {
+    const building = buildings.find((item) => item.id === floor.buildingId);
+    if (building) {
+      catalogRows.push(["", "", "", building.name, building.id, floor.id, floor.name]);
+    }
+  });
   if (amenities.length > 0) {
     amenities.forEach((amenity, index) => catalogRows.push([index === 0 ? "Tiện ích" : "", amenity.id, amenity.name]));
   }
@@ -130,9 +145,9 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
       validations: [
         ...(roomTypes.length ? [listValidation("Loại phòng", "RoomTypes")] : []),
         ...(buildings.length ? [listValidation("Tòa", "BuildingList")] : []),
+        ...(floorNumbers.length ? [listValidation("Tầng", "FloorNumbers")] : []),
         ...(statuses.length ? [listValidation("Trạng thái", "RoomStatuses")] : []),
         numericValidation("Số phòng", "whole", 1),
-        numericValidation("Tầng", "whole", -2147483648, 2147483647),
       ],
     },
     {
@@ -140,8 +155,8 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
       rows: [
         ["HƯỚNG DẪN NHẬP PHÒNG"],
         ["Mỗi dòng trong sheet Dữ liệu phòng là một phòng. Không đổi tên các cột."],
-        ["Ô Loại phòng, Tòa và Trạng thái có danh sách xổ xuống; nhập floorNumber dạng số nguyên vào cột Tầng."],
-        ["Tầng phải là số nguyên (floorNumber). Hệ thống ghép floorNumber với Tòa để tìm đúng tầng."],
+        ["Ô Loại phòng, Tòa, Tầng và Trạng thái có danh sách xổ xuống; chọn Tầng theo đúng Tòa trong danh mục tầng ở sheet Danh mục."],
+        ["Sheet Danh mục liệt kê tất cả các tầng thật từ máy chủ, kèm Tòa nhà, ID tòa, ID tầng và floorNumber. Hệ thống dùng Tòa + floorNumber để tìm ID tầng chính xác."],
         ["Số phòng phải là số nguyên dương; ô này được kiểm tra dữ liệu ngay trong Excel."],
         ["Tiện ích dùng một ô duy nhất; nhập ID tiện ích, ngăn cách nhiều ID bằng dấu chấm phẩy (;). Có thể nhập nhiều ID, không giới hạn số lượng."],
         ["Tra ID và tên tiện ích trong sheet Danh mục. Chỉ nhập ID có trong danh mục; hệ thống sẽ kiểm tra từng ID và báo lỗi nếu ID sai."],

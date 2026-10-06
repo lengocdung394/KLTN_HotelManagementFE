@@ -15,6 +15,7 @@ type BulkImportDialogProps = {
   uploadLabel: string;
   validateFile?: (file: File) => string | null;
   progress?: string;
+  progressPercent?: number;
   onUpload: (file: File) => Promise<boolean>;
 };
 
@@ -32,6 +33,7 @@ export default function BulkImportDialog({
   uploadLabel,
   validateFile,
   progress,
+  progressPercent,
   onUpload,
 }: BulkImportDialogProps) {
   const titleId = useId();
@@ -134,9 +136,24 @@ export default function BulkImportDialog({
         )}
 
         {progress && (
-          <p role="status" className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
-            {progress}
-          </p>
+          <div role="status" className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+            <p>{progress}</p>
+            {progressPercent !== undefined && (
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"
+                role="progressbar"
+                aria-label="Tiến trình nhập dữ liệu"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent}
+              >
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                  style={{ width: `${Math.max(0, Math.min(100, progressPercent))}%` }}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         <div className="mt-6 flex justify-end gap-3">

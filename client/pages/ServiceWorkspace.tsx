@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
-import { downloadServiceTemplate, validateServiceImportArchive, type ServiceImportRowResult } from "../lib/serviceBulkImport";
+import { downloadServiceTemplate, parseServiceImportArchive, validateServiceImportArchive, type ServiceImportRowResult } from "../lib/serviceBulkImport";
 import {
   getServiceImportErrorMessage,
   isServiceImportFailed,
@@ -11,6 +11,8 @@ import {
 } from "../services/serviceImportApi";
 import { baseApi } from "../services/baseApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { uploadServiceImagesToCloudinary } from "../services/cloudinaryUploadApi";
+import { bindHotelSocketEvents } from "../lib/socket";
 import BulkImportDialog from "../components/BulkImportDialog";
 import ServiceImportProgressCard from "../components/ServiceImportProgressCard";
 
@@ -39,24 +41,68 @@ export default function ServiceWorkspace() {
   const [serviceImportRows, setServiceImportRows] = useState<ServiceImportRowResult[]>([]);
   const [serviceImportArchiveError, setServiceImportArchiveError] = useState("");
   const [serviceImportValidationOnly, setServiceImportValidationOnly] = useState(false);
+  const [serviceImportUploadProgress, setServiceImportUploadProgress] = useState("");
+  const [serviceImportSocketStatus, setServiceImportSocketStatus] = useState<ServiceImportTaskStatus | undefined>();
   const [createServiceRequest, { isLoading: isCreating }] = useCreateServiceMutation();
   const [updateServiceRequest, { isLoading: isUpdating }] = useUpdateServiceMutation();
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(12);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
   const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const hotelName = useAppSelector((state) => state.auth.hotelName);
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
-  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(hasHotelId ? { hotelId: Number(hotelId), activeOnly: true } : undefined, { skip: !hasHotelId });
+  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(hasHotelId ? { hotelId: Number(hotelId) } : undefined, { skip: !hasHotelId });
   const allServices = useMemo(() => [...services, ...localServices], [services, localServices]);
+  const filteredServices = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+    return allServices.filter((service) => {
+      const isActive = statusOverrides[service.id] ?? service.active;
+      const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? isActive : !isActive);
+      const searchableText = [service.name, service.detail, service.category, service.unit]
+        .join(" ")
+        .normalize("NFD")
+        .replace(/\p{M}/gu, "")
+        .toLocaleLowerCase();
+      return matchesStatus && (!normalizedQuery || searchableText.includes(normalizedQuery));
+    });
+  }, [allServices, searchQuery, statusFilter, statusOverrides]);
   const isSaving = isCreating || isUpdating;
 
-  const totalPages = Math.max(1, Math.ceil(allServices.length / pageSize));
+  useEffect(() => {
+    if (!hasHotelId) return;
+    bindHotelSocketEvents({
+      onServiceImportProgress: (data) => {
+        if (!data || typeof data !== "object") return;
+        const payload = data as Record<string, unknown>;
+        const taskId = payload.taskId;
+        if (typeof taskId !== "string" && typeof taskId !== "number") return;
+        const status = typeof payload.status === "string" ? payload.status : "PROCESSING";
+        const percent = typeof payload.percent === "number" ? payload.percent : undefined;
+        const message = typeof payload.message === "string" ? payload.message : undefined;
+        const socketStatus: ServiceImportTaskStatus = {
+          taskId: String(taskId),
+          status,
+          ...(percent === undefined ? {} : { percent }),
+          ...(message === undefined ? {} : { message }),
+          completed: payload.completed === true,
+        };
+        setServiceImportSocketStatus(socketStatus);
+        if (socketStatus.completed) {
+          dispatch(baseApi.util.invalidateTags(["Service"]));
+        }
+      },
+    });
+  }, [dispatch, hasHotelId]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredServices.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const paginatedServices = allServices.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paginatedServices = filteredServices.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   useEffect(() => {
     setPage(1);
-  }, [allServices.length, pageSize]);
+  }, [allServices.length, pageSize, searchQuery, statusFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -147,9 +193,40 @@ export default function ServiceWorkspace() {
         setServiceImportValidationOnly(true);
         return true;
       }
-      const taskId = await startServiceImport(archiveFile);
+      if (!hotelName) throw new Error("Không xác định được tên chi nhánh từ tài khoản đang đăng nhập.");
+
+      setServiceImportUploadProgress("Đang đọc ảnh dịch vụ trong file ZIP...");
+      const parsed = await parseServiceImportArchive(archiveFile);
+      const validRowNumbers = new Set(validation.rows.filter((row) => row.passed).map((row) => row.rowNumber));
+      const validServices = parsed.rows.filter((row) => validRowNumbers.has(row.rowNumber));
+      const filesByName = new Map<string, File>();
+      validServices.forEach((service) => {
+        const matches = parsed.images.get(service.imageFileName.toLocaleLowerCase()) ?? [];
+        if (matches.length !== 1) {
+          throw new Error(`Không thể xác định duy nhất ảnh "${service.imageFileName}" ở dòng ${service.rowNumber}.`);
+        }
+        filesByName.set(service.imageFileName.toLocaleLowerCase(), matches[0]);
+      });
+
+      const imageFiles = [...filesByName.values()];
+      setServiceImportUploadProgress(`Đang tải ${imageFiles.length} ảnh dịch vụ lên Cloudinary...`);
+      const imageUrls = await uploadServiceImagesToCloudinary(imageFiles, hotelName, (uploaded, total) => {
+        setServiceImportUploadProgress(`Đang tải ảnh dịch vụ lên Cloudinary: ${uploaded}/${total}...`);
+      });
+      const request = {
+        services: validServices.map((service) => {
+          const imageUrl = imageUrls.get(service.imageFileName.toLocaleLowerCase());
+          if (!imageUrl) throw new Error(`Không tìm thấy URL Cloudinary cho ảnh "${service.imageFileName}".`);
+          return { ...service, imageUrl };
+        }),
+      };
+
+      setServiceImportUploadProgress("Đã tải ảnh xong. Đang gửi dữ liệu dịch vụ lên máy chủ...");
+      const taskId = await startServiceImport(request);
       setServiceImportTaskId(taskId);
+      setServiceImportSocketStatus(undefined);
       setServiceImportValidationOnly(false);
+      setServiceImportUploadProgress("");
       return true;
     } catch (error) {
       const message = getServiceImportErrorMessage(error);
@@ -157,11 +234,13 @@ export default function ServiceWorkspace() {
       setServiceImportRows([]);
       setServiceImportArchiveError(message);
       setServiceImportValidationOnly(true);
+      setServiceImportUploadProgress("");
       return true;
     }
   };
 
   const handleServiceImportFinished = useCallback((status: ServiceImportTaskStatus) => {
+    setServiceImportUploadProgress("");
     dispatch(baseApi.util.invalidateTags(["Service"]));
     const failed = isServiceImportFailed(status);
     const addedCount = status.successCount
@@ -203,11 +282,14 @@ export default function ServiceWorkspace() {
       {(serviceImportTaskId || serviceImportRows.length > 0 || serviceImportArchiveError) && (
         <ServiceImportProgressCard
           taskId={serviceImportTaskId}
+          liveStatus={serviceImportSocketStatus}
           onDismiss={() => {
             setServiceImportTaskId("");
             setServiceImportRows([]);
             setServiceImportArchiveError("");
             setServiceImportValidationOnly(false);
+            setServiceImportUploadProgress("");
+            setServiceImportSocketStatus(undefined);
           }}
           onFinished={handleServiceImportFinished}
           validationRows={serviceImportRows}
@@ -215,10 +297,36 @@ export default function ServiceWorkspace() {
           validationOnly={serviceImportValidationOnly}
         />
       )}
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <label className="relative min-w-0 flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Tìm theo tên, mô tả hoặc danh mục dịch vụ..."
+            aria-label="Tìm kiếm dịch vụ"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <label className="flex items-center">
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            aria-label="Lọc dịch vụ theo trạng thái"
+            className="h-10 min-w-44 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          >
+            <option value="all">Tất cả trạng thái</option>
+            <option value="active">Đang hoạt động</option>
+            <option value="inactive">Tạm ngưng</option>
+          </select>
+        </label>
+      </div>
       {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách dịch vụ...</p>}
       {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách dịch vụ.</p>}
       {!isLoading && !isError && !hasHotelId && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Chưa xác định được chi nhánh hiện tại.</p>}
-      {!isLoading && !isError && hasHotelId && services.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chi nhánh chưa có dịch vụ khả dụng.</p>}
+      {!isLoading && !isError && hasHotelId && allServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chi nhánh chưa có dịch vụ nào.</p>}
+      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy dịch vụ phù hợp với từ khóa hoặc trạng thái đã chọn.</p>}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {paginatedServices.map((service) => {
           const isActive = statusOverrides[service.id] ?? service.active;
@@ -230,10 +338,10 @@ export default function ServiceWorkspace() {
           </article>;
         })}
       </div>
-      {allServices.length > 0 && (
+      {filteredServices.length > 0 && (
         <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span>
-            Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, allServices.length)} trên {allServices.length} dịch vụ
+            Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filteredServices.length)} trên {filteredServices.length} dịch vụ
           </span>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2">
@@ -243,6 +351,7 @@ export default function ServiceWorkspace() {
                 onChange={(event) => setPageSize(Number(event.target.value))}
                 className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
               >
+                <option value={12}>12</option>
                 <option value={10}>10</option>
                 <option value={20}>20</option>
                 <option value={50}>50</option>
@@ -361,7 +470,7 @@ export default function ServiceWorkspace() {
         onOpenChange={setIsBulkImportOpen}
         eyebrow="Nhập hàng loạt"
         title="Tải dữ liệu dịch vụ"
-        description="Đặt file Excel mẫu và thư mục images cùng cấp bên trong một thư mục, sau đó nén thư mục đó thành dichvu.zip."
+        description="Ảnh được tải trực tiếp từ FE lên Cloudinary theo thư mục chi nhánh; BE chỉ nhận URL ảnh và lưu thông tin dịch vụ."
         templateLabel="Tải file Excel mẫu"
         onDownloadTemplate={downloadServiceTemplate}
         acceptedFileTypes=".zip,application/zip"
@@ -385,6 +494,7 @@ export default function ServiceWorkspace() {
           </>
         }
         uploadLabel="Nhập dịch vụ"
+        progress={serviceImportUploadProgress || undefined}
         onUpload={importServicesFromFile}
       />
       {showCreate && (

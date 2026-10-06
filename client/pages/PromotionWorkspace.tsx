@@ -57,10 +57,19 @@ const isPromotionExpired = (promotion: Promotion) => {
   return status === "EXPIRED" || (Number.isFinite(endDate) && endDate < Date.now());
 };
 
-const statusBadgeClass = (promotion: Promotion) => {
+const promotionStatusOf = (promotion: Promotion): PromotionStatus => {
+  if (isPromotionExpired(promotion)) return "EXPIRED";
   const status = String(promotion.status ?? (promotion.active ? "ACTIVE" : "INACTIVE")).toUpperCase();
+  return status === "DRAFT" || status === "ACTIVE" || status === "INACTIVE"
+    ? status
+    : promotion.active ? "ACTIVE" : "INACTIVE";
+};
+
+const statusBadgeClass = (promotion: Promotion) => {
+  const status = promotionStatusOf(promotion);
   if (status === "ACTIVE") return "bg-emerald-50 text-emerald-700";
   if (status === "DRAFT") return "bg-amber-50 text-amber-700";
+  if (status === "EXPIRED") return "bg-rose-50 text-rose-700";
   return "bg-slate-100 text-slate-500";
 };
 
@@ -111,6 +120,7 @@ export default function PromotionWorkspace() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | PromotionStatus>("ALL");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [isDateFilterActive, setIsDateFilterActive] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -155,11 +165,13 @@ export default function PromotionWorkspace() {
     })
     : monthlyPromotions;
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("vi-VN");
-  const visiblePromotions = dateFilteredPromotions.filter((promotion) =>
-    `${promotion.name} ${promotion.code} ${promotion.description} ${promotion.type}`
+  const visiblePromotions = dateFilteredPromotions.filter((promotion) => {
+    const matchesStatus = statusFilter === "ALL" || promotionStatusOf(promotion) === statusFilter;
+    const matchesSearch = `${promotion.name} ${promotion.code} ${promotion.description} ${promotion.type}`
       .toLocaleLowerCase("vi-VN")
-      .includes(normalizedSearchQuery),
-  );
+      .includes(normalizedSearchQuery);
+    return matchesStatus && matchesSearch;
+  });
   const totalPages = Math.max(1, Math.ceil(visiblePromotions.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedPromotions = visiblePromotions.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -167,7 +179,7 @@ export default function PromotionWorkspace() {
 
   useEffect(() => {
     setPage(1);
-  }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate, searchQuery]);
+  }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate, searchQuery, statusFilter]);
 
   useEffect(() => {
     if (!hasHotelId) return;
@@ -641,7 +653,8 @@ export default function PromotionWorkspace() {
               {label("codeListDescription")}
             </p>
           </div>
-          <label className="relative block w-full sm:max-w-sm">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <label className="relative block w-full sm:w-72">
             <span className="sr-only">{label("searchPromotion")}</span>
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -653,6 +666,22 @@ export default function PromotionWorkspace() {
             />
             {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={label("clearSearch")} className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={15} /></button>}
           </label>
+          <label>
+            <span className="sr-only">{label("status")}</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+              aria-label={label("status")}
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-48"
+            >
+              <option value="ALL">{label("allPromotionStatuses")}</option>
+              <option value="DRAFT">{label("statusDraft")}</option>
+              <option value="ACTIVE">{label("statusActive")}</option>
+              <option value="INACTIVE">{label("statusInactive")}</option>
+              <option value="EXPIRED">{label("statusExpired")}</option>
+            </select>
+          </label>
+          </div>
         </div>
         {isLoading ? (
           <p className="p-8 text-center text-sm text-slate-500">
@@ -671,12 +700,13 @@ export default function PromotionWorkspace() {
             Chi nhánh chưa có khuyến mãi.
           </p>
         ) : visiblePromotions.length === 0 ? (
-          <p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery ? label("noPromotionsMatchingSearch") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p>
+          <p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery || statusFilter !== "ALL" ? label("noPromotionsMatchingFilters") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p>
         ) : (
           <>
             <div className="divide-y divide-slate-100">
               {paginatedPromotions.map((promotion) => {
                 const scope = promotionScopeOf(promotion);
+                const status = promotionStatusOf(promotion);
                 return (
                 <article
                   key={promotion.id}
@@ -725,25 +755,9 @@ export default function PromotionWorkspace() {
                         {formatValue(promotion)}
                       </p>
                     </div>
-                    <select
-                      aria-label={label("changePromotionStatus", { name: promotion.name })}
-                      value={promotion.status ?? (promotion.active ? "ACTIVE" : "INACTIVE")}
-                      disabled={isPromotionExpired(promotion)}
-                      title={isPromotionExpired(promotion) ? label("expiredStatusLocked") : undefined}
-                      onChange={(event) => {
-                        if (isPromotionExpired(promotion)) return;
-                        const status = event.target.value as PromotionStatus;
-                        setPromotions(displayedPromotions.map((item) => item.id === promotion.id
-                          ? { ...item, status, active: status === "ACTIVE" }
-                          : item));
-                      }}
-                      className={`rounded-full border-0 px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 ${statusBadgeClass(promotion)}`}
-                    >
-                      <option value="DRAFT">{label("statusDraft")}</option>
-                      <option value="ACTIVE">{label("statusActive")}</option>
-                      <option value="INACTIVE">{label("statusInactive")}</option>
-                      <option value="EXPIRED">{label("statusExpired")}</option>
-                    </select>
+                    <span className={`rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
+                      {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
+                    </span>
                     <button
                       type="button"
                       onClick={() => setDetailPromotion(promotion)}

@@ -16,6 +16,7 @@ type ServiceImportProgressDialogProps = {
   validationRows?: ServiceImportRowResult[];
   archiveError?: string;
   validationOnly?: boolean;
+  liveStatus?: ServiceImportTaskStatus;
 };
 
 const getProgressValue = (status: ServiceImportTaskStatus) => {
@@ -61,6 +62,7 @@ export default function ServiceImportProgressCard({
   validationRows = [],
   archiveError,
   validationOnly = false,
+  liveStatus,
 }: ServiceImportProgressDialogProps) {
   const [status, setStatus] = useState<ServiceImportTaskStatus | null>(null);
   const [pollingError, setPollingError] = useState("");
@@ -96,11 +98,14 @@ export default function ServiceImportProgressCard({
     };
   }, [onFinished, taskId]);
 
-  const finished = Boolean((status && isServiceImportFinished(status)) || validationOnly || archiveError);
-  const failed = Boolean((status && isServiceImportFailed(status)) || archiveError);
-  const progress = status ? getProgressValue(status) : null;
-  const processed = status?.processedCount ?? status?.processed;
-  const total = status?.totalCount ?? status?.total;
+  const visibleStatus = liveStatus?.taskId === taskId
+    ? { ...status, ...liveStatus }
+    : status;
+  const finished = Boolean((visibleStatus && isServiceImportFinished(visibleStatus)) || validationOnly || archiveError);
+  const failed = Boolean((visibleStatus && isServiceImportFailed(visibleStatus)) || archiveError);
+  const progress = visibleStatus ? getProgressValue(visibleStatus) : null;
+  const processed = visibleStatus?.processedCount ?? visibleStatus?.processed;
+  const total = visibleStatus?.totalCount ?? visibleStatus?.total;
   const validRows = validationRows.filter((row) => row.passed);
   const invalidRows = validationRows.filter((row) => !row.passed);
   const validationFinished = validationRows.length > 0 && finished;
@@ -142,10 +147,10 @@ export default function ServiceImportProgressCard({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900">
-                    {archiveError ? "Không thể đọc file dịch vụ" : pollingError ? "Không thể kiểm tra tiến trình" : validationOnly ? "Đã kiểm tra file dịch vụ" : getStatusLabel(status?.status)}
+                    {archiveError ? "Không thể đọc file dịch vụ" : pollingError ? "Không thể kiểm tra tiến trình"                     : validationOnly ? "Đã kiểm tra file dịch vụ" : getStatusLabel(visibleStatus?.status)}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {archiveError || pollingError || status?.message || (validationOnly ? "Không có dòng hợp lệ để gửi nhập." : "File đã được gửi lên và đang được xử lý.")}
+                    {archiveError || pollingError || visibleStatus?.message || (validationOnly ? "Không có dòng hợp lệ để gửi nhập." : "File đã được gửi lên và đang được xử lý.")}
                   </p>
                 </div>
                 {(finished || pollingError || archiveError) && (

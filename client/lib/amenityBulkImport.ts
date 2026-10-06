@@ -17,7 +17,7 @@ export const downloadAmenityTemplate = () => {
         ["Nhập tên tiện ích và giá tiền không âm; không đổi tên hai cột Tên tiện ích, Giá tiền."],
         ["Giá tiền nhập bằng số, không thêm ký hiệu tiền tệ. Ví dụ: 50000."],
         ["Các tiện ích trùng tên với danh sách hiện có sẽ được bỏ qua."],
-        ["Dữ liệu nhập được thêm tạm trên giao diện, chưa lưu lên máy chủ."],
+        ["Dữ liệu tiện nghi hợp lệ sẽ được lưu vào cơ sở dữ liệu của hệ thống."],
       ],
     },
   ]);

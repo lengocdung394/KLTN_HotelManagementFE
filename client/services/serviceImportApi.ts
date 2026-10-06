@@ -1,6 +1,17 @@
 import axios from "axios";
 import axiosClient from "../store/axiosClient";
-import { normalizeServiceImportArchive } from "../lib/serviceBulkImport";
+
+export type ServiceImportRequest = {
+  services: Array<{
+    rowNumber: number;
+    name: string;
+    description: string;
+    price: number;
+    unit: string;
+    category: string;
+    imageUrl: string;
+  }>;
+};
 
 type StartServiceImportResponse = {
   success: boolean;
@@ -9,8 +20,10 @@ type StartServiceImportResponse = {
 };
 
 export type ServiceImportTaskStatus = {
+  taskId?: string;
   status: string;
   message?: string;
+  percent?: number;
   progress?: number;
   percentage?: number;
   progressPercentage?: number;
@@ -38,14 +51,10 @@ export const getServiceImportErrorMessage = (error: unknown) => {
   return error instanceof Error ? error.message : "Không thể nhập dịch vụ.";
 };
 
-export const startServiceImport = async (file: File) => {
-  const normalizedFile = await normalizeServiceImportArchive(file);
-  const formData = new FormData();
-  formData.append("file", normalizedFile);
-
+export const startServiceImport = async (request: ServiceImportRequest) => {
   const response = await axiosClient.post<StartServiceImportResponse>(
-    "/servicesImport/import-zip-async",
-    formData,
+    "/servicesImport/import-urls-async",
+    request,
   );
   if (!response.data.success || !response.data.taskId) {
     throw new Error(response.data.message || "Máy chủ không trả về mã tiến trình nhập.");

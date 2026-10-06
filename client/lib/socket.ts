@@ -30,6 +30,7 @@ type HotelSocketHandlers = {
   onRoomCreated?: (data: unknown) => void;
   onRoomUpdated?: (data: unknown) => void;
   onRoomImportProgress?: (data: unknown) => void;
+  onServiceImportProgress?: (data: unknown) => void;
   onRoomMatrixUpdated?: (data: unknown) => void;
   onRoomPolicyUpdated?: (data: unknown) => void;
   onNewBookingNotification?: (data: unknown) => void;
@@ -108,6 +109,7 @@ export const bindHotelSocketEvents = ({
   onRoomCreated,
   onRoomUpdated,
   onRoomImportProgress,
+  onServiceImportProgress,
   onRoomMatrixUpdated,
   onRoomPolicyUpdated,
   onNewBookingNotification,
@@ -124,6 +126,7 @@ export const bindHotelSocketEvents = ({
     ...(onRoomCreated ? { onRoomCreated } : {}),
     ...(onRoomUpdated ? { onRoomUpdated } : {}),
     ...(onRoomImportProgress ? { onRoomImportProgress } : {}),
+    ...(onServiceImportProgress ? { onServiceImportProgress } : {}),
     ...(onRoomMatrixUpdated ? { onRoomMatrixUpdated } : {}),
     ...(onRoomPolicyUpdated ? { onRoomPolicyUpdated } : {}),
     ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
@@ -141,6 +144,7 @@ export const bindHotelSocketEvents = ({
   socket.off("room_create");
   socket.off("room_update");
   socket.off("room_import_progress");
+  socket.off("service_import_progress");
   socket.off("room_matrix_updated");
   socket.off("room_policy_updated");
   socket.off("new_booking_notification");
@@ -162,6 +166,10 @@ export const bindHotelSocketEvents = ({
 
   if (hotelSocketHandlers.onRoomImportProgress) {
     socket.on("room_import_progress", hotelSocketHandlers.onRoomImportProgress);
+  }
+
+  if (hotelSocketHandlers.onServiceImportProgress) {
+    socket.on("service_import_progress", hotelSocketHandlers.onServiceImportProgress);
   }
 
   if (hotelSocketHandlers.onRoomMatrixUpdated) {
