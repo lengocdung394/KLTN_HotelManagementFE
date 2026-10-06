@@ -241,7 +241,7 @@ export const roomApi = baseApi.injectEndpoints({
 
     getRoomTypeDetail: builder.query<RoomTypeDetailResponse, { hotelId: number; roomType: string }>({
       query: ({ hotelId, roomType }) => ({
-        url: `/hotels/${hotelId}/room-types/${roomType}/detail`,
+        url: `/hotels/${hotelId}/room-types/${encodeURIComponent(roomType)}/detail`,
         method: "GET",
       }),
     }),

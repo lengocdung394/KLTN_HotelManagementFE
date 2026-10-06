@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
@@ -9,19 +9,77 @@ import EventPricingCalendar from "../components/EventPricingCalendar";
 import RoomAmenitiesTab from "../components/RoomAmenitiesTab";
 import RoomListTab from "../components/RoomListTab";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
+import BulkImportDialog from "../components/BulkImportDialog";
+import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation } from "../services/roomApi";
-import { useGetAllAmenitiesQuery, type AmenityResponse } from "../services/amenityApi.ts";
+import { getAmenityImportStatus, isAmenityImportFinished, useGetAllAmenitiesQuery, useImportAmenitiesFromFileMutation, type AmenityResponse } from "../services/amenityApi.ts";
 import { useGetBuildingsByCurrentHotelQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery } from "../services/floorApi";
 import { useGetBranchRoomPoliciesQuery, useUpdateBranchRoomPolicyMutation } from "../services/branchRoomPolicyApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import { bindHotelSocketEvents } from "../lib/socket";
+import { downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
+import { downloadAmenityTemplate } from "../lib/amenityBulkImport";
+import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
+import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
 
 type ImportedRoomRow = Record<string, string>;
+type ImportTarget = "rooms" | "buildings" | "floors" | "amenities";
+type RoomSocketImportProgress = {
+  taskId: string;
+  percent: number | null;
+  message: string;
+  completed: boolean;
+  rows: RoomImportRowResult[];
+};
+
+const parseRoomSocketImportProgress = (data: unknown): RoomSocketImportProgress => {
+  const payload = data && typeof data === "object" ? data as Record<string, unknown> : {};
+  const detailItems = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.details) ? payload.details : [];
+  const rows = detailItems.map((item, index): RoomImportRowResult => {
+    const detail = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const readString = (...keys: string[]) => {
+      const value = keys.map((key) => detail[key]).find((candidate) => candidate !== undefined && candidate !== null);
+      return typeof value === "string" || typeof value === "number" ? String(value) : "";
+    };
+    const rowNumber = Number(readString("rowNumber", "row", "lineNumber", "excelRow")) || index + 1;
+    const roomNumber = readString("roomNumber", "roomNo", "roomCode", "roomId", "number");
+    const rawStatus = readString("status", "result", "state").trim().toLocaleLowerCase();
+    const explicitResult = [detail.passed, detail.success, detail.isSuccess, detail.valid, detail.isValid, detail.imported]
+      .find((value) => typeof value === "boolean");
+    const passed = typeof explicitResult === "boolean"
+      ? explicitResult
+      : ["success", "succeeded", "completed", "pass", "passed", "valid", "imported"].includes(rawStatus);
+    const message = readString("message", "error", "reason", "detail", "description");
+    return {
+      rowNumber: Number.isFinite(rowNumber) ? rowNumber : index + 1,
+      roomNumber,
+      passed,
+      ...(!passed ? { message: message || (rawStatus ? `Trạng thái xử lý: ${rawStatus}` : "Dòng chưa được đánh dấu thành công từ máy chủ.") } : {}),
+    };
+  });
+  const percentValue = payload.percent ?? payload.percentage ?? payload.progress;
+  const percent = typeof percentValue === "number" && Number.isFinite(percentValue)
+    ? Math.min(100, Math.max(0, percentValue))
+    : null;
+  const rawTaskStatus = String(payload.status ?? "").trim().toUpperCase();
+  return {
+    taskId: typeof payload.taskId === "string" || typeof payload.taskId === "number" ? String(payload.taskId) : "",
+    percent,
+    message: typeof payload.message === "string" ? payload.message : "Đang nhận tiến trình nhập phòng.",
+    completed: payload.completed === true ||
+      (percent !== null && percent >= 100) ||
+      ["COMPLETED", "COMPLETE", "SUCCESS", "SUCCEEDED", "FAILED", "ERROR", "DONE"].includes(rawTaskStatus),
+    rows,
+  };
+};
 
 const normalizeImportedValue = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "").trim();
+const getImportedValue = (row: ImportedRoomRow, names: string[]) =>
+  names.map(normalizeImportedValue).map((name) => row[name]).find((value) => value?.trim())?.trim() ?? "";
+
 const parseCsv = (text: string): ImportedRoomRow[] => {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -45,6 +103,10 @@ const parseCsv = (text: string): ImportedRoomRow[] => {
   const headers = (rows.shift() ?? []).map(normalizeImportedValue);
   return rows.map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])));
 };
+
+const readImportRows = async (file: File) => file.name.toLowerCase().endsWith(".csv")
+  ? parseCsv(await file.text())
+  : parseXlsx(await file.arrayBuffer());
 
 const readZipEntry = async (data: ArrayBuffer, entryName: string) => {
   const bytes = new Uint8Array(data);
@@ -114,8 +176,23 @@ type Room = RoomDetailsData;
 const employees = ["Nguyễn Thị Mai", "Lê Thị Hương", "Phạm Ngọc Anh", "Trần Minh Tú"];
 const statuses = ["Sẵn sàng", "Đang dọn", "Đang ở", "Bảo trì"];
 const statusStyle: Record<string, string> = { "Sẵn sàng": "bg-emerald-50 text-emerald-700", "Đang dọn": "bg-amber-50 text-amber-700", "Đang ở": "bg-blue-50 text-blue-700", "Bảo trì": "bg-rose-50 text-rose-700" };
-const roomTypeLabels: Record<string, string> = { STANDARD: "Standard Room", DELUXE: "Deluxe Room", SUITE: "Suite Room", FAMILY: "Family Room" };
-const roomTypeValues: Record<string, string> = Object.fromEntries(Object.entries(roomTypeLabels).map(([value, label]) => [label, value]));
+const roomTypeLabels: Record<string, string> = {
+  STANDARD: "Phòng Tiêu Chuẩn",
+  DELUXE: "Phòng Cao Cấp",
+  SUITE: "Phòng Thượng Hạng",
+  FAMILY: "Phòng Gia Đình",
+};
+const roomTypeAliases: Record<string, string> = {
+  "Standard Room": "STANDARD",
+  "Deluxe Room": "DELUXE",
+  "Superior Room": "DELUXE",
+  "Suite Room": "SUITE",
+  "Family Room": "FAMILY",
+};
+const roomTypeValues: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(roomTypeLabels).map(([value, label]) => [label, value])),
+  ...roomTypeAliases,
+};
 const statusLabels: Record<string, string> = { READY: "Sẵn sàng", MAINTENANCE: "Bảo trì", IN_USE: "Đang ở", CLEANING: "Đang dọn" };
 const statusValues: Record<string, string> = Object.fromEntries(Object.entries(statusLabels).map(([value, label]) => [label, value]));
 const roomTypeLabel = (value: string) => roomTypeLabels[value] ?? value;
@@ -177,22 +254,32 @@ export default function RoomWorkspace() {
   const { t } = useTranslation();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
+  const canManageRooms = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
+  const canViewRoomStructure = canManageRooms || roles.includes("ROLE_EMPLOYEE");
   const { data: apiRoomTypes, isLoading: isRoomTypesLoading, isError: isRoomTypesError } = useGetRoomTypesQuery();
   const { data: apiBedTypes, isLoading: isBedTypesLoading, isError: isBedTypesError } = useGetAllBedTypesQuery();
   const { data: apiRoomStatuses, isLoading: isRoomStatusesLoading, isError: isRoomStatusesError } = useGetRoomStatusesQuery();
   const { data: apiAmenities, isLoading: isAmenitiesLoading, isError: isAmenitiesError } = useGetAllAmenitiesQuery();
   const [createRoom, { isLoading: isCreatingRoom }] = useCreateRoomMutation();
   const [updateRoomApi, { isLoading: isUpdatingRoom }] = useUpdateRoomMutation(); // Added updateRoomApi
+  const [importAmenitiesFromFile] = useImportAmenitiesFromFileMutation();
   const [amenityOverrides, setAmenityOverrides] = useState<Record<number, AmenityResponse>>({});
-  const amenityCatalog = useMemo(() => (apiAmenities ?? []).map((amenity) => amenityOverrides[amenity.id] ?? amenity), [apiAmenities, amenityOverrides]);
+  const [localAmenities, setLocalAmenities] = useState<AmenityResponse[]>([]);
+  const amenityCatalog = useMemo(() => {
+    const catalog = [...(apiAmenities ?? [])];
+    localAmenities.forEach((amenity) => {
+      if (!catalog.some((item) => normalizeText(item.name) === normalizeText(amenity.name))) catalog.push(amenity);
+    });
+    return catalog.map((amenity) => amenityOverrides[amenity.id] ?? amenity);
+  }, [apiAmenities, amenityOverrides, localAmenities]);
   const availableRoomTypes = useMemo(() => (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value))), [apiRoomTypes]);
   const availableRoomStatuses = useMemo(() => (apiRoomStatuses ?? []).map((value) => statusLabel(String(value))), [apiRoomStatuses]);
-  const amenityOptions = useMemo(() => (apiAmenities ?? []).map((amenity) => amenity.name).filter(Boolean), [apiAmenities]);
+  const amenityOptions = useMemo(() => amenityCatalog.map((amenity) => amenity.name).filter(Boolean), [amenityCatalog]);
   const bedTypeOptions = useMemo(() => (apiBedTypes ?? []).map((item) => String(item.bedTypeName ?? item.name ?? item.description ?? "")).filter(Boolean), [apiBedTypes]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const requestedTab = new URLSearchParams(location.search).get("tab");
-  const defaultRoomTab: "rooms" | "pricing" | "amenities" = requestedTab === "pricing" || requestedTab === "amenities" ? requestedTab : "rooms";
+  const defaultRoomTab: "rooms" | "pricing" | "amenities" = canManageRooms && (requestedTab === "pricing" || requestedTab === "amenities") ? requestedTab : "rooms";
   const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing" | "amenities">(defaultRoomTab);
   const [pricingMode, setPricingMode] = useState<"branch" | "event">("branch");
   const [editingPricingType, setEditingPricingType] = useState<string | null>(null);
@@ -211,6 +298,19 @@ export default function RoomWorkspace() {
       },
       onRoomPolicyUpdated: () => {
         dispatch(baseApi.util.invalidateTags(["Room", "Booking", "BranchRoomPolicy"]));
+      },
+      onRoomImportProgress: (data) => {
+        const progress = parseRoomSocketImportProgress(data);
+        const activeTaskId = activeRoomImportTaskIdRef.current;
+        if (progress.completed) {
+          const completedTaskId = progress.taskId || activeTaskId;
+          if (!completedTaskId || !refreshedRoomImportTasksRef.current.has(completedTaskId)) {
+            if (completedTaskId) refreshedRoomImportTasksRef.current.add(completedTaskId);
+            dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
+          }
+        }
+        if (!activeTaskId || (progress.taskId && progress.taskId !== activeTaskId)) return;
+        setRoomSocketImportProgress(progress);
       },
     });
   }, [dispatch, hotelId]);
@@ -231,8 +331,8 @@ export default function RoomWorkspace() {
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, { price: string; extraAdultFee: string; extraChildFee: string; standardCapacity: string; maxExtraGuests: string }>>({});
   const [floors, setFloors] = useState<string[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
-  const { data: apiBuildings } = useGetBuildingsByCurrentHotelQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
-  const { currentData: apiFloorsByBuilding, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(Number(selectedBuildingId), { skip: !selectedBuildingId || Number.isNaN(Number(selectedBuildingId)) });
+  const { data: apiBuildings, isLoading: isBuildingsLoading, isError: isBuildingsError } = useGetBuildingsByCurrentHotelQuery();
+  const { currentData: apiFloorsByBuilding, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(selectedBuildingId, { skip: !selectedBuildingId });
   const [rooms, setRooms] = useState<Room[]>([]);
   const [query, setQuery] = useState("");
   const [building, setBuilding] = useState("Tất cả các tòa");
@@ -240,7 +340,7 @@ export default function RoomWorkspace() {
   const [roomType, setRoomType] = useState("Tất cả loại phòng");
   const [status, setStatus] = useState("Tất cả trạng thái");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(12);
   const [assignmentRoom, setAssignmentRoom] = useState<Room | null>(null);
   const [statusMenuRoom, setStatusMenuRoom] = useState<string | null>(null);
   const [galleryRoom, setGalleryRoom] = useState<Room | null>(null);
@@ -252,12 +352,90 @@ export default function RoomWorkspace() {
   const [editingBuildingId, setEditingBuildingId] = useState<string | null>(null);
   const [buildingQuery, setBuildingQuery] = useState("");
   const [importingRooms, setImportingRooms] = useState(false);
+  const [roomImportUploadProgress, setRoomImportUploadProgress] = useState("");
+  const [isRoomImportDialogOpen, setIsRoomImportDialogOpen] = useState(false);
+  const [isAmenityImportDialogOpen, setIsAmenityImportDialogOpen] = useState(false);
+  const [amenityImportProgress, setAmenityImportProgress] = useState("");
+  const [amenityImportProgressPercent, setAmenityImportProgressPercent] = useState<number>();
+  const [roomImportReport, setRoomImportReport] = useState<{
+    processing: boolean;
+    rows: RoomImportRowResult[];
+    archiveError?: string;
+  } | null>(null);
+  const [roomSocketImportProgress, setRoomSocketImportProgress] = useState<RoomSocketImportProgress | null>(null);
+  const [roomImportTaskId, setRoomImportTaskId] = useState("");
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const importTargetRef = useRef<ImportTarget>("rooms");
+  const activeRoomImportTaskIdRef = useRef("");
+  const finishedRoomImportTasksRef = useRef(new Set<string>());
+  const refreshedRoomImportTasksRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!roomImportTaskId) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+
+    const pollStatus = async () => {
+      try {
+        const status = await getRoomImportStatus(roomImportTaskId, controller.signal);
+        if (controller.signal.aborted) return;
+        const nextProgress = parseRoomSocketImportProgress({ ...status, taskId: status.taskId ?? roomImportTaskId });
+        setRoomSocketImportProgress((current) => ({
+          ...nextProgress,
+          rows: nextProgress.rows.length > 0
+            ? [
+              ...(current?.rows ?? []).filter((row) => !nextProgress.rows.some((nextRow) => nextRow.rowNumber === row.rowNumber)),
+              ...nextProgress.rows,
+            ].sort((left, right) => left.rowNumber - right.rowNumber)
+            : current?.rows ?? [],
+        }));
+
+        if (isRoomImportFinished(status)) {
+          if (!finishedRoomImportTasksRef.current.has(roomImportTaskId)) {
+            finishedRoomImportTasksRef.current.add(roomImportTaskId);
+            if (!refreshedRoomImportTasksRef.current.has(roomImportTaskId)) {
+              refreshedRoomImportTasksRef.current.add(roomImportTaskId);
+              dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
+            }
+            const failed = ["FAILED", "ERROR"].includes(String(status.status ?? "").trim().toUpperCase());
+            toast({
+              variant: failed ? "destructive" : "success",
+              title: failed ? "Nhập phòng thất bại" : "Nhập phòng hoàn tất",
+              description: status.message || (failed ? "Backend báo tiến trình nhập phòng thất bại." : "Danh sách phòng đã được cập nhật từ máy chủ."),
+            });
+          }
+          return;
+        }
+
+        timer = window.setTimeout(() => void pollStatus(), 1500);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        const message = getRoomImportErrorMessage(error);
+        setRoomSocketImportProgress((current) => current
+          ? { ...current, message: `Đang thử lại trạng thái từ máy chủ: ${message}` }
+          : {
+            taskId: roomImportTaskId,
+            percent: null,
+            message: `Đang thử lại trạng thái từ máy chủ: ${message}`,
+            completed: false,
+            rows: [],
+          });
+        timer = window.setTimeout(() => void pollStatus(), 3000);
+      }
+    };
+
+    void pollStatus();
+    return () => {
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [dispatch, roomImportTaskId]);
   const [detailRoom, setDetailRoom] = useState<Room | null>(null);
   const [createRoomForm, setCreateRoomForm] = useState<CreateRoomFormState>(emptyCreateRoomForm);
   const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
   const [newAmenityName, setNewAmenityName] = useState("");
   const [amenityPrice, setAmenityPrice] = useState("");
+  const [isCreatingAmenity, setIsCreatingAmenity] = useState(false);
   const [customAmenityPrices, setCustomAmenityPrices] = useState<Record<string, number>>({});
   const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
@@ -270,7 +448,7 @@ export default function RoomWorkspace() {
     { skip: !hotelId || !createRoomForm.roomType },
   );
   const getApiValue = (item: Record<string, unknown>, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
-  const { data: apiFloorsByHotel = [] } = useGetFloorsByHotelIdQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { data: apiFloorsByHotel = [], isLoading: isHotelFloorsLoading, isError: isHotelFloorsError } = useGetFloorsByHotelIdQuery();
   const getRoomAmenityNames = (item: Record<string, unknown>) => {
     const amenityKeys = ["amenities", "roomAmenities", "amenityList", "amenityResponses", "roomAmenityResponses", "services", "amenityIds", "amenityNames"];
     const nestedRoom = getApiValue(item, ["roomInfo", "roomDetails", "room"]);
@@ -310,24 +488,45 @@ export default function RoomWorkspace() {
   }).filter((item) => item.id && item.name), [apiFloorsByBuilding]);
   const hotelFloorOptions = useMemo(() => apiFloorsByHotel.map((item) => {
     const id = getApiValue(item, ["id", "floorId", "floorID"]);
-    const floorNumber = getApiValue(item, ["floorNumber", "floorLevel", "number"]);
+    const floorNumber = getApiValue(item, ["floorNumber", "floorLevel", "floorNo", "number"]);
     const name = getApiValue(item, ["name", "floorName"]);
     const displayName = String(floorNumber ?? name ?? "");
-    const buildingValue = getApiValue(item, ["building"]);
+    const directBuildingId = getApiValue(item, ["buildingId", "buildingID", "towerId", "towerID"]);
+    const buildingValue = getApiValue(item, ["building", "buildingInfo", "buildingResponse", "tower", "towerInfo"]);
     const buildingRecord = buildingValue && typeof buildingValue === "object" ? buildingValue as Record<string, unknown> : {};
-    const buildingId = getApiValue(item, ["buildingId", "buildingID"]) ?? getApiValue(buildingRecord, ["id", "buildingId", "buildingID"]);
+    const nestedBuildingId = getApiValue(buildingRecord, ["id", "buildingId", "buildingID", "towerId", "towerID"]);
+    const buildingName = getApiValue(item, ["buildingName", "towerName"]) ?? getApiValue(buildingRecord, ["name", "buildingName", "towerName"]);
+    const buildingId = directBuildingId ?? nestedBuildingId ?? buildings.find((building) =>
+      buildingName != null && normalizeText(building.name) === normalizeText(String(buildingName)),
+    )?.id;
     return {
       id: String(id ?? ""),
       name: displayName,
       buildingId: String(buildingId ?? ""),
     };
-  }).filter((item) => item.id && item.name), [apiFloorsByHotel]);
+  }).filter((item) => item.id && item.name), [apiFloorsByHotel, buildings]);
   const hotelFloorNames = useMemo(() => [...new Set(hotelFloorOptions.map((item) => item.name))], [hotelFloorOptions]);
   const hotelFloorsForSelectedBuilding = useMemo(
     () => hotelFloorOptions.filter((item) => !selectedBuildingId || !item.buildingId || item.buildingId === selectedBuildingId),
     [hotelFloorOptions, selectedBuildingId],
   );
   const selectedBuildingFloorOptions = apiFloorsByBuilding !== undefined ? apiFloorOptions : hotelFloorsForSelectedBuilding;
+  const roomImportOptions = useMemo<RoomImportOptions>(() => ({
+    roomTypes: Object.keys(roomTypeLabels),
+    statuses: [...new Set((availableRoomStatuses.length > 0 ? availableRoomStatuses : statuses).map((value) => value.trim()).filter(Boolean))],
+    amenities: [...new Map(amenityCatalog
+      .filter((item) => Number.isInteger(item.id) && item.name.trim())
+      .map((item) => [String(item.id), { id: String(item.id), name: item.name.trim() }])).values()],
+    buildings: [...new Map(buildings.filter((item) => item.id && item.name.trim()).map((item) => [normalizeText(item.name), item])).values()],
+    floors: [...new Map(hotelFloorOptions
+      .filter((item) => buildings.some((building) => building.id === item.buildingId))
+      .map((item) => [`${item.buildingId}:${normalizeText(item.name)}`, item])).values()],
+  }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, buildings, hotelFloorOptions]);
+  const selectedBuildingName = buildings.find((item) => item.id === createRoomForm.building)?.name ?? "Chưa chọn";
+  const selectedFloorName = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor)?.name;
+  const selectedFloorLabel = selectedFloorName
+    ? selectedFloorName.startsWith("Tầng") ? selectedFloorName : `Tầng ${selectedFloorName}`
+    : "Chưa chọn";
   useEffect(() => {
     console.log("[RoomWorkspace] rooms by current hotel", { rooms: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError });
   }, [apiRooms, roomsError, isRoomsLoading, isRoomsFetching, isRoomsError]);
@@ -403,10 +602,13 @@ export default function RoomWorkspace() {
       };
     });
 
-    setRooms((current) => nextRooms.map((room) => {
-      const previous = current.find((item) => item.id === room.id);
-      return previous ? { ...room, status: previous.status, cleaner: previous.cleaner } : room;
-    }));
+    setRooms((current) => {
+      const refreshedRooms = nextRooms.map((room) => {
+        const previous = current.find((item) => item.id === room.id);
+        return previous ? { ...room, status: previous.status, cleaner: previous.cleaner } : room;
+      });
+      return refreshedRooms;
+    });
   }, [apiRooms, apiAmenities, hotelFloorOptions]);
   useEffect(() => {
     if (!apiBuildings) return;
@@ -616,6 +818,14 @@ export default function RoomWorkspace() {
   }, [apiAmenities, amenitySearch]);
   const saveAmenityEdit = (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => {
     setAmenityOverrides((current) => ({ ...current, [amenity.id]: { ...amenity, ...changes } }));
+  };
+  const addLocalAmenity = (amenity: Pick<AmenityResponse, "name" | "price">) => {
+    if (amenityCatalog.some((item) => normalizeText(item.name) === normalizeText(amenity.name))) {
+      toast({ variant: "destructive", title: "Tiện nghi đã tồn tại", description: `“${amenity.name}” đã có trong danh sách.` });
+      return;
+    }
+    setLocalAmenities((current) => [...current, { ...amenity, id: -(Date.now() + current.length) }]);
+    toast({ variant: "success", title: "Thêm tiện nghi thành công", description: `Đã thêm “${amenity.name}” vào giao diện.` });
   };
   const filteredBuildings = useMemo(() => {
     const normalizedQuery = normalizeText(buildingQuery);
@@ -947,82 +1157,383 @@ export default function RoomWorkspace() {
       });
     }
   };
-  const importRoomsFromFile = async (file: File | null) => {
-    if (!file) return;
+  const importRoomsFromFile = async (file: File): Promise<boolean> => {
     setImportingRooms(true);
+    setRoomImportReport(null);
+    setRoomSocketImportProgress(null);
+    setRoomImportTaskId("");
+    setRoomImportUploadProgress("Đang đọc ZIP và kiểm tra dữ liệu phòng...");
+    activeRoomImportTaskIdRef.current = "";
     try {
-      const rows = file.name.toLowerCase().endsWith(".csv")
-        ? parseCsv(await file.text())
-        : await parseXlsx(await file.arrayBuffer());
-      const getValue = (row: ImportedRoomRow, names: string[]) => names.map(normalizeImportedValue).map((name) => row[name]).find((value) => value?.trim())?.trim() ?? "";
-      const nextRooms = [...rooms];
-      let importedCount = 0;
-      rows.forEach((row) => {
-        const building = getValue(row, ["tòa", "toa", "building"]).toUpperCase() || "A";
-        const floorNumber = getValue(row, ["tầng", "tang", "floor"]).replace(/[^1-4]/g, "") || "1";
-        const prefix = `${building}-${floorNumber}-`;
-        const usedSequences = nextRooms.filter((room) => room.id.startsWith(prefix)).map((room) => Number(room.id.slice(prefix.length))).filter(Number.isInteger);
-        let sequence = 1;
-        while (usedSequences.includes(sequence)) sequence += 1;
-        const roomCode = getValue(row, ["mã phòng", "ma phong", "room code", "id"]) || `${prefix}${sequence}`;
-        if (nextRooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase())) return;
-        const roomType = getValue(row, ["loại phòng", "loai phong", "room type"]) || "Standard Room";
-        const area = getValue(row, ["diện tích", "dien tich", "area"]) || "25 m²";
-        const price = Number(getValue(row, ["giá", "gia", "giá tiền", "gia tien", "price"]).replace(/[^\d]/g, ""));
-        const capacity = Number(getValue(row, ["sức chứa", "suc chua", "capacity"]).replace(/[^\d]/g, "")) || 1;
-        const services = getValue(row, ["tiện nghi", "tien nghi", "amenities", "services"]).split(/[;,|]/).map((item) => item.trim()).filter(Boolean);
-        if (!roomType || !price) return;
-        nextRooms.unshift({
-          id: roomCode,
-          name: roomType,
-          images: [],
-          floor: floorNumber,
-          size: area.toLowerCase().includes("m") ? area : `${area} m²`,
-          beds: getValue(row, ["giường", "giuong", "beds"]) || "1 giường",
-          capacity,
-          standardCapacity: capacity,
-          maxExtraGuests: 0,
-          extraAdultFee: 0,
-          extraChildFee: 0,
-          guestPolicy: getValue(row, ["số người tối đa", "so nguoi toi da", "guest policy"]) || `Tối đa ${capacity} khách`,
-          price,
-          status: statuses.includes(getValue(row, ["trạng thái", "trang thai", "status"])) ? getValue(row, ["trạng thái", "trang thai", "status"]) : "Sẵn sàng",
-          cleaner: "",
-          services: services.length > 0 ? services : ["Wifi", "Điều hòa"],
+      const parsed = await parseRoomImportArchive(file, roomImportOptions, rooms.map((room) => room.id));
+      setRoomImportReport({ processing: true, rows: parsed.rows });
+      if (parsed.rooms.length === 0) {
+        setRoomImportReport({
+          processing: false,
+          rows: parsed.rows,
+          archiveError: "Không có dòng phòng hợp lệ để nhập. Hãy xem chi tiết các dòng cần sửa.",
         });
-        importedCount += 1;
+        return true;
+      }
+      const roomWithLocalFloor = parsed.rooms.find((room) => room.floor.id.startsWith("local-"));
+      if (roomWithLocalFloor) {
+        throw new Error(`Không tìm thấy ID tầng trên máy chủ cho phòng ${roomWithLocalFloor.roomNumber}. Hãy tải lại danh sách tầng rồi thử lại.`);
+      }
+
+      const files = [...new Map(parsed.rooms.flatMap((room) => room.imageFiles)
+        .map((image) => [image.name.toLocaleLowerCase(), image])).values()];
+      setRoomImportUploadProgress(`Đang tải ${files.length} ảnh lên Cloudinary...`);
+      if (!hotelName) {
+        throw new Error("Không xác định được tên chi nhánh từ tài khoản đang đăng nhập.");
+      }
+      const imageUrls = await uploadRoomImagesToCloudinary(files, hotelName, (uploaded, total) => {
+        setRoomImportUploadProgress(`Đang tải ảnh lên Cloudinary: ${uploaded}/${total}...`);
       });
-      setRooms(nextRooms);
-      window.alert(importedCount > 0 ? `Đã nhập ${importedCount} phòng.` : "Không có dòng phòng hợp lệ để nhập.");
+      const request = {
+        rooms: parsed.rooms.map((room) => ({
+          rowNumber: room.rowNumber,
+          roomNumber: room.roomNumber,
+          floorId: room.floor.id,
+          roomType: roomTypeValues[room.roomType] ?? room.roomType,
+          roomStatus: statusValues[room.status] ?? room.status,
+          amenityIds: room.amenities.map((name) => {
+            const id = roomImportOptions.amenities.find((amenity) => normalizeText(amenity.name) === normalizeText(name))?.id;
+            if (!id || !/^\d+$/.test(id)) throw new Error(`Không tìm thấy ID hợp lệ cho tiện ích "${name}".`);
+            return Number(id);
+          }),
+          imageUrls: room.imageFiles.map((image) => {
+            const url = imageUrls.get(image.name.toLocaleLowerCase());
+            if (!url) throw new Error(`Không tìm thấy URL Cloudinary cho ảnh "${image.name}".`);
+            return url;
+          }),
+        })),
+      };
+      setRoomImportUploadProgress("Đã tải ảnh xong. Đang gửi dữ liệu phòng lên máy chủ...");
+      const { taskId, message } = await startRoomImport(request);
+      activeRoomImportTaskIdRef.current = taskId;
+      setRoomImportTaskId(taskId);
+      setRoomSocketImportProgress({
+        taskId,
+        percent: 0,
+        message: message || "Máy chủ đã tiếp nhận file và đang xử lý.",
+        completed: false,
+        rows: parsed.rows.filter((row) => !row.passed),
+      });
+      setIsRoomImportDialogOpen(false);
+      return true;
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Không thể đọc file phòng.");
+      setRoomImportReport({
+        processing: false,
+        rows: [],
+        archiveError: getRoomImportErrorMessage(error),
+      });
+      return true;
     } finally {
       setImportingRooms(false);
+      setRoomImportUploadProgress("");
+    }
+  };
+
+  const openImportPicker = (target: ImportTarget) => {
+    importTargetRef.current = target;
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = "";
+      importFileInputRef.current.accept = target === "rooms" ? ".zip,application/zip" : ".csv,.xlsx";
+      importFileInputRef.current.click();
+    }
+  };
+
+  const importLocalDataFromFile = async (file: File, target = importTargetRef.current): Promise<boolean> => {
+    if (target === "rooms") {
+      await importRoomsFromFile(file);
+      return true;
+    }
+
+    try {
+      if (target === "amenities") {
+        setAmenityImportProgress("Đang đọc file tiện nghi...");
+        setAmenityImportProgressPercent(10);
+      }
+      const rows = await readImportRows(file);
+      if (rows.length === 0) throw new Error("File không có dòng dữ liệu.");
+
+      if (target === "buildings") {
+        const nextBuildings = [...buildings];
+        let importedCount = 0;
+        rows.forEach((row) => {
+          const name = getImportedValue(row, ["tên tòa", "ten toa", "tên tòa nhà", "ten toa nha", "building name", "name"]);
+          if (!name || nextBuildings.some((item) => normalizeText(item.name) === normalizeText(name))) return;
+          const requestedCode = getImportedValue(row, ["mã tòa", "ma toa", "mã tòa nhà", "ma toa nha", "building code", "code"]);
+          const id = requestedCode || createBuildingCode(nextBuildings);
+          if (nextBuildings.some((item) => item.id.toLocaleLowerCase() === id.toLocaleLowerCase())) return;
+          nextBuildings.push({ id, name });
+          importedCount += 1;
+        });
+        if (importedCount === 0) throw new Error("Không có tòa nhà hợp lệ mới trong file. Cần cột Tên tòa; có thể thêm cột Mã tòa.");
+        setBuildings(nextBuildings);
+        window.localStorage.setItem("staywise-buildings", JSON.stringify(nextBuildings));
+        toast({ variant: "success", title: "Nhập tòa nhà thành công", description: `Đã thêm ${importedCount} tòa nhà vào giao diện.` });
+        return true;
+      }
+
+      if (target === "floors") {
+        if (!selectedBuildingId) throw new Error("Vui lòng chọn tòa nhà trước khi nhập tầng.");
+        const nextFloors = [...floors];
+        let importedCount = 0;
+        rows.forEach((row) => {
+          const name = getImportedValue(row, ["tên tầng", "ten tang", "tầng", "tang", "floor name", "floor"]);
+          const buildingNameOrCode = getImportedValue(row, ["tên tòa", "ten toa", "tòa", "toa", "building", "building code"]);
+          if (!name || nextFloors.some((item) => normalizeText(item) === normalizeText(name))) return;
+          if (buildingNameOrCode) {
+            const selectedBuilding = buildings.find((item) => item.id === selectedBuildingId);
+            if (!selectedBuilding || normalizeText(buildingNameOrCode) !== normalizeText(selectedBuilding.name) &&
+              buildingNameOrCode.toLocaleLowerCase() !== selectedBuilding.id.toLocaleLowerCase()) return;
+          }
+          nextFloors.push(name);
+          importedCount += 1;
+        });
+        if (importedCount === 0) throw new Error("Không có tầng mới hợp lệ. Cần cột Tên tầng cho tòa nhà đang chọn.");
+        setFloors(nextFloors);
+        toast({ variant: "success", title: "Nhập tầng thành công", description: `Đã thêm ${importedCount} tầng vào giao diện.` });
+        return true;
+      }
+
+      const importedAmenities = rows.map((row, index) => {
+        const name = getImportedValue(row, ["tên tiện ích", "ten tien ich", "tên tiện nghi", "ten tien nghi", "tiện ích", "tien ich", "amenity", "name"]);
+        const priceText = getImportedValue(row, ["giá tiền", "gia tien", "giá", "gia", "price"]);
+        const price = Number(priceText.replace(/\./g, "").replace(/,/g, "."));
+        if (!name || !priceText || !Number.isFinite(price) || price < 0) {
+          throw new Error(`Dòng ${index + 2} cần có tên tiện ích và giá không âm hợp lệ.`);
+        }
+        return { row: index + 2, name, price };
+      });
+      if (importedAmenities.length === 0) throw new Error("File không có tiện ích hợp lệ để nhập.");
+      setAmenityImportProgress(`Đã kiểm tra ${importedAmenities.length} dòng. Đang gửi dữ liệu lên máy chủ...`);
+      setAmenityImportProgressPercent(5);
+      const { taskId } = await importAmenitiesFromFile({ amenities: importedAmenities }).unwrap();
+      if (!taskId) throw new Error("Máy chủ không trả về mã tiến trình nhập tiện nghi.");
+
+      let importStatus = await getAmenityImportStatus(taskId);
+      while (!isAmenityImportFinished(importStatus)) {
+        if (typeof importStatus.percent === "number") {
+          setAmenityImportProgressPercent(importStatus.percent);
+        }
+        setAmenityImportProgress(importStatus.message || "Máy chủ đang xử lý dữ liệu tiện nghi...");
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        importStatus = await getAmenityImportStatus(taskId);
+      }
+
+      if (importStatus.status.trim().toUpperCase() !== "SUCCESS") {
+        throw new Error(importStatus.message || "Máy chủ không thể lưu tiện nghi.");
+      }
+      const savedAmenities = Array.isArray(importStatus.details) ? importStatus.details : [];
+      dispatch(baseApi.util.invalidateTags(["Amenity", "Room"]));
+      const skippedCount = importedAmenities.length - savedAmenities.length;
+      setAmenityImportProgress(
+        savedAmenities.length > 0
+          ? `Hoàn tất: đã lưu ${savedAmenities.length} tiện nghi${skippedCount > 0 ? `, bỏ qua ${skippedCount} dòng trùng tên` : ""}.`
+          : `Hoàn tất: không có tiện nghi mới; đã bỏ qua ${skippedCount} dòng trùng tên.`,
+      );
+      setAmenityImportProgressPercent(100);
+      toast({
+        variant: savedAmenities.length > 0 ? "success" : "default",
+        title: savedAmenities.length > 0 ? "Nhập tiện nghi thành công" : "Không có tiện nghi mới",
+        description: savedAmenities.length > 0
+          ? `Đã lưu ${savedAmenities.length} tiện nghi vào cơ sở dữ liệu.${skippedCount > 0 ? ` Đã bỏ qua ${skippedCount} dòng bị trùng tên.` : ""}`
+          : `Tất cả ${skippedCount} tiện nghi đã tồn tại nên không có dữ liệu mới được lưu.`,
+      });
+      return true;
+    } catch (error) {
+      if (target === "amenities") {
+        setAmenityImportProgress("");
+        setAmenityImportProgressPercent(undefined);
+        if (typeof error === "object" && error !== null && "data" in error) {
+          const response = error.data;
+          if (typeof response === "object" && response !== null && "message" in response && typeof response.message === "string") {
+            throw new Error(response.message);
+          }
+        }
+        throw error;
+      }
+      toast({
+        variant: "destructive",
+        title: "Không thể nhập dữ liệu",
+        description: error instanceof Error ? error.message : "Không thể đọc file.",
+      });
+      return true;
     }
   };
 
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+    <input
+      ref={importFileInputRef}
+      type="file"
+      className="hidden"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (file) void importLocalDataFromFile(file);
+      }}
+    />
     {detailRoom && <RoomDetailModal room={detailRoom} onClose={() => setDetailRoom(null)} />}
     {activeTab !== "pricing" && <>
-      {activeTab !== "amenities" && <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div><h3 className="font-bold text-slate-900">{t("room.roomList")}</h3><p className="mt-1 text-sm text-slate-500">{filtered.length} {t("room.roomsAtBranch")} · {t("room.realTimeUpdate")}</p></div>
-        <div className="flex flex-wrap gap-2">{activeTab === "buildings" ? <button type="button" onClick={openCreateBuildingModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addBuilding")}</button> : activeTab === "floors" ? <button type="button" onClick={openCreateFloorModal} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addFloor")}</button> : activeTab === "rooms" ? <button type="button" onClick={() => setShowCreateRoom(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><span className="text-lg leading-none">+</span>{t("room.addRoom")}</button> : null}</div>
-      </div>}
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="font-bold text-slate-900">
+            {activeTab === "rooms" ? t("room.roomList") : activeTab === "buildings" ? t("room.buildingList", "Danh sách tòa nhà") : activeTab === "floors" ? t("room.floorManagement") : "Danh sách tiện nghi"}
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            {activeTab === "rooms" ? `${filtered.length} ${t("room.roomsAtBranch")} · ${t("room.realTimeUpdate")}` : activeTab === "buildings" ? `${filteredBuildings.length} tòa nhà` : activeTab === "floors" ? `${floors.length} tầng · ${buildings.find((item) => item.id === selectedBuildingId)?.name ?? ""}` : `${amenityCatalog.length} tiện nghi`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canManageRooms && <button
+            type="button"
+            onClick={() => {
+              if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
+              else if (activeTab === "amenities") setIsAmenityImportDialogOpen(true);
+              else openImportPicker(activeTab);
+            }}
+            disabled={importingRooms}
+            className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:opacity-50"
+          >
+            <Upload size={16} />{importingRooms && activeTab === "rooms" ? "Đang đọc file..." : "Tải dữ liệu bằng file"}
+          </button>}
+          {canManageRooms && activeTab !== "amenities" && (
+            <button
+              type="button"
+              onClick={() => activeTab === "rooms" ? setShowCreateRoom(true) : activeTab === "buildings" ? openCreateBuildingModal() : openCreateFloorModal()}
+              className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700"
+            >
+              <span className="text-lg leading-none">+</span>{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
+            </button>
+          )}
+          {canManageRooms && activeTab === "amenities" && (
+            <button
+              type="button"
+              onClick={() => setIsCreatingAmenity(true)}
+              className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700"
+            >
+              <span className="text-lg leading-none">+</span>Thêm tiện nghi
+            </button>
+          )}
+        </div>
+      </div>
       <div className="flex flex-wrap border-b border-slate-100 bg-slate-50/60 p-2">
         <button type="button" onClick={() => setActiveTab("rooms")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button>
-        <button type="button" onClick={() => setActiveTab("buildings")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button>
-        <button type="button" onClick={() => setActiveTab("floors")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button>
-        <button type="button" onClick={() => setActiveTab("amenities")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "amenities" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>Danh sách tiện nghi</button>
+        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("buildings")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button>}
+        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("floors")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button>}
+        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("amenities")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "amenities" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>Danh sách tiện nghi</button>}
       </div>
     </>}
-    {activeTab === "buildings" && <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} />}
-    {activeTab === "floors" && <>
+    {canViewRoomStructure && activeTab === "buildings" && <>
+      {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
+      {isBuildingsLoading && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tòa nhà...</p>}
+      <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} canManage={canManageRooms} />
+    </>}
+    {canViewRoomStructure && activeTab === "floors" && <>
+      {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
+      {isBuildingsLoading && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tòa nhà...</p>}
       {isFloorsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tầng của tòa nhà này.</p>}
       {(isFloorsLoading || isFloorsFetching) && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tầng...</p>}
-      <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} />
+      <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} canManage={canManageRooms} />
     </>}
-    {activeTab === "amenities" && <RoomAmenitiesTab amenities={amenityCatalog} isLoading={isAmenitiesLoading} isError={isAmenitiesError} onSave={saveAmenityEdit} />}
+    {canViewRoomStructure && activeTab === "amenities" && <RoomAmenitiesTab amenities={amenityCatalog} isLoading={isAmenitiesLoading} isError={isAmenitiesError} canManage={canManageRooms} isCreating={isCreatingAmenity} onCreateOpenChange={setIsCreatingAmenity} onSave={saveAmenityEdit} onAdd={addLocalAmenity} />}
+    <BulkImportDialog
+      open={isRoomImportDialogOpen}
+      onOpenChange={setIsRoomImportDialogOpen}
+      eyebrow="Nhập hàng loạt"
+      title="Tải dữ liệu phòng"
+      description="Đặt file Excel mẫu và ảnh trong thư mục dulieuphong rồi nén thành dulieuphong.zip. Ảnh được tải trực tiếp lên Cloudinary trước khi gửi dữ liệu phòng cho máy chủ."
+      templateLabel="Tải file Excel mẫu"
+      onDownloadTemplate={() => {
+        if (isBuildingsLoading || isHotelFloorsLoading) {
+          toast({ title: "Đang tải danh sách tòa và tầng", description: "Vui lòng đợi trong giây lát rồi tải mẫu Excel." });
+          return;
+        }
+        if (isBuildingsError || isHotelFloorsError) {
+          toast({ variant: "destructive", title: "Không thể tải danh sách tòa và tầng", description: "Hãy kiểm tra kết nối máy chủ rồi thử lại." });
+          return;
+        }
+        try {
+          downloadRoomTemplate(roomImportOptions);
+        } catch (error) {
+          toast({
+            variant: "destructive",
+            title: "Không thể tạo file Excel mẫu",
+            description: error instanceof Error ? error.message : "Đã xảy ra lỗi không xác định.",
+          });
+        }
+      }}
+      acceptedFileTypes=".zip,application/zip"
+      fileLabel="File ZIP bộ dữ liệu (.zip)"
+      validateFile={(file) => file.name.toLocaleLowerCase() === "dulieuphong.zip" ? null : "Vui lòng chọn đúng file dulieuphong.zip."}
+      instructions={
+        <>
+          <p className="font-bold">Cấu trúc file ZIP</p>
+          <pre className="my-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dulieuphong.zip
+└── dulieuphong/
+    ├── phong.xlsx
+    └── images/
+        ├── 101-1.jpg
+        ├── 101-2.jpg
+        ├── 101-3.jpg
+        └── 101-4.jpg`}</pre>
+          <p>Trong Excel, các ô Loại phòng, Tòa và Trạng thái có danh sách xổ xuống để chọn. Cột Tầng nhập số nguyên floorNumber; hệ thống ghép số tầng với Tòa để tìm đúng tầng. Tiện ích nhập trong một ô bằng ID, ngăn cách nhiều ID bằng dấu chấm phẩy (;); tra ID và tên ở sheet Danh mục. Chỉ ID có trong danh mục mới được chấp nhận. Số phòng phải là số nguyên dương.</p>
+          <p className="mt-2">Mỗi phòng cần từ 4 đến 8 ảnh, tối đa 5 MB mỗi ảnh. Nhập tên file ảnh bằng tay vào các cột Ảnh 1–Ảnh 8; tên phải khớp ảnh trong thư mục <strong>images</strong>, gồm phần đuôi, ví dụ <strong>101-1.jpg</strong>. Mỗi dòng là một phòng, không đổi tên cột.</p>
+          <p className="mt-2">Trong thư mục <strong>dulieuphong</strong>, đặt <strong>phong.xlsx</strong> và thư mục <strong>images</strong> cùng cấp. Sau đó nén thư mục <strong>dulieuphong</strong> thành <strong>dulieuphong.zip</strong>. FE tải ảnh trực tiếp lên Cloudinary bằng unsigned upload preset; máy chủ chỉ nhận URL ảnh và lưu phòng.</p>
+        </>
+      }
+      uploadLabel="Nhập phòng"
+      progress={roomImportUploadProgress || undefined}
+      onUpload={importRoomsFromFile}
+    />
+    <BulkImportDialog
+      open={isAmenityImportDialogOpen}
+      onOpenChange={(open) => {
+        setIsAmenityImportDialogOpen(open);
+        if (open) {
+          setAmenityImportProgress("");
+          setAmenityImportProgressPercent(undefined);
+        }
+      }}
+      eyebrow="Nhập hàng loạt"
+      title="Tải dữ liệu tiện nghi"
+      description="Tải file Excel mẫu ngay tại đây, điền danh sách tiện nghi và giữ nguyên tên file khi tải lên."
+      templateLabel="Tải file Excel mẫu tiện nghi"
+      onDownloadTemplate={downloadAmenityTemplate}
+      acceptedFileTypes=".xlsx"
+      fileLabel="File Excel tiện nghi (mau-nhap-tien-ich.xlsx)"
+      validateFile={(file) => file.name.toLocaleLowerCase() === "mau-nhap-tien-ich.xlsx"
+        ? null
+        : 'Vui lòng chọn đúng file "mau-nhap-tien-ich.xlsx". Không đổi tên file mẫu.'}
+      instructions={
+        <>
+          <p>File cần có hai cột <strong>Tên tiện ích</strong> và <strong>Giá tiền</strong>. Giá nhập bằng số không âm, không thêm ký hiệu tiền tệ.</p>
+          <p className="mt-2">Các tiện ích trùng tên (không phân biệt hoa thường hoặc dấu tiếng Việt) sẽ được bỏ qua; các tiện nghi mới được lưu vào cơ sở dữ liệu.</p>
+        </>
+      }
+      uploadLabel="Nhập tiện nghi"
+      progress={amenityImportProgress || undefined}
+      progressPercent={amenityImportProgress ? amenityImportProgressPercent : undefined}
+      onUpload={(file) => importLocalDataFromFile(file, "amenities")}
+    />
+    {(roomImportReport || roomSocketImportProgress) && (
+      <RoomImportProgressCard
+        processing={roomImportReport?.processing ?? false}
+        rows={roomSocketImportProgress?.rows ?? roomImportReport?.rows ?? []}
+        archiveError={roomImportReport?.archiveError}
+        liveProgress={roomSocketImportProgress ?? undefined}
+        onDismiss={() => {
+          setRoomImportReport(null);
+          setRoomSocketImportProgress(null);
+          activeRoomImportTaskIdRef.current = "";
+          setRoomImportTaskId("");
+        }}
+      />
+    )}
     {activeTab === "rooms" && <RoomListTab
+       canManageRooms={canManageRooms}
       filtered={filtered}
       paginatedRooms={paginatedRooms}
       buildings={buildings}
@@ -1672,11 +2183,11 @@ export default function RoomWorkspace() {
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                     <span>Tòa</span>
-                    <strong className="font-semibold text-slate-800">{createRoomForm.building}</strong>
+                    <strong className="font-semibold text-slate-800">{selectedBuildingName}</strong>
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                     <span>Tầng</span>
-                    <strong className="font-semibold text-slate-800">{createRoomForm.floor}</strong>
+                    <strong className="font-semibold text-slate-800">{selectedFloorLabel}</strong>
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                     <span>Diện tích</span>

@@ -513,6 +513,8 @@
     "usageLimit": "Maximum uses",
     "hotelName": "Applicable hotel",
     "status": "Status",
+    "allPromotionStatuses": "All statuses",
+    "noPromotionsMatchingFilters": "No promotions match the selected filters.",
     "statusDraft": "Draft",
     "statusActive": "Active",
     "statusInactive": "Inactive",
