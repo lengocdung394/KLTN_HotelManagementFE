@@ -182,7 +182,17 @@ const roomTypeLabels: Record<string, string> = {
   SUITE: "Phòng Thượng Hạng",
   FAMILY: "Phòng Gia Đình",
 };
-const roomTypeValues: Record<string, string> = Object.fromEntries(Object.entries(roomTypeLabels).map(([value, label]) => [label, value]));
+const roomTypeAliases: Record<string, string> = {
+  "Standard Room": "STANDARD",
+  "Deluxe Room": "DELUXE",
+  "Superior Room": "DELUXE",
+  "Suite Room": "SUITE",
+  "Family Room": "FAMILY",
+};
+const roomTypeValues: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(roomTypeLabels).map(([value, label]) => [label, value])),
+  ...roomTypeAliases,
+};
 const statusLabels: Record<string, string> = { READY: "Sẵn sàng", MAINTENANCE: "Bảo trì", IN_USE: "Đang ở", CLEANING: "Đang dọn" };
 const statusValues: Record<string, string> = Object.fromEntries(Object.entries(statusLabels).map(([value, label]) => [label, value]));
 const roomTypeLabel = (value: string) => roomTypeLabels[value] ?? value;
@@ -244,8 +254,9 @@ export default function RoomWorkspace() {
   const { t } = useTranslation();
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const hotelId = useAppSelector((state) => state.auth.hotelId);
-  const hotelName = useAppSelector((state) => state.auth.hotelName);
+  const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
+  const canManageRooms = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
+  const canViewRoomStructure = canManageRooms || roles.includes("ROLE_EMPLOYEE");
   const { data: apiRoomTypes, isLoading: isRoomTypesLoading, isError: isRoomTypesError } = useGetRoomTypesQuery();
   const { data: apiBedTypes, isLoading: isBedTypesLoading, isError: isBedTypesError } = useGetAllBedTypesQuery();
   const { data: apiRoomStatuses, isLoading: isRoomStatusesLoading, isError: isRoomStatusesError } = useGetRoomStatusesQuery();
@@ -268,7 +279,7 @@ export default function RoomWorkspace() {
   const bedTypeOptions = useMemo(() => (apiBedTypes ?? []).map((item) => String(item.bedTypeName ?? item.name ?? item.description ?? "")).filter(Boolean), [apiBedTypes]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const requestedTab = new URLSearchParams(location.search).get("tab");
-  const defaultRoomTab: "rooms" | "pricing" | "amenities" = requestedTab === "pricing" || requestedTab === "amenities" ? requestedTab : "rooms";
+  const defaultRoomTab: "rooms" | "pricing" | "amenities" = canManageRooms && (requestedTab === "pricing" || requestedTab === "amenities") ? requestedTab : "rooms";
   const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing" | "amenities">(defaultRoomTab);
   const [pricingMode, setPricingMode] = useState<"branch" | "event">("branch");
   const [editingPricingType, setEditingPricingType] = useState<string | null>(null);
@@ -320,8 +331,8 @@ export default function RoomWorkspace() {
   const [pricingDrafts, setPricingDrafts] = useState<Record<string, { price: string; extraAdultFee: string; extraChildFee: string; standardCapacity: string; maxExtraGuests: string }>>({});
   const [floors, setFloors] = useState<string[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState("");
-  const { data: apiBuildings, isLoading: isBuildingsLoading, isError: isBuildingsError } = useGetBuildingsByCurrentHotelQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
-  const { currentData: apiFloorsByBuilding, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(Number(selectedBuildingId), { skip: !selectedBuildingId || Number.isNaN(Number(selectedBuildingId)) });
+  const { data: apiBuildings, isLoading: isBuildingsLoading, isError: isBuildingsError } = useGetBuildingsByCurrentHotelQuery();
+  const { currentData: apiFloorsByBuilding, isLoading: isFloorsLoading, isFetching: isFloorsFetching, isError: isFloorsError } = useGetFloorsByBuildingIdQuery(selectedBuildingId, { skip: !selectedBuildingId });
   const [rooms, setRooms] = useState<Room[]>([]);
   const [query, setQuery] = useState("");
   const [building, setBuilding] = useState("Tất cả các tòa");
@@ -437,7 +448,7 @@ export default function RoomWorkspace() {
     { skip: !hotelId || !createRoomForm.roomType },
   );
   const getApiValue = (item: Record<string, unknown>, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
-  const { data: apiFloorsByHotel = [], isLoading: isHotelFloorsLoading, isError: isHotelFloorsError } = useGetFloorsByHotelIdQuery(undefined, { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { data: apiFloorsByHotel = [], isLoading: isHotelFloorsLoading, isError: isHotelFloorsError } = useGetFloorsByHotelIdQuery();
   const getRoomAmenityNames = (item: Record<string, unknown>) => {
     const amenityKeys = ["amenities", "roomAmenities", "amenityList", "amenityResponses", "roomAmenityResponses", "services", "amenityIds", "amenityNames"];
     const nestedRoom = getApiValue(item, ["roomInfo", "roomDetails", "room"]);
@@ -1376,7 +1387,7 @@ export default function RoomWorkspace() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
+          {canManageRooms && <button
             type="button"
             onClick={() => {
               if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
@@ -1387,8 +1398,8 @@ export default function RoomWorkspace() {
             className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:opacity-50"
           >
             <Upload size={16} />{importingRooms && activeTab === "rooms" ? "Đang đọc file..." : "Tải dữ liệu bằng file"}
-          </button>
-          {activeTab !== "amenities" && (
+          </button>}
+          {canManageRooms && activeTab !== "amenities" && (
             <button
               type="button"
               onClick={() => activeTab === "rooms" ? setShowCreateRoom(true) : activeTab === "buildings" ? openCreateBuildingModal() : openCreateFloorModal()}
@@ -1397,7 +1408,7 @@ export default function RoomWorkspace() {
               <span className="text-lg leading-none">+</span>{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
             </button>
           )}
-          {activeTab === "amenities" && (
+          {canManageRooms && activeTab === "amenities" && (
             <button
               type="button"
               onClick={() => setIsCreatingAmenity(true)}
@@ -1410,18 +1421,24 @@ export default function RoomWorkspace() {
       </div>
       <div className="flex flex-wrap border-b border-slate-100 bg-slate-50/60 p-2">
         <button type="button" onClick={() => setActiveTab("rooms")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button>
-        <button type="button" onClick={() => setActiveTab("buildings")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button>
-        <button type="button" onClick={() => setActiveTab("floors")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button>
-        <button type="button" onClick={() => setActiveTab("amenities")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "amenities" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>Danh sách tiện nghi</button>
+        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("buildings")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button>}
+        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("floors")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button>}
+        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("amenities")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "amenities" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>Danh sách tiện nghi</button>}
       </div>
     </>}
-    {activeTab === "buildings" && <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} />}
-    {activeTab === "floors" && <>
+    {canViewRoomStructure && activeTab === "buildings" && <>
+      {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
+      {isBuildingsLoading && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tòa nhà...</p>}
+      <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} canManage={canManageRooms} />
+    </>}
+    {canViewRoomStructure && activeTab === "floors" && <>
+      {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
+      {isBuildingsLoading && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tòa nhà...</p>}
       {isFloorsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tầng của tòa nhà này.</p>}
       {(isFloorsLoading || isFloorsFetching) && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tầng...</p>}
-      <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} />
+      <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} canManage={canManageRooms} />
     </>}
-    {activeTab === "amenities" && <RoomAmenitiesTab amenities={amenityCatalog} isLoading={isAmenitiesLoading} isError={isAmenitiesError} isCreating={isCreatingAmenity} onCreateOpenChange={setIsCreatingAmenity} onSave={saveAmenityEdit} onAdd={addLocalAmenity} />}
+    {canViewRoomStructure && activeTab === "amenities" && <RoomAmenitiesTab amenities={amenityCatalog} isLoading={isAmenitiesLoading} isError={isAmenitiesError} canManage={canManageRooms} isCreating={isCreatingAmenity} onCreateOpenChange={setIsCreatingAmenity} onSave={saveAmenityEdit} onAdd={addLocalAmenity} />}
     <BulkImportDialog
       open={isRoomImportDialogOpen}
       onOpenChange={setIsRoomImportDialogOpen}
@@ -1516,6 +1533,7 @@ export default function RoomWorkspace() {
       />
     )}
     {activeTab === "rooms" && <RoomListTab
+       canManageRooms={canManageRooms}
       filtered={filtered}
       paginatedRooms={paginatedRooms}
       buildings={buildings}

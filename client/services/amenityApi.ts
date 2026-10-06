@@ -57,6 +57,15 @@ export const amenityApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<AmenityResponse[]>) => response?.result ?? [],
       providesTags: ["Amenity"],
     }),
+    createSharedAmenity: builder.mutation<AmenityResponse[], AmenityImportRequest>({
+      query: (data) => ({
+        url: "/amenities/importExcel",
+        method: "POST",
+        data,
+      }),
+      transformResponse: (response: ApiResponse<AmenityResponse[]>) => response?.result ?? [],
+      invalidatesTags: ["Amenity"],
+    }),
     importAmenitiesFromFile: builder.mutation<StartAmenityImportResponse, AmenityImportRequest>({
       query: (data) => ({
         url: "/amenitiesExcel/importExcel/async",
@@ -68,4 +77,4 @@ export const amenityApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useGetAllAmenitiesQuery, useImportAmenitiesFromFileMutation } = amenityApi;
+export const { useGetAllAmenitiesQuery, useCreateSharedAmenityMutation, useImportAmenitiesFromFileMutation } = amenityApi;

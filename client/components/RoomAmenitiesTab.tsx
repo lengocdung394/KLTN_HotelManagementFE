@@ -6,6 +6,7 @@ type RoomAmenitiesTabProps = {
   amenities: AmenityResponse[];
   isLoading: boolean;
   isError: boolean;
+  canManage: boolean;
   isCreating: boolean;
   onCreateOpenChange: (open: boolean) => void;
   onSave: (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => void;
@@ -15,7 +16,7 @@ type RoomAmenitiesTabProps = {
 const normalizeText = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 const money = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
 
-export default function RoomAmenitiesTab({ amenities, isLoading, isError, isCreating, onCreateOpenChange, onSave, onAdd }: RoomAmenitiesTabProps) {
+export default function RoomAmenitiesTab({ amenities, isLoading, isError, canManage, isCreating, onCreateOpenChange, onSave, onAdd }: RoomAmenitiesTabProps) {
   const [search, setSearch] = useState("");
   const [editingAmenity, setEditingAmenity] = useState<AmenityResponse | null>(null);
   const [editForm, setEditForm] = useState({ name: "", price: "" });
@@ -75,7 +76,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, isCrea
               <tr className="border-b border-slate-100">
                 <th className="px-3 py-3 font-semibold">Tên tiện nghi</th>
                 <th className="px-3 py-3 text-right font-semibold">Giá</th>
-                <th className="px-3 py-3 text-right font-semibold">Thao tác</th>
+                {canManage && <th className="px-3 py-3 text-right font-semibold">Thao tác</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -83,11 +84,11 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, isCrea
                 <tr key={amenity.id} className="hover:bg-slate-50">
                   <td className="px-3 py-3 font-medium text-slate-800">{amenity.name}</td>
                   <td className="px-3 py-3 text-right font-semibold text-blue-700">{money(amenity.price)}</td>
-                  <td className="px-3 py-3 text-right">
+                  {canManage && <td className="px-3 py-3 text-right">
                     <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
                       <Pencil size={13} />Chỉnh sửa
                     </button>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>
@@ -95,7 +96,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, isCrea
         </div>
       )}
 
-      {editingAmenity && (
+      {canManage && editingAmenity && (
         <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeEditor}>
           <form onSubmit={(event) => { event.preventDefault(); saveEdit(); }} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
@@ -110,7 +111,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, isCrea
         </div>
       )}
 
-      {isCreating && (
+      {canManage && isCreating && (
         <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateForm}>
           <form
             onSubmit={(event) => { event.preventDefault(); saveNewAmenity(); }}
