@@ -70,11 +70,25 @@ export type SuperAdminRoomPolicy = {
   maxExtraGuests: number;
 };
 
+export type CreateBranchAccountRequest = {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+};
+
+export type CreateBranchAdminAccountRequest = {
+  username: string;
+  password: string;
+};
+
 export type CreateBranchRequest = {
   name: string;
   address: string;
   phone: string;
   provinceName: string;
+  adminAccount: CreateBranchAdminAccountRequest;
+  managerAccount: CreateBranchAccountRequest;
 };
 
 export type CreateProvinceRequest = {
@@ -82,8 +96,76 @@ export type CreateProvinceRequest = {
   backgroundImageUrl: string;
 };
 
+export type SuperAdminRole = {
+  code: string;
+  name: string;
+  description: string;
+  system: boolean;
+};
+
+export type CreateSuperAdminRoleRequest = {
+  code: string;
+  name: string;
+  description: string;
+};
+
+export type SuperAdminPermissionAssignment = {
+  code: string;
+  name: string;
+  description: string;
+  granted: boolean;
+};
+
+export type SuperAdminRolePermissionGroup = {
+  roleCode: string;
+  permissions: SuperAdminPermissionAssignment[];
+};
+
+export type SuperAdminRolePermissionOverview = SuperAdminRolePermissionGroup;
+
 export const superAdminApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getSuperAdminRoles: builder.query<SuperAdminRole[], void>({
+      query: () => ({ url: "/role_permissions/roles", method: "GET" }),
+      transformResponse: (response: ApiResponse<SuperAdminRole[]>) => response?.result ?? [],
+      providesTags: ["SuperAdminRole"],
+    }),
+    createSuperAdminRole: builder.mutation<SuperAdminRole, CreateSuperAdminRoleRequest>({
+      query: (data) => ({ url: "/role_permissions/roles", method: "POST", data }),
+      transformResponse: (response: ApiResponse<SuperAdminRole>) => response.result,
+      invalidatesTags: ["SuperAdminRole"],
+    }),
+    getSuperAdminRolePermissions: builder.query<SuperAdminRolePermissionOverview[], void>({
+      query: () => ({ url: "/role_permissions/roles/permissions", method: "GET" }),
+      transformResponse: (response: ApiResponse<SuperAdminRolePermissionOverview[]>) => response?.result ?? [],
+      providesTags: ["SuperAdminRole"],
+    }),
+    importSuperAdminRolePermissions: builder.mutation<
+      SuperAdminRolePermissionOverview[],
+      SuperAdminRolePermissionGroup[]
+    >({
+      query: (rolePermissions) => ({
+        url: "/role_permissions/roles/permissions/import",
+        method: "POST",
+        data: { rolePermissions },
+      }),
+      transformResponse: (response: ApiResponse<SuperAdminRolePermissionOverview[]>) => response.result,
+      invalidatesTags: ["SuperAdminRole"],
+    }),
+    addSuperAdminPermissionToRole: builder.mutation<void, { roleCode: string; permissionCode: string }>({
+      query: ({ roleCode, permissionCode }) => ({
+        url: `/role_permissions/roles/${encodeURIComponent(roleCode)}/permissions/${encodeURIComponent(permissionCode)}`,
+        method: "POST",
+      }),
+      invalidatesTags: ["SuperAdminRole"],
+    }),
+    removeSuperAdminPermissionFromRole: builder.mutation<void, { roleCode: string; permissionCode: string }>({
+      query: ({ roleCode, permissionCode }) => ({
+        url: `/role_permissions/roles/${encodeURIComponent(roleCode)}/permissions/${encodeURIComponent(permissionCode)}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["SuperAdminRole"],
+    }),
     getSuperAdminBranches: builder.query<SuperAdminBranch[], void>({
       query: () => ({ url: "/superAdmin/branches", method: "GET" }),
       transformResponse: (response: ApiResponse<SuperAdminBranch[]>) => response?.result ?? [],
@@ -140,6 +222,12 @@ export const superAdminApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetSuperAdminRolesQuery,
+  useCreateSuperAdminRoleMutation,
+  useGetSuperAdminRolePermissionsQuery,
+  useImportSuperAdminRolePermissionsMutation,
+  useAddSuperAdminPermissionToRoleMutation,
+  useRemoveSuperAdminPermissionFromRoleMutation,
   useGetSuperAdminBranchesQuery,
   useGetSuperAdminBranchesByProvinceQuery,
   useGetSuperAdminProvincesQuery,
