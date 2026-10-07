@@ -12,7 +12,11 @@ interface AuthState {
 }
 
 type JwtPayload = {
-  roles?: string[];
+  roles?: unknown;
+  authorities?: unknown;
+  authority?: unknown;
+  role?: unknown;
+  scope?: unknown;
   hotelId?: number | string | null;
   hotelName?: string | null;
   employeeId?: number | string | null;
@@ -38,7 +42,34 @@ export const getRolesFromToken = (token: string | null) => {
     const paddedPayload = normalizedPayload.padEnd(normalizedPayload.length + ((4 - normalizedPayload.length % 4) % 4), "=");
     const payloadBytes = Uint8Array.from(atob(paddedPayload), (character) => character.charCodeAt(0));
     const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as JwtPayload;
-    return Array.isArray(payload.roles) ? payload.roles.filter((role): role is string => typeof role === "string") : [];
+    const candidates: unknown[] = [
+      payload.roles,
+      payload.authorities,
+      payload.authority,
+      payload.role,
+      payload.scope,
+    ];
+    const roles = new Set<string>();
+    const collectRoles = (value: unknown) => {
+      if (typeof value === "string") {
+        value.split(/[,\s]+/).forEach((candidate) => {
+          const role = candidate.trim().toUpperCase();
+          if (/^ROLE_[A-Z0-9_]+$/.test(role)) roles.add(role);
+        });
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach(collectRoles);
+        return;
+      }
+      if (value && typeof value === "object") {
+        const authority = value as { authority?: unknown; role?: unknown };
+        collectRoles(authority.authority);
+        collectRoles(authority.role);
+      }
+    };
+    candidates.forEach(collectRoles);
+    return [...roles];
   } catch {
     return [];
   }

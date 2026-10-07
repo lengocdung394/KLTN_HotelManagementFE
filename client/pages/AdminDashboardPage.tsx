@@ -28,10 +28,13 @@ import {
   type SuperAdminRoomPolicy,
   type SuperAdminBranch,
   type SuperAdminBranchDetails,
+  type CreateBranchAccountRequest,
+  type CreateBranchAdminAccountRequest,
 } from "../services/superAdminApi";
 import { useCreateSharedAmenityMutation, useGetAllAmenitiesQuery } from "../services/amenityApi";
+import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 
-type AdminSection = "overview" | "branches" | "provinces" | "amenities";
+type AdminSection = "overview" | "branches" | "provinces" | "amenities" | "permissions";
 
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")} đ`;
 
@@ -103,7 +106,40 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const initialBranchForm = { name: "", address: "", phone: "", provinceName: "" };
+const initialBranchForm = {
+  name: "",
+  address: "",
+  phone: "",
+  provinceName: "",
+  adminAccount: { username: "", password: "" },
+  managerAccount: { fullName: "", email: "", phone: "", password: "" },
+};
+
+const branchAccountSections = [
+  { key: "managerAccount", title: "Tài khoản quản lý chi nhánh" },
+] as const;
+
+const branchAccountFields: {
+  key: keyof CreateBranchAccountRequest;
+  label: string;
+  type: string;
+  autoComplete: string;
+}[] = [
+  { key: "fullName", label: "Họ và tên", type: "text", autoComplete: "name" },
+  { key: "email", label: "Email", type: "email", autoComplete: "email" },
+  { key: "phone", label: "Số điện thoại", type: "tel", autoComplete: "tel" },
+  { key: "password", label: "Mật khẩu", type: "password", autoComplete: "new-password" },
+];
+
+const branchAdminAccountFields: {
+  key: keyof CreateBranchAdminAccountRequest;
+  label: string;
+  type: string;
+  autoComplete: string;
+}[] = [
+  { key: "username", label: "Tên tài khoản", type: "text", autoComplete: "username" },
+  { key: "password", label: "Mật khẩu", type: "password", autoComplete: "new-password" },
+];
 
 type AdminDashboardPageProps = {
   onLogout: () => void;
@@ -245,6 +281,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
     { id: "amenities", label: "Tiện nghi dùng chung", icon: ShieldCheck },
+    { id: "permissions", label: "Role và phân quyền", icon: ShieldCheck },
   ];
 
   const selectProvince = (provinceId: string) => {
@@ -505,7 +542,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         )}
 
         <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
-          {section !== "amenities" && section !== "provinces" && (
+          {section !== "amenities" && section !== "provinces" && section !== "permissions" && (
             <>
               {isBranchesError && (
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -711,6 +748,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             </section>
           )}
 
+          {section === "permissions" && <SuperAdminRolePermissionsPanel />}
+
           <footer className="mt-10 flex items-center gap-2 border-t border-slate-200 pt-5 text-xs text-slate-400">
             <CircleUserRound size={14} />
             Chỉ tài khoản có role ROLE_SUPER_ADMIN mới truy cập được cổng này.
@@ -720,20 +759,69 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
       {isBranchFormOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/50 p-4" onMouseDown={() => setIsBranchFormOpen(false)}>
-          <form onSubmit={(event) => void submitBranch(event)} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+          <form onSubmit={(event) => void submitBranch(event)} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Quản lý chi nhánh</p><h2 className="mt-1 text-xl font-bold text-slate-900">Thêm chi nhánh mới</h2></div>
               <button type="button" onClick={() => setIsBranchFormOpen(false)} aria-label="Đóng" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </div>
-            <label className="mt-5 block text-sm font-semibold text-slate-700">Tên chi nhánh<input required value={branchForm.name} onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
-            <label className="mt-3 block text-sm font-semibold text-slate-700">Địa chỉ<input required value={branchForm.address} onChange={(event) => setBranchForm({ ...branchForm, address: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
-            <label className="mt-3 block text-sm font-semibold text-slate-700">Số điện thoại<input required value={branchForm.phone} onChange={(event) => setBranchForm({ ...branchForm, phone: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
-            <label className="mt-3 block text-sm font-semibold text-slate-700">Tỉnh/thành
-              <select required value={branchForm.provinceName} onChange={(event) => setBranchForm({ ...branchForm, provinceName: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal outline-none focus:border-blue-400">
-                <option value="">Chọn tỉnh/thành</option>
-                {provinces.map((province) => <option key={province.id} value={province.name}>{province.name}</option>)}
-              </select>
-            </label>
+            <section className="mt-5 rounded-xl border border-slate-200 p-4">
+              <h3 className="font-semibold text-slate-900">Thông tin chi nhánh</h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="text-sm font-semibold text-slate-700">Tên chi nhánh<span className="text-rose-500" aria-hidden="true"> *</span><input required value={branchForm.name} onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
+                <label className="text-sm font-semibold text-slate-700">Số điện thoại chi nhánh<span className="text-rose-500" aria-hidden="true"> *</span><input required type="tel" value={branchForm.phone} onChange={(event) => setBranchForm({ ...branchForm, phone: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
+                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Địa chỉ<span className="text-rose-500" aria-hidden="true"> *</span><input required value={branchForm.address} onChange={(event) => setBranchForm({ ...branchForm, address: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
+                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Tỉnh/thành<span className="text-rose-500" aria-hidden="true"> *</span>
+                  <select required value={branchForm.provinceName} onChange={(event) => setBranchForm({ ...branchForm, provinceName: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal outline-none focus:border-blue-400">
+                    <option value="">Chọn tỉnh/thành</option>
+                    {provinces.map((province) => <option key={province.id} value={province.name}>{province.name}</option>)}
+                  </select>
+                </label>
+              </div>
+            </section>
+            <section className="mt-4 rounded-xl border border-slate-200 p-4">
+              <h3 className="font-semibold text-slate-900">Tài khoản admin chi nhánh <span className="font-mono text-xs font-medium text-slate-500">(ROLE_ADMIN)</span></h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {branchAdminAccountFields.map((field) => (
+                  <label key={field.key} className="text-sm font-semibold text-slate-700">
+                    {field.label}<span className="text-rose-500" aria-hidden="true"> *</span>
+                    <input
+                      required
+                      type={field.type}
+                      autoComplete={field.autoComplete}
+                      value={branchForm.adminAccount[field.key]}
+                      onChange={(event) => setBranchForm((current) => ({
+                        ...current,
+                        adminAccount: { ...current.adminAccount, [field.key]: event.target.value },
+                      }))}
+                      className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400"
+                    />
+                  </label>
+                ))}
+              </div>
+            </section>
+            {branchAccountSections.map(({ key, title }) => (
+              <section key={key} className="mt-4 rounded-xl border border-slate-200 p-4">
+                <h3 className="font-semibold text-slate-900">{title} <span className="font-mono text-xs font-medium text-slate-500">(ROLE_MANAGER)</span></h3>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {branchAccountFields.map((field) => (
+                    <label key={field.key} className="text-sm font-semibold text-slate-700">
+                      {field.label}<span className="text-rose-500" aria-hidden="true"> *</span>
+                      <input
+                        required
+                        type={field.type}
+                        autoComplete={field.autoComplete}
+                        value={branchForm[key][field.key]}
+                        onChange={(event) => setBranchForm((current) => ({
+                          ...current,
+                          [key]: { ...current[key], [field.key]: event.target.value },
+                        }))}
+                        className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </section>
+            ))}
             {branchFormError && <p role="alert" className="mt-3 text-sm text-rose-600">{branchFormError}</p>}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setIsBranchFormOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
