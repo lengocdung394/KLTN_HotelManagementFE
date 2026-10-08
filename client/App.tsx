@@ -28,6 +28,7 @@ type AppRoutesProps = {
 function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
   const roles = useAppSelector((state) => state.auth.roles);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
+  const isBranchAdmin = roles.includes("ROLE_ADMIN");
   const isManager = roles.includes("ROLE_MANAGER");
   const isEmployee = roles.includes("ROLE_EMPLOYEE");
 
@@ -50,7 +51,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
     );
   }
 
-  if (!isManager && !isEmployee) {
+  if (!isBranchAdmin && !isManager && !isEmployee) {
     return (
       <Routes>
         <Route path="/access-denied" element={
@@ -67,7 +68,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
     );
   }
 
-  if (isEmployee && !isManager) {
+  if (isEmployee && !isManager && !isBranchAdmin) {
     return (
       <Routes>
         <Route path="/" element={<Navigate to="/overview" replace />} />
