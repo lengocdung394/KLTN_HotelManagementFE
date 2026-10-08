@@ -23,14 +23,14 @@ describe("parseSuperAdminRolePermissionsRows", () => {
       {
         roleCode: "ROLE_MANAGER",
         permissions: [
-          { code: "BOOKING_VIEW", name: "Xem đặt phòng", description: "Xem booking", granted: true },
-          { code: "BOOKING_EDIT", name: "Sửa đặt phòng", description: "", granted: false },
+          { code: "BOOKING_VIEW", name: "Xem đặt phòng", category: "Chưa phân loại", description: "Xem booking", granted: true },
+          { code: "BOOKING_EDIT", name: "Sửa đặt phòng", category: "Chưa phân loại", description: "", granted: false },
         ],
       },
       {
         roleCode: "ROLE_RECEPTION",
         permissions: [
-          { code: "BOOKING_VIEW", name: "Xem đặt phòng", description: "Xem booking", granted: true },
+          { code: "BOOKING_VIEW", name: "Xem đặt phòng", category: "Chưa phân loại", description: "Xem booking", granted: true },
         ],
       },
     ]);
@@ -59,6 +59,20 @@ describe("parseSuperAdminRolePermissionsRows", () => {
     ], roles);
 
     expect(parsed.rolePermissions).toHaveLength(2);
+  });
+
+  it("imports category when provided and defaults old templates to uncategorized", () => {
+    const categorized = parseSuperAdminRolePermissionsRows([
+      [...headers.slice(0, 4), "Danh mục", headers[4]],
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng", "Có"],
+    ], roles);
+    const legacy = parseSuperAdminRolePermissionsRows([
+      headers,
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Có"],
+    ], roles);
+
+    expect(categorized.rolePermissions[0].permissions[0].category).toBe("Đặt phòng");
+    expect(legacy.rolePermissions[0].permissions[0].category).toBe("Chưa phân loại");
   });
 
   it("rejects files missing required column headers", () => {

@@ -112,8 +112,18 @@ export type CreateSuperAdminRoleRequest = {
 export type SuperAdminPermissionAssignment = {
   code: string;
   name: string;
+  category: string;
   description: string;
   granted: boolean;
+};
+
+export type SuperAdminPermissionCatalogItem = Omit<SuperAdminPermissionAssignment, "granted">;
+
+export type CreateSuperAdminPermissionRequest = SuperAdminPermissionCatalogItem;
+
+export type SuperAdminPermissionCatalogGroup = {
+  category: string;
+  permissions: SuperAdminPermissionCatalogItem[];
 };
 
 export type SuperAdminRolePermissionGroup = {
@@ -134,6 +144,43 @@ export const superAdminApi = baseApi.injectEndpoints({
       query: (data) => ({ url: "/role_permissions/roles", method: "POST", data }),
       transformResponse: (response: ApiResponse<SuperAdminRole>) => response.result,
       invalidatesTags: ["SuperAdminRole"],
+    }),
+    getSuperAdminPermissionCatalog: builder.query<SuperAdminPermissionCatalogItem[], void>({
+      query: () => ({ url: "/role_permissions/permissions", method: "GET" }),
+      transformResponse: (response: ApiResponse<SuperAdminPermissionCatalogGroup[]>) =>
+        (response?.result ?? []).flatMap((group) =>
+          group.permissions.map((permission) => ({
+            ...permission,
+            category: group.category,
+          })),
+        ),
+      providesTags: ["SuperAdminPermissionCatalog"],
+    }),
+    createSuperAdminPermission: builder.mutation<
+      SuperAdminPermissionCatalogItem,
+      CreateSuperAdminPermissionRequest
+    >({
+      query: (data) => ({ url: "/role_permissions/permissions", method: "POST", data }),
+      transformResponse: (response: ApiResponse<SuperAdminPermissionCatalogItem>) => response.result,
+      invalidatesTags: ["SuperAdminPermissionCatalog", "SuperAdminRole"],
+    }),
+    importSuperAdminPermissionCatalog: builder.mutation<
+      SuperAdminPermissionCatalogItem[],
+      SuperAdminPermissionCatalogItem[]
+    >({
+      query: (permissions) => ({
+        url: "/role_permissions/permissions/import",
+        method: "POST",
+        data: { permissions },
+      }),
+      transformResponse: (response: ApiResponse<SuperAdminPermissionCatalogGroup[]>) =>
+        (response?.result ?? []).flatMap((group) =>
+          group.permissions.map((permission) => ({
+            ...permission,
+            category: group.category,
+          })),
+        ),
+      invalidatesTags: ["SuperAdminPermissionCatalog", "SuperAdminRole"],
     }),
     getSuperAdminRolePermissions: builder.query<SuperAdminRolePermissionOverview[], void>({
       query: () => ({ url: "/role_permissions/roles/permissions", method: "GET" }),
@@ -224,6 +271,9 @@ export const superAdminApi = baseApi.injectEndpoints({
 export const {
   useGetSuperAdminRolesQuery,
   useCreateSuperAdminRoleMutation,
+  useGetSuperAdminPermissionCatalogQuery,
+  useCreateSuperAdminPermissionMutation,
+  useImportSuperAdminPermissionCatalogMutation,
   useGetSuperAdminRolePermissionsQuery,
   useImportSuperAdminRolePermissionsMutation,
   useAddSuperAdminPermissionToRoleMutation,

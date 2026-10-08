@@ -27,6 +27,7 @@ export const parseSuperAdminRolePermissionsRows = (
   if (missingHeaders.length > 0) {
     throw new Error(`File Excel thiếu cột: ${missingHeaders.join(", ")}.`);
   }
+  const categoryIndex = headerIndexes.get(normalizeHeader("Danh mục"));
 
   const roleByCode = new Map(roles.map((role) => [normalizeCode(role.code), role]));
   const groups = new Map<string, Map<string, SuperAdminRolePermissionGroup["permissions"][number]>>();
@@ -38,6 +39,9 @@ export const parseSuperAdminRolePermissionsRows = (
     const rowNumber = rowIndex + 2;
     const values = indexes.map((index) => row[index ?? -1]?.trim() ?? "");
     const [rawRoleCode, rawPermissionCode, name, description, rawGranted] = values;
+    const category = categoryIndex === undefined
+      ? "Chưa phân loại"
+      : row[categoryIndex]?.trim() || "Chưa phân loại";
     const roleCode = normalizeCode(rawRoleCode);
     const permissionCode = normalizeCode(rawPermissionCode);
 
@@ -64,6 +68,7 @@ export const parseSuperAdminRolePermissionsRows = (
     groups.get(roleCode)?.set(permissionCode, {
       code: permissionCode,
       name,
+      category,
       description,
       granted,
     });
