@@ -167,6 +167,11 @@ export default function SuperAdminRolePermissionsPanel() {
   const [importError, setImportError] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [permissionActionError, setPermissionActionError] = useState("");
+  const [pendingPermissionChange, setPendingPermissionChange] = useState<{
+    roleCode: string;
+    permission: SuperAdminPermissionAssignment;
+  } | null>(null);
+  const [isConfirmingPermissionChange, setIsConfirmingPermissionChange] = useState(false);
   const [updatingAssignment, setUpdatingAssignment] = useState<string | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [overviewSearch, setOverviewSearch] = useState("");
@@ -275,20 +280,33 @@ export default function SuperAdminRolePermissionsPanel() {
   const toggleRolePermission = async (
     roleCode: string,
     permission: SuperAdminPermissionAssignment,
-  ) => {
+  ): Promise<boolean> => {
     const assignmentKey = `${roleCode}:${permission.code}`;
     setUpdatingAssignment(assignmentKey);
     setPermissionActionError("");
     try {
       const request = permission.granted ? removePermissionFromRole : addPermissionToRole;
       await request({ roleCode, permissionCode: permission.code }).unwrap();
+      return true;
     } catch (error) {
       setPermissionActionError(
         getErrorMessage(error, `Không thể cập nhật quyền ${permission.code} cho role ${roleCode}.`),
       );
+      return false;
     } finally {
       setUpdatingAssignment(null);
     }
+  };
+
+  const confirmPermissionChange = async () => {
+    if (!pendingPermissionChange) return;
+    setIsConfirmingPermissionChange(true);
+    const succeeded = await toggleRolePermission(
+      pendingPermissionChange.roleCode,
+      pendingPermissionChange.permission,
+    );
+    setIsConfirmingPermissionChange(false);
+    if (succeeded) setPendingPermissionChange(null);
   };
 
   const importPermissions = async (file?: File) => {
@@ -724,6 +742,57 @@ export default function SuperAdminRolePermissionsPanel() {
         </Dialog>
       )}
 
+      <Dialog
+        open={pendingPermissionChange !== null}
+        onOpenChange={(open) => {
+          if (!open && !isConfirmingPermissionChange) setPendingPermissionChange(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingPermissionChange?.permission.granted ? "Xác nhận gỡ quyền" : "Xác nhận gán quyền"}
+            </DialogTitle>
+            <DialogDescription>
+              {pendingPermissionChange && (() => {
+                const role = roles.find((item) => item.code === pendingPermissionChange.roleCode);
+                const permission = pendingPermissionChange.permission;
+                return pendingPermissionChange.permission.granted
+                  ? <>Bạn có chắc muốn gỡ quyền <strong>{permission.name}</strong> ({permission.code}) khỏi role <strong>{role?.name ?? role?.code ?? pendingPermissionChange.roleCode}</strong>?</>
+                  : <>Bạn có chắc muốn gán quyền <strong>{permission.name}</strong> ({permission.code}) cho role <strong>{role?.name ?? role?.code ?? pendingPermissionChange.roleCode}</strong>?</>;
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          {permissionActionError && <p role="alert" className="text-sm text-rose-600">{permissionActionError}</p>}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingPermissionChange(null)}
+              disabled={isConfirmingPermissionChange}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmPermissionChange()}
+              disabled={isConfirmingPermissionChange || !pendingPermissionChange}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                pendingPermissionChange?.permission.granted
+                  ? "bg-rose-600 hover:bg-rose-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {isConfirmingPermissionChange
+                ? "Đang lưu..."
+                : pendingPermissionChange?.permission.granted
+                  ? "Gỡ quyền"
+                  : "Gán quyền"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {activeStep === "permissions" && (
         <div className="space-y-5 p-4 sm:p-5">
           <section className="mb-5 rounded-xl border border-slate-200 p-4 sm:p-5">
@@ -875,7 +944,13 @@ export default function SuperAdminRolePermissionsPanel() {
                               <button
                                 type="button"
                                 disabled={!selectedAssignmentRoleCode || isUpdatingAssignment}
-                                onClick={() => void toggleRolePermission(selectedAssignmentRoleCode, permission)}
+                                onClick={() => {
+                                  setPermissionActionError("");
+                                  setPendingPermissionChange({
+                                    roleCode: selectedAssignmentRoleCode,
+                                    permission,
+                                  });
+                                }}
                                 aria-pressed={permission.granted}
                                 className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
                                   permission.granted
@@ -1122,7 +1197,10 @@ export default function SuperAdminRolePermissionsPanel() {
                                       <button
                                         type="button"
                                         disabled={isUpdatingAssignment}
-                                        onClick={() => void toggleRolePermission(role.code, permission)}
+                                        onClick={() => {
+                                          setPermissionActionError("");
+                                          setPendingPermissionChange({ roleCode: role.code, permission });
+                                        }}
                                         className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
                                           permission.granted
                                             ? "bg-white text-rose-700 hover:bg-rose-100"
