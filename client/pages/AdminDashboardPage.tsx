@@ -14,7 +14,9 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { baseApi } from "../services/baseApi";
+import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
 import { uploadProvinceBackgroundToCloudinary } from "../services/cloudinaryUploadApi";
 import {
   useCreateSuperAdminBranchMutation,
@@ -33,8 +35,17 @@ import {
 } from "../services/superAdminApi";
 import { useCreateSharedAmenityMutation, useGetAllAmenitiesQuery } from "../services/amenityApi";
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
+import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
 
-type AdminSection = "overview" | "branches" | "provinces" | "amenities" | "permissions";
+type AdminSection =
+  | "overview"
+  | "branches"
+  | "provinces"
+  | "amenities"
+  | "permissions"
+  | "accounts-overview"
+  | "staff-accounts"
+  | "customer-accounts";
 
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")} đ`;
 
@@ -146,9 +157,11 @@ type AdminDashboardPageProps = {
 };
 
 export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps) {
+  const dispatch = useAppDispatch();
   const { fullName, email } = useAppSelector((state) => state.auth);
   const [section, setSection] = useState<AdminSection>("overview");
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [expandedBranchGroup, setExpandedBranchGroup] = useState<string | null>(null);
   const [isBranchFormOpen, setIsBranchFormOpen] = useState(false);
   const [isProvinceFormOpen, setIsProvinceFormOpen] = useState(false);
@@ -163,6 +176,22 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
   const [amenityName, setAmenityName] = useState("");
+
+  useEffect(() => {
+    const unbindSuperAdminEvents = bindSuperAdminSocketEvents({
+      onCustomerCreated: () => {
+        dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
+      },
+      onAccountCreated: () => {
+        dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
+      },
+      onBranchCreated: () => {
+        dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
+      },
+    });
+    joinSuperAdminAccountsRoom();
+    return unbindSuperAdminEvents;
+  }, [dispatch]);
   const [amenityPrice, setAmenityPrice] = useState("");
   const [amenityError, setAmenityError] = useState("");
   const {
@@ -203,6 +232,22 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const totalBookings = useMemo(
     () => branches.reduce((sum, branch) => sum + (Number(branch.bookingCount) || 0), 0),
     [branches],
+  );
+  const provinceDashboardBranches =
+    section === "branches" && selectedProvinceId ? branchesByProvince : branches;
+  const isProvinceDashboardLoading =
+    section === "branches" && selectedProvinceId ? isProvinceBranchesLoading : isBranchesLoading;
+  const dashboardRevenue = useMemo(
+    () => provinceDashboardBranches.reduce((sum, branch) => sum + (Number(branch.totalRevenue) || 0), 0),
+    [provinceDashboardBranches],
+  );
+  const dashboardEmployees = useMemo(
+    () => provinceDashboardBranches.reduce((sum, branch) => sum + (Number(branch.employeeCount) || 0), 0),
+    [provinceDashboardBranches],
+  );
+  const dashboardBookings = useMemo(
+    () => provinceDashboardBranches.reduce((sum, branch) => sum + (Number(branch.bookingCount) || 0), 0),
+    [provinceDashboardBranches],
   );
 
   const submitBranch = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -283,6 +328,15 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "amenities", label: "Tiện nghi dùng chung", icon: ShieldCheck },
     { id: "permissions", label: "Role và phân quyền", icon: ShieldCheck },
   ];
+  const isAccountSection =
+    section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
+
+  const handleAccountMenuSelect = () => {
+    setSection("accounts-overview");
+    setIsAccountMenuOpen((isOpen) => !isOpen);
+    setIsBranchMenuOpen(false);
+    setSelectedBranchId(null);
+  };
 
   const selectProvince = (provinceId: string) => {
     setSelectedProvinceId(provinceId);
@@ -325,6 +379,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
   const handleSectionSelect = (id: AdminSection) => {
     if (id === "branches") {
+      setIsAccountMenuOpen(false);
       if (section === "branches") {
         setIsBranchMenuOpen((isOpen) => !isOpen);
       } else {
@@ -333,6 +388,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         setIsBranchMenuOpen(true);
       }
       return;
+    }
+    if (id === "staff-accounts" || id === "customer-accounts" || id === "accounts-overview") {
+      setIsAccountMenuOpen(true);
+    } else {
+      setIsAccountMenuOpen(false);
     }
     setSection(id);
     setIsBranchMenuOpen(false);
@@ -453,6 +513,40 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               )}
             </div>
           ))}
+          <div>
+            <button
+              type="button"
+              onClick={handleAccountMenuSelect}
+              aria-expanded={isAccountMenuOpen}
+              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                isAccountSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <CircleUserRound size={18} />
+              <span className="flex-1">Quản lý tài khoản</span>
+              {isAccountMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </button>
+            {isAccountMenuOpen && (
+              <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
+                {([
+                  { id: "staff-accounts", label: "Tài khoản nhân sự", icon: Users },
+                  { id: "customer-accounts", label: "Tài khoản khách hàng", icon: CircleUserRound },
+                ] as const).map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => handleSectionSelect(id)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+                      section === id ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <Icon size={15} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
 
         <button type="button" onClick={onLogout} className="mt-4 flex shrink-0 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">
@@ -498,7 +592,39 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={handleAccountMenuSelect}
+            aria-expanded={isAccountMenuOpen}
+            className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+              isAccountSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <CircleUserRound size={15} />
+            Quản lý tài khoản
+            {isAccountMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
         </nav>
+        {isAccountMenuOpen && (
+          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý tài khoản">
+            {([
+              { id: "staff-accounts", label: "Tài khoản nhân sự", icon: Users },
+              { id: "customer-accounts", label: "Tài khoản khách hàng", icon: CircleUserRound },
+            ] as const).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleSectionSelect(id)}
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+                  section === id ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-white"
+                }`}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
         {section === "branches" && isBranchMenuOpen && (
           <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Lọc chi nhánh theo tỉnh/thành">
             <button
@@ -541,8 +667,30 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           </nav>
         )}
 
-        <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
-          {section !== "amenities" && section !== "provinces" && section !== "permissions" && (
+        <div className="relative isolate min-h-[calc(100vh-5rem)]">
+          {section === "branches" && selectedProvinceId && selectedBranchId === null && (
+            <>
+              <img
+                src={getProvinceCoverImage(selectedProvinceId)}
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover opacity-50"
+                onError={(event) => {
+                  if (!event.currentTarget.src.endsWith(DEFAULT_PROVINCE_COVER)) {
+                    event.currentTarget.src = DEFAULT_PROVINCE_COVER;
+                  }
+                }}
+              />
+              <div className="pointer-events-none absolute inset-0 z-0 bg-white/30" />
+            </>
+          )}
+          <div className="relative z-10 mx-auto max-w-7xl px-5 pt-4 pb-8 sm:px-8 sm:pt-5 sm:pb-10">
+          {section !== "amenities" &&
+            section !== "provinces" &&
+            section !== "permissions" &&
+            section !== "accounts-overview" &&
+            section !== "staff-accounts" &&
+            section !== "customer-accounts" && (
             <>
               {isBranchesError && (
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -551,16 +699,16 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 </div>
               )}
               <section className="mt-0 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard label="Chi nhánh" value={isBranchesLoading ? "..." : branches.length} icon={Building2} />
-                <SummaryCard label="Nhân sự toàn hệ thống" value={isBranchesLoading ? "..." : totalEmployees} icon={Users} />
-                <SummaryCard label="Tổng lượt đặt phòng" value={isBranchesLoading ? "..." : totalBookings} icon={CalendarDays} />
-                <SummaryCard label="Tổng doanh thu đã thu" value={isBranchesLoading ? "..." : formatMoney(totalRevenue)} icon={Wallet} />
+                <SummaryCard label={selectedProvinceId && section === "branches" ? "Chi nhánh tại tỉnh/thành" : "Chi nhánh"} value={isProvinceDashboardLoading ? "..." : provinceDashboardBranches.length} icon={Building2} />
+                <SummaryCard label={selectedProvinceId && section === "branches" ? "Nhân sự tại tỉnh/thành" : "Nhân sự toàn hệ thống"} value={isProvinceDashboardLoading ? "..." : selectedProvinceId && section === "branches" ? dashboardEmployees : totalEmployees} icon={Users} />
+                <SummaryCard label={selectedProvinceId && section === "branches" ? "Lượt đặt phòng tại tỉnh/thành" : "Tổng lượt đặt phòng"} value={isProvinceDashboardLoading ? "..." : selectedProvinceId && section === "branches" ? dashboardBookings : totalBookings} icon={CalendarDays} />
+                <SummaryCard label={selectedProvinceId && section === "branches" ? "Doanh thu tại tỉnh/thành" : "Tổng doanh thu đã thu"} value={isProvinceDashboardLoading ? "..." : formatMoney(selectedProvinceId && section === "branches" ? dashboardRevenue : totalRevenue)} icon={Wallet} />
               </section>
             </>
           )}
 
           {section === "overview" && (
-            <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Chi nhánh</h2>
@@ -584,20 +732,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
           {section === "branches" && selectedBranchId === null && (
             <section
-              className="relative isolate mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+              className={`relative isolate mt-4 overflow-hidden rounded-2xl border border-white/70 shadow-sm ${
+                selectedProvinceId ? "bg-white/55 backdrop-blur-[1px]" : "bg-white"
+              }`}
             >
-              <img
-                src={getProvinceCoverImage(selectedProvinceId)}
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-60"
-                onError={(event) => {
-                  if (!event.currentTarget.src.endsWith(DEFAULT_PROVINCE_COVER)) {
-                    event.currentTarget.src = DEFAULT_PROVINCE_COVER;
-                  }
-                }}
-              />
-              <div className="pointer-events-none absolute inset-0 -z-10 bg-white/35" />
               <div className="relative z-10 p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -627,7 +765,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           )}
 
           {section === "provinces" && (
-            <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Danh sách tỉnh/thành</h2>
@@ -714,7 +852,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           )}
 
           {section === "amenities" && (
-            <section className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <h2 className="text-lg font-bold text-slate-900">Danh mục tiện nghi dùng chung</h2>
                 <p className="mt-1 text-sm text-slate-500">Danh sách này được các chi nhánh sử dụng chung.</p>
@@ -748,12 +886,19 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             </section>
           )}
 
+          {(section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts") && (
+            <SuperAdminAccountManagementPanel
+              view={section === "staff-accounts" ? "staff" : section === "customer-accounts" ? "customers" : "all"}
+            />
+          )}
+
           {section === "permissions" && <SuperAdminRolePermissionsPanel />}
 
           <footer className="mt-10 flex items-center gap-2 border-t border-slate-200 pt-5 text-xs text-slate-400">
             <CircleUserRound size={14} />
             Chỉ tài khoản có role ROLE_SUPER_ADMIN mới truy cập được cổng này.
           </footer>
+          </div>
         </div>
       </main>
 
@@ -939,7 +1084,7 @@ function BranchDetailsPanel({
   const activeCategoryInfo = categories.find((category) => category.id === activeCategory) ?? categories[0];
 
   return (
-    <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+    <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
           <h2 className="text-xl font-bold text-slate-900">{details?.branch.name ?? "Chi tiết chi nhánh"}</h2>

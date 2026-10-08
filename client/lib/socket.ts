@@ -43,7 +43,15 @@ type HotelSocketHandlers = {
   onLateCheckOutCalendar?: (data: unknown) => void;
 };
 
+type SuperAdminSocketHandlers = {
+  onCustomerCreated?: (data: unknown) => void;
+  onAccountCreated?: (data: unknown) => void;
+  onBranchCreated?: (data: unknown) => void;
+};
+
 let hotelSocketHandlers: HotelSocketHandlers = {};
+let superAdminSocketHandlers: SuperAdminSocketHandlers = {};
+let superAdminRoomRequested = false;
 const pendingCustomerEvents: Array<{ event: "customer_created"; payload: Record<string, unknown> }> = [];
 
 const flushPendingCustomerEvents = () => {
@@ -141,20 +149,25 @@ export const bindHotelSocketEvents = ({
 
   if (!socket) return;
 
-  socket.off("room_create");
-  socket.off("room_update");
-  socket.off("room_import_progress");
-  socket.off("service_import_progress");
-  socket.off("room_matrix_updated");
-  socket.off("room_policy_updated");
-  socket.off("new_booking_notification");
-  socket.off("customer_booking_updated");
-  socket.off("customer_created");
-  socket.off("seasonal_rate_announcement");
-  socket.off(SEASONAL_RATE_UPDATE_EVENT);
-  socket.off("update_promotion_notification");
-  socket.off("new_promotion_notification");
-  socket.off("late_check_out_calendar");
+  const eventHandlers: [string, ((data: unknown) => void) | undefined][] = [
+    ["room_create", hotelSocketHandlers.onRoomCreated],
+    ["room_update", hotelSocketHandlers.onRoomUpdated],
+    ["room_import_progress", hotelSocketHandlers.onRoomImportProgress],
+    ["service_import_progress", hotelSocketHandlers.onServiceImportProgress],
+    ["room_matrix_updated", hotelSocketHandlers.onRoomMatrixUpdated],
+    ["room_policy_updated", hotelSocketHandlers.onRoomPolicyUpdated],
+    ["new_booking_notification", hotelSocketHandlers.onNewBookingNotification],
+    ["customer_booking_updated", hotelSocketHandlers.onCustomerBookingUpdated],
+    ["customer_created", hotelSocketHandlers.onCustomerCreated],
+    ["seasonal_rate_announcement", hotelSocketHandlers.onSeasonalRateAnnouncement],
+    [SEASONAL_RATE_UPDATE_EVENT, hotelSocketHandlers.onSeasonalRateAnnouncementUpdate],
+    ["update_promotion_notification", hotelSocketHandlers.onPromotionUpdate],
+    ["new_promotion_notification", hotelSocketHandlers.onPromotionCreate],
+    ["late_check_out_calendar", hotelSocketHandlers.onLateCheckOutCalendar],
+  ];
+  eventHandlers.forEach(([event, handler]) => {
+    if (handler) socket.off(event, handler);
+  });
 
   if (hotelSocketHandlers.onRoomCreated) {
     socket.on("room_create", hotelSocketHandlers.onRoomCreated);
@@ -213,6 +226,52 @@ export const bindHotelSocketEvents = ({
   }
 };
 
+const attachSuperAdminSocketHandlers = () => {
+  if (!socket) return;
+
+  const registrations: [string, ((data: unknown) => void) | undefined][] = [
+    ["customer_created", superAdminSocketHandlers.onCustomerCreated],
+    ["account_created", superAdminSocketHandlers.onAccountCreated],
+    ["branch_created", superAdminSocketHandlers.onBranchCreated],
+  ];
+  registrations.forEach(([event, handler]) => {
+    if (handler) socket?.on(event, handler);
+  });
+};
+
+export const bindSuperAdminSocketEvents = (handlers: SuperAdminSocketHandlers) => {
+  const previousHandlers = superAdminSocketHandlers;
+  if (socket) {
+    const previousRegistrations: [string, ((data: unknown) => void) | undefined][] = [
+      ["customer_created", previousHandlers.onCustomerCreated],
+      ["account_created", previousHandlers.onAccountCreated],
+      ["branch_created", previousHandlers.onBranchCreated],
+    ];
+    previousRegistrations.forEach(([event, handler]) => {
+      if (handler) socket?.off(event, handler);
+    });
+  }
+
+  superAdminSocketHandlers = handlers;
+  attachSuperAdminSocketHandlers();
+
+  return () => {
+    if (socket) {
+      const registrations: [string, ((data: unknown) => void) | undefined][] = [
+        ["customer_created", handlers.onCustomerCreated],
+        ["account_created", handlers.onAccountCreated],
+        ["branch_created", handlers.onBranchCreated],
+      ];
+      registrations.forEach(([event, handler]) => {
+        if (handler) socket?.off(event, handler);
+      });
+    }
+    if (superAdminSocketHandlers === handlers) {
+      superAdminSocketHandlers = {};
+    }
+  };
+};
+
 const attachHotelSocketHandlers = () => {
   bindHotelSocketEvents(hotelSocketHandlers);
 };
@@ -249,6 +308,10 @@ export const initSocket = (token: string | null) => {
     if (hotelId) {
       socket?.emit("join_hotel_room", String(hotelId));
       console.log("🏢 [Socket] join_hotel_room emitted:", hotelId);
+    }
+
+    if (superAdminRoomRequested) {
+      socket?.emit("join_super_admin_accounts_room", "");
     }
 
     flushPendingCustomerEvents();
@@ -290,6 +353,7 @@ export const initSocket = (token: string | null) => {
   });
 
   attachHotelSocketHandlers();
+  attachSuperAdminSocketHandlers();
 
   socket.on("connect_error", (error) => {
     console.error("❌ [Socket] connect error:", error.message);
@@ -306,6 +370,14 @@ export const disconnectSocket = () => {
   if (socket) {
     socket.disconnect();
     socket = null;
+  }
+  superAdminRoomRequested = false;
+};
+
+export const joinSuperAdminAccountsRoom = () => {
+  superAdminRoomRequested = true;
+  if (socket?.connected) {
+    socket.emit("join_super_admin_accounts_room", "");
   }
 };
 

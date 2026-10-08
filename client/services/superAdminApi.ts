@@ -133,8 +133,95 @@ export type SuperAdminRolePermissionGroup = {
 
 export type SuperAdminRolePermissionOverview = SuperAdminRolePermissionGroup;
 
+export type SuperAdminAccount = {
+  accountId: string | null;
+  profileId: string;
+  accountType: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "EMPLOYEE" | "CUSTOMER" | "WALK_IN_CUSTOMER" | "OTHER";
+  email: string | null;
+  fullName: string | null;
+  phone: string | null;
+  identityNumber: string | null;
+  address: string | null;
+  position: string | null;
+  avatarUrl: string | null;
+  hotelId: number | null;
+  hotelName: string | null;
+  registered: boolean | null;
+  loyaltyTier: string | null;
+  roles: string[];
+};
+
+export type SuperAdminAccountListType =
+  | "ALL"
+  | "STAFF"
+  | "CUSTOMERS"
+  | "REGISTERED_CUSTOMERS"
+  | "WALK_IN_CUSTOMERS";
+
+export type SuperAdminAccountUpdateRequest = {
+  email?: string;
+  fullName?: string;
+  phone?: string;
+  address?: string;
+  position?: string;
+  role?: "ROLE_ADMIN" | "ROLE_MANAGER" | "ROLE_EMPLOYEE";
+};
+
+export type SuperAdminCustomerUpdateRequest = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  identityNumber?: string;
+};
+
 export const superAdminApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getSuperAdminAccounts: builder.query<SuperAdminAccount[], SuperAdminAccountListType>({
+      query: (type) => ({ url: "/super-admin/accounts", method: "GET", params: { type } }),
+      transformResponse: (response: ApiResponse<SuperAdminAccount[]>) => response?.result ?? [],
+      providesTags: ["SuperAdminAccounts"],
+    }),
+    getSuperAdminAccountDetails: builder.query<SuperAdminAccount, string>({
+      query: (accountId) => ({ url: `/super-admin/accounts/${encodeURIComponent(accountId)}`, method: "GET" }),
+      transformResponse: (response: ApiResponse<SuperAdminAccount>) => response.result,
+      providesTags: (_result, _error, accountId) => [{ type: "SuperAdminAccounts", id: accountId }],
+    }),
+    getSuperAdminCustomerDetails: builder.query<SuperAdminAccount, string>({
+      query: (customerId) => ({ url: `/super-admin/accounts/customers/${encodeURIComponent(customerId)}`, method: "GET" }),
+      transformResponse: (response: ApiResponse<SuperAdminAccount>) => response.result,
+      providesTags: (_result, _error, customerId) => [{ type: "SuperAdminAccounts", id: customerId }],
+    }),
+    updateSuperAdminAccount: builder.mutation<
+      SuperAdminAccount,
+      { accountId: string; request: SuperAdminAccountUpdateRequest }
+    >({
+      query: ({ accountId, request }) => ({
+        url: `/super-admin/accounts/${encodeURIComponent(accountId)}`,
+        method: "PUT",
+        data: request,
+      }),
+      transformResponse: (response: ApiResponse<SuperAdminAccount>) => response.result,
+      invalidatesTags: ["SuperAdminAccounts"],
+    }),
+    updateSuperAdminCustomer: builder.mutation<
+      SuperAdminAccount,
+      { customerId: string; request: SuperAdminCustomerUpdateRequest }
+    >({
+      query: ({ customerId, request }) => ({
+        url: `/super-admin/accounts/customers/${encodeURIComponent(customerId)}`,
+        method: "PUT",
+        data: request,
+      }),
+      transformResponse: (response: ApiResponse<SuperAdminAccount>) => response.result,
+      invalidatesTags: ["SuperAdminAccounts"],
+    }),
+    requestSuperAdminPasswordReset: builder.mutation<void, string>({
+      query: (accountId) => ({
+        url: `/super-admin/accounts/${encodeURIComponent(accountId)}/password-reset`,
+        method: "POST",
+      }),
+      transformResponse: (response: ApiResponse<void>) => response?.result,
+    }),
     getSuperAdminRoles: builder.query<SuperAdminRole[], void>({
       query: () => ({ url: "/role_permissions/roles", method: "GET" }),
       transformResponse: (response: ApiResponse<SuperAdminRole[]>) => response?.result ?? [],
@@ -269,6 +356,12 @@ export const superAdminApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetSuperAdminAccountsQuery,
+  useLazyGetSuperAdminAccountDetailsQuery,
+  useLazyGetSuperAdminCustomerDetailsQuery,
+  useUpdateSuperAdminAccountMutation,
+  useUpdateSuperAdminCustomerMutation,
+  useRequestSuperAdminPasswordResetMutation,
   useGetSuperAdminRolesQuery,
   useCreateSuperAdminRoleMutation,
   useGetSuperAdminPermissionCatalogQuery,
@@ -285,5 +378,6 @@ export const {
   useUpdateSuperAdminProvinceBackgroundMutation,
   useCreateSuperAdminBranchMutation,
   useGetSuperAdminBranchDetailsQuery,
+  useLazyGetSuperAdminBranchDetailsQuery,
   useSaveSuperAdminBranchRoomPoliciesMutation,
 } = superAdminApi;

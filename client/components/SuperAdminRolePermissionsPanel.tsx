@@ -359,7 +359,7 @@ export default function SuperAdminRolePermissionsPanel() {
     }));
 
   return (
-    <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="border-b border-slate-100 p-5 sm:p-6">
         <div className="flex items-center gap-2">
           <ShieldCheck size={19} className="text-blue-600" />
