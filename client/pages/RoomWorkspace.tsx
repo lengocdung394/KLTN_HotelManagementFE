@@ -275,6 +275,9 @@ const roomTypeDetails: Record<string, { area: string; beds: string; capacity: nu
   "Family Room": { area: "45 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 4, guestPolicy: "Người lớn: 4 · Trẻ nhỏ dưới 11 tuổi: 2 · Em bé dưới 12 tháng: 1", price: 2200000, description: "Phòng gia đình rộng rãi, phù hợp cho nhóm khách hoặc gia đình." },
 };
 const normalizeText = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+const roomTypeIdentity = (value: string) =>
+  Object.entries(roomTypeValues).find(([label]) => normalizeText(label) === normalizeText(value))?.[1]
+  ?? value.trim().toUpperCase();
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   const errorRecord = error && typeof error === "object" ? error as { data?: unknown; message?: unknown } : {};
   const responseData = errorRecord.data && typeof errorRecord.data === "object"
@@ -756,7 +759,7 @@ export default function RoomWorkspace() {
     });
   }, [apiRoomTypes, apiRoomStatuses, availableRoomTypes, availableRoomStatuses]);
   useEffect(() => {
-    if (editingRoomId !== null || (!roomTypeDetail && branchRoomPolicies.length === 0)) return;
+    if (editingRoomId !== null) return;
 
     const getDetailValue = (keys: string[]) => keys.map((key) => roomTypeDetail?.[key]).find((value) => value !== undefined && value !== null && value !== "");
     const rawBeds = getDetailValue(["beds", "bedTypes", "roomBeds"]);
@@ -772,17 +775,22 @@ export default function RoomWorkspace() {
     const standardCapacity = getDetailValue(["standardCapacity", "standardAdults", "capacity", "maxAdults", "adults", "adultCapacity", "numberOfAdults"]);
     const roomTypePolicy = branchRoomPolicies.find((policy) => {
       const policyRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
-      return roomTypeLabel(String(policyRoomType ?? "")) === createRoomForm.roomType;
+      return policyRoomType != null
+        && roomTypeIdentity(String(policyRoomType)) === roomTypeIdentity(createRoomForm.roomType);
     });
-    const maxExtraGuests = getDetailValue(["maxExtraGuests", "maxExtraGuest", "extraGuestCapacity"])
-      ?? getApiValue(roomTypePolicy ?? {}, ["maxExtraGuests", "max_extra_guests", "extraGuestCapacity"]);
+    const policyStandardCapacity = getApiValue(roomTypePolicy ?? {}, ["standardCapacity", "standard_capacity", "capacity", "maxCapacity", "maxAdults"]);
+    const policyMaxExtraGuests = getApiValue(roomTypePolicy ?? {}, ["maxExtraGuests", "maxExtraGuest", "max_extra_guests", "extraGuestCapacity"]);
+    const maxExtraGuests = policyMaxExtraGuests
+      ?? getDetailValue(["maxExtraGuests", "maxExtraGuest", "extraGuestCapacity"]);
     const extraAdultFee = getApiValue(roomTypePolicy ?? {}, ["extraAdultFee", "extra_adult_fee", "adultSurcharge"])
       ?? getDetailValue(["extraAdultFee"]);
     const extraChildFee = getApiValue(roomTypePolicy ?? {}, ["extraChildFee", "extra_child_fee", "childSurcharge"])
       ?? getDetailValue(["extraChildFee"]);
 
     setCreateRoomForm((current) => {
-      const nextStandardCapacity = standardCapacity !== undefined ? String(standardCapacity) : current.standardCapacity;
+      const nextStandardCapacity = policyStandardCapacity !== undefined
+        ? String(policyStandardCapacity)
+        : standardCapacity !== undefined ? String(standardCapacity) : current.standardCapacity;
       const nextMaxExtraGuests = maxExtraGuests !== undefined ? String(maxExtraGuests) : current.maxExtraGuests;
       const nextExtraAdultFee = extraAdultFee !== undefined ? String(extraAdultFee) : current.extraAdultFee;
       const nextExtraChildFee = extraChildFee !== undefined ? String(extraChildFee) : current.extraChildFee;
@@ -881,7 +889,8 @@ export default function RoomWorkspace() {
   }, [rooms, branchRoomPolicies]);
   const selectedRoomTypePolicy = branchRoomPolicies.find((policy) => {
     const policyRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
-    return roomTypeLabel(String(policyRoomType ?? "")) === createRoomForm.roomType;
+    return policyRoomType != null
+      && roomTypeIdentity(String(policyRoomType)) === roomTypeIdentity(createRoomForm.roomType);
   });
   const standardRoomPrice = Number(
     getApiValue(selectedRoomTypePolicy ?? {}, ["basePrice", "base_price", "price", "roomPrice", "pricePerNight", "listedPrice"]) ??
@@ -971,7 +980,7 @@ export default function RoomWorkspace() {
     const building = defaultBuildingOption(buildings);
     const floorsForBuilding = hotelFloorOptions.filter((item) => item.buildingId === building?.id);
     const floor = defaultFloorOption(floorsForBuilding);
-    const standardRoomType = availableRoomTypes.find((item) => normalizeText(item) === normalizeText("Standard Room"))
+    const standardRoomType = availableRoomTypes.find((item) => roomTypeIdentity(item) === "STANDARD")
       ?? availableRoomTypes[0]
       ?? "Standard Room";
 
@@ -2242,6 +2251,8 @@ export default function RoomWorkspace() {
                     <input type="number" min="0" step="1000" value={createRoomForm.extraChildFee} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-amber-200 bg-amber-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
                 </div>
+                {isBranchPoliciesLoading && <p className="mt-2 text-xs font-normal text-blue-600">Đang tải sức chứa và phụ thu theo chính sách loại phòng...</p>}
+                {isBranchPoliciesError && <p role="alert" className="mt-2 text-xs font-normal text-rose-600">Không tải được chính sách sức chứa và phụ thu. Vui lòng thử tải lại trang.</p>}
 
                 <div className="mt-4">
                   <div className="flex items-center justify-between gap-2">
