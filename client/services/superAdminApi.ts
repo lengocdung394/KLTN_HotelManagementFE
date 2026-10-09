@@ -89,6 +89,7 @@ export type CreateBranchRequest = {
   provinceName: string;
   adminAccount: CreateBranchAdminAccountRequest;
   managerAccount: CreateBranchAccountRequest;
+  roomPolicies: SuperAdminRoomPolicy[];
 };
 
 export type CreateProvinceRequest = {

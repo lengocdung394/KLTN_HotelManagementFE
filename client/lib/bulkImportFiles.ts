@@ -75,11 +75,46 @@ const columnIndexFromReference = (reference: string) => {
 export const readZipFiles = (data: ArrayBuffer | Uint8Array) =>
   decodeZipEntries(data instanceof Uint8Array ? data : new Uint8Array(data));
 
-export const readXlsxRows = async (data: ArrayBuffer | Uint8Array, sheetNumber = 1): Promise<string[][]> => {
-  const entries = await readZipFiles(data);
+const normalizeZipPath = (path: string) => {
+  const parts: string[] = [];
+  path.replace(/\\/g, "/").split("/").forEach((part) => {
+    if (!part || part === ".") return;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  });
+  return parts.join("/");
+};
+
+const resolveSheetPath = (entries: ZipFileEntry[], sheetName: string) => {
   const entryMap = new Map(entries.map((entry) => [entry.name, entry.content]));
-  const sheetBytes = entryMap.get(`xl/worksheets/sheet${sheetNumber}.xml`);
-  if (!sheetBytes) throw new Error(`Không tìm thấy sheet ${sheetNumber} trong file Excel.`);
+  const workbookBytes = entryMap.get("xl/workbook.xml");
+  const relationshipsBytes = entryMap.get("xl/_rels/workbook.xml.rels");
+  if (!workbookBytes || !relationshipsBytes) {
+    throw new Error("File Excel thiếu thông tin workbook hoặc danh sách sheet.");
+  }
+
+  const workbook = xmlDocument(workbookBytes);
+  const relationships = xmlDocument(relationshipsBytes);
+  if (workbook.querySelector("parsererror") || relationships.querySelector("parsererror")) {
+    throw new Error("Thông tin sheet trong file Excel không hợp lệ.");
+  }
+  const sheet = Array.from(workbook.querySelectorAll("sheets > sheet"))
+    .find((item) => item.getAttribute("name")?.trim().toLocaleLowerCase() === sheetName.trim().toLocaleLowerCase());
+  if (!sheet) throw new Error(`Không tìm thấy sheet "${sheetName}" trong file Excel.`);
+
+  const relationshipId = sheet.getAttribute("r:id");
+  const relationship = Array.from(relationships.querySelectorAll("Relationship"))
+    .find((item) => item.getAttribute("Id") === relationshipId);
+  const target = relationship?.getAttribute("Target");
+  if (!target) throw new Error(`Không tìm thấy đường dẫn của sheet "${sheetName}" trong file Excel.`);
+
+  const sheetPath = normalizeZipPath(target.startsWith("/") ? target.slice(1) : `xl/${target}`);
+  if (!entryMap.has(sheetPath)) throw new Error(`Không thể đọc sheet "${sheetName}" trong file Excel.`);
+  return entryMap.get(sheetPath)!;
+};
+
+const parseXlsxRows = (entries: ZipFileEntry[], sheetBytes: Uint8Array): string[][] => {
+  const entryMap = new Map(entries.map((entry) => [entry.name, entry.content]));
 
   const sharedBytes = entryMap.get("xl/sharedStrings.xml");
   const sharedStrings = sharedBytes
@@ -100,6 +135,19 @@ export const readXlsxRows = async (data: ArrayBuffer | Uint8Array, sheetNumber =
     });
     return cells;
   });
+};
+
+export const readXlsxRows = async (data: ArrayBuffer | Uint8Array, sheetNumber = 1): Promise<string[][]> => {
+  const entries = await readZipFiles(data);
+  const sheetBytes = new Map(entries.map((entry) => [entry.name, entry.content]))
+    .get(`xl/worksheets/sheet${sheetNumber}.xml`);
+  if (!sheetBytes) throw new Error(`Không tìm thấy sheet ${sheetNumber} trong file Excel.`);
+  return parseXlsxRows(entries, sheetBytes);
+};
+
+export const readXlsxRowsByName = async (data: ArrayBuffer | Uint8Array, sheetName: string): Promise<string[][]> => {
+  const entries = await readZipFiles(data);
+  return parseXlsxRows(entries, resolveSheetPath(entries, sheetName));
 };
 
 const escapeXml = (value: string) =>

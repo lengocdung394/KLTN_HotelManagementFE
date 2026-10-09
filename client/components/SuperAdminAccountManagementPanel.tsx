@@ -64,9 +64,9 @@ const getAccountTypeLabel = (account: SuperAdminAccount) => {
 
 const getAccountTypeBadgeClass = (account: SuperAdminAccount) => {
   switch (getDisplayAccountType(account)) {
-    case "SUPER_ADMIN": return "bg-violet-100 text-violet-800";
-    case "ADMIN": return "bg-rose-50 text-rose-700";
-    case "MANAGER": return "bg-indigo-50 text-indigo-700";
+    case "SUPER_ADMIN": return "bg-violet-50 text-violet-700";
+    case "ADMIN":
+    case "MANAGER":
     case "EMPLOYEE": return "bg-blue-50 text-blue-700";
     case "CUSTOMER": return "bg-emerald-50 text-emerald-700";
     case "WALK_IN_CUSTOMER": return "bg-amber-50 text-amber-800";

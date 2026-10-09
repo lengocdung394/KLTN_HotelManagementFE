@@ -49,8 +49,14 @@ type SuperAdminSocketHandlers = {
   onCustomerCreated?: (data: unknown) => void;
   onAccountCreated?: (data: unknown) => void;
   onBranchCreated?: (data: unknown) => void;
+  onRoomPolicyUpdated?: (data: unknown) => void;
   onBuildingChanged?: (data: unknown) => void;
   onFloorChanged?: (data: unknown) => void;
+  onRoomCreated?: (data: unknown) => void;
+  onRoomUpdated?: (data: unknown) => void;
+  onRoomImportProgress?: (data: unknown) => void;
+  onNewBookingNotification?: (data: unknown) => void;
+  onServiceImportProgress?: (data: unknown) => void;
 };
 
 let hotelSocketHandlers: HotelSocketHandlers = {};
@@ -120,6 +126,17 @@ const getCurrentHotelId = () => {
 const hasJwtRole = (token: string, role: string) => {
   const payload = decodeJwtPayload(token);
   return Array.isArray(payload?.roles) && payload.roles.includes(role);
+};
+
+const requestSuperAdminRoomJoin = () => {
+  socket?.emit("join_super_admin_accounts_room", "", (result: unknown) => {
+    const response = result && typeof result === "object" ? result as Record<string, unknown> : {};
+    if (response.joined === true) {
+      console.log("🛡️ [Socket] joined super_admin_accounts room");
+    } else {
+      console.error("🛡️ [Socket] failed to join super_admin_accounts room:", response.reason ?? result);
+    }
+  });
 };
 
 export const bindHotelSocketEvents = ({
@@ -256,8 +273,14 @@ const attachSuperAdminSocketHandlers = () => {
     ["customer_created", superAdminSocketHandlers.onCustomerCreated],
     ["account_created", superAdminSocketHandlers.onAccountCreated],
     ["branch_created", superAdminSocketHandlers.onBranchCreated],
+    ["room_policy_updated", superAdminSocketHandlers.onRoomPolicyUpdated],
     ["building_changed", superAdminSocketHandlers.onBuildingChanged],
     ["floor_changed", superAdminSocketHandlers.onFloorChanged],
+    ["room_create", superAdminSocketHandlers.onRoomCreated],
+    ["room_update", superAdminSocketHandlers.onRoomUpdated],
+    ["room_import_progress", superAdminSocketHandlers.onRoomImportProgress],
+    ["new_booking_notification", superAdminSocketHandlers.onNewBookingNotification],
+    ["service_import_progress", superAdminSocketHandlers.onServiceImportProgress],
   ];
   registrations.forEach(([event, handler]) => {
     if (handler) socket?.on(event, handler);
@@ -271,8 +294,14 @@ export const bindSuperAdminSocketEvents = (handlers: SuperAdminSocketHandlers) =
       ["customer_created", previousHandlers.onCustomerCreated],
       ["account_created", previousHandlers.onAccountCreated],
       ["branch_created", previousHandlers.onBranchCreated],
+      ["room_policy_updated", previousHandlers.onRoomPolicyUpdated],
       ["building_changed", previousHandlers.onBuildingChanged],
       ["floor_changed", previousHandlers.onFloorChanged],
+      ["room_create", previousHandlers.onRoomCreated],
+      ["room_update", previousHandlers.onRoomUpdated],
+      ["room_import_progress", previousHandlers.onRoomImportProgress],
+      ["new_booking_notification", previousHandlers.onNewBookingNotification],
+      ["service_import_progress", previousHandlers.onServiceImportProgress],
     ];
     previousRegistrations.forEach(([event, handler]) => {
       if (handler) socket?.off(event, handler);
@@ -288,8 +317,14 @@ export const bindSuperAdminSocketEvents = (handlers: SuperAdminSocketHandlers) =
         ["customer_created", handlers.onCustomerCreated],
         ["account_created", handlers.onAccountCreated],
         ["branch_created", handlers.onBranchCreated],
+        ["room_policy_updated", handlers.onRoomPolicyUpdated],
         ["building_changed", handlers.onBuildingChanged],
         ["floor_changed", handlers.onFloorChanged],
+        ["room_create", handlers.onRoomCreated],
+        ["room_update", handlers.onRoomUpdated],
+        ["room_import_progress", handlers.onRoomImportProgress],
+        ["new_booking_notification", handlers.onNewBookingNotification],
+        ["service_import_progress", handlers.onServiceImportProgress],
       ];
       registrations.forEach(([event, handler]) => {
         if (handler) socket?.off(event, handler);
@@ -340,8 +375,7 @@ export const initSocket = (token: string | null) => {
     }
 
     if (superAdminRoomRequested || hasJwtRole(token, "ROLE_SUPER_ADMIN")) {
-      socket?.emit("join_super_admin_accounts_room", "");
-      console.log("🛡️ [Socket] join_super_admin_accounts_room emitted");
+      requestSuperAdminRoomJoin();
     }
 
     flushPendingCustomerEvents();
@@ -407,8 +441,7 @@ export const disconnectSocket = () => {
 export const joinSuperAdminAccountsRoom = () => {
   superAdminRoomRequested = true;
   if (socket?.connected) {
-    socket.emit("join_super_admin_accounts_room", "");
-    console.log("🛡️ [Socket] join_super_admin_accounts_room emitted manually");
+    requestSuperAdminRoomJoin();
   }
 };
 

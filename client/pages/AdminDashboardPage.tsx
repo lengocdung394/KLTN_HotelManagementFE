@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
+  BedDouble,
   Building2,
   CalendarDays,
   CheckCheck,
@@ -11,8 +12,13 @@ import {
   LogOut,
   MapPin,
   Plus,
+  Pencil,
+  FileSpreadsheet,
   ShieldCheck,
+  Upload,
   Users,
+  Volume2,
+  VolumeX,
   Wallet,
   X,
 } from "lucide-react";
@@ -36,7 +42,15 @@ import {
   type CreateBranchAccountRequest,
   type CreateBranchAdminAccountRequest,
 } from "../services/superAdminApi";
-import { useCreateSharedAmenityMutation, useGetAllAmenitiesQuery } from "../services/amenityApi";
+import {
+  useCreateBedTypeMutation,
+  useGetAllBedTypesQuery,
+  useImportBedTypesMutation,
+  useUpdateBedTypeMutation,
+  type BedTypeRequest,
+} from "../services/roomApi";
+import { downloadBedTypeTemplate, parseBedTypeFile } from "../lib/bedTypeImport";
+import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } from "../lib/superAdminRoomPolicyImport";
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
 
@@ -57,7 +71,11 @@ type AdminNotification = {
   description: string;
   occurredAt: Date;
   read: boolean;
+  category: "booking" | "room" | "service" | "staff" | "other";
+  hotelId: number | null;
 };
+
+type NotificationCategoryFilter = "all" | AdminNotification["category"];
 
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")} đ`;
 
@@ -160,6 +178,13 @@ const initialBranchForm = {
   managerAccount: { fullName: "", email: "", phone: "", password: "" },
 };
 
+const initialBedTypeForm: BedTypeRequest = {
+  name: "",
+  description: "",
+  capacity: 1,
+  isExtraBed: false,
+};
+
 const branchAccountSections = [
   { key: "managerAccount", title: "Tài khoản quản lý chi nhánh" },
 ] as const;
@@ -209,18 +234,95 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [provinceCardUploadError, setProvinceCardUploadError] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
+  const [branchRoomPolicies, setBranchRoomPolicies] = useState<SuperAdminRoomPolicy[]>([]);
+  const [branchPolicyFileName, setBranchPolicyFileName] = useState("");
+  const [branchPolicyError, setBranchPolicyError] = useState("");
+  const [isParsingBranchPolicy, setIsParsingBranchPolicy] = useState(false);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
-  const [amenityName, setAmenityName] = useState("");
+  const [notificationCategoryFilter, setNotificationCategoryFilter] = useState<NotificationCategoryFilter>("all");
+  const [notificationBranchFilter, setNotificationBranchFilter] = useState("all");
+  const [isNotificationSoundEnabled, setIsNotificationSoundEnabled] = useState(false);
+  const recentRoomCreateEventsRef = useRef(new Map<string, number>());
+  const notificationSoundEnabledRef = useRef(false);
+  const notificationAudioContextRef = useRef<AudioContext | null>(null);
+  const playNotificationSoundRef = useRef<() => void>(() => undefined);
+  const [bedTypeForm, setBedTypeForm] = useState<BedTypeRequest>(initialBedTypeForm);
+  const [editingBedTypeId, setEditingBedTypeId] = useState<number | null>(null);
+  const [bedTypeError, setBedTypeError] = useState("");
+  const [bedTypeMessage, setBedTypeMessage] = useState("");
+  const [isParsingBedTypeFile, setIsParsingBedTypeFile] = useState(false);
+
+  const playNotificationSound = async () => {
+    try {
+      const AudioContextConstructor = window.AudioContext;
+      if (!AudioContextConstructor) {
+        throw new Error("Trình duyệt không hỗ trợ phát âm thanh thông báo.");
+      }
+      const audioContext = notificationAudioContextRef.current ?? new AudioContextConstructor();
+      notificationAudioContextRef.current = audioContext;
+      if (audioContext.state === "suspended") await audioContext.resume();
+
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.16, audioContext.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.22);
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.23);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể phát âm thanh thông báo.";
+      toast({ variant: "destructive", title: "Không bật được âm thanh", description: message });
+      return false;
+    }
+  };
+  playNotificationSoundRef.current = () => {
+    if (!notificationSoundEnabledRef.current) return;
+    void playNotificationSound().then((played) => {
+      if (played) return;
+      notificationSoundEnabledRef.current = false;
+      setIsNotificationSoundEnabled(false);
+    });
+  };
+
+  const toggleNotificationSound = async () => {
+    if (notificationSoundEnabledRef.current) {
+      notificationSoundEnabledRef.current = false;
+      setIsNotificationSoundEnabled(false);
+      return;
+    }
+    if (await playNotificationSound()) {
+      notificationSoundEnabledRef.current = true;
+      setIsNotificationSoundEnabled(true);
+    }
+  };
 
   useEffect(() => {
-    const addNotification = (title: string, description: string) => {
+    const addNotification = (
+      title: string,
+      description: string,
+      options: { category?: AdminNotification["category"]; hotelId?: number | null } = {},
+    ) => {
+      playNotificationSoundRef.current();
       setNotifications((current) => [{
         id: `${Date.now()}-${Math.random()}`,
         title,
         description,
         occurredAt: new Date(),
         read: false,
+        category: options.category ?? "other",
+        hotelId: options.hotelId ?? null,
       }, ...current].slice(0, 100));
+    };
+    const getHotelId = (payload: Record<string, unknown>) => {
+      const hotel = getSocketPayload(payload.hotel);
+      const hotelId = payload.hotelId ?? payload.hotelID ?? hotel.id ?? hotel.hotelId;
+      const parsedHotelId = Number(hotelId);
+      return Number.isInteger(parsedHotelId) && parsedHotelId > 0 ? parsedHotelId : null;
     };
     const unbindSuperAdminEvents = bindSuperAdminSocketEvents({
       onCustomerCreated: (payload) => {
@@ -228,6 +330,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         addNotification(
           "Khách hàng mới",
           `Mã khách hàng ${getSocketText(data, "customerId", "mới")}${data.hotelId == null ? "" : ` tại khách sạn #${data.hotelId}`}.`,
+          { hotelId: getHotelId(data) },
         );
         dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
       },
@@ -237,6 +340,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         addNotification(
           "Tài khoản mới",
           `Tài khoản loại ${getSocketText(data, "accountType", "mới")}${hotelLabel} vừa được tạo.`,
+          { category: String(data.accountType ?? "").toUpperCase() === "STAFF" ? "staff" : "other", hotelId: getHotelId(data) },
         );
         dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
       },
@@ -246,8 +350,100 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         addNotification(
           "Chi nhánh mới",
           `${getSocketText(data, "name", "Chi nhánh")}${hotelLabel} vừa được tạo.`,
+          { hotelId: getHotelId(data) },
         );
         dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
+      },
+      onRoomCreated: (payload) => {
+        const event = getSocketPayload(payload);
+        const data = getSocketPayload(event.data);
+        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        if (event.action === "IMPORTED") {
+          dispatch(baseApi.util.invalidateTags(["Room", "Booking", "SuperAdminBranch"]));
+          return;
+        }
+        if (["CREATE", "CREATED"].includes(String(event.action ?? "").toUpperCase())) {
+          const roomIdentity = data.roomId ?? data.id ?? data.roomNumber;
+          if (roomIdentity !== undefined && roomIdentity !== null) {
+            const now = Date.now();
+            const dedupeKey = `${event.hotelId ?? ""}:${String(roomIdentity)}`;
+            for (const [key, timestamp] of recentRoomCreateEventsRef.current) {
+              if (now - timestamp > 5000) recentRoomCreateEventsRef.current.delete(key);
+            }
+            const previousEventAt = recentRoomCreateEventsRef.current.get(dedupeKey);
+            if (previousEventAt !== undefined && now - previousEventAt <= 5000) {
+              console.warn("[SuperAdminSocket] Ignored duplicate room_create event:", dedupeKey);
+              return;
+            }
+            recentRoomCreateEventsRef.current.set(dedupeKey, now);
+          }
+        }
+        const description = `Phòng ${getSocketText(data, "roomNumber", "mới")}${hotelLabel} vừa được thêm.`;
+        addNotification("Phòng mới", description, { category: "room", hotelId: getHotelId(event) });
+        toast({ title: "Danh sách phòng đã cập nhật", description });
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking", "SuperAdminBranch"]));
+      },
+      onRoomImportProgress: (payload) => {
+        const event = getSocketPayload(payload);
+        if (event.completed !== true) return;
+
+        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        const status = String(event.status ?? "").trim().toUpperCase();
+        const failed = status !== "SUCCESS";
+        const description = `${getSocketText(event, "message", failed ? "Nhập phòng thất bại." : "Nhập phòng hoàn tất.")}${hotelLabel}.`;
+        addNotification(failed ? "Nhập phòng thất bại" : "Nhập phòng hoàn tất", description, { category: "room", hotelId: getHotelId(event) });
+        toast({
+          variant: failed ? "destructive" : "default",
+          title: failed ? "Nhập phòng thất bại" : "Nhập phòng hoàn tất",
+          description,
+        });
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking", "SuperAdminBranch"]));
+      },
+      onServiceImportProgress: (payload) => {
+        const event = getSocketPayload(payload);
+        if (event.completed !== true) return;
+
+        const hotelId = getHotelId(event);
+        const status = String(event.status ?? "").trim().toUpperCase();
+        const failed = status !== "SUCCESS";
+        const hotelLabel = hotelId === null ? "" : ` tại khách sạn #${hotelId}`;
+        const description = `${getSocketText(event, "message", failed ? "Nhập dịch vụ thất bại." : "Nhập dịch vụ hoàn tất.")}${hotelLabel}.`;
+        addNotification(
+          failed ? "Nhập dịch vụ thất bại" : "Nhập dịch vụ hoàn tất",
+          description,
+          { category: "service", hotelId },
+        );
+        toast({
+          variant: failed ? "destructive" : "default",
+          title: failed ? "Nhập dịch vụ thất bại" : "Nhập dịch vụ hoàn tất",
+          description,
+        });
+        dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
+      },
+      onRoomUpdated: (payload) => {
+        const event = getSocketPayload(payload);
+        const data = getSocketPayload(event.data);
+        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        const description = `Phòng ${getSocketText(data, "roomNumber", "không xác định")}${hotelLabel} vừa được chỉnh sửa.`;
+        addNotification("Phòng được cập nhật", description, { category: "room", hotelId: getHotelId(event) });
+        toast({ title: "Danh sách phòng đã cập nhật", description });
+        dispatch(baseApi.util.invalidateTags(["Room", "Booking", "SuperAdminBranch"]));
+      },
+      onRoomPolicyUpdated: (payload) => {
+        const event = getSocketPayload(payload);
+        const data = getSocketPayload(event.data);
+        const action = event.action === "CREATED" ? "được thêm mới" : "được cập nhật";
+        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        addNotification(
+          `Cấu hình giá ${action}`,
+          `Cấu hình ${getSocketText(data, "roomType", "loại phòng")} ${action}${hotelLabel}.`,
+          { category: "room", hotelId: getHotelId(event) },
+        );
+        toast({
+          title: `Cấu hình giá ${action}`,
+          description: `Loại phòng ${getSocketText(data, "roomType", "không xác định")}${hotelLabel}.`,
+        });
+        dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
       },
       onBuildingChanged: (payload) => {
         const event = getSocketPayload(payload);
@@ -257,6 +453,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         addNotification(
           `Tòa nhà ${action}`,
           `${getSocketText(data, "name", "Tòa nhà")} ${action}${hotelLabel}.`,
+          { category: "room", hotelId: getHotelId(event) },
         );
         dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
         notifyBuildingFloorChange("building", payload);
@@ -272,16 +469,25 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         addNotification(
           `Tầng ${action}`,
           `Tầng ${floorNumber}${buildingLabel} ${action}${hotelLabel}.`,
+          { category: "room", hotelId: getHotelId(event) },
         );
         dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
         notifyBuildingFloorChange("floor", payload);
+      },
+      onNewBookingNotification: (payload) => {
+        const event = getSocketPayload(payload);
+        const data = getSocketPayload(event.data ?? event);
+        const hotelId = getHotelId(event) ?? getHotelId(data);
+        const bookingId = getSocketText(data, "bookingId", getSocketText(data, "id", "mới"));
+        const hotelLabel = hotelId == null ? "" : ` tại khách sạn #${hotelId}`;
+        const description = `Booking ${bookingId}${hotelLabel} vừa được tạo.`;
+        addNotification("Booking mới", description, { category: "booking", hotelId });
+        dispatch(baseApi.util.invalidateTags(["Booking", "SuperAdminBranch"]));
       },
     });
     joinSuperAdminAccountsRoom();
     return unbindSuperAdminEvents;
   }, [dispatch]);
-  const [amenityPrice, setAmenityPrice] = useState("");
-  const [amenityError, setAmenityError] = useState("");
   const {
     data: branches = [],
     isLoading: isBranchesLoading,
@@ -301,8 +507,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [createBranch, { isLoading: isCreatingBranch }] = useCreateSuperAdminBranchMutation();
   const [createProvince, { isLoading: isCreatingProvince }] = useCreateSuperAdminProvinceMutation();
   const [updateProvinceBackground] = useUpdateSuperAdminProvinceBackgroundMutation();
-  const { data: amenities = [], isLoading: isAmenitiesLoading, isError: isAmenitiesError } = useGetAllAmenitiesQuery();
-  const [createAmenity, { isLoading: isCreatingAmenity }] = useCreateSharedAmenityMutation();
+  const { data: bedTypes = [], isLoading: isBedTypesLoading, isError: isBedTypesError } = useGetAllBedTypesQuery();
+  const [createBedType, { isLoading: isCreatingBedType }] = useCreateBedTypeMutation();
+  const [updateBedType, { isLoading: isUpdatingBedType }] = useUpdateBedTypeMutation();
+  const [importBedTypes, { isLoading: isImportingBedTypes }] = useImportBedTypesMutation();
   const {
     data: branchDetails,
     isLoading: isBranchDetailsLoading,
@@ -341,9 +549,23 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const submitBranch = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBranchFormError("");
+    if (isParsingBranchPolicy) {
+      setBranchPolicyError("Đang đọc file Excel, vui lòng đợi đọc xong rồi tạo chi nhánh.");
+      return;
+    }
+    if (branchRoomPolicies.length !== roomTypes.length) {
+      setBranchPolicyError(branchPolicyFileName
+        ? "File chưa được đọc đủ chính sách cho 4 loại phòng. Vui lòng kiểm tra lỗi bên trên hoặc tải lại file."
+        : "Vui lòng chọn file Excel có đủ chính sách cho 4 loại phòng.");
+      return;
+    }
     try {
-      await createBranch(branchForm).unwrap();
+      await createBranch({ ...branchForm, roomPolicies: branchRoomPolicies }).unwrap();
       setBranchForm(initialBranchForm);
+      setBranchRoomPolicies([]);
+      setBranchPolicyFileName("");
+      setBranchPolicyError("");
+      setIsParsingBranchPolicy(false);
       setIsBranchFormOpen(false);
     } catch (error) {
       setBranchFormError(getErrorMessage(error, "Không thể tạo chi nhánh. Vui lòng thử lại."));
@@ -386,26 +608,39 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     }
   };
 
-  const submitAmenity = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submitBedType = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAmenityError("");
-    const price = Number(amenityPrice);
-    if (!amenityName.trim() || !Number.isFinite(price) || price < 0) {
-      setAmenityError("Vui lòng nhập tên tiện nghi và giá hợp lệ.");
-      return;
-    }
+    setBedTypeError("");
+    setBedTypeMessage("");
     try {
-      const imported = await createAmenity({
-        amenities: [{ row: 1, name: amenityName.trim(), price }],
-      }).unwrap();
-      if (imported.length === 0) {
-        setAmenityError("Tiện nghi cùng tên đã có trong danh mục dùng chung.");
-        return;
+      const payload = { ...bedTypeForm, name: bedTypeForm.name.trim(), description: bedTypeForm.description.trim() };
+      if (editingBedTypeId !== null) {
+        await updateBedType({ id: editingBedTypeId, bedType: payload }).unwrap();
+        setBedTypeMessage("Đã cập nhật loại giường.");
+      } else {
+        await createBedType(payload).unwrap();
+        setBedTypeMessage("Đã thêm loại giường.");
       }
-      setAmenityName("");
-      setAmenityPrice("");
+      setBedTypeForm(initialBedTypeForm);
+      setEditingBedTypeId(null);
     } catch (error) {
-      setAmenityError(getErrorMessage(error, "Không thể thêm tiện nghi dùng chung."));
+      setBedTypeError(getErrorMessage(error, "Không thể lưu loại giường."));
+    }
+  };
+
+  const importBedTypeFile = async (file?: File) => {
+    if (!file) return;
+    setBedTypeError("");
+    setBedTypeMessage("");
+    setIsParsingBedTypeFile(true);
+    try {
+      const parsed = await parseBedTypeFile(file);
+      const imported = await importBedTypes(parsed).unwrap();
+      setBedTypeMessage(`Đã nhập ${imported.length} loại giường.`);
+    } catch (error) {
+      setBedTypeError(getErrorMessage(error, "Không thể nhập danh sách loại giường."));
+    } finally {
+      setIsParsingBedTypeFile(false);
     }
   };
 
@@ -414,7 +649,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "notifications", label: "Thông báo", icon: Bell },
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
-    { id: "amenities", label: "Tiện nghi dùng chung", icon: ShieldCheck },
+    { id: "amenities", label: "Danh sách giường", icon: BedDouble },
     { id: "permissions", label: "Role và phân quyền", icon: ShieldCheck },
   ];
   const isAccountSection =
@@ -447,7 +682,19 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
   const openBranchDetailsById = (branchId: number) => {
     const branch = branches.find((item) => item.id === branchId);
-    if (branch) openBranchDetails(branch);
+    if (branch) {
+      openBranchDetails(branch);
+      return;
+    }
+    setSelectedProvinceId("");
+    setSection("branches");
+    setIsBranchMenuOpen(true);
+    setSelectedBranchId(branchId);
+  };
+  const openNotificationBranch = (notification: AdminNotification) => {
+    if (notification.hotelId === null) return;
+    setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, read: true } : item));
+    openBranchDetailsById(notification.hotelId);
   };
 
   const getBranchesForProvince = (provinceId: string) => {
@@ -464,6 +711,28 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const getProvinceCoverImage = (provinceId: string) => {
     const province = provinces.find((item) => item.id === provinceId);
     return province?.backgroundImageUrl || DEFAULT_PROVINCE_COVER;
+  };
+  const notificationCategoryLabels: Record<NotificationCategoryFilter, string> = {
+    all: "Tất cả",
+    booking: "Booking",
+    room: "Phòng",
+    service: "Dịch vụ",
+    staff: "Nhân viên",
+    other: "Khác",
+  };
+  const filteredNotifications = notifications.filter((notification) =>
+    (notificationCategoryFilter === "all" || notification.category === notificationCategoryFilter)
+    && (notificationBranchFilter === "all" || String(notification.hotelId ?? "") === notificationBranchFilter),
+  );
+  const getNotificationBranch = (notification: AdminNotification) =>
+    notification.hotelId === null
+      ? undefined
+      : branches.find((branch) => branch.id === notification.hotelId);
+  const getNotificationDescription = (notification: AdminNotification) => {
+    const branch = getNotificationBranch(notification);
+    return branch
+      ? notification.description.split(`khách sạn #${notification.hotelId}`).join(`khách sạn ${branch.name}`)
+      : notification.description;
   };
 
   const handleSectionSelect = (id: AdminSection) => {
@@ -805,17 +1074,62 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   <CheckCheck size={16} />
                   Đánh dấu đã đọc
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleNotificationSound()}
+                  aria-pressed={isNotificationSoundEnabled}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                    isNotificationSoundEnabled
+                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                      : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {isNotificationSoundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                  Âm thanh {isNotificationSoundEnabled ? "đang bật" : "đang tắt"}
+                </button>
               </div>
 
-              {notifications.length === 0 ? (
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Loại thông báo</span>
+                {(Object.keys(notificationCategoryLabels) as NotificationCategoryFilter[]).map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    aria-pressed={notificationCategoryFilter === category}
+                    onClick={() => setNotificationCategoryFilter(category)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      notificationCategoryFilter === category
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {notificationCategoryLabels[category]}
+                  </button>
+                ))}
+                <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-slate-500">
+                  Chi nhánh
+                  <select
+                    value={notificationBranchFilter}
+                    onChange={(event) => setNotificationBranchFilter(event.target.value)}
+                    className="h-9 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-400"
+                  >
+                    <option value="all">Tất cả chi nhánh</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {filteredNotifications.length === 0 ? (
                 <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-12 text-center">
                   <Bell size={24} className="mx-auto text-slate-400" />
-                  <p className="mt-3 text-sm font-semibold text-slate-700">Chưa có thông báo</p>
-                  <p className="mt-1 text-sm text-slate-500">Thông báo sẽ xuất hiện tại đây khi có sự kiện mới.</p>
+                  <p className="mt-3 text-sm font-semibold text-slate-700">{notifications.length === 0 ? "Chưa có thông báo" : "Không có thông báo phù hợp"}</p>
+                  <p className="mt-1 text-sm text-slate-500">{notifications.length === 0 ? "Thông báo sẽ xuất hiện tại đây khi có sự kiện mới." : "Thử chọn loại thông báo hoặc chi nhánh khác."}</p>
                 </div>
               ) : (
                 <div className="mt-5 divide-y divide-slate-100">
-                  {notifications.map((notification) => (
+                  {filteredNotifications.map((notification) => (
                     <article
                       key={notification.id}
                       className={`flex gap-3 py-4 ${notification.read ? "opacity-75" : ""}`}
@@ -828,9 +1142,26 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-semibold text-slate-900">{notification.title}</h3>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                            {notificationCategoryLabels[notification.category]}
+                          </span>
                           {!notification.read && <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Chưa đọc" />}
                         </div>
-                        <p className="mt-1 text-sm text-slate-600">{notification.description}</p>
+                        <p className="mt-1 text-sm text-slate-600">{getNotificationDescription(notification)}</p>
+                        {notification.hotelId !== null && (
+                          <>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Khách sạn: {getNotificationBranch(notification)?.name ?? `#${notification.hotelId}`}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => openNotificationBranch(notification)}
+                              className="mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                            >
+                              Xem chi tiết chi nhánh
+                            </button>
+                          </>
+                        )}
                         <time className="mt-1 block text-xs text-slate-400" dateTime={notification.occurredAt.toISOString()}>
                           {notification.occurredAt.toLocaleString("vi-VN")}
                         </time>
@@ -1012,34 +1343,100 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           {section === "amenities" && (
             <section className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <h2 className="text-lg font-bold text-slate-900">Danh mục tiện nghi dùng chung</h2>
-                <p className="mt-1 text-sm text-slate-500">Danh sách này được các chi nhánh sử dụng chung.</p>
-                {isAmenitiesLoading ? <p className="py-8 text-center text-sm text-slate-500">Đang tải danh sách...</p>
-                  : isAmenitiesError ? <p className="py-8 text-center text-sm text-rose-600">Không thể tải danh sách tiện nghi.</p>
-                    : amenities.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Chưa có tiện nghi nào.</p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Danh sách loại giường</h2>
+                    <p className="mt-1 text-sm text-slate-500">Danh mục loại giường dùng chung để chọn khi cấu hình phòng.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={downloadBedTypeTemplate} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                      <FileSpreadsheet size={16} /> Tải mẫu Excel
+                    </button>
+                    <label className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 ${isParsingBedTypeFile || isImportingBedTypes ? "pointer-events-none opacity-50" : ""}`}>
+                      <Upload size={16} /> {isParsingBedTypeFile || isImportingBedTypes ? "Đang nhập..." : "Import Excel"}
+                      <input
+                        type="file"
+                        accept=".xlsx"
+                        className="sr-only"
+                        disabled={isParsingBedTypeFile || isImportingBedTypes}
+                        onChange={(event) => {
+                          void importBedTypeFile(event.target.files?.[0]);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+                {isBedTypesLoading ? <p className="py-8 text-center text-sm text-slate-500">Đang tải danh sách...</p>
+                  : isBedTypesError ? <p className="py-8 text-center text-sm text-rose-600">Không thể tải danh sách loại giường.</p>
+                    : bedTypes.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Chưa có loại giường nào.</p>
                       : <div className="mt-4 divide-y divide-slate-100">
-                        {amenities.map((amenity) => (
-                          <div key={amenity.id} className="flex items-center justify-between gap-3 py-3">
-                            <span className="font-medium text-slate-800">{amenity.name}</span>
-                            <span className="text-sm font-semibold text-blue-700">{formatMoney(amenity.price)}</span>
+                        {bedTypes.map((bedType) => (
+                          <div key={bedType.id} className="flex items-center justify-between gap-3 py-3">
+                            <div className="min-w-0">
+                              <p className="font-medium text-slate-800">{bedType.name}</p>
+                              <p className="mt-0.5 text-sm text-slate-500">{bedType.description || "Không có mô tả"} · Sức chứa {bedType.capacity ?? "—"} người</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bedType.isExtraBed ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}>
+                                {bedType.isExtraBed ? "Giường phụ" : "Giường thường"}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={`Chỉnh sửa ${bedType.name}`}
+                                disabled={bedType.id == null}
+                                onClick={() => {
+                                  if (bedType.id == null) return;
+                                  setEditingBedTypeId(bedType.id);
+                                  setBedTypeForm({
+                                    name: bedType.name ?? "",
+                                    description: bedType.description ?? "",
+                                    capacity: bedType.capacity ?? 1,
+                                    isExtraBed: bedType.isExtraBed ?? false,
+                                  });
+                                  setBedTypeError("");
+                                  setBedTypeMessage("");
+                                }}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>}
               </div>
-              <form onSubmit={(event) => void submitAmenity(event)} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <h2 className="text-lg font-bold text-slate-900">Thêm tiện nghi chung</h2>
+              <form onSubmit={(event) => void submitBedType(event)} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <h2 className="text-lg font-bold text-slate-900">{editingBedTypeId !== null ? "Chỉnh sửa loại giường" : "Thêm loại giường"}</h2>
                 <label className="mt-4 block text-sm font-semibold text-slate-700">
-                  Tên tiện nghi
-                  <input required value={amenityName} onChange={(event) => setAmenityName(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" placeholder="Ví dụ: Hồ bơi" />
+                  Tên loại giường
+                  <input required value={bedTypeForm.name} onChange={(event) => setBedTypeForm({ ...bedTypeForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" placeholder="Ví dụ: Giường Queen" />
                 </label>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Giá
-                  <input required type="number" min="0" value={amenityPrice} onChange={(event) => setAmenityPrice(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" placeholder="0" />
+                  Mô tả
+                  <input value={bedTypeForm.description} onChange={(event) => setBedTypeForm({ ...bedTypeForm, description: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" placeholder="Mô tả ngắn (không bắt buộc)" />
                 </label>
-                {amenityError && <p role="alert" className="mt-3 text-sm text-rose-600">{amenityError}</p>}
-                <button type="submit" disabled={isCreatingAmenity} className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                  {isCreatingAmenity ? "Đang lưu..." : "Thêm vào danh mục chung"}
+                <label className="mt-3 block text-sm font-semibold text-slate-700">
+                  Sức chứa (người)
+                  <input required type="number" min="1" step="1" value={bedTypeForm.capacity} onChange={(event) => setBedTypeForm({ ...bedTypeForm, capacity: Number(event.target.value) })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" />
+                </label>
+                <label className="mt-3 block text-sm font-semibold text-slate-700">
+                  Loại giường
+                  <select value={String(bedTypeForm.isExtraBed)} onChange={(event) => setBedTypeForm({ ...bedTypeForm, isExtraBed: event.target.value === "true" })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal outline-none focus:border-blue-400">
+                    <option value="false">Giường thường</option>
+                    <option value="true">Giường phụ</option>
+                  </select>
+                </label>
+                {bedTypeError && <p role="alert" className="mt-3 text-sm text-rose-600">{bedTypeError}</p>}
+                {bedTypeMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{bedTypeMessage}</p>}
+                <button type="submit" disabled={isCreatingBedType || isUpdatingBedType} className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                  {isCreatingBedType || isUpdatingBedType ? "Đang lưu..." : editingBedTypeId !== null ? "Lưu thay đổi" : "Thêm loại giường"}
                 </button>
+                {editingBedTypeId !== null && (
+                  <button type="button" onClick={() => { setEditingBedTypeId(null); setBedTypeForm(initialBedTypeForm); setBedTypeError(""); }} className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    Hủy chỉnh sửa
+                  </button>
+                )}
               </form>
             </section>
           )}
@@ -1080,6 +1477,60 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   </select>
                 </label>
               </div>
+            </section>
+            <section className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-slate-900">Chính sách giá các loại phòng</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    Tải mẫu, điền đủ 4 loại phòng rồi tải file lên. Quản lý chi nhánh có thể điều chỉnh giá sau khi tạo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadSuperAdminRoomPolicyTemplate}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                >
+                  <FileSpreadsheet size={15} />
+                  Tải file mẫu
+                </button>
+              </div>
+              <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-white px-3 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-50">
+                <Upload size={16} />
+                {branchPolicyFileName || "Chọn file chính sách phòng (.xlsx)"}
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="sr-only"
+                  disabled={isParsingBranchPolicy}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (!file) return;
+                    setBranchPolicyError("");
+                    setBranchRoomPolicies([]);
+                    setBranchPolicyFileName(file.name);
+                    setIsParsingBranchPolicy(true);
+                    void parseSuperAdminRoomPolicyFile(file).then((policies) => {
+                      setBranchRoomPolicies(policies);
+                      setBranchPolicyError("");
+                    }).catch((error: unknown) => {
+                      setBranchPolicyError(error instanceof Error ? error.message : "Không thể đọc file chính sách phòng.");
+                    }).finally(() => {
+                      setIsParsingBranchPolicy(false);
+                    });
+                  }}
+                />
+              </label>
+              {isParsingBranchPolicy && (
+                <p role="status" className="mt-2 text-xs font-medium text-blue-700">Đang đọc file Excel...</p>
+              )}
+              {branchPolicyFileName && branchRoomPolicies.length > 0 && (
+                <p role="status" className="mt-2 text-xs font-medium text-emerald-700">
+                  Đã đọc {branchRoomPolicies.length} loại phòng: {branchRoomPolicies.map((policy) => roomTypeNames[policy.roomType]).join(", ")}.
+                </p>
+              )}
+              {branchPolicyError && <p role="alert" className="mt-2 text-xs text-rose-600">{branchPolicyError}</p>}
             </section>
             <section className="mt-4 rounded-xl border border-slate-200 p-4">
               <h3 className="font-semibold text-slate-900">Tài khoản admin chi nhánh <span className="font-mono text-xs font-medium text-slate-500">(ROLE_ADMIN)</span></h3>
@@ -1128,7 +1579,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             {branchFormError && <p role="alert" className="mt-3 text-sm text-rose-600">{branchFormError}</p>}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setIsBranchFormOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
-              <button type="submit" disabled={isCreatingBranch || provinces.length === 0} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isCreatingBranch ? "Đang tạo..." : "Tạo chi nhánh"}</button>
+              <button type="submit" disabled={isCreatingBranch || isParsingBranchPolicy || provinces.length === 0} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isParsingBranchPolicy ? "Đang đọc file..." : isCreatingBranch ? "Đang tạo..." : "Tạo chi nhánh"}</button>
             </div>
           </form>
         </div>

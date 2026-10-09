@@ -13,6 +13,10 @@ export type RoomImportBatchRequest = {
     floorId: string;
     roomType: string;
     roomStatus: string;
+    beds: Array<{
+      bedTypeId: number;
+      quantity: number;
+    }>;
     amenityIds: number[];
     imageUrls: string[];
   }>;
@@ -46,6 +50,7 @@ export const getRoomImportErrorMessage = (error: unknown) => {
 };
 
 export const startRoomImport = async (request: RoomImportBatchRequest) => {
+  console.log("[RoomExcelImport] Payload gửi đến BE:", request);
   const response = await axiosClient.post<StartRoomImportResponse>("/roomsExcel/importRooms", request);
   if (!response.data?.taskId) {
     throw new Error(response.data?.message || "Máy chủ không trả về mã tiến trình nhập phòng.");
