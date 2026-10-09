@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bell,
   Building2,
   CalendarDays,
+  CheckCheck,
   ChevronDown,
   ChevronRight,
   CircleUserRound,
@@ -15,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { toast } from "@/components/ui/use-toast";
 import { baseApi } from "../services/baseApi";
 import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
 import { uploadProvinceBackgroundToCloudinary } from "../services/cloudinaryUploadApi";
@@ -39,6 +42,7 @@ import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountMan
 
 type AdminSection =
   | "overview"
+  | "notifications"
   | "branches"
   | "provinces"
   | "amenities"
@@ -46,6 +50,14 @@ type AdminSection =
   | "accounts-overview"
   | "staff-accounts"
   | "customer-accounts";
+
+type AdminNotification = {
+  id: string;
+  title: string;
+  description: string;
+  occurredAt: Date;
+  read: boolean;
+};
 
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")} đ`;
 
@@ -117,6 +129,28 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
+const notifyBuildingFloorChange = (entity: "building" | "floor", payload: unknown) => {
+  const event = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
+  const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
+  const name = entity === "building"
+    ? String(data.name ?? "Tòa nhà")
+    : `Tầng ${String(data.floorNumber ?? "")}`.trim();
+  const hotelId = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+  toast({
+    title: `${entity === "building" ? "Tòa nhà" : "Tầng"} ${action}`,
+    description: `${name}${hotelId}.`,
+  });
+};
+
+const getSocketPayload = (payload: unknown): Record<string, unknown> =>
+  payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+
+const getSocketText = (payload: Record<string, unknown>, key: string, fallback: string) => {
+  const value = payload[key];
+  return value === null || value === undefined || value === "" ? fallback : String(value);
+};
+
 const initialBranchForm = {
   name: "",
   address: "",
@@ -175,18 +209,72 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [provinceCardUploadError, setProvinceCardUploadError] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [amenityName, setAmenityName] = useState("");
 
   useEffect(() => {
+    const addNotification = (title: string, description: string) => {
+      setNotifications((current) => [{
+        id: `${Date.now()}-${Math.random()}`,
+        title,
+        description,
+        occurredAt: new Date(),
+        read: false,
+      }, ...current].slice(0, 100));
+    };
     const unbindSuperAdminEvents = bindSuperAdminSocketEvents({
-      onCustomerCreated: () => {
+      onCustomerCreated: (payload) => {
+        const data = getSocketPayload(payload);
+        addNotification(
+          "Khách hàng mới",
+          `Mã khách hàng ${getSocketText(data, "customerId", "mới")}${data.hotelId == null ? "" : ` tại khách sạn #${data.hotelId}`}.`,
+        );
         dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
       },
-      onAccountCreated: () => {
+      onAccountCreated: (payload) => {
+        const data = getSocketPayload(payload);
+        const hotelLabel = data.hotelId == null ? "" : ` tại khách sạn #${data.hotelId}`;
+        addNotification(
+          "Tài khoản mới",
+          `Tài khoản loại ${getSocketText(data, "accountType", "mới")}${hotelLabel} vừa được tạo.`,
+        );
         dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
       },
-      onBranchCreated: () => {
+      onBranchCreated: (payload) => {
+        const data = getSocketPayload(payload);
+        const hotelLabel = data.hotelId == null ? "" : ` (khách sạn #${data.hotelId})`;
+        addNotification(
+          "Chi nhánh mới",
+          `${getSocketText(data, "name", "Chi nhánh")}${hotelLabel} vừa được tạo.`,
+        );
         dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
+      },
+      onBuildingChanged: (payload) => {
+        const event = getSocketPayload(payload);
+        const data = getSocketPayload(event.data);
+        const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
+        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        addNotification(
+          `Tòa nhà ${action}`,
+          `${getSocketText(data, "name", "Tòa nhà")} ${action}${hotelLabel}.`,
+        );
+        dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
+        notifyBuildingFloorChange("building", payload);
+      },
+      onFloorChanged: (payload) => {
+        const event = getSocketPayload(payload);
+        const data = getSocketPayload(event.data);
+        const building = getSocketPayload(data.building);
+        const buildingLabel = building.name ? ` thuộc ${building.name}` : "";
+        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
+        const floorNumber = getSocketText(data, "floorNumber", "");
+        addNotification(
+          `Tầng ${action}`,
+          `Tầng ${floorNumber}${buildingLabel} ${action}${hotelLabel}.`,
+        );
+        dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
+        notifyBuildingFloorChange("floor", payload);
       },
     });
     joinSuperAdminAccountsRoom();
@@ -323,6 +411,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
   const navItems: { id: AdminSection; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "overview", label: "Tổng quan", icon: LayoutDashboard },
+    { id: "notifications", label: "Thông báo", icon: Bell },
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
     { id: "amenities", label: "Tiện nghi dùng chung", icon: ShieldCheck },
@@ -378,6 +467,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   };
 
   const handleSectionSelect = (id: AdminSection) => {
+    if (id === "notifications") {
+      setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
+    }
     if (id === "branches") {
       setIsAccountMenuOpen(false);
       if (section === "branches") {
@@ -425,6 +517,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               >
                 <Icon size={18} />
                 <span className="flex-1">{label}</span>
+                {id === "notifications" && notifications.some((notification) => !notification.read) && (
+                  <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs text-white">
+                    {notifications.filter((notification) => !notification.read).length}
+                  </span>
+                )}
                 {id === "branches" && (section === "branches" && isBranchMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />)}
               </button>
               {id === "branches" && section === "branches" && isBranchMenuOpen && (
@@ -590,6 +687,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             >
               <Icon size={15} />
               {label}
+              {id === "notifications" && notifications.some((notification) => !notification.read) && (
+                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] text-white">
+                  {notifications.filter((notification) => !notification.read).length}
+                </span>
+              )}
             </button>
           ))}
           <button
@@ -685,9 +787,65 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             </>
           )}
           <div className="relative z-10 mx-auto max-w-7xl px-5 pt-4 pb-8 sm:px-8 sm:pt-5 sm:pb-10">
+          {section === "notifications" && (
+            <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Thông báo hệ thống</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Các sự kiện nhận trực tiếp qua socket. Tối đa 100 thông báo trong phiên hiện tại.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNotifications((current) => current.map((item) => ({ ...item, read: true })))}
+                  disabled={!notifications.some((item) => !item.read)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCheck size={16} />
+                  Đánh dấu đã đọc
+                </button>
+              </div>
+
+              {notifications.length === 0 ? (
+                <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-12 text-center">
+                  <Bell size={24} className="mx-auto text-slate-400" />
+                  <p className="mt-3 text-sm font-semibold text-slate-700">Chưa có thông báo</p>
+                  <p className="mt-1 text-sm text-slate-500">Thông báo sẽ xuất hiện tại đây khi có sự kiện mới.</p>
+                </div>
+              ) : (
+                <div className="mt-5 divide-y divide-slate-100">
+                  {notifications.map((notification) => (
+                    <article
+                      key={notification.id}
+                      className={`flex gap-3 py-4 ${notification.read ? "opacity-75" : ""}`}
+                    >
+                      <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full ${
+                        notification.read ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"
+                      }`}>
+                        <Bell size={16} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-semibold text-slate-900">{notification.title}</h3>
+                          {!notification.read && <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Chưa đọc" />}
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">{notification.description}</p>
+                        <time className="mt-1 block text-xs text-slate-400" dateTime={notification.occurredAt.toISOString()}>
+                          {notification.occurredAt.toLocaleString("vi-VN")}
+                        </time>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           {section !== "amenities" &&
             section !== "provinces" &&
             section !== "permissions" &&
+            section !== "notifications" &&
             section !== "accounts-overview" &&
             section !== "staff-accounts" &&
             section !== "customer-accounts" && (
