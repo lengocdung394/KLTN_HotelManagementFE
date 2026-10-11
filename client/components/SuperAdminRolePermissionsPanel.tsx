@@ -934,12 +934,15 @@ export default function SuperAdminRolePermissionsPanel() {
                                 permission.granted ? "border-emerald-100 bg-emerald-50/50" : "border-slate-200 bg-white"
                               }`}
                             >
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-slate-800">{permission.name}</p>
-                                <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{permission.code}</p>
-                                {permission.description && (
-                                  <p className="mt-1 text-xs leading-5 text-slate-500">{permission.description}</p>
-                                )}
+                              <div className="flex min-w-0 gap-2">
+                                {permission.granted && <Check size={15} className="mt-0.5 shrink-0 text-emerald-600" />}
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-slate-800">{permission.name}</p>
+                                  <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{permission.code}</p>
+                                  {permission.description && (
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">{permission.description}</p>
+                                  )}
+                                </div>
                               </div>
                               <button
                                 type="button"
@@ -952,17 +955,17 @@ export default function SuperAdminRolePermissionsPanel() {
                                   });
                                 }}
                                 aria-pressed={permission.granted}
-                                className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
+                                className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-50 ${
                                   permission.granted
                                     ? "bg-white text-rose-700 hover:bg-rose-100"
-                                    : "bg-blue-600 text-white hover:bg-blue-700"
+                                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
                                 }`}
                               >
                                 {updatingAssignment === `${selectedAssignmentRoleCode}:${permission.code}`
                                   ? "Đang lưu..."
                                   : permission.granted
-                                    ? "Đã gán · Gỡ"
-                                    : "Gán quyền"}
+                                    ? "Gỡ"
+                                    : "Gán"}
                               </button>
                             </article>
                           ))}

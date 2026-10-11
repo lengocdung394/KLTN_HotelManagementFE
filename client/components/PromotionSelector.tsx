@@ -11,6 +11,7 @@ type PromotionSelectorProps = {
   customerId?: string;
   initialPromotionId?: string | null;
   initialCustomerPromotionId?: string | null;
+  initialPromotionApplyAt?: string | null;
   orderTotal?: number;
   roomTotal?: number;
   serviceTotal?: number;
@@ -76,7 +77,7 @@ function PromotionRail({ promotions, source, title, loading, error, emptyMessage
   </section>;
 }
 
-export default function PromotionSelector({ customerId, initialPromotionId, initialCustomerPromotionId, orderTotal = 0, roomTotal = orderTotal, serviceTotal = 0, onApply, onEligibilityChange }: PromotionSelectorProps) {
+export default function PromotionSelector({ customerId, initialPromotionId, initialCustomerPromotionId, initialPromotionApplyAt, orderTotal = 0, roomTotal = orderTotal, serviceTotal = 0, onApply, onEligibilityChange }: PromotionSelectorProps) {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: branchPromotions = [], isLoading: isBranchLoading, isError: isBranchError } = useGetPromotionsQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
   const { data: promotionLookup = [], isLoading: isPromotionLookupLoading } = useGetPromotionsQuery(
@@ -91,30 +92,41 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
   const [promotionWarning, setPromotionWarning] = useState("");
   const [detailPromotion, setDetailPromotion] = useState<{ promotion: SelectedPromotion; source: "branch" | "customer" } | null>(null);
   const restoredPromotionKey = useRef("");
+  const restoredPromotionRef = useRef<SelectedPromotion | null>(null);
   const matchingPromotions = [...branchPromotions, ...customerPromotions].filter((promotion) => `${promotion.code} ${promotion.name}`.toLowerCase().includes(promotionSearch.trim().toLowerCase()));
+  const isCurrentBookingPromotion = (promotion: SelectedPromotion) =>
+    restoredPromotionRef.current?.id === promotion.id
+    && (
+      promotion.id === initialPromotionId
+      || promotion.id === initialCustomerPromotionId
+      || (promotion as SelectedPromotion & { customerPromotionId?: string }).customerPromotionId === initialCustomerPromotionId
+    );
   const detailEligibilityWarning = detailPromotion
-    ? promotionEligibilityMessage(detailPromotion.promotion, orderTotal, roomTotal, serviceTotal)
+    ? promotionEligibilityMessage(detailPromotion.promotion, orderTotal, roomTotal, serviceTotal, {
+      alreadyApplied: isCurrentBookingPromotion(detailPromotion.promotion),
+      applyAt: initialPromotionApplyAt,
+    })
     : "";
 
   useEffect(() => {
     if (!appliedPromotion) return;
-    const isPersistedPromotion = appliedPromotion.id === initialPromotionId
-      || appliedPromotion.id === initialCustomerPromotionId
-      || (appliedPromotion as SelectedPromotion & { customerPromotionId?: string }).customerPromotionId === initialCustomerPromotionId;
+    const isPersistedPromotion = isCurrentBookingPromotion(appliedPromotion);
     const warning = promotionEligibilityMessage(
-      isPersistedPromotion ? { ...appliedPromotion, used: false } : appliedPromotion,
+      appliedPromotion,
       orderTotal,
       roomTotal,
       serviceTotal,
+      { alreadyApplied: isPersistedPromotion, applyAt: initialPromotionApplyAt },
     );
     if (!warning) return;
+    if (isPersistedPromotion) restoredPromotionRef.current = null;
     setAppliedPromotion(null);
     setAppliedSource(null);
     onApply(null);
     onEligibilityChange?.(true);
     setPromotionCode("");
     setPromotionWarning(`Đã bỏ mã ${appliedPromotion.code}: ${warning}`);
-  }, [orderTotal, roomTotal, serviceTotal, appliedPromotion, initialPromotionId, initialCustomerPromotionId, onApply, onEligibilityChange]);
+  }, [orderTotal, roomTotal, serviceTotal, appliedPromotion, initialPromotionId, initialCustomerPromotionId, initialPromotionApplyAt, onApply, onEligibilityChange]);
 
   useEffect(() => {
     const promotionKey = `${initialPromotionId ?? ""}:${initialCustomerPromotionId ?? ""}`;
@@ -133,6 +145,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
     restoredPromotionKey.current = promotionKey;
     if (!promotion) return;
 
+    restoredPromotionRef.current = promotion;
     setAppliedPromotion(promotion);
     setAppliedSource(source);
     setPromotionCode(promotion.code);
@@ -151,7 +164,12 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
   }, [hotelId, customerId, branchPromotions, customerPromotions, isBranchLoading, isBranchError, isCustomerLoading, isCustomerError]);
 
   const applyPromotion = (promotion: SelectedPromotion | null, source: "branch" | "customer") => {
-    const warning = promotion ? promotionEligibilityMessage(promotion, orderTotal, roomTotal, serviceTotal) : "";
+    const warning = promotion
+      ? promotionEligibilityMessage(promotion, orderTotal, roomTotal, serviceTotal, {
+        alreadyApplied: isCurrentBookingPromotion(promotion),
+        applyAt: initialPromotionApplyAt,
+      })
+      : "";
     if (import.meta.env.DEV) {
       console.log("[promotions] eligibility comparison:", JSON.stringify({
         code: promotion?.code ?? null,
@@ -181,6 +199,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       }, null, 2));
       return;
     }
+    if (promotion && !isCurrentBookingPromotion(promotion)) restoredPromotionRef.current = null;
     setPromotionWarning("");
     onEligibilityChange?.(false);
     if (import.meta.env.DEV) {
@@ -261,7 +280,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       <PromotionRail promotions={branchPromotions} source="branch" title="Khuyến mãi chi nhánh" loading={isBranchLoading} error={isBranchError} emptyMessage="Chưa có mã khả dụng." appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
       <PromotionRail promotions={customerPromotions} source="customer" title="Khuyến mãi khách hàng" loading={!customerId || isCustomerLoading} error={isCustomerError} emptyMessage={!customerId ? "Chọn khách hàng để xem mã đã lưu." : "Khách hàng chưa lưu mã nào."} appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
     </div>
-    {appliedPromotion && <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><p>Đã áp dụng {appliedSource === "customer" ? "khuyến mãi khách hàng" : "khuyến mãi chi nhánh"}: {appliedPromotion.code} · giảm {moneyAmount(calculatePromotionDiscount(appliedPromotion, roomTotal, serviceTotal, orderTotal))}</p><button type="button" onClick={() => { setAppliedPromotion(null); setAppliedSource(null); setPromotionCode(""); setPromotionWarning(""); onEligibilityChange?.(false); onApply(null); }} className="shrink-0 underline">Bỏ chọn</button></div>}
+    {appliedPromotion && <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><p>Đã áp dụng {appliedSource === "customer" ? "khuyến mãi khách hàng" : "khuyến mãi chi nhánh"}: {appliedPromotion.code} · giảm {moneyAmount(calculatePromotionDiscount(appliedPromotion, roomTotal, serviceTotal, orderTotal))}</p><button type="button" onClick={() => { restoredPromotionRef.current = null; setAppliedPromotion(null); setAppliedSource(null); setPromotionCode(""); setPromotionWarning(""); onEligibilityChange?.(false); onApply(null); }} className="shrink-0 underline">Bỏ chọn</button></div>}
     <Dialog open={Boolean(detailPromotion)} onOpenChange={(open) => { if (!open) setDetailPromotion(null); }}>
       {detailPromotion && <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>

@@ -133,6 +133,8 @@ const requestSuperAdminRoomJoin = () => {
     const response = result && typeof result === "object" ? result as Record<string, unknown> : {};
     if (response.joined === true) {
       console.log("🛡️ [Socket] joined super_admin_accounts room");
+    } else if (result === undefined || result === null) {
+      console.info("🛡️ [Socket] join_super_admin_accounts_room sent; backend did not return an acknowledgement");
     } else {
       console.error("🛡️ [Socket] failed to join super_admin_accounts room:", response.reason ?? result);
     }
@@ -357,6 +359,12 @@ export const initSocket = (token: string | null) => {
     reconnection: true,
     reconnectionAttempts: 5,
   });
+
+  if (import.meta.env.DEV) {
+    socket.onAny((eventName) => {
+      console.debug("📨 [Socket] incoming event:", eventName);
+    });
+  }
 
   socket.on("connect", () => {
     console.log("✅ [Socket] connected:", socket?.id);

@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   CheckCheck,
+  ConciergeBell,
   ChevronDown,
   ChevronRight,
   CircleUserRound,
@@ -15,6 +16,7 @@ import {
   Pencil,
   FileSpreadsheet,
   ShieldCheck,
+  Tag,
   Upload,
   Users,
   Volume2,
@@ -53,6 +55,8 @@ import { downloadBedTypeTemplate, parseBedTypeFile } from "../lib/bedTypeImport"
 import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } from "../lib/superAdminRoomPolicyImport";
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
+import PromotionWorkspace from "./PromotionWorkspace";
+import ServiceWorkspace from "./ServiceWorkspace";
 
 type AdminSection =
   | "overview"
@@ -61,6 +65,8 @@ type AdminSection =
   | "provinces"
   | "amenities"
   | "permissions"
+  | "promotions"
+  | "services"
   | "accounts-overview"
   | "staff-accounts"
   | "customer-accounts";
@@ -651,6 +657,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
     { id: "amenities", label: "Danh sách giường", icon: BedDouble },
     { id: "permissions", label: "Role và phân quyền", icon: ShieldCheck },
+    { id: "promotions", label: "Quản lý khuyến mãi", icon: Tag },
+    { id: "services", label: "Quản lý dịch vụ", icon: ConciergeBell },
   ];
   const isAccountSection =
     section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
@@ -720,6 +728,58 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     staff: "Nhân viên",
     other: "Khác",
   };
+  const notificationCategoryStyles: Record<AdminNotification["category"], {
+    card: string;
+    icon: string;
+    badge: string;
+    tabActive: string;
+    tabIdle: string;
+  }> = {
+    booking: {
+      card: "border-violet-600 bg-violet-50/50",
+      icon: "bg-violet-600 text-white",
+      badge: "bg-violet-600 text-white",
+      tabActive: "bg-violet-600 text-white ring-violet-200",
+      tabIdle: "bg-violet-50 text-violet-700 hover:bg-violet-100",
+    },
+    room: {
+      card: "border-sky-600 bg-sky-50/50",
+      icon: "bg-sky-600 text-white",
+      badge: "bg-sky-600 text-white",
+      tabActive: "bg-sky-600 text-white ring-sky-200",
+      tabIdle: "bg-sky-50 text-sky-700 hover:bg-sky-100",
+    },
+    service: {
+      card: "border-amber-500 bg-amber-50/50",
+      icon: "bg-amber-500 text-white",
+      badge: "bg-amber-500 text-white",
+      tabActive: "bg-amber-500 text-white ring-amber-200",
+      tabIdle: "bg-amber-50 text-amber-800 hover:bg-amber-100",
+    },
+    staff: {
+      card: "border-emerald-600 bg-emerald-50/50",
+      icon: "bg-emerald-600 text-white",
+      badge: "bg-emerald-600 text-white",
+      tabActive: "bg-emerald-600 text-white ring-emerald-200",
+      tabIdle: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+    },
+    other: {
+      card: "border-slate-600 bg-slate-50/50",
+      icon: "bg-slate-600 text-white",
+      badge: "bg-slate-600 text-white",
+      tabActive: "bg-slate-600 text-white ring-slate-200",
+      tabIdle: "bg-slate-100 text-slate-700 hover:bg-slate-200",
+    },
+  };
+  const allNotificationFilterStyle = {
+    active: "bg-blue-600 text-white ring-blue-200",
+    idle: "bg-blue-50 text-blue-700 hover:bg-blue-100",
+  };
+  const notificationCountForCategory = (category: NotificationCategoryFilter) =>
+    notifications.filter((notification) =>
+      (category === "all" || notification.category === category)
+      && (notificationBranchFilter === "all" || String(notification.hotelId ?? "") === notificationBranchFilter),
+    ).length;
   const filteredNotifications = notifications.filter((notification) =>
     (notificationCategoryFilter === "all" || notification.category === notificationCategoryFilter)
     && (notificationBranchFilter === "all" || String(notification.hotelId ?? "") === notificationBranchFilter),
@@ -1097,13 +1157,22 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                     type="button"
                     aria-pressed={notificationCategoryFilter === category}
                     onClick={() => setNotificationCategoryFilter(category)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                      notificationCategoryFilter === category
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition ${
+                      category === "all"
+                        ? notificationCategoryFilter === category
+                          ? `${allNotificationFilterStyle.active} ring-current/20`
+                          : `${allNotificationFilterStyle.idle} ring-transparent`
+                        : notificationCategoryFilter === category
+                          ? `${notificationCategoryStyles[category].tabActive} ring-current/20`
+                          : `${notificationCategoryStyles[category].tabIdle} ring-transparent`
                     }`}
                   >
                     {notificationCategoryLabels[category]}
+                    <span className={`ml-1.5 inline-flex min-w-5 justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none ${
+                      notificationCategoryFilter === category ? "bg-white/20" : "bg-black/5"
+                    }`}>
+                      {notificationCountForCategory(category)}
+                    </span>
                   </button>
                 ))}
                 <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-slate-500">
@@ -1128,21 +1197,19 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   <p className="mt-1 text-sm text-slate-500">{notifications.length === 0 ? "Thông báo sẽ xuất hiện tại đây khi có sự kiện mới." : "Thử chọn loại thông báo hoặc chi nhánh khác."}</p>
                 </div>
               ) : (
-                <div className="mt-5 divide-y divide-slate-100">
+                <div className="mt-5 flex flex-col gap-3">
                   {filteredNotifications.map((notification) => (
                     <article
                       key={notification.id}
-                      className={`flex gap-3 py-4 ${notification.read ? "opacity-75" : ""}`}
+                      className={`flex gap-3 rounded-xl border border-l-4 p-4 shadow-sm ${notification.read ? "opacity-75" : ""} ${notificationCategoryStyles[notification.category].card}`}
                     >
-                      <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full ${
-                        notification.read ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"
-                      }`}>
+                      <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full ${notificationCategoryStyles[notification.category].icon}`}>
                         <Bell size={16} />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-semibold text-slate-900">{notification.title}</h3>
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${notificationCategoryStyles[notification.category].badge}`}>
                             {notificationCategoryLabels[notification.category]}
                           </span>
                           {!notification.read && <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Chưa đọc" />}
@@ -1177,6 +1244,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             section !== "provinces" &&
             section !== "permissions" &&
             section !== "notifications" &&
+            section !== "promotions" &&
+            section !== "services" &&
             section !== "accounts-overview" &&
             section !== "staff-accounts" &&
             section !== "customer-accounts" && (
@@ -1448,6 +1517,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           )}
 
           {section === "permissions" && <SuperAdminRolePermissionsPanel />}
+
+          {section === "promotions" && <PromotionWorkspace branches={branches} />}
+
+          {section === "services" && <ServiceWorkspace branches={branches} />}
 
           <footer className="mt-10 flex items-center gap-2 border-t border-slate-200 pt-5 text-xs text-slate-400">
             <CircleUserRound size={14} />

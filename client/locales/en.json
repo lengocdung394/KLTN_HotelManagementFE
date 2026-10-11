@@ -473,7 +473,7 @@
     "yes": "Yes",
     "no": "No",
     "update": "Save changes",
-    "updatedLocally": "Updated in this view; changes have not been saved to the server.",
+    "updatedSuccessfully": "Promotion updated successfully.",
     "active": "Active",
     "usesThisMonth": "Uses this month",
     "guestSavings": "Guest savings",
@@ -529,6 +529,7 @@
     "createdSuccessfully": "Promotion created successfully.",
     "newPromotionNotification": "A new promotion was added for this branch",
     "createFailed": "Failed to create promotion.",
+    "updateFailed": "Failed to update promotion.",
     "creating": "Saving...",
     "codeGenerated": "Code generated automatically",
     "copyCode": "Copy promotion code"
