@@ -13,6 +13,7 @@ export type RoomDetailsData = {
   floor: string;
   size: string;
   beds: string;
+  bedConfigurations?: Array<{ bedTypeId: number; name?: string; quantity: number }>;
   capacity: number;
   standardCapacity: number;
   maxExtraGuests: number;

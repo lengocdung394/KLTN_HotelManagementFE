@@ -120,4 +120,4 @@ export const customerApi = baseApi.injectEndpoints({
 	}),
 });
 
-export const { useGetCustomersByHotelIdQuery, useGetCustomerByIdQuery, useLazyGetCustomerByIdQuery, useCreateWalkInCustomerMutation, useUpdateCustomerMutation } = customerApi;
+export const { useGetCustomersByHotelIdQuery, useLazyGetCustomersByHotelIdQuery, useGetCustomerByIdQuery, useLazyGetCustomerByIdQuery, useCreateWalkInCustomerMutation, useUpdateCustomerMutation } = customerApi;

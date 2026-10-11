@@ -28,7 +28,7 @@ export default function FloorManagementPanel({ floors, rooms, buildings, selecte
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("room.searchFloors", "Tìm tầng nhà...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
       </div>
     </div>
-    {canManage && <p className="mb-3 text-xs text-slate-500">File CSV/Excel cần cột <strong>Tên tầng</strong>. Các tầng sẽ được thêm vào tòa nhà đang chọn.</p>}
+    {canManage && <p className="mb-3 text-xs text-slate-500">Chọn tòa nhà, sau đó thêm từng tầng bằng nút “Thêm tầng”.</p>}
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     {filteredFloors.map((floor) => <div key={floor} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 p-4">
       <div><p className="text-sm font-bold text-slate-800">{t("room.floorLabel", "Tầng: {{floor}}", { floor })}</p><p className="mt-1 text-xs text-slate-500">{rooms.filter((room) => room.floor === floor).length} {t("room.rooms")}</p></div>

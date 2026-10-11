@@ -14,8 +14,8 @@ import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation } from "../services/roomApi";
 import { getAmenityImportStatus, isAmenityImportFinished, useGetAllAmenitiesQuery, useImportAmenitiesFromFileMutation, type AmenityResponse } from "../services/amenityApi.ts";
-import { useGetBuildingsByCurrentHotelQuery } from "../services/buildingApi";
-import { useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery } from "../services/floorApi";
+import { useCreateBuildingMutation, useGetBuildingsByCurrentHotelQuery, useUpdateBuildingMutation } from "../services/buildingApi";
+import { useCreateFloorMutation, useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery, useUpdateFloorMutation } from "../services/floorApi";
 import { useGetBranchRoomPoliciesQuery, useUpdateBranchRoomPolicyMutation } from "../services/branchRoomPolicyApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
@@ -173,6 +173,47 @@ const createBuildingCode = (currentBuildings: Building[]) => {
   return code;
 };
 type Room = RoomDetailsData;
+type RoomBedConfiguration = { bedTypeId: number; name?: string; quantity: number };
+
+const parseRoomBedConfiguration = (
+  value: unknown,
+  bedTypes: Array<{ id?: number; name?: string; bedTypeName?: string }> = [],
+): RoomBedConfiguration | null => {
+  if (!value || typeof value !== "object") return null;
+
+  const bed = value as Record<string, unknown>;
+  const bedType = bed.bedType && typeof bed.bedType === "object"
+    ? bed.bedType as Record<string, unknown>
+    : {};
+  const nameValue = bed.bedTypeName ?? bedType.name ?? bed.name;
+  const name = typeof nameValue === "string" ? nameValue.trim() : "";
+  const matchingBedType = bedTypes.find((item) =>
+    Number(item.id) === Number(bed.bedTypeId ?? bedType.id ?? bed.id)
+    || normalizeText(item.name ?? item.bedTypeName ?? "") === normalizeText(name),
+  );
+  const bedTypeId = Number(bed.bedTypeId ?? bedType.id ?? bed.id ?? matchingBedType?.id);
+  const quantity = Number(bed.quantity ?? bed.bedQuantity ?? 1);
+
+  if (!Number.isSafeInteger(bedTypeId) || bedTypeId <= 0 || !Number.isSafeInteger(quantity) || quantity <= 0) {
+    return null;
+  }
+
+  const resolvedName = name || matchingBedType?.name || matchingBedType?.bedTypeName;
+  return { bedTypeId, quantity, ...(resolvedName ? { name: resolvedName } : {}) };
+};
+
+const deduplicateRoomBedConfigurations = (beds: RoomBedConfiguration[]) => {
+  const uniqueBeds = new Map<string, RoomBedConfiguration>();
+  beds.forEach((bed) => {
+    const key = normalizeText(bed.name ?? "") || `id:${bed.bedTypeId}`;
+    const existing = uniqueBeds.get(key);
+    if (!existing || bed.quantity > existing.quantity) {
+      uniqueBeds.set(key, bed);
+    }
+  });
+  return [...uniqueBeds.values()];
+};
+
 const employees = ["Nguyễn Thị Mai", "Lê Thị Hương", "Phạm Ngọc Anh", "Trần Minh Tú"];
 const statuses = ["Sẵn sàng", "Đang dọn", "Đang ở", "Bảo trì"];
 const statusStyle: Record<string, string> = { "Sẵn sàng": "bg-emerald-50 text-emerald-700", "Đang dọn": "bg-amber-50 text-amber-700", "Đang ở": "bg-blue-50 text-blue-700", "Bảo trì": "bg-rose-50 text-rose-700" };
@@ -198,6 +239,16 @@ const statusValues: Record<string, string> = Object.fromEntries(Object.entries(s
 const roomTypeLabel = (value: string) => roomTypeLabels[value] ?? value;
 const statusLabel = (value: string) => statusLabels[value] ?? value;
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
+const formatRoomArea = (value: unknown) => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? `${value} m²` : "Chưa cập nhật";
+  }
+  if (typeof value !== "string" || !value.trim()) return "Chưa cập nhật";
+  const area = value.trim();
+  if (/m(?:²|2)(?:\s|$)/i.test(area)) return area;
+  const numericArea = Number(area.replace(",", "."));
+  return Number.isFinite(numericArea) && numericArea > 0 ? `${numericArea} m²` : area;
+};
 type CreateRoomFormState = {
   roomNumber: string;
   roomType: string;
@@ -209,6 +260,7 @@ type CreateRoomFormState = {
   extraAdultFee: string;
   extraChildFee: string;
   bedType: string;
+  bedConfigurations: Array<{ bedTypeId: number; quantity: number }>;
   description: string;
   amenities: string[];
   images: string[];
@@ -223,6 +275,19 @@ const roomTypeDetails: Record<string, { area: string; beds: string; capacity: nu
   "Family Room": { area: "45 m²", beds: "1 giường King Size + 1 giường đơn", capacity: 4, guestPolicy: "Người lớn: 4 · Trẻ nhỏ dưới 11 tuổi: 2 · Em bé dưới 12 tháng: 1", price: 2200000, description: "Phòng gia đình rộng rãi, phù hợp cho nhóm khách hoặc gia đình." },
 };
 const normalizeText = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+const roomTypeIdentity = (value: string) =>
+  Object.entries(roomTypeValues).find(([label]) => normalizeText(label) === normalizeText(value))?.[1]
+  ?? value.trim().toUpperCase();
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  const errorRecord = error && typeof error === "object" ? error as { data?: unknown; message?: unknown } : {};
+  const responseData = errorRecord.data && typeof errorRecord.data === "object"
+    ? errorRecord.data as { message?: unknown }
+    : undefined;
+  if (typeof errorRecord.data === "string") return errorRecord.data;
+  if (typeof responseData?.message === "string") return responseData.message;
+  if (typeof errorRecord.message === "string") return errorRecord.message;
+  return fallback;
+};
 const roomFormDefaults = (roomType: string) => {
   const details = roomTypeDetails[roomType] ?? roomTypeDetails["Standard Room"];
   return {
@@ -232,14 +297,15 @@ const roomFormDefaults = (roomType: string) => {
     extraAdultFee: "",
     extraChildFee: "",
     bedType: details.beds,
+    bedConfigurations: [],
   };
 };
 
 const emptyCreateRoomForm: CreateRoomFormState = {
   roomNumber: "",
   roomType: "Standard Room",
-  building: "A",
-  floor: "1",
+  building: "",
+  floor: "",
   ...roomFormDefaults("Standard Room"),
   description: "",
   amenities: [],
@@ -263,6 +329,10 @@ export default function RoomWorkspace() {
   const { data: apiAmenities, isLoading: isAmenitiesLoading, isError: isAmenitiesError } = useGetAllAmenitiesQuery();
   const [createRoom, { isLoading: isCreatingRoom }] = useCreateRoomMutation();
   const [updateRoomApi, { isLoading: isUpdatingRoom }] = useUpdateRoomMutation(); // Added updateRoomApi
+  const [createBuildingApi, { isLoading: isCreatingBuilding }] = useCreateBuildingMutation();
+  const [updateBuildingApi, { isLoading: isUpdatingBuilding }] = useUpdateBuildingMutation();
+  const [createFloorApi, { isLoading: isCreatingFloor }] = useCreateFloorMutation();
+  const [updateFloorApi, { isLoading: isUpdatingFloor }] = useUpdateFloorMutation();
   const [importAmenitiesFromFile] = useImportAmenitiesFromFileMutation();
   const [amenityOverrides, setAmenityOverrides] = useState<Record<number, AmenityResponse>>({});
   const [localAmenities, setLocalAmenities] = useState<AmenityResponse[]>([]);
@@ -276,7 +346,6 @@ export default function RoomWorkspace() {
   const availableRoomTypes = useMemo(() => (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value))), [apiRoomTypes]);
   const availableRoomStatuses = useMemo(() => (apiRoomStatuses ?? []).map((value) => statusLabel(String(value))), [apiRoomStatuses]);
   const amenityOptions = useMemo(() => amenityCatalog.map((amenity) => amenity.name).filter(Boolean), [amenityCatalog]);
-  const bedTypeOptions = useMemo(() => (apiBedTypes ?? []).map((item) => String(item.bedTypeName ?? item.name ?? item.description ?? "")).filter(Boolean), [apiBedTypes]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const requestedTab = new URLSearchParams(location.search).get("tab");
   const defaultRoomTab: "rooms" | "pricing" | "amenities" = canManageRooms && (requestedTab === "pricing" || requestedTab === "amenities") ? requestedTab : "rooms";
@@ -290,14 +359,35 @@ export default function RoomWorkspace() {
     if (!hotelId || Number.isNaN(Number(hotelId))) return;
 
     bindHotelSocketEvents({
-      onRoomCreated: () => {
+      onRoomCreated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
+        const event = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+        const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
+        const count = Number(data.count);
+        toast({
+          title: "Phòng mới được thêm",
+          description: event.action === "IMPORTED" && Number.isFinite(count)
+            ? `Đã nhập ${count} phòng.`
+            : `Phòng ${String(data.roomNumber ?? "")} đã được thêm vào danh sách.`,
+        });
       },
-      onRoomUpdated: () => {
+      onRoomUpdated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
+        const event = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+        const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
+        toast({
+          title: "Phòng được cập nhật",
+          description: `Thông tin phòng ${String(data.roomNumber ?? "")} đã được làm mới.`,
+        });
       },
       onRoomPolicyUpdated: () => {
         dispatch(baseApi.util.invalidateTags(["Room", "Booking", "BranchRoomPolicy"]));
+      },
+      onBuildingChanged: () => {
+        dispatch(baseApi.util.invalidateTags(["Building", "Floor", "Room"]));
+      },
+      onFloorChanged: () => {
+        dispatch(baseApi.util.invalidateTags(["Floor", "Room"]));
       },
       onRoomImportProgress: (data) => {
         const progress = parseRoomSocketImportProgress(data);
@@ -441,6 +531,7 @@ export default function RoomWorkspace() {
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
+  const [editingFloorId, setEditingFloorId] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
   const selectedRoomTypeValue = roomTypeValues[createRoomForm.roomType] ?? createRoomForm.roomType;
   const { currentData: roomTypeDetail, isLoading: isRoomTypeDetailLoading, isError: isRoomTypeDetailError } = useGetRoomTypeDetailQuery(
@@ -511,17 +602,28 @@ export default function RoomWorkspace() {
     [hotelFloorOptions, selectedBuildingId],
   );
   const selectedBuildingFloorOptions = apiFloorsByBuilding !== undefined ? apiFloorOptions : hotelFloorsForSelectedBuilding;
+  const defaultBuildingOption = (options: Building[]) =>
+    options.find((item) =>
+      normalizeText(item.name) === normalizeText("Tòa A")
+      || item.id.trim().toLocaleUpperCase() === "A"
+      || item.id.trim().toLocaleUpperCase().endsWith("_TOA_A"),
+    ) ?? options[0];
+  const defaultFloorOption = (options: Array<{ id: string; name: string }>) =>
+    options.find((item) => Number(item.name.replace(/[^\d-]/g, "")) === 1) ?? options[0];
   const roomImportOptions = useMemo<RoomImportOptions>(() => ({
     roomTypes: Object.keys(roomTypeLabels),
     statuses: [...new Set((availableRoomStatuses.length > 0 ? availableRoomStatuses : statuses).map((value) => value.trim()).filter(Boolean))],
     amenities: [...new Map(amenityCatalog
       .filter((item) => Number.isInteger(item.id) && item.name.trim())
       .map((item) => [String(item.id), { id: String(item.id), name: item.name.trim() }])).values()],
+    bedTypes: [...new Map((apiBedTypes ?? [])
+      .filter((item) => Number.isInteger(item.id) && item.name?.trim())
+      .map((item) => [item.id!, { id: item.id!, name: item.name!.trim() }])).values()],
     buildings: [...new Map(buildings.filter((item) => item.id && item.name.trim()).map((item) => [normalizeText(item.name), item])).values()],
     floors: [...new Map(hotelFloorOptions
       .filter((item) => buildings.some((building) => building.id === item.buildingId))
       .map((item) => [`${item.buildingId}:${normalizeText(item.name)}`, item])).values()],
-  }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, buildings, hotelFloorOptions]);
+  }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, apiBedTypes, buildings, hotelFloorOptions]);
   const selectedBuildingName = buildings.find((item) => item.id === createRoomForm.building)?.name ?? "Chưa chọn";
   const selectedFloorName = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor)?.name;
   const selectedFloorLabel = selectedFloorName
@@ -559,12 +661,17 @@ export default function RoomWorkspace() {
       const services = getRoomAmenityNames(item);
       const rawBeds = getApiValue(item, ["beds", "bedTypes"]);
       const bedItems = Array.isArray(rawBeds) ? rawBeds : rawBeds && typeof rawBeds === "object" ? [rawBeds] : [];
-      const bedNames = bedItems.map((bed) => {
-        const bedRecord = bed as Record<string, unknown>;
-        const name = String(bedRecord.bedTypeName ?? bedRecord.name ?? "").trim();
-        const quantity = Number(bedRecord.quantity ?? 1);
-        return name ? `${quantity > 1 ? `${quantity} ` : ""}${name}` : "";
-      }).filter(Boolean);
+      const bedConfigurations = deduplicateRoomBedConfigurations(bedItems
+        .map((bed) => parseRoomBedConfiguration(bed, apiBedTypes ?? []))
+        .filter((bed): bed is RoomBedConfiguration => bed !== null)
+        .map((bed) => ({
+          ...bed,
+          name: bed.name ?? apiBedTypes?.find((bedType) => Number(bedType.id) === bed.bedTypeId)?.name,
+        })));
+      const bedNames = bedConfigurations.map((bed) => {
+        const name = bed.name ?? `Loại giường #${bed.bedTypeId}`;
+        return `${name} × ${bed.quantity}`;
+      });
       const bedCapacity = bedItems.reduce((total, bed) => {
         const bedRecord = bed as Record<string, unknown>;
         const capacity = Number(bedRecord.capacity ?? 0);
@@ -587,8 +694,9 @@ export default function RoomWorkspace() {
         name: roomType,
         images,
         floor: String(floorNumber ?? ""),
-        size: String(getApiValue(item, ["roomSize", "size", "area", "roomArea", "acreage"]) ?? "Chưa cập nhật"),
-        beds: bedNames.join(" · ") || String(getApiValue(item, ["bedType", "bedTypeName"]) ?? details.beds),
+        size: formatRoomArea(getApiValue(item, ["area", "roomArea", "roomSize", "room_area", "squareMeters", "size", "acreage"])),
+        beds: bedNames.join(" · ") || String(getApiValue(item, ["bedType", "bedTypeName"]) ?? "Chưa cập nhật loại giường"),
+        bedConfigurations,
         capacity: Number.isFinite(standardCapacity) ? standardCapacity : details.capacity,
         standardCapacity: Number.isFinite(standardCapacity) ? standardCapacity : details.capacity,
         maxExtraGuests: Number.isFinite(maxExtraGuests) ? maxExtraGuests : 0,
@@ -609,7 +717,7 @@ export default function RoomWorkspace() {
       });
       return refreshedRooms;
     });
-  }, [apiRooms, apiAmenities, hotelFloorOptions]);
+  }, [apiRooms, apiAmenities, apiBedTypes, hotelFloorOptions]);
   useEffect(() => {
     if (!apiBuildings) return;
     const nextBuildings = apiBuildings.map((item) => {
@@ -620,11 +728,15 @@ export default function RoomWorkspace() {
 
     setBuildings((current) => (current.length === nextBuildings.length && current.every((building, index) => building.id === nextBuildings[index]?.id && building.name === nextBuildings[index]?.name) ? current : nextBuildings));
     setSelectedBuildingId((current) => {
-      const nextSelected = nextBuildings.some((item) => item.id === current) ? current : (nextBuildings[0]?.id ?? "");
+      const nextSelected = nextBuildings.some((item) => item.id === current)
+        ? current
+        : (defaultBuildingOption(nextBuildings)?.id ?? "");
       return nextSelected === current ? current : nextSelected;
     });
     setCreateRoomForm((current) => {
-      const nextBuilding = nextBuildings.some((item) => item.id === current.building) ? current.building : (nextBuildings[0]?.id ?? current.building);
+      const nextBuilding = nextBuildings.some((item) => item.id === current.building)
+        ? current.building
+        : (defaultBuildingOption(nextBuildings)?.id ?? "");
       return nextBuilding === current.building ? current : { ...current, building: nextBuilding };
     });
   }, [apiBuildings]);
@@ -633,7 +745,9 @@ export default function RoomWorkspace() {
 
     setFloors((current) => (current.length === nextFloors.length && current.every((floorName, index) => floorName === nextFloors[index]) ? current : nextFloors));
     setCreateRoomForm((current) => {
-      const nextFloor = selectedBuildingFloorOptions.some((item) => item.id === current.floor) ? current.floor : (selectedBuildingFloorOptions[0]?.id ?? current.floor);
+      const nextFloor = selectedBuildingFloorOptions.some((item) => item.id === current.floor)
+        ? current.floor
+        : (defaultFloorOption(selectedBuildingFloorOptions)?.id ?? "");
       return nextFloor === current.floor ? current : { ...current, floor: nextFloor };
     });
   }, [selectedBuildingFloorOptions]);
@@ -645,41 +759,51 @@ export default function RoomWorkspace() {
     });
   }, [apiRoomTypes, apiRoomStatuses, availableRoomTypes, availableRoomStatuses]);
   useEffect(() => {
-    if (!roomTypeDetail || editingRoomId !== null) return;
+    if (editingRoomId !== null) return;
 
-    const getDetailValue = (keys: string[]) => keys.map((key) => roomTypeDetail[key]).find((value) => value !== undefined && value !== null && value !== "");
+    const getDetailValue = (keys: string[]) => keys.map((key) => roomTypeDetail?.[key]).find((value) => value !== undefined && value !== null && value !== "");
     const rawBeds = getDetailValue(["beds", "bedTypes", "roomBeds"]);
     const bedItems = Array.isArray(rawBeds) ? rawBeds : rawBeds && typeof rawBeds === "object" ? [rawBeds] : [];
-    const bedNames = bedItems.map((bed) => {
-      const bedRecord = bed as Record<string, unknown>;
-      const name = String(bedRecord.bedTypeName ?? bedRecord.name ?? bedRecord.description ?? "").trim();
-      const quantity = Number(bedRecord.quantity ?? 1);
-      return name ? `${quantity > 1 ? `${quantity} ` : ""}${name}` : "";
-    }).filter(Boolean);
+    const bedConfigurations = deduplicateRoomBedConfigurations(bedItems
+      .map((bed) => parseRoomBedConfiguration(bed, apiBedTypes ?? []))
+      .filter((bed): bed is RoomBedConfiguration => bed !== null)
+      .map((bed) => ({
+        ...bed,
+        name: bed.name ?? apiBedTypes?.find((bedType) => Number(bedType.id) === bed.bedTypeId)?.name,
+      })));
+    const bedNames = bedConfigurations.map((bed) => `${bed.name ?? `Loại giường #${bed.bedTypeId}`} × ${bed.quantity}`);
     const standardCapacity = getDetailValue(["standardCapacity", "standardAdults", "capacity", "maxAdults", "adults", "adultCapacity", "numberOfAdults"]);
     const roomTypePolicy = branchRoomPolicies.find((policy) => {
       const policyRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
-      return roomTypeLabel(String(policyRoomType ?? "")) === createRoomForm.roomType;
+      return policyRoomType != null
+        && roomTypeIdentity(String(policyRoomType)) === roomTypeIdentity(createRoomForm.roomType);
     });
-    const maxExtraGuests = getDetailValue(["maxExtraGuests", "maxExtraGuest", "extraGuestCapacity"])
-      ?? getApiValue(roomTypePolicy ?? {}, ["maxExtraGuests", "max_extra_guests", "extraGuestCapacity"]);
-    const extraAdultFee = getDetailValue(["extraAdultFee"]);
-    const extraChildFee = getDetailValue(["extraChildFee"]);
+    const policyStandardCapacity = getApiValue(roomTypePolicy ?? {}, ["standardCapacity", "standard_capacity", "capacity", "maxCapacity", "maxAdults"]);
+    const policyMaxExtraGuests = getApiValue(roomTypePolicy ?? {}, ["maxExtraGuests", "maxExtraGuest", "max_extra_guests", "extraGuestCapacity"]);
+    const maxExtraGuests = policyMaxExtraGuests
+      ?? getDetailValue(["maxExtraGuests", "maxExtraGuest", "extraGuestCapacity"]);
+    const extraAdultFee = getApiValue(roomTypePolicy ?? {}, ["extraAdultFee", "extra_adult_fee", "adultSurcharge"])
+      ?? getDetailValue(["extraAdultFee"]);
+    const extraChildFee = getApiValue(roomTypePolicy ?? {}, ["extraChildFee", "extra_child_fee", "childSurcharge"])
+      ?? getDetailValue(["extraChildFee"]);
 
     setCreateRoomForm((current) => {
-      const nextStandardCapacity = standardCapacity !== undefined ? String(standardCapacity) : current.standardCapacity;
+      const nextStandardCapacity = policyStandardCapacity !== undefined
+        ? String(policyStandardCapacity)
+        : standardCapacity !== undefined ? String(standardCapacity) : current.standardCapacity;
       const nextMaxExtraGuests = maxExtraGuests !== undefined ? String(maxExtraGuests) : current.maxExtraGuests;
       const nextExtraAdultFee = extraAdultFee !== undefined ? String(extraAdultFee) : current.extraAdultFee;
       const nextExtraChildFee = extraChildFee !== undefined ? String(extraChildFee) : current.extraChildFee;
       const nextBedType = bedNames.length > 0 ? bedNames.join(" · ") : current.bedType;
+      const nextBedConfigurations = bedConfigurations.map(({ bedTypeId, quantity }) => ({ bedTypeId, quantity }));
 
-      if (current.standardCapacity === nextStandardCapacity && current.maxExtraGuests === nextMaxExtraGuests && current.extraAdultFee === nextExtraAdultFee && current.extraChildFee === nextExtraChildFee && current.bedType === nextBedType) {
+      if (current.standardCapacity === nextStandardCapacity && current.maxExtraGuests === nextMaxExtraGuests && current.extraAdultFee === nextExtraAdultFee && current.extraChildFee === nextExtraChildFee && current.bedType === nextBedType && current.bedConfigurations.length > 0) {
         return current;
       }
 
-      return { ...current, standardCapacity: nextStandardCapacity, maxExtraGuests: nextMaxExtraGuests, extraAdultFee: nextExtraAdultFee, extraChildFee: nextExtraChildFee, bedType: nextBedType };
+      return { ...current, standardCapacity: nextStandardCapacity, maxExtraGuests: nextMaxExtraGuests, extraAdultFee: nextExtraAdultFee, extraChildFee: nextExtraChildFee, bedType: nextBedType, bedConfigurations: current.bedConfigurations.length > 0 ? current.bedConfigurations : nextBedConfigurations };
     });
-  }, [roomTypeDetail, branchRoomPolicies, createRoomForm.roomType, editingRoomId]);
+  }, [roomTypeDetail, branchRoomPolicies, createRoomForm.roomType, editingRoomId, apiBedTypes]);
   const isAnyModalOpen = showCreateRoom || Boolean(detailRoom) || Boolean(galleryRoom) || Boolean(assignmentRoom);
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -765,7 +889,8 @@ export default function RoomWorkspace() {
   }, [rooms, branchRoomPolicies]);
   const selectedRoomTypePolicy = branchRoomPolicies.find((policy) => {
     const policyRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
-    return roomTypeLabel(String(policyRoomType ?? "")) === createRoomForm.roomType;
+    return policyRoomType != null
+      && roomTypeIdentity(String(policyRoomType)) === roomTypeIdentity(createRoomForm.roomType);
   });
   const standardRoomPrice = Number(
     getApiValue(selectedRoomTypePolicy ?? {}, ["basePrice", "base_price", "price", "roomPrice", "pricePerNight", "listedPrice"]) ??
@@ -851,6 +976,27 @@ export default function RoomWorkspace() {
     setShowAmenityMenu(false);
     setRoomImageFiles([]);
   };
+  const openCreateRoomModal = () => {
+    const building = defaultBuildingOption(buildings);
+    const floorsForBuilding = hotelFloorOptions.filter((item) => item.buildingId === building?.id);
+    const floor = defaultFloorOption(floorsForBuilding);
+    const standardRoomType = availableRoomTypes.find((item) => roomTypeIdentity(item) === "STANDARD")
+      ?? availableRoomTypes[0]
+      ?? "Standard Room";
+
+    setSelectedBuildingId(building?.id ?? "");
+    setEditingRoomId(null);
+    setEditingRoomDatabaseId(null);
+    setCreateRoomForm({
+      ...emptyCreateRoomForm,
+      roomType: standardRoomType,
+      ...roomFormDefaults(standardRoomType),
+      building: building?.id ?? "",
+      floor: floor?.id ?? "",
+    });
+    setRoomImageFiles([]);
+    setShowCreateRoom(true);
+  };
   const handlePricingDraftChange = (roomType: string, field: "price" | "extraAdultFee" | "extraChildFee" | "standardCapacity" | "maxExtraGuests", value: string) => {
     setPricingDrafts((current) => ({
       ...current,
@@ -916,12 +1062,12 @@ export default function RoomWorkspace() {
     if (buildingId) setSelectedBuildingId(buildingId); // Set selectedBuildingId if buildingId is available
     setEditingRoomId(room.id);
     setEditingRoomDatabaseId(room.databaseId ?? null);
-    setCreateRoomForm({ roomNumber: /^\d+$/.test(room.id) ? room.id : "", roomType: room.name, building: buildingId, floor: floorId, area, standardCapacity: String(room.standardCapacity || room.capacity), maxExtraGuests: String(room.maxExtraGuests), extraAdultFee: String(room.extraAdultFee || ""), extraChildFee: String(room.extraChildFee || ""), bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" }); // Updated to use buildingId and floorId
+    setCreateRoomForm({ roomNumber: /^\d+$/.test(room.id) ? room.id : "", roomType: room.name, building: buildingId, floor: floorId, area, standardCapacity: String(room.standardCapacity || room.capacity), maxExtraGuests: String(room.maxExtraGuests), extraAdultFee: String(room.extraAdultFee || ""), extraChildFee: String(room.extraChildFee || ""), bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", bedConfigurations: (room.bedConfigurations ?? []).map(({ bedTypeId, quantity }) => ({ bedTypeId, quantity })), description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" }); // Updated to use buildingId and floorId
     setShowCreateRoom(true);
   };
   const openCreateBuildingModal = () => {
     setEditingBuildingId(null);
-    setBuildingForm({ name: "", code: createBuildingCode(buildings) });
+    setBuildingForm(emptyBuildingForm);
     setShowCreateBuilding(true);
   };
   const openEditBuildingModal = (building: Building) => {
@@ -934,37 +1080,145 @@ export default function RoomWorkspace() {
     setEditingBuildingId(null);
     setBuildingForm(emptyBuildingForm);
   };
-  const saveBuilding = () => {
+  const saveBuilding = async () => {
     const name = buildingForm.name.trim();
     if (!name) return;
-    const nextBuildings = editingBuildingId
-      ? buildings.map((building) => building.id === editingBuildingId ? { ...building, name } : building)
-      : [{ id: buildingForm.code, name }, ...buildings];
-    setBuildings(nextBuildings);
-    window.localStorage.setItem("staywise-buildings", JSON.stringify(nextBuildings));
+    if (editingBuildingId) {
+      try {
+        await updateBuildingApi({ buildingId: editingBuildingId, body: { name } }).unwrap();
+        toast({
+          variant: "success",
+          title: "Cập nhật tòa nhà thành công",
+          description: `Đã cập nhật tên thành ${name}.`,
+        });
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Không thể cập nhật tòa nhà",
+          description: getApiErrorMessage(error, "Vui lòng thử lại."),
+        });
+        return;
+      }
+      closeCreateBuildingModal();
+      return;
+    }
+
+    try {
+      await createBuildingApi({ name }).unwrap();
+      toast({
+        variant: "success",
+        title: "Tạo tòa nhà thành công",
+        description: `Đã thêm ${name} vào khách sạn.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Không thể tạo tòa nhà",
+        description: getApiErrorMessage(error, "Vui lòng thử lại."),
+      });
+      return;
+    }
     closeCreateBuildingModal();
   };
   const openCreateFloorModal = () => {
+    if (!selectedBuildingId) {
+      toast({
+        variant: "destructive",
+        title: "Chưa chọn tòa nhà",
+        description: "Hãy tạo hoặc chọn một tòa nhà trước khi thêm tầng.",
+      });
+      return;
+    }
     setEditingFloor(null);
     setFloorForm(emptyFloorForm);
     setShowCreateFloor(true);
   };
   const openEditFloorModal = (floor: string) => {
+    const floorId = apiFloorOptions.find((option) => option.name === floor)?.id;
+    if (!floorId) {
+      toast({
+        variant: "destructive",
+        title: "Không thể sửa tầng",
+        description: "Không tìm thấy ID tầng từ máy chủ. Vui lòng tải lại danh sách.",
+      });
+      return;
+    }
     setEditingFloor(floor);
+    setEditingFloorId(floorId);
     setFloorForm({ name: floor });
     setShowCreateFloor(true);
   };
   const closeCreateFloorModal = () => {
     setShowCreateFloor(false);
     setEditingFloor(null);
+    setEditingFloorId(null);
     setFloorForm(emptyFloorForm);
   };
-  const saveFloor = () => {
+  const saveFloor = async () => {
     const name = floorForm.name.trim();
     if (!name || (!editingFloor && floors.includes(name))) return;
-    const nextFloors = editingFloor ? floors.map((floor) => floor === editingFloor ? name : floor) : [...floors, name];
-    setFloors(nextFloors);
-    setRooms((current) => editingFloor ? current.map((room) => room.floor === editingFloor ? { ...room, floor: name } : room) : current);
+    if (editingFloor) {
+      const floorNumber = Number(name);
+      if (!Number.isInteger(floorNumber) || !editingFloorId) {
+        toast({
+          variant: "destructive",
+          title: "Số tầng không hợp lệ",
+          description: "Nhập số nguyên hợp lệ và tải lại danh sách tầng trước khi sửa.",
+        });
+        return;
+      }
+      try {
+        await updateFloorApi({ floorId: editingFloorId, floorNumber }).unwrap();
+        toast({
+          variant: "success",
+          title: "Cập nhật tầng thành công",
+          description: `Đã cập nhật thành tầng ${floorNumber}.`,
+        });
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Không thể cập nhật tầng",
+          description: getApiErrorMessage(error, "Vui lòng thử lại."),
+        });
+        return;
+      }
+      closeCreateFloorModal();
+      return;
+    }
+
+    const floorNumber = Number(name);
+    if (!Number.isInteger(floorNumber)) {
+      toast({
+        variant: "destructive",
+        title: "Số tầng không hợp lệ",
+        description: "Vui lòng nhập số nguyên, ví dụ 1 hoặc -1.",
+      });
+      return;
+    }
+    if (!selectedBuildingId) {
+      toast({
+        variant: "destructive",
+        title: "Chưa chọn tòa nhà",
+        description: "Hãy tạo hoặc chọn một tòa nhà trước khi thêm tầng.",
+      });
+      return;
+    }
+
+    try {
+      await createFloorApi({ buildingId: selectedBuildingId, floorNumber }).unwrap();
+      toast({
+        variant: "success",
+        title: "Tạo tầng thành công",
+        description: `Đã thêm tầng ${floorNumber}.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Không thể tạo tầng",
+        description: getApiErrorMessage(error, "Vui lòng thử lại."),
+      });
+      return;
+    }
     closeCreateFloorModal();
   };
   const appendAmenity = (value?: string) => {
@@ -1031,7 +1285,13 @@ export default function RoomWorkspace() {
     const maxExtraGuests = Number(createRoomForm.maxExtraGuests);
     const extraAdultFee = Number(createRoomForm.extraAdultFee || 0);
     const extraChildFee = Number(createRoomForm.extraChildFee || 0);
-    const bedType = createRoomForm.bedType || roomDetails.beds;
+    const selectedBeds = createRoomForm.bedConfigurations
+      .map((bed) => ({ bedTypeId: Number(bed.bedTypeId), quantity: Number(bed.quantity) }))
+      .filter((bed) => Number.isSafeInteger(bed.bedTypeId) && bed.bedTypeId > 0 && Number.isSafeInteger(bed.quantity) && bed.quantity > 0);
+    const bedType = selectedBeds.map((bed) => {
+      const definition = apiBedTypes?.find((item) => item.id === bed.bedTypeId);
+      return definition ? `${definition.name ?? definition.bedTypeName} × ${bed.quantity}` : `Loại giường #${bed.bedTypeId} × ${bed.quantity}`;
+    }).join(" · ");
     const showRoomSaveError = (title: string, description: string) => toast({
       variant: "destructive",
       title,
@@ -1040,6 +1300,10 @@ export default function RoomWorkspace() {
 
     if (!roomCode || !roomType || !area || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
       showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Vui lòng nhập đầy đủ các trường bắt buộc.");
+      return;
+    }
+    if (selectedBeds.length === 0) {
+      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Vui lòng chọn ít nhất một loại giường và nhập số lượng hợp lệ.");
       return;
     }
     if (rooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase() && room.id !== editingRoomId)) {
@@ -1063,7 +1327,7 @@ export default function RoomWorkspace() {
         .filter((id): id is number => id !== undefined);
       try {
         await createRoom({
-            roomInfo: { roomNumber: roomCode, floorId, roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status, roomType: roomTypeValues[roomType] ?? roomType, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds },
+            roomInfo: { roomNumber: roomCode, floorId, roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status, roomType: roomTypeValues[roomType] ?? roomType, defaultImageIndex: Math.max(defaultImageIndex, 0), amenityIds, beds: selectedBeds },
           imageFiles: roomImageFiles,
         }).unwrap();
         closeCreateRoomModal();
@@ -1108,6 +1372,7 @@ export default function RoomWorkspace() {
           roomType: roomTypeValues[roomType] ?? roomType,
           defaultImageIndex: Math.max(updateDefaultImageIndex, 0),
           amenityIds: updateAmenityIds,
+          beds: selectedBeds,
           keptImageUrls: createRoomForm.images.filter((image) => !image.startsWith("blob:")),
         },
         images: roomImageFiles,
@@ -1135,6 +1400,12 @@ export default function RoomWorkspace() {
       floor: selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor)?.name ?? location,
       size: `${area} m²`,
       beds: bedType,
+      bedConfigurations: selectedBeds.map((bed) => ({
+        ...bed,
+        name: apiBedTypes?.find((item) => Number(item.id) === bed.bedTypeId)?.name
+          ?? apiBedTypes?.find((item) => Number(item.id) === bed.bedTypeId)?.bedTypeName
+          ?? `Loại giường #${bed.bedTypeId}`,
+      })),
       capacity: standardCapacity,
       standardCapacity,
       maxExtraGuests,
@@ -1196,6 +1467,7 @@ export default function RoomWorkspace() {
           floorId: room.floor.id,
           roomType: roomTypeValues[room.roomType] ?? room.roomType,
           roomStatus: statusValues[room.status] ?? room.status,
+          beds: room.beds.map((bed) => ({ bedTypeId: bed.bedTypeId, quantity: bed.quantity })),
           amenityIds: room.amenities.map((name) => {
             const id = roomImportOptions.amenities.find((amenity) => normalizeText(amenity.name) === normalizeText(name))?.id;
             if (!id || !/^\d+$/.test(id)) throw new Error(`Không tìm thấy ID hợp lệ cho tiện ích "${name}".`);
@@ -1387,7 +1659,7 @@ export default function RoomWorkspace() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canManageRooms && <button
+          {canManageRooms && (activeTab === "rooms" || activeTab === "amenities") && <button
             type="button"
             onClick={() => {
               if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
@@ -1402,7 +1674,7 @@ export default function RoomWorkspace() {
           {canManageRooms && activeTab !== "amenities" && (
             <button
               type="button"
-              onClick={() => activeTab === "rooms" ? setShowCreateRoom(true) : activeTab === "buildings" ? openCreateBuildingModal() : openCreateFloorModal()}
+              onClick={() => activeTab === "rooms" ? openCreateRoomModal() : activeTab === "buildings" ? openCreateBuildingModal() : openCreateFloorModal()}
               className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700"
             >
               <span className="text-lg leading-none">+</span>{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
@@ -1447,6 +1719,14 @@ export default function RoomWorkspace() {
       description="Đặt file Excel mẫu và ảnh trong thư mục dulieuphong rồi nén thành dulieuphong.zip. Ảnh được tải trực tiếp lên Cloudinary trước khi gửi dữ liệu phòng cho máy chủ."
       templateLabel="Tải file Excel mẫu"
       onDownloadTemplate={() => {
+        if (isBedTypesLoading) {
+          toast({ title: "Đang tải danh sách loại giường", description: "Vui lòng đợi danh sách giường tải xong rồi tạo mẫu." });
+          return;
+        }
+        if (isBedTypesError) {
+          toast({ variant: "destructive", title: "Không thể tải danh sách loại giường", description: "Hãy kiểm tra kết nối máy chủ rồi thử lại." });
+          return;
+        }
         if (isBuildingsLoading || isHotelFloorsLoading) {
           toast({ title: "Đang tải danh sách tòa và tầng", description: "Vui lòng đợi trong giây lát rồi tải mẫu Excel." });
           return;
@@ -1480,6 +1760,7 @@ export default function RoomWorkspace() {
         ├── 101-3.jpg
         └── 101-4.jpg`}</pre>
           <p>Trong Excel, các ô Loại phòng, Tòa và Trạng thái có danh sách xổ xuống để chọn. Cột Tầng nhập số nguyên floorNumber; hệ thống ghép số tầng với Tòa để tìm đúng tầng. Tiện ích nhập trong một ô bằng ID, ngăn cách nhiều ID bằng dấu chấm phẩy (;); tra ID và tên ở sheet Danh mục. Chỉ ID có trong danh mục mới được chấp nhận. Số phòng phải là số nguyên dương.</p>
+          <p className="mt-2">Tại sheet <strong>Giường phòng</strong>, mỗi dòng chọn Số phòng và Loại giường từ danh sách xổ xuống rồi nhập số lượng (từ 1 trở lên). Một phòng có thể có nhiều loại giường bằng cách thêm nhiều dòng cho cùng số phòng; mỗi phòng cần ít nhất một dòng cấu hình giường.</p>
           <p className="mt-2">Mỗi phòng cần từ 4 đến 8 ảnh, tối đa 5 MB mỗi ảnh. Nhập tên file ảnh bằng tay vào các cột Ảnh 1–Ảnh 8; tên phải khớp ảnh trong thư mục <strong>images</strong>, gồm phần đuôi, ví dụ <strong>101-1.jpg</strong>. Mỗi dòng là một phòng, không đổi tên cột.</p>
           <p className="mt-2">Trong thư mục <strong>dulieuphong</strong>, đặt <strong>phong.xlsx</strong> và thư mục <strong>images</strong> cùng cấp. Sau đó nén thư mục <strong>dulieuphong</strong> thành <strong>dulieuphong.zip</strong>. FE tải ảnh trực tiếp lên Cloudinary bằng unsigned upload preset; máy chủ chỉ nhận URL ảnh và lưu phòng.</p>
         </>
@@ -1843,27 +2124,28 @@ export default function RoomWorkspace() {
         )}
       </div>
     )}
-    {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateBuildingModal}>
+    {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => { if (!isCreatingBuilding) closeCreateBuildingModal(); }}>
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Quản lý cơ sở vật chất</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingBuildingId ? "Sửa tòa nhà" : "Tạo tòa nhà mới"}</h3><p className="mt-1 text-sm text-slate-500">{editingBuildingId ? "Cập nhật tên tòa nhà. Mã tòa được giữ nguyên." : "Nhập tên tòa nhà, mã sẽ được hệ thống tạo tự động."}</p></div>
-          <button type="button" onClick={closeCreateBuildingModal} className="text-slate-400 hover:text-slate-700"><X size={19} /></button>
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Quản lý cơ sở vật chất</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingBuildingId ? "Sửa tòa nhà" : "Tạo tòa nhà mới"}</h3><p className="mt-1 text-sm text-slate-500">{editingBuildingId ? "Cập nhật tên tòa nhà. Mã tòa được giữ nguyên." : "Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu."}</p></div>
+          <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="text-slate-400 hover:text-slate-700 disabled:opacity-50"><X size={19} /></button>
         </div>
         <div className="mt-5 space-y-4">
-          <label className="block text-sm font-semibold text-slate-700">Tên tòa nhà <span className="text-rose-500">*</span><input autoFocus value={buildingForm.name} onChange={(event) => setBuildingForm((current) => ({ ...current, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && buildingForm.name.trim()) saveBuilding(); }} placeholder="Ví dụ: Tòa Sunrise" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-          <label className="block text-sm font-semibold text-slate-700">Mã tòa nhà<input value={buildingForm.code} readOnly className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>
+          <label className="block text-sm font-semibold text-slate-700">Tên tòa nhà <span className="text-rose-500">*</span><input autoFocus value={buildingForm.name} onChange={(event) => setBuildingForm((current) => ({ ...current, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && buildingForm.name.trim()) void saveBuilding(); }} placeholder="Ví dụ: Tòa Sunrise" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+          {editingBuildingId && <label className="block text-sm font-semibold text-slate-700">Mã tòa nhà<input value={buildingForm.code} readOnly className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>}
         </div>
-        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateBuildingModal} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button><button type="button" onClick={saveBuilding} disabled={!buildingForm.name.trim()} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{editingBuildingId ? "Lưu thay đổi" : "Tạo tòa nhà"}</button></div>
+        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Hủy</button><button type="button" onClick={() => void saveBuilding()} disabled={!buildingForm.name.trim() || isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingBuilding || isUpdatingBuilding ? "Đang lưu..." : editingBuildingId ? "Lưu thay đổi" : "Tạo tòa nhà"}</button></div>
       </div>
     </div>}
-    {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateFloorModal}>
+    {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => { if (!isCreatingFloor && !isUpdatingFloor) closeCreateFloorModal(); }}>
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
-          <button type="button" onClick={closeCreateFloorModal} className="text-slate-400 hover:text-slate-700"><X size={19} /></button>
+          <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="text-slate-400 hover:text-slate-700 disabled:opacity-50"><X size={19} /></button>
         </div>
-        <label className="mt-5 block text-sm font-semibold text-slate-700">{t("room.floorName")} <span className="text-rose-500">*</span><input autoFocus value={floorForm.name} onChange={(event) => setFloorForm({ name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") saveFloor(); }} placeholder={t("room.floorNamePlaceholder")} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateFloorModal} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("common.cancel")}</button><button type="button" onClick={saveFloor} disabled={!floorForm.name.trim()} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{t("common.save")}</button></div>
+        <label className="mt-5 block text-sm font-semibold text-slate-700">Tòa nhà <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="mt-4 block text-sm font-semibold text-slate-700">Số tầng <span className="text-rose-500">*</span><input autoFocus type="number" step="1" value={floorForm.name} onChange={(event) => setFloorForm({ name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void saveFloor(); }} placeholder="Ví dụ: 1 hoặc -1" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button><button type="button" onClick={() => void saveFloor()} disabled={!floorForm.name.trim() || !selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? "Đang lưu..." : t("common.save")}</button></div>
       </div>
     </div>}
     {showCreateRoom && (
@@ -1969,22 +2251,67 @@ export default function RoomWorkspace() {
                     <input type="number" min="0" step="1000" value={createRoomForm.extraChildFee} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-amber-200 bg-amber-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
                 </div>
+                {isBranchPoliciesLoading && <p className="mt-2 text-xs font-normal text-blue-600">Đang tải sức chứa và phụ thu theo chính sách loại phòng...</p>}
+                {isBranchPoliciesError && <p role="alert" className="mt-2 text-xs font-normal text-rose-600">Không tải được chính sách sức chứa và phụ thu. Vui lòng thử tải lại trang.</p>}
 
                 <div className="mt-4">
-                  <label className="block text-sm font-semibold text-slate-700">
-                    Loại giường <span className="text-rose-500">*</span>
-                    {isBedTypesLoading && <span className="ml-2 text-xs font-normal text-blue-600">Đang tải...</span>}
-                    {isBedTypesError && <p className="mt-1 text-xs font-normal text-rose-600">Không tải được danh sách loại giường.</p>}
-                    <select
-                      value={createRoomForm.bedType}
-                      onChange={(event) => setCreateRoomForm((current) => ({ ...current, bedType: event.target.value }))}
-                      className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    >
-                      {[createRoomForm.bedType, ...bedTypeOptions].filter((bedType, index, options) => bedType && options.indexOf(bedType) === index).map((bedType) => (
-                        <option key={bedType} value={bedType}>{bedType}</option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-700">Loại giường <span className="text-rose-500">*</span></p>
+                    {isBedTypesLoading && <span className="text-xs font-normal text-blue-600">Đang tải...</span>}
+                  </div>
+                  {isBedTypesError ? (
+                    <p className="mt-1 text-xs text-rose-600">Không tải được danh sách loại giường.</p>
+                  ) : apiBedTypes?.length ? (
+                    <div className="mt-2 space-y-2">
+                      {apiBedTypes.map((bedType) => {
+                        if (bedType.id == null) return null;
+                        const selected = createRoomForm.bedConfigurations.find((bed) => Number(bed.bedTypeId) === Number(bedType.id));
+                        return (
+                          <div key={bedType.id} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+                            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(selected)}
+                                onChange={(event) => setCreateRoomForm((current) => ({
+                                  ...current,
+                                  bedConfigurations: event.target.checked
+                                    ? [...current.bedConfigurations, { bedTypeId: bedType.id!, quantity: 1 }]
+                                    : current.bedConfigurations.filter((bed) => Number(bed.bedTypeId) !== Number(bedType.id)),
+                                }))}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="truncate">{bedType.name ?? bedType.bedTypeName}</span>
+                              {bedType.isExtraBed && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">Giường phụ</span>}
+                            </label>
+                            {selected && (
+                              <label className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
+                                SL
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={selected.quantity}
+                                  aria-label={`Số lượng ${bedType.name ?? bedType.bedTypeName}`}
+                                  onChange={(event) => {
+                                    const quantity = Number(event.target.value);
+                                    setCreateRoomForm((current) => ({
+                                      ...current,
+                                      bedConfigurations: current.bedConfigurations.map((bed) =>
+                                        Number(bed.bedTypeId) === Number(bedType.id) ? { ...bed, quantity } : bed,
+                                      ),
+                                    }));
+                                  }}
+                                  className="h-9 w-20 rounded-lg border border-slate-200 px-2 text-sm text-slate-800 outline-none focus:border-blue-400"
+                                />
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-amber-700">Chưa có loại giường. Hãy thêm loại giường trước khi tạo phòng.</p>
+                  )}
                 </div>
 
                 <div className="mt-4">

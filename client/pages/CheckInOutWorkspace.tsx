@@ -21,6 +21,7 @@ import {
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { useGetBookingsByHotelQuery, useGetRoomMatrixQuery } from "../services/bookingApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
+import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import {
@@ -275,6 +276,9 @@ export default function CheckInOutWorkspace() {
     { date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
   );
   const { data: hotelBookings = [] } = useGetBookingsByHotelQuery(Number(hotelId), {
+    skip: !hotelId || Number.isNaN(Number(hotelId)),
+  });
+  const { data: hotelRooms = [] } = useGetRoomsByCurrentHotelQuery(undefined, {
     skip: !hotelId || Number.isNaN(Number(hotelId)),
   });
   const checkoutFeesByDetailId = useMemo(() => {
@@ -1067,12 +1071,27 @@ export default function CheckInOutWorkspace() {
 
   const openRoomModal = (record: DailyRecord) => {
     const [roomId, roomType] = record.room.split(" · ");
+    const roomData = hotelRooms.find((room) => {
+      const value = room as Record<string, unknown>;
+      return String(value.roomNumber ?? value.roomNo ?? value.roomCode ?? "") === roomId;
+    }) as Record<string, unknown> | undefined;
+    const rawBeds = roomData?.beds;
+    const bedList = Array.isArray(rawBeds) ? rawBeds : [];
+    const beds = bedList.map((item) => {
+      if (!item || typeof item !== "object") return "";
+      const bed = item as Record<string, unknown>;
+      const name = String(bed.bedTypeName ?? bed.name ?? "").trim();
+      const quantity = Number(bed.quantity ?? 1);
+      return name ? `${name} × ${Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1}` : "";
+    }).filter(Boolean).join(" · ");
+    const area = Number(roomData?.area);
+    const floorNumber = roomData?.floorNumber;
     const fallback: RoomDetail = {
       id: roomId,
       type: roomType || t("frontDesk.unknownRoomType", "Unknown room type"),
-      floor: t("frontDesk.notUpdated", "Not updated"),
-      beds: t("frontDesk.notUpdated", "Not updated"),
-      size: t("frontDesk.notUpdated", "Not updated"),
+      floor: floorNumber == null ? t("frontDesk.notUpdated", "Not updated") : String(floorNumber),
+      beds: beds || t("frontDesk.notUpdated", "Not updated"),
+      size: Number.isFinite(area) && area > 0 ? `${area} m²` : t("frontDesk.notUpdated", "Not updated"),
       view: t("frontDesk.notUpdated", "Not updated"),
       rate: t("frontDesk.notUpdated", "Not updated"),
       status: t("frontDesk.updating", "Updating"),
@@ -1082,7 +1101,16 @@ export default function CheckInOutWorkspace() {
       ),
       amenities: [t("frontDesk.notUpdated", "Not updated")],
     };
-    setRoomPreview({ record, detail: fallback });
+    setRoomPreview({
+      record,
+      detail: roomData
+        ? {
+          ...fallback,
+          type: String(roomData.roomType ?? roomData.name ?? fallback.type),
+          status: String(roomData.roomStatus ?? fallback.status),
+        }
+        : fallback,
+    });
   };
 
   return (

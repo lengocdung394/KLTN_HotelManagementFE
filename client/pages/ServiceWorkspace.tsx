@@ -13,6 +13,7 @@ import { baseApi } from "../services/baseApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { uploadServiceImagesToCloudinary } from "../services/cloudinaryUploadApi";
 import { bindHotelSocketEvents } from "../lib/socket";
+import type { SuperAdminBranch } from "../services/superAdminApi";
 import BulkImportDialog from "../components/BulkImportDialog";
 import ServiceImportProgressCard from "../components/ServiceImportProgressCard";
 
@@ -26,10 +27,8 @@ const getSaveErrorMessage = (error: unknown) => {
   return "Không thể lưu dịch vụ. Vui lòng kiểm tra thông tin hoặc thử lại.";
 };
 
-export default function ServiceWorkspace() {
+export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAdminBranch[] }) {
   const dispatch = useAppDispatch();
-  const [localServices, setLocalServices] = useState<HotelService[]>([]);
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, boolean>>({});
   const [detailService, setDetailService] = useState<HotelService | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editingService, setEditingService] = useState<HotelService | null>(null);
@@ -51,15 +50,20 @@ export default function ServiceWorkspace() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
   const { hotelId, roles } = useAppSelector((state) => state.auth);
+  const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const canManageServices = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
   const hotelName = useAppSelector((state) => state.auth.hotelName);
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
-  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(hasHotelId ? { hotelId: Number(hotelId) } : undefined, { skip: !hasHotelId });
-  const allServices = useMemo(() => [...services, ...localServices], [services, localServices]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(
+    isSystemAdmin ? (selectedBranchId ? { hotelId: Number(selectedBranchId) } : undefined) : hasHotelId ? { hotelId: Number(hotelId) } : undefined,
+    { skip: !hasHotelId && !isSystemAdmin },
+  );
+  const allServices = services;
   const filteredServices = useMemo(() => {
     const normalizedQuery = searchQuery.trim().normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
     return allServices.filter((service) => {
-      const isActive = statusOverrides[service.id] ?? service.active;
+      const isActive = service.active;
       const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? isActive : !isActive);
       const searchableText = [service.name, service.detail, service.category, service.unit]
         .join(" ")
@@ -68,11 +72,11 @@ export default function ServiceWorkspace() {
         .toLocaleLowerCase();
       return matchesStatus && (!normalizedQuery || searchableText.includes(normalizedQuery));
     });
-  }, [allServices, searchQuery, statusFilter, statusOverrides]);
+  }, [allServices, searchQuery, statusFilter]);
   const isSaving = isCreating || isUpdating;
 
   useEffect(() => {
-    if (!hasHotelId) return;
+    if (!hasHotelId && !isSystemAdmin) return;
     bindHotelSocketEvents({
       onServiceImportProgress: (data) => {
         if (!data || typeof data !== "object") return;
@@ -95,7 +99,7 @@ export default function ServiceWorkspace() {
         }
       },
     });
-  }, [dispatch, hasHotelId]);
+  }, [dispatch, hasHotelId, isSystemAdmin]);
 
   const totalPages = Math.max(1, Math.ceil(filteredServices.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -109,12 +113,31 @@ export default function ServiceWorkspace() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const toggleServiceStatus = (serviceId: string) => {
+  const toggleServiceStatus = async (serviceId: string) => {
     const currentService = allServices.find((service) => service.id === serviceId);
     if (!currentService) return;
-    const currentStatus = statusOverrides[serviceId] ?? currentService.active;
-    setStatusOverrides((current) => ({ ...current, [serviceId]: !currentStatus }));
-    setLocalServices((current) => current.map((service) => service.id === serviceId ? { ...service, active: !service.active } : service));
+    const active = !currentService.active;
+    try {
+      await updateServiceRequest({
+        id: currentService.id,
+        service: {
+          name: currentService.name,
+          description: currentService.detail,
+          price: currentService.price,
+          unit: currentService.unit,
+          category: currentService.category,
+          active,
+        },
+      }).unwrap();
+      setDetailService((current) => current?.id === currentService.id ? { ...current, active } : current);
+      toast({
+        variant: "checkin",
+        title: active ? "Đã bật dịch vụ" : "Đã tạm ngưng dịch vụ",
+        description: currentService.name,
+      });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Không thể cập nhật trạng thái dịch vụ", description: getSaveErrorMessage(error) });
+    }
   };
 
   const openCreateForm = () => {
@@ -194,7 +217,7 @@ export default function ServiceWorkspace() {
         setServiceImportValidationOnly(true);
         return true;
       }
-      if (!hotelName) throw new Error("Không xác định được tên chi nhánh từ tài khoản đang đăng nhập.");
+      if (!hotelName) throw new Error("Không xác định được tên chi nhánh để nhập dịch vụ hàng loạt.");
 
       setServiceImportUploadProgress("Đang đọc ảnh dịch vụ trong file ZIP...");
       const parsed = await parseServiceImportArchive(archiveFile);
@@ -262,7 +285,7 @@ export default function ServiceWorkspace() {
   }, [dispatch, serviceImportRows]);
 
   return (
-    <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+    <section className="mt-2 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2 text-blue-600"><ConciergeBell size={18} /><p className="text-xs font-bold uppercase tracking-wider">Dịch vụ lưu trú</p></div>
@@ -270,7 +293,7 @@ export default function ServiceWorkspace() {
           <p className="mt-1 text-sm text-slate-500">Quản lý thông tin và trạng thái dịch vụ của khách sạn.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canManageServices && <button
+          {canManageServices && !isSystemAdmin && <button
             type="button"
             onClick={() => setIsBulkImportOpen(true)}
             className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
@@ -299,6 +322,22 @@ export default function ServiceWorkspace() {
         />
       )}
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        {isSystemAdmin && (
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+            <span>Chi nhánh</span>
+            <select
+              value={selectedBranchId}
+              onChange={(event) => setSelectedBranchId(event.target.value)}
+              aria-label="Lọc dịch vụ theo chi nhánh"
+              className="h-10 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Tất cả chi nhánh</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="relative min-w-0 flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -325,17 +364,17 @@ export default function ServiceWorkspace() {
       </div>
       {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách dịch vụ...</p>}
       {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách dịch vụ.</p>}
-      {!isLoading && !isError && !hasHotelId && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Chưa xác định được chi nhánh hiện tại.</p>}
-      {!isLoading && !isError && hasHotelId && allServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chi nhánh chưa có dịch vụ nào.</p>}
+      {!isLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Chưa xác định được chi nhánh hiện tại.</p>}
+      {!isLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chưa có dịch vụ nào.</p>}
       {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy dịch vụ phù hợp với từ khóa hoặc trạng thái đã chọn.</p>}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {paginatedServices.map((service) => {
-          const isActive = statusOverrides[service.id] ?? service.active;
+          const isActive = service.active;
           return <article key={service.id} className="rounded-xl border border-blue-200 bg-blue-100/55 p-4 text-left transition hover:border-blue-400 hover:bg-blue-100/80 hover:shadow-sm">
             <div className="flex items-start justify-between gap-3"><span className="text-sm font-bold text-slate-900">{service.name}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">{service.category}</span></div>
             <p className="mt-2 min-h-10 text-xs leading-5 text-slate-500">{service.detail}</p>
             <div className="mt-4"><span className="text-sm font-bold text-blue-700">{service.price.toLocaleString("vi-VN")}đ <span className="font-normal text-slate-400">/ {service.unit}</span></span></div>
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><div className="flex items-center gap-3"><button type="button" onClick={() => setDetailService(service)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><Eye size={14} />Xem chi tiết</button>{canManageServices && <button type="button" onClick={() => openEditForm(service)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800"><Pencil size={14} />Chỉnh sửa</button>}</div>{canManageServices ? <button type="button" onClick={() => toggleServiceStatus(service.id)} className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</button> : <span className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</span>}</div>
+            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><div className="flex items-center gap-3"><button type="button" onClick={() => setDetailService(service)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><Eye size={14} />Xem chi tiết</button>{canManageServices && <button type="button" onClick={() => openEditForm(service)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800"><Pencil size={14} />Chỉnh sửa</button>}</div>{canManageServices ? <button type="button" onClick={() => void toggleServiceStatus(service.id)} disabled={isUpdating} className={`flex items-center gap-1.5 text-xs font-semibold disabled:cursor-wait disabled:opacity-60 ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</button> : <span className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</span>}</div>
           </article>;
         })}
       </div>
