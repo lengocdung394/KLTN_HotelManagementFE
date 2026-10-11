@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   BedDouble,
+  BarChart3,
   Building2,
   CalendarDays,
   CheckCheck,
@@ -55,6 +56,7 @@ import { downloadBedTypeTemplate, parseBedTypeFile } from "../lib/bedTypeImport"
 import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } from "../lib/superAdminRoomPolicyImport";
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
+import SuperAdminResourceStatsPanel from "../components/SuperAdminResourceStatsPanel";
 import PromotionWorkspace from "./PromotionWorkspace";
 import ServiceWorkspace from "./ServiceWorkspace";
 
@@ -65,6 +67,7 @@ type AdminSection =
   | "provinces"
   | "amenities"
   | "permissions"
+  | "resource-stats"
   | "promotions"
   | "services"
   | "accounts-overview"
@@ -655,10 +658,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "notifications", label: "Thông báo", icon: Bell },
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
-    { id: "amenities", label: "Danh sách giường", icon: BedDouble },
-    { id: "permissions", label: "Role và phân quyền", icon: ShieldCheck },
+    { id: "amenities", label: "Quản lý tiện nghi", icon: BedDouble },
+    { id: "permissions", label: "Quản lý Role và quyền", icon: ShieldCheck },
     { id: "promotions", label: "Quản lý khuyến mãi", icon: Tag },
     { id: "services", label: "Quản lý dịch vụ", icon: ConciergeBell },
+    { id: "resource-stats", label: "Thống kê", icon: BarChart3 },
   ];
   const isAccountSection =
     section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
@@ -1243,6 +1247,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           {section !== "amenities" &&
             section !== "provinces" &&
             section !== "permissions" &&
+            section !== "resource-stats" &&
             section !== "notifications" &&
             section !== "promotions" &&
             section !== "services" &&
@@ -1517,6 +1522,15 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           )}
 
           {section === "permissions" && <SuperAdminRolePermissionsPanel />}
+
+          {section === "resource-stats" && (
+            <SuperAdminResourceStatsPanel
+              branches={branches}
+              isLoading={isBranchesLoading}
+              isError={isBranchesError}
+              onRetry={() => void refetchBranches()}
+            />
+          )}
 
           {section === "promotions" && <PromotionWorkspace branches={branches} />}
 
