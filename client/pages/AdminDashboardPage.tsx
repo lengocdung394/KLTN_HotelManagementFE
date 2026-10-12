@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleUserRound,
+  Eye,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -29,6 +30,10 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { toast } from "@/components/ui/use-toast";
 import { baseApi } from "../services/baseApi";
 import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
+import {
+  formatEntityUpdateNotification,
+  formatRoomUpdateNotification,
+} from "../lib/roomUpdateNotification";
 import { uploadProvinceBackgroundToCloudinary } from "../services/cloudinaryUploadApi";
 import {
   useGetNotificationsQuery,
@@ -52,6 +57,18 @@ import {
   type CreateBranchAccountRequest,
   type CreateBranchAdminAccountRequest,
 } from "../services/superAdminApi";
+import { useUpdateBranchRoomPolicyMutation } from "../services/branchRoomPolicyApi";
+import { useUpdateBuildingMutation } from "../services/buildingApi";
+import { useUpdateFloorMutation } from "../services/floorApi";
+import { useGetAllAmenitiesQuery } from "../services/amenityApi";
+import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
+import {
+  useLazyGetRoomByIdQuery,
+  useGetRoomStatusesQuery,
+  useGetRoomTypesQuery,
+  useUpdateRoomMutation,
+  type RoomResponse,
+} from "../services/roomApi";
 import {
   useCreateBedTypeMutation,
   useGetAllBedTypesQuery,
@@ -184,10 +201,13 @@ const notifyBuildingFloorChange = (entity: "building" | "floor", payload: unknow
   const name = entity === "building"
     ? String(data.name ?? "Tòa nhà")
     : `Tầng ${String(data.floorNumber ?? "")}`.trim();
-  const hotelId = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+  const description = formatEntityUpdateNotification(
+    event,
+    name || (entity === "building" ? "Tòa nhà" : "Tầng"),
+  );
   toast({
     title: `${entity === "building" ? "Tòa nhà" : "Tầng"} ${action}`,
-    description: `${name}${hotelId}.`,
+    description,
   });
 };
 
@@ -487,8 +507,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       onRoomUpdated: (payload) => {
         const event = getSocketPayload(payload);
         const data = getSocketPayload(event.data);
-        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
-        const description = `Phòng ${getSocketText(data, "roomNumber", "không xác định")}${hotelLabel} vừa được chỉnh sửa.`;
+        const description = formatRoomUpdateNotification(event);
         addNotification("Phòng được cập nhật", description, { category: "room", hotelId: getHotelId(event) });
         toast({ title: "Danh sách phòng đã cập nhật", description });
         dispatch(baseApi.util.invalidateTags(["Room", "Booking", "SuperAdminBranch"]));
@@ -497,26 +516,32 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         const event = getSocketPayload(payload);
         const data = getSocketPayload(event.data);
         const action = event.action === "CREATED" ? "được thêm mới" : "được cập nhật";
-        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        const description = formatEntityUpdateNotification(
+          event,
+          `Cấu hình ${getSocketText(data, "roomType", "loại phòng")}`,
+        );
         addNotification(
           `Cấu hình giá ${action}`,
-          `Cấu hình ${getSocketText(data, "roomType", "loại phòng")} ${action}${hotelLabel}.`,
+          description,
           { category: "room", hotelId: getHotelId(event) },
         );
         toast({
           title: `Cấu hình giá ${action}`,
-          description: `Loại phòng ${getSocketText(data, "roomType", "không xác định")}${hotelLabel}.`,
+          description,
         });
-        dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
+        dispatch(baseApi.util.invalidateTags(["Notification", "BranchRoomPolicy", "SuperAdminBranch"]));
       },
       onBuildingChanged: (payload) => {
         const event = getSocketPayload(payload);
         const data = getSocketPayload(event.data);
         const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
-        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
+        const description = formatEntityUpdateNotification(
+          event,
+          getSocketText(data, "name", "Tòa nhà"),
+        );
         addNotification(
           `Tòa nhà ${action}`,
-          `${getSocketText(data, "name", "Tòa nhà")} ${action}${hotelLabel}.`,
+          description,
           { category: "room", hotelId: getHotelId(event) },
         );
         dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
@@ -527,12 +552,15 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         const data = getSocketPayload(event.data);
         const building = getSocketPayload(data.building);
         const buildingLabel = building.name ? ` thuộc ${building.name}` : "";
-        const hotelLabel = event.hotelId == null ? "" : ` tại khách sạn #${event.hotelId}`;
         const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
         const floorNumber = getSocketText(data, "floorNumber", "");
+        const description = formatEntityUpdateNotification(
+          event,
+          `Tầng ${floorNumber}${buildingLabel}`,
+        );
         addNotification(
           `Tầng ${action}`,
-          `Tầng ${floorNumber}${buildingLabel} ${action}${hotelLabel}.`,
+          description,
           { category: "room", hotelId: getHotelId(event) },
         );
         dispatch(baseApi.util.invalidateTags(["SuperAdminBranch"]));
@@ -1234,15 +1262,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 </div>
                 <button
                   type="button"
-                  onClick={handleMarkAllNotificationsRead}
-                  disabled={(notificationSummaryResponse?.result.unreadCount ?? 0) === 0}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <CheckCheck size={16} />
-                  Đánh dấu đã đọc
-                </button>
-                <button
-                  type="button"
                   onClick={() => void toggleNotificationSound()}
                   aria-pressed={isNotificationSoundEnabled}
                   className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
@@ -1282,8 +1301,16 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                     </span>
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={handleMarkAllNotificationsRead}
+                  disabled={(notificationSummaryResponse?.result.unreadCount ?? 0) === 0}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCheck size={15} />
+                  Đánh dấu tất cả đã đọc
+                </button>
                 <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-slate-500">
-                  Chi nhánh
                   <select
                     value={notificationBranchFilter}
                     onChange={(event) => setNotificationBranchFilter(event.target.value)}
@@ -1323,42 +1350,47 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   {filteredNotifications.map((notification) => (
                     <article
                       key={notification.id}
-                      className={`flex gap-3 rounded-xl border border-l-4 p-4 shadow-sm ${notification.read ? "opacity-75" : ""} ${notificationCategoryStyles[notification.category].card}`}
+                      className={`grid grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-xl border border-l-4 p-4 shadow-sm transition-shadow hover:shadow-md sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-4 ${notificationCategoryStyles[notification.category].card}`}
                     >
                       <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full ${notificationCategoryStyles[notification.category].icon}`}>
                         <Bell size={16} />
                       </span>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-sm font-semibold text-slate-900">{notification.title}</h3>
+                          <h3 className={`break-words text-sm text-slate-900 ${notification.read ? "font-medium" : "font-bold"}`}>{notification.title}</h3>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${notificationCategoryStyles[notification.category].badge}`}>
                             {notificationCategoryLabels[notification.category]}
                           </span>
                           {!notification.read && <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Chưa đọc" />}
                         </div>
-                        <p className="mt-1 text-sm text-slate-600">{getNotificationDescription(notification)}</p>
+                        <p className="mt-1 break-words text-sm leading-6 text-slate-700">{getNotificationDescription(notification)}</p>
                         {notification.hotelId !== null && (
-                          <>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Khách sạn: {getNotificationBranch(notification)?.name ?? `#${notification.hotelId}`}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => openNotificationDetails(notification)}
-                              className="mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
-                            >
-                              Xem {getNotificationDetailLabel(notification)}
-                            </button>
-                          </>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Chi nhánh: <span className="font-semibold text-slate-700">{getNotificationBranch(notification)?.name ?? `#${notification.hotelId}`}</span>
+                          </p>
                         )}
-                        <time className="mt-1 block text-xs text-slate-400" dateTime={notification.occurredAt.toISOString()}>
+                        <time className="mt-2 block text-xs text-slate-500 sm:hidden" dateTime={notification.occurredAt.toISOString()}>
                           {notification.occurredAt.toLocaleString("vi-VN")}
                         </time>
+                      </div>
+                      <div className="col-start-2 flex flex-wrap items-center gap-2 sm:col-start-auto sm:flex-col sm:items-end sm:justify-between">
+                        <time className="hidden text-xs text-slate-500 sm:block" dateTime={notification.occurredAt.toISOString()}>
+                          {notification.occurredAt.toLocaleString("vi-VN")}
+                        </time>
+                        {notification.hotelId !== null && (
+                          <button
+                            type="button"
+                            onClick={() => openNotificationDetails(notification)}
+                            className="rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-200 hover:bg-blue-50"
+                          >
+                            Xem {getNotificationDetailLabel(notification)}
+                          </button>
+                        )}
                         {!notification.read && (
                           <button
                             type="button"
                             onClick={() => handleMarkNotificationRead(notification.id)}
-                            className="mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                            className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50"
                           >
                             Đánh dấu đã đọc
                           </button>
@@ -1892,9 +1924,47 @@ function BranchDetailsPanel({
   onBack: () => void;
 }) {
   const [saveRoomPolicies, { isLoading: isSavingRoomPolicies }] = useSaveSuperAdminBranchRoomPoliciesMutation();
+  const [updateBranchRoomPolicy, { isLoading: isUpdatingRoomPolicy }] = useUpdateBranchRoomPolicyMutation();
+  const [updateBuilding, { isLoading: isUpdatingBuilding }] = useUpdateBuildingMutation();
+  const [updateFloor, { isLoading: isUpdatingFloor }] = useUpdateFloorMutation();
+  const [getRoomById] = useLazyGetRoomByIdQuery();
+  const [updateRoom, { isLoading: isUpdatingRoom }] = useUpdateRoomMutation();
+  const { data: editRoomTypes = [] } = useGetRoomTypesQuery();
+  const { data: editRoomStatuses = [] } = useGetRoomStatusesQuery();
+  const { data: editAmenities = [] } = useGetAllAmenitiesQuery();
+  const { data: editBedTypes = [] } = useGetAllBedTypesQuery();
+  const isSavingRoomPolicy = isSavingRoomPolicies || isUpdatingRoomPolicy;
   const [roomPolicyMessage, setRoomPolicyMessage] = useState("");
   const [roomPolicyError, setRoomPolicyError] = useState("");
+  const [editingBuilding, setEditingBuilding] = useState<{ id: string; name: string } | null>(null);
+  const [buildingName, setBuildingName] = useState("");
+  const [buildingError, setBuildingError] = useState("");
+  const [editingFloor, setEditingFloor] = useState<{ id: string; floorNumber: number } | null>(null);
+  const [floorNumber, setFloorNumber] = useState("");
+  const [floorError, setFloorError] = useState("");
+  const [editingRoom, setEditingRoom] = useState<{
+    id: string;
+    roomNumber: string;
+    floorId: string;
+    roomType: string;
+    roomStatus: string;
+    area: string;
+    basePrice: string;
+    standardCapacity: string;
+    maxExtraGuests: string;
+    extraAdultFee: string;
+    extraChildFee: string;
+    images: string[];
+    defaultImageIndex: number;
+    amenityIds: number[];
+    beds: Array<{ bedTypeId: number; quantity: number }>;
+  } | null>(null);
+  const [roomEditImageFiles, setRoomEditImageFiles] = useState<File[]>([]);
+  const [roomEditError, setRoomEditError] = useState("");
+  const [loadingRoomId, setLoadingRoomId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<BranchDetailCategory>(initialCategory);
+  const [viewingItem, setViewingItem] = useState<{ title: string; fields: DetailField[] } | null>(null);
+  const viewItem = (title: string, fields: DetailField[]) => setViewingItem({ title, fields });
 
   const categories: { id: BranchDetailCategory; label: string; count: number; icon: typeof LayoutDashboard }[] = [
     { id: "employees", label: "Nhân viên", count: details?.employees.length ?? 0, icon: Users },
@@ -1910,25 +1980,25 @@ function BranchDetailsPanel({
   const activeCategoryInfo = categories.find((category) => category.id === activeCategory) ?? categories[0];
 
   return (
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-          <h2 className="text-xl font-bold text-slate-900">{details?.branch.name ?? "Chi tiết chi nhánh"}</h2>
+          <h2 className="text-lg font-bold text-slate-900">{details?.branch.name ?? "Chi tiết chi nhánh"}</h2>
           {details && (
-            <p className="flex items-start gap-1.5 text-sm text-slate-500">
-              <MapPin size={16} className="mt-0.5 shrink-0 text-blue-600" />
+            <p className="flex items-start gap-1.5 text-xs text-slate-500">
+              <MapPin size={14} className="mt-0.5 shrink-0 text-blue-600" />
               <span>{[details.branch.address, details.branch.provinceName].filter(Boolean).join(", ")}</span>
             </p>
           )}
         </div>
-        <button type="button" onClick={onBack} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+        <button type="button" onClick={onBack} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
           Quay lại danh sách
         </button>
       </div>
         {isLoading ? <p className="py-12 text-center text-sm text-slate-500">Đang tải chi tiết chi nhánh...</p>
           : isError || !details ? <p role="alert" className="py-12 text-center text-sm text-rose-600">Không thể tải hồ sơ chi nhánh.</p>
             : <>
-              <div className="mt-6 grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="mt-4 grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                 <nav className="flex gap-2 overflow-x-auto rounded-xl bg-slate-50 p-1 md:flex-col md:gap-1" aria-label="Danh mục chi tiết chi nhánh">
                   {categories.map(({ id, label, count, icon: Icon }) => (
                     <button
@@ -1950,58 +2020,294 @@ function BranchDetailsPanel({
                     </button>
                   ))}
                 </nav>
-                <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-                  <div className="mb-4 border-b border-slate-100 pb-4">
-                    <h3 className="mt-1 text-lg font-bold text-slate-900">{activeCategoryInfo.label}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{activeCategoryInfo.count} mục</p>
+                <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 pb-3">
+                    <h3 className="text-base font-bold text-slate-900">{activeCategoryInfo.label}</h3>
+                    <p className="text-xs text-slate-500">{activeCategoryInfo.count} mục</p>
                   </div>
                   {activeCategory === "employees" && (
                     <DetailList count={details.employees.length}>
-                      {details.employees.map((employee) => <DetailRow key={employee.id} title={employee.fullName} subtitle={`${employee.position || "Nhân viên"} · ${employee.email} · ${employee.phone || "Chưa có SĐT"}`} />)}
+                      {details.employees.map((employee) => <DetailRow
+                        key={employee.id}
+                        title={employee.fullName}
+                        subtitle={`${employee.position || "Nhân viên"} · ${employee.email} · ${employee.phone || "Chưa có SĐT"}`}
+                        onView={() => viewItem(employee.fullName, [
+                          { label: "Mã nhân viên", value: employee.id },
+                          { label: "Chức vụ", value: employee.position || "Nhân viên" },
+                          { label: "Email", value: employee.email },
+                          { label: "Số điện thoại", value: employee.phone || "Chưa có" },
+                          { label: "Vai trò", value: employee.roles?.join(", ") || "Chưa có thông tin" },
+                        ])}
+                      />)}
                     </DetailList>
                   )}
                   {activeCategory === "buildings" && (
                     <DetailList count={details.buildings.length}>
-                      {details.buildings.map((building) => <DetailRow key={building.id} title={building.name} subtitle={`${building.floorCount} tầng · Mã ${building.id}`} />)}
+                      {details.buildings.map((building) => <DetailRow
+                        key={building.id}
+                        title={building.name}
+                        subtitle={`${building.floorCount} tầng · Mã ${building.id}`}
+                        onEdit={() => {
+                          setEditingBuilding({ id: building.id, name: building.name });
+                          setBuildingName(building.name);
+                          setBuildingError("");
+                        }}
+                        onView={() => viewItem(building.name, [
+                          { label: "Mã tòa nhà", value: building.id },
+                          { label: "Tên tòa nhà", value: building.name },
+                          { label: "Số tầng", value: String(building.floorCount) },
+                        ])}
+                      />)}
                     </DetailList>
                   )}
                   {activeCategory === "floors" && (
                     <DetailList count={details.floors.length}>
-                      {details.floors.map((floor) => <DetailRow key={floor.id} title={`Tầng ${floor.floorNumber}`} subtitle={`${floor.buildingName} · ${floor.roomCount} phòng · ${floor.id}`} />)}
+                      {details.floors.map((floor) => <DetailRow
+                        key={floor.id}
+                        title={`Tầng ${floor.floorNumber}`}
+                        subtitle={`${floor.buildingName} · ${floor.roomCount} phòng · ${floor.id}`}
+                        onEdit={() => {
+                          setEditingFloor({ id: floor.id, floorNumber: floor.floorNumber });
+                          setFloorNumber(String(floor.floorNumber));
+                          setFloorError("");
+                        }}
+                        onView={() => viewItem(`Tầng ${floor.floorNumber}`, [
+                          { label: "Mã tầng", value: floor.id },
+                          { label: "Số tầng", value: String(floor.floorNumber) },
+                          { label: "Tòa nhà", value: floor.buildingName },
+                          { label: "Số phòng", value: String(floor.roomCount) },
+                        ])}
+                      />)}
                     </DetailList>
                   )}
                   {activeCategory === "rooms" && (
                     <DetailList count={details.rooms.length}>
-                      {details.rooms.map((room) => <DetailRow key={room.id} title={`Phòng ${room.roomNumber}`} subtitle={`${room.buildingName} · Tầng ${room.floorNumber} · ${room.roomType || "Chưa phân loại"} · ${room.roomStatus || "Chưa có trạng thái"}`} />)}
+                      {details.rooms.map((room) => <DetailRow
+                        key={room.id}
+                        title={`Phòng ${room.roomNumber}`}
+                        subtitle={`${room.buildingName} · Tầng ${room.floorNumber} · ${room.roomType || "Chưa phân loại"} · ${room.roomStatus || "Chưa có trạng thái"}`}
+                        editLoading={loadingRoomId === room.id}
+                        onEdit={() => {
+                          setRoomEditError("");
+                          setLoadingRoomId(room.id);
+                          void getRoomById({
+                            roomId: room.id,
+                            hotelId: details?.branch.id,
+                          }).unwrap()
+                            .then((roomRecord) => {
+                              const record = roomRecord as Record<string, unknown>;
+                              const roomType = String(roomRecord.roomType ?? room.roomType ?? "STANDARD");
+                              const policy = details?.roomPolicies?.find((item) =>
+                                item.roomType.toUpperCase() === roomType.toUpperCase());
+                              const branchPolicy = record.branchRoomPolicy && typeof record.branchRoomPolicy === "object"
+                                ? record.branchRoomPolicy as Record<string, unknown>
+                                : {};
+                              const imageValue = record.avatarUrl ?? record.imageUrls ?? record.images;
+                              const imageItems = Array.isArray(imageValue) ? imageValue : [];
+                              const imageUrls = imageItems.map((image) => {
+                                if (typeof image === "string") return image;
+                                if (image && typeof image === "object" && "url" in image) {
+                                  return String((image as { url: unknown }).url ?? "");
+                                }
+                                return "";
+                              }).filter(Boolean);
+
+                              if (imageUrls.length < 4 || imageUrls.length > 8) {
+                                throw new Error("Không thể chỉnh sửa vì API chưa trả về đủ 4–8 ảnh hiện có của phòng.");
+                              }
+
+                              const amenityValue = record.amenities ?? record.amenityIds ?? record.roomAmenities;
+                              if (!Array.isArray(amenityValue)) {
+                                throw new Error("Không thể chỉnh sửa vì API chưa trả về tiện nghi hiện có của phòng.");
+                              }
+                              const amenityItems = amenityValue;
+                              const amenityIds = amenityItems.map((item) => {
+                                if (typeof item === "number" || typeof item === "string") return Number(item);
+                                if (!item || typeof item !== "object") return Number.NaN;
+                                const value = item as Record<string, unknown>;
+                                const nested = value.amenity && typeof value.amenity === "object"
+                                  ? value.amenity as Record<string, unknown>
+                                  : {};
+                                return Number(value.amenityId ?? value.id ?? nested.id);
+                              }).filter((id) => Number.isSafeInteger(id) && id > 0);
+
+                              const bedValue = record.beds
+                                ?? record.roomBeds
+                                ?? record.bedConfigurations
+                                ?? record.bedTypes
+                                ?? record.roomTypeBeds
+                                ?? record.bedType
+                                ?? record.bedTypeName;
+                              const bedItems = Array.isArray(bedValue)
+                                ? bedValue
+                                : bedValue == null ? [] : [bedValue];
+                              const normalizeBedTypeName = (value: unknown) =>
+                                typeof value === "string"
+                                  ? value.trim().toLocaleLowerCase().replace(/[_\s-]+/g, "")
+                                  : "";
+                              const beds = bedItems.map((item) => {
+                                if (typeof item !== "string" && (!item || typeof item !== "object")) return null;
+                                const value = typeof item === "string"
+                                  ? { bedTypeName: item }
+                                  : item as Record<string, unknown>;
+                                const nested = value.bedType && typeof value.bedType === "object"
+                                  ? value.bedType as Record<string, unknown>
+                                  : {};
+                                const bedTypeName = value.bedTypeName
+                                  ?? value.name
+                                  ?? (typeof value.bedType === "string" ? value.bedType : undefined)
+                                  ?? nested.name
+                                  ?? nested.bedTypeName;
+                                const normalizedBedName = normalizeBedTypeName(bedTypeName);
+                                const matchedBedType = editBedTypes.find((bedType) =>
+                                  Number(bedType.id) === Number(value.bedTypeId ?? value.bedTypeID ?? nested.id)
+                                  || (normalizedBedName !== ""
+                                    && normalizeBedTypeName(bedType.name ?? bedType.bedTypeName) === normalizedBedName));
+                                const bedTypeId = Number(
+                                  value.bedTypeId
+                                  ?? value.bedTypeID
+                                  ?? nested.id
+                                  ?? matchedBedType?.id,
+                                );
+                                const quantity = Number(value.quantity ?? value.bedQuantity ?? 1);
+                                return Number.isSafeInteger(bedTypeId) && bedTypeId > 0
+                                  && Number.isSafeInteger(quantity) && quantity > 0
+                                  ? { bedTypeId, quantity }
+                                  : null;
+                              }).filter((bed): bed is { bedTypeId: number; quantity: number } => bed !== null);
+                              if (beds.length === 0) {
+                                throw new Error("Không thể chỉnh sửa vì API chưa trả về loại giường hiện có của phòng.");
+                              }
+
+                              setEditingRoom({
+                                id: room.id,
+                                roomNumber: String(roomRecord.roomNumber ?? room.roomNumber),
+                                floorId: String(roomRecord.floorId ?? room.floorId),
+                                roomType,
+                                roomStatus: String(roomRecord.roomStatus ?? room.roomStatus ?? "READY"),
+                                area: String(record.area ?? branchPolicy.area ?? policy?.area ?? ""),
+                                basePrice: String(record.basePrice ?? record.price ?? branchPolicy.basePrice ?? policy?.basePrice ?? ""),
+                                standardCapacity: String(record.standardCapacity ?? branchPolicy.standardCapacity ?? policy?.standardCapacity ?? ""),
+                                maxExtraGuests: String(record.maxExtraGuests ?? branchPolicy.maxExtraGuests ?? policy?.maxExtraGuests ?? ""),
+                                extraAdultFee: String(record.extraAdultFee ?? branchPolicy.extraAdultFee ?? policy?.extraAdultFee ?? ""),
+                                extraChildFee: String(record.extraChildFee ?? branchPolicy.extraChildFee ?? policy?.extraChildFee ?? ""),
+                                images: imageUrls,
+                                defaultImageIndex: Math.max(0, imageItems.findIndex((image) =>
+                                  Boolean(image && typeof image === "object"
+                                    && "isDefault" in image
+                                    && (image as { isDefault?: unknown }).isDefault))),
+                                amenityIds,
+                                beds,
+                              });
+                              setRoomEditImageFiles([]);
+                            })
+                            .catch((error: unknown) => {
+                              setRoomEditError(getErrorMessage(error, "Không thể tải dữ liệu phòng để chỉnh sửa."));
+                            })
+                            .finally(() => setLoadingRoomId(null));
+                        }}
+                        onView={() => viewItem(`Phòng ${room.roomNumber}`, [
+                          { label: "Mã phòng", value: room.id },
+                          { label: "Tòa nhà", value: room.buildingName },
+                          { label: "Tầng", value: String(room.floorNumber) },
+                          { label: "Loại phòng", value: room.roomType || "Chưa phân loại" },
+                          { label: "Trạng thái", value: room.roomStatus || "Chưa có trạng thái" },
+                          ...(() => {
+                            const policy = details.roomPolicies?.find((item) =>
+                              item.roomType.toUpperCase() === String(room.roomType ?? "").toUpperCase());
+                            return policy ? [
+                              { label: "Giá cơ bản / đêm", value: formatMoney(policy.basePrice) },
+                              { label: "Diện tích", value: `${policy.area} m²` },
+                              { label: "Sức chứa tiêu chuẩn", value: String(policy.standardCapacity) },
+                              { label: "Khách thêm tối đa", value: String(policy.maxExtraGuests) },
+                              { label: "Phụ thu người lớn", value: formatMoney(policy.extraAdultFee) },
+                              { label: "Phụ thu trẻ em", value: formatMoney(policy.extraChildFee) },
+                            ] : [{ label: "Chính sách phòng", value: "Chưa cấu hình cho loại phòng này" }];
+                          })(),
+                        ])}
+                      />)}
                     </DetailList>
                   )}
                   {activeCategory === "bookings" && (
                     <DetailList count={details.bookings.length}>
-                      {details.bookings.map((booking, index) => <DetailRow key={booking.bookingId ?? index} title={`${booking.bookingId || "Booking"} · ${booking.customerName || "Khách"}`} subtitle={`${booking.bookingStatus || "N/A"} · ${booking.createdAt ? new Date(booking.createdAt).toLocaleString("vi-VN") : "Không có ngày tạo"} · Đã thu ${formatMoney(Number(booking.paidAmount) || 0)}`} />)}
+                      {details.bookings.map((booking, index) => <DetailRow
+                        key={booking.bookingId ?? index}
+                        title={`${booking.bookingId || "Booking"} · ${booking.customerName || "Khách"}`}
+                        subtitle={`${booking.bookingStatus || "N/A"} · ${booking.createdAt ? new Date(booking.createdAt).toLocaleString("vi-VN") : "Không có ngày tạo"} · Đã thu ${formatMoney(Number(booking.paidAmount) || 0)}`}
+                        onView={() => viewItem(booking.bookingId || "Chi tiết booking", [
+                          { label: "Mã booking", value: booking.bookingId || "Chưa có" },
+                          { label: "Khách hàng", value: booking.customerName || "Chưa có" },
+                          { label: "Trạng thái", value: booking.bookingStatus || "Chưa có" },
+                          { label: "Kênh đặt", value: booking.bookingChannel || "Chưa có" },
+                          { label: "Ngày tạo", value: booking.createdAt ? new Date(booking.createdAt).toLocaleString("vi-VN") : "Chưa có" },
+                          { label: "Tổng tiền", value: formatMoney(Number(booking.finalAmount) || 0) },
+                          { label: "Đã thu", value: formatMoney(Number(booking.paidAmount) || 0) },
+                          { label: "Còn lại", value: formatMoney(Number(booking.remainingAmount) || 0) },
+                        ])}
+                      />)}
                     </DetailList>
                   )}
                   {activeCategory === "services" && (
                     <DetailList count={details.services.length}>
-                      {details.services.map((service) => <DetailRow key={service.id} title={service.name} subtitle={`${service.category || "Chưa phân loại"} · ${service.price == null ? "Chưa có giá" : formatMoney(service.price)}${service.unit ? `/${service.unit}` : ""} · ${service.shared ? "Dùng chung" : "Riêng chi nhánh"}`} />)}
+                      {details.services.map((service) => <DetailRow
+                        key={service.id}
+                        title={service.name}
+                        subtitle={`${service.category || "Chưa phân loại"} · ${service.price == null ? "Chưa có giá" : formatMoney(service.price)}${service.unit ? `/${service.unit}` : ""} · ${service.shared ? "Dùng chung" : "Riêng chi nhánh"}`}
+                        onView={() => viewItem(service.name, [
+                          { label: "Mã dịch vụ", value: service.id },
+                          { label: "Tên dịch vụ", value: service.name },
+                          { label: "Danh mục", value: service.category || "Chưa phân loại" },
+                          { label: "Giá", value: service.price == null ? "Chưa có giá" : `${formatMoney(service.price)}${service.unit ? `/${service.unit}` : ""}` },
+                          { label: "Phạm vi", value: service.shared ? "Dùng chung" : "Riêng chi nhánh" },
+                        ])}
+                      />)}
                     </DetailList>
                   )}
                   {activeCategory === "promotions" && (
                     <DetailList count={details.promotions.length}>
-                      {details.promotions.map((promotion) => <DetailRow key={promotion.id} title={`${promotion.name} · ${promotion.code}`} subtitle={`${promotion.status || "N/A"} · ${promotion.startDate ? new Date(promotion.startDate).toLocaleDateString("vi-VN") : "?"} – ${promotion.endDate ? new Date(promotion.endDate).toLocaleDateString("vi-VN") : "?"}`} />)}
+                      {details.promotions.map((promotion) => <DetailRow
+                        key={promotion.id}
+                        title={`${promotion.name} · ${promotion.code}`}
+                        subtitle={`${promotion.status || "N/A"} · ${promotion.startDate ? new Date(promotion.startDate).toLocaleDateString("vi-VN") : "?"} – ${promotion.endDate ? new Date(promotion.endDate).toLocaleDateString("vi-VN") : "?"}`}
+                        onView={() => viewItem(promotion.name, [
+                          { label: "Mã khuyến mãi", value: promotion.code },
+                          { label: "Tên", value: promotion.name },
+                          { label: "Trạng thái", value: promotion.status || "Chưa có" },
+                          { label: "Ngày bắt đầu", value: promotion.startDate ? new Date(promotion.startDate).toLocaleDateString("vi-VN") : "Chưa có" },
+                          { label: "Ngày kết thúc", value: promotion.endDate ? new Date(promotion.endDate).toLocaleDateString("vi-VN") : "Chưa có" },
+                        ])}
+                      />)}
                     </DetailList>
                   )}
                   {activeCategory === "roomPolicies" && (
                     <RoomPolicyEditor
                       hotelId={details.branch.id}
                       policies={details.roomPolicies ?? []}
-                      isSaving={isSavingRoomPolicies}
+                      isSaving={isSavingRoomPolicy}
                       message={roomPolicyMessage}
                       error={roomPolicyError}
                       onSave={async (policy) => {
                         setRoomPolicyMessage("");
                         setRoomPolicyError("");
                         try {
-                          await saveRoomPolicies({ hotelId: details.branch.id, policies: [policy] }).unwrap();
+                          if (policy.id) {
+                            await updateBranchRoomPolicy({
+                              policyId: policy.id,
+                              request: {
+                                basePrice: policy.basePrice,
+                                extraAdultFee: policy.extraAdultFee,
+                                extraChildFee: policy.extraChildFee,
+                                area: policy.area,
+                                standardCapacity: policy.standardCapacity,
+                                maxExtraGuests: policy.maxExtraGuests,
+                              },
+                            }).unwrap();
+                          } else {
+                            await saveRoomPolicies({
+                              hotelId: details.branch.id,
+                              policies: [policy],
+                            }).unwrap();
+                          }
                           setRoomPolicyMessage(`${roomTypeNames[policy.roomType]} đã được lưu cho chi nhánh.`);
                         } catch (error) {
                           setRoomPolicyError(getErrorMessage(error, "Không thể lưu cấu hình loại phòng."));
@@ -2012,6 +2318,294 @@ function BranchDetailsPanel({
                 </div>
               </div>
             </>}
+      {viewingItem && (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setViewingItem(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="branch-record-detail-title"
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{activeCategoryInfo.label}</p>
+                <h3 id="branch-record-detail-title" className="mt-1 break-words text-lg font-bold text-slate-900">{viewingItem.title}</h3>
+              </div>
+              <button type="button" onClick={() => setViewingItem(null)} aria-label="Đóng" className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              {viewingItem.fields.map((field) => (
+                <div key={field.label} className="min-w-0 rounded-lg bg-slate-50 p-3">
+                  <dt className="text-xs font-medium text-slate-500">{field.label}</dt>
+                  <dd className="mt-1 break-words text-sm font-semibold text-slate-800">{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-5 flex justify-end">
+              <button type="button" onClick={() => setViewingItem(null)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700">
+                Đóng
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {editingBuilding && (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isUpdatingBuilding) {
+              setEditingBuilding(null);
+            }
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-building-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const name = buildingName.trim().replace(/\s+/g, " ");
+              if (!name) {
+                setBuildingError("Vui lòng nhập tên tòa nhà.");
+                return;
+              }
+
+              setBuildingError("");
+              void updateBuilding({
+                buildingId: editingBuilding.id,
+                body: { name },
+              }).unwrap()
+                .then(() => {
+                  setEditingBuilding(null);
+                })
+                .catch((error: unknown) => {
+                  setBuildingError(getErrorMessage(error, "Không thể cập nhật tòa nhà."));
+                });
+            }}
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Tòa nhà</p>
+                <h3 id="edit-building-title" className="mt-1 text-lg font-bold text-slate-900">
+                  Chỉnh sửa tòa nhà
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBuilding(null)}
+                disabled={isUpdatingBuilding}
+                aria-label="Đóng"
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <label className="mt-4 block text-sm font-semibold text-slate-700">
+              Tên tòa nhà
+              <input
+                autoFocus
+                required
+                value={buildingName}
+                onChange={(event) => setBuildingName(event.target.value)}
+                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400"
+              />
+            </label>
+            {buildingError && <p role="alert" className="mt-3 text-sm text-rose-600">{buildingError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingBuilding(null)}
+                disabled={isUpdatingBuilding}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingBuilding || !buildingName.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isUpdatingBuilding ? "Đang lưu..." : "Lưu thay đổi"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {editingFloor && (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isUpdatingFloor) {
+              setEditingFloor(null);
+            }
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-floor-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const nextFloorNumber = Number(floorNumber);
+              if (!Number.isSafeInteger(nextFloorNumber)) {
+                setFloorError("Số tầng phải là số nguyên hợp lệ.");
+                return;
+              }
+
+              setFloorError("");
+              void updateFloor({
+                floorId: editingFloor.id,
+                floorNumber: nextFloorNumber,
+              }).unwrap()
+                .then(() => setEditingFloor(null))
+                .catch((error: unknown) => {
+                  setFloorError(getErrorMessage(error, "Không thể cập nhật tầng."));
+                });
+            }}
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Tầng</p>
+                <h3 id="edit-floor-title" className="mt-1 text-lg font-bold text-slate-900">
+                  Chỉnh sửa tầng
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingFloor(null)}
+                disabled={isUpdatingFloor}
+                aria-label="Đóng"
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <label className="mt-4 block text-sm font-semibold text-slate-700">
+              Số tầng
+              <input
+                autoFocus
+                required
+                type="number"
+                step="1"
+                value={floorNumber}
+                onChange={(event) => setFloorNumber(event.target.value)}
+                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400"
+              />
+            </label>
+            {floorError && <p role="alert" className="mt-3 text-sm text-rose-600">{floorError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingFloor(null)}
+                disabled={isUpdatingFloor}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingFloor || floorNumber.trim() === ""}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isUpdatingFloor ? "Đang lưu..." : "Lưu thay đổi"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {roomEditError && !editingRoom && (
+        <div role="alert" className="fixed bottom-5 right-5 z-[70] max-w-md rounded-xl border border-rose-200 bg-white p-4 text-sm text-rose-700 shadow-lg">
+          {roomEditError}
+          <button type="button" onClick={() => setRoomEditError("")} className="ml-3 font-semibold underline">Đóng</button>
+        </div>
+      )}
+      {editingRoom && (
+        <RoomEditForm
+          draft={{
+            roomNumber: editingRoom.roomNumber,
+            roomType: editingRoom.roomType,
+            floorId: editingRoom.floorId,
+            roomStatus: editingRoom.roomStatus,
+            area: editingRoom.area,
+            basePrice: editingRoom.basePrice,
+            standardCapacity: editingRoom.standardCapacity,
+            maxExtraGuests: editingRoom.maxExtraGuests,
+            extraAdultFee: editingRoom.extraAdultFee,
+            extraChildFee: editingRoom.extraChildFee,
+            images: editingRoom.images,
+            defaultImageIndex: editingRoom.defaultImageIndex,
+            amenityIds: editingRoom.amenityIds,
+            beds: editingRoom.beds,
+          }}
+          onDraftChange={(draft: RoomEditDraft) => setEditingRoom((current) => current ? {
+            ...current,
+            ...draft,
+          } : current)}
+          buildings={(details?.buildings ?? []).map((building) => ({
+            value: building.id,
+            label: building.name,
+          }))}
+          floors={(details?.floors ?? []).map((floor) => ({
+            value: floor.id,
+            label: `${floor.buildingName} · Tầng ${floor.floorNumber}`,
+            buildingId: floor.buildingId,
+          }))}
+          roomTypes={editRoomTypes.map((value) => ({ value, label: value }))}
+          roomStatuses={editRoomStatuses.map((value) => ({ value, label: value }))}
+          amenities={editAmenities}
+          bedTypes={editBedTypes
+            .filter((bedType) => bedType.id != null)
+            .map((bedType) => ({
+              id: Number(bedType.id),
+              name: String(bedType.name ?? bedType.bedTypeName ?? `Loại giường ${bedType.id}`),
+              isExtraBed: bedType.isExtraBed,
+            }))}
+          imageFiles={roomEditImageFiles}
+          onImageFilesChange={setRoomEditImageFiles}
+          isSaving={isUpdatingRoom}
+          error={roomEditError}
+          onCancel={() => {
+            if (!isUpdatingRoom) {
+              setEditingRoom(null);
+              setRoomEditImageFiles([]);
+            }
+          }}
+          onSave={() => {
+            if (!editingRoom) return;
+            setRoomEditError("");
+            void updateRoom({
+              roomId: editingRoom.id,
+              room: {
+                roomNumber: editingRoom.roomNumber.trim(),
+                floorId: editingRoom.floorId,
+                roomType: editingRoom.roomType,
+                roomStatus: editingRoom.roomStatus,
+                defaultImageIndex: editingRoom.defaultImageIndex,
+                amenityIds: editingRoom.amenityIds,
+                beds: editingRoom.beds,
+                keptImageUrls: editingRoom.images.filter((image) => !image.startsWith("blob:")),
+              },
+              images: roomEditImageFiles,
+            }).unwrap()
+              .then(() => {
+                setEditingRoom(null);
+                setRoomEditImageFiles([]);
+              })
+              .catch((error: unknown) => {
+                setRoomEditError(getErrorMessage(error, "Không thể cập nhật phòng."));
+              });
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -2126,22 +2720,63 @@ function PolicyInput({ label, value, min = 0, onChange }: { label: string; value
 }
 
 type BranchDetailCategory = "employees" | "buildings" | "floors" | "rooms" | "bookings" | "services" | "promotions" | "roomPolicies";
+type DetailField = { label: string; value: string };
 
 function DetailList({ count, children }: { count: number; children: React.ReactNode }) {
   return (
     <section className="min-w-0">
       <div className="max-h-[32rem] overflow-y-auto pr-1">
-        {count === 0 ? <p className="py-8 text-center text-sm text-slate-500">Chưa có dữ liệu trong danh mục này.</p> : children}
+        {count === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">Chưa có dữ liệu trong danh mục này.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{children}</div>
+        )}
       </div>
     </section>
   );
 }
 
-function DetailRow({ title, subtitle }: { title: string; subtitle: string }) {
+function DetailRow({
+  title,
+  subtitle,
+  onView,
+  onEdit,
+  editLoading = false,
+}: {
+  title: string;
+  subtitle: string;
+  onView: () => void;
+  onEdit?: () => void;
+  editLoading?: boolean;
+}) {
   return (
-    <div className="border-b border-slate-100 py-2.5 last:border-0">
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
+    <div className="flex min-w-0 flex-col rounded-lg border border-slate-300 bg-white p-3 shadow-sm">
+      <p className="break-words text-sm font-semibold text-slate-800">{title}</p>
       <p className="mt-1 break-words text-xs leading-5 text-slate-500">{subtitle}</p>
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onView}
+          className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
+        >
+          <Eye size={14} />
+          Xem chi tiết
+        </button>
+        <button
+          type="button"
+          disabled={!onEdit || editLoading}
+          title={onEdit ? "Chỉnh sửa" : "Chưa kết nối API chỉnh sửa"}
+          onClick={onEdit}
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${
+            onEdit
+              ? "border-blue-200 bg-white text-blue-700 transition hover:bg-blue-50"
+              : "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400"
+          }`}
+        >
+          <Pencil size={14} />
+          {editLoading ? "Đang tải..." : "Chỉnh sửa"}
+        </button>
+      </div>
     </div>
   );
 }

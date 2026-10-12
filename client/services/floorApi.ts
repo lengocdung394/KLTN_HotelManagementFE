@@ -43,7 +43,7 @@ export const floorApi = baseApi.injectEndpoints({
 				data: body,
 			}),
 			transformResponse: (response: ApiResponse<FloorResponse>) => response.result,
-			invalidatesTags: ["Floor"],
+			invalidatesTags: ["Floor", "SuperAdminBranch"],
 		}),
 		updateFloor: builder.mutation<FloorResponse, { floorId: string; floorNumber: number }>({
 			query: ({ floorId, floorNumber }) => ({
@@ -52,7 +52,7 @@ export const floorApi = baseApi.injectEndpoints({
 				data: { floorNumber },
 			}),
 			transformResponse: (response: ApiResponse<FloorResponse>) => response.result,
-			invalidatesTags: ["Floor"],
+			invalidatesTags: ["Floor", "SuperAdminBranch"],
 		}),
 	}),
 });

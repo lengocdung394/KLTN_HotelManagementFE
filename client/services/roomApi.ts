@@ -202,7 +202,7 @@ export const roomApi = baseApi.injectEndpoints({
         return { url: `/room/updateRoomById/${encodeURIComponent(roomId)}`, method: "PUT", data: formData };
       },
       transformResponse: (response: ApiResponse<RoomResponse>) => response?.result ?? {},
-      invalidatesTags: ["Room", "Booking"],
+      invalidatesTags: ["Room", "Booking", "SuperAdminBranch"],
     }),
     // Trả về mảng string[] từ Backend
     getRoomTypes: builder.query<string[], void>({
@@ -248,13 +248,23 @@ export const roomApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<string[]>) => response?.result ?? [],
     }),
 
-    getRoomsByFloorId: builder.query<RoomResponse[], number>({
+    getRoomsByFloorId: builder.query<RoomResponse[], string | number>({
       query: (floorId) => ({
-        url: "/room/getRoomsByFloorId",
+        url: "/room",
         method: "GET",
         params: { floorId },
       }),
       transformResponse: (response: ApiResponse<RoomResponse[]>) => response?.result ?? [],
+      providesTags: ["Room"],
+    }),
+
+    getRoomById: builder.query<RoomResponse, { roomId: string; hotelId?: number }>({
+      query: ({ roomId, hotelId }) => ({
+        url: `/room/${encodeURIComponent(roomId)}`,
+        method: "GET",
+        params: { hotelId },
+      }),
+      transformResponse: (response: ApiResponse<RoomResponse>) => response?.result,
       providesTags: ["Room"],
     }),
 
@@ -387,4 +397,4 @@ export const roomApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useCreateRoomMutation, useUpdateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useCreateBedTypeMutation, useUpdateBedTypeMutation, useImportBedTypesMutation, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;
+export const { useCreateRoomMutation, useUpdateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useCreateBedTypeMutation, useUpdateBedTypeMutation, useImportBedTypesMutation, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useLazyGetRoomsByFloorIdQuery, useGetRoomByIdQuery, useLazyGetRoomByIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;

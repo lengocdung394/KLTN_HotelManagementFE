@@ -486,7 +486,7 @@ function DesktopCalendar({
   useEffect(() => {
     if (!hotelId || Number.isNaN(Number(hotelId))) return;
 
-    bindHotelSocketEvents({
+    return bindHotelSocketEvents({
       onRoomMatrixUpdated: () => {
         dispatch(baseApi.util.invalidateTags(["Booking", "Room", "BranchRoomPolicy"]));
       },

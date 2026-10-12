@@ -3,6 +3,7 @@ import { io, type Socket } from "socket.io-client";
 const SOCKET_URL = "http://localhost:8085";
 
 let socket: Socket | null = null;
+let requestedHotelRoomId: string | null = null;
 
 export const CUSTOMER_REFRESH_EVENTS = ["customer_created", "customer_booking_updated"] as const;
 export const SEASONAL_RATE_UPDATE_EVENT = "seasonal_rate_announcement_update";
@@ -70,6 +71,10 @@ type SuperAdminSocketHandlers = {
 let hotelSocketHandlers: HotelSocketHandlers = {};
 let superAdminSocketHandlers: SuperAdminSocketHandlers = {};
 let superAdminRoomRequested = false;
+const roomPolicyUpdatedSubscribers = new Set<(data: unknown) => void>();
+const dispatchRoomPolicyUpdated = (data: unknown) => {
+  roomPolicyUpdatedSubscribers.forEach((handler) => handler(data));
+};
 const pendingCustomerEvents: Array<{ event: "customer_created"; payload: Record<string, unknown> }> = [];
 
 const flushPendingCustomerEvents = () => {
@@ -170,6 +175,10 @@ export const bindHotelSocketEvents = ({
   onPromotionCreate,
   onLateCheckOutCalendar,
 }: HotelSocketHandlers = {}) => {
+  if (onRoomPolicyUpdated && onRoomPolicyUpdated !== dispatchRoomPolicyUpdated) {
+    roomPolicyUpdatedSubscribers.add(onRoomPolicyUpdated);
+  }
+
   hotelSocketHandlers = {
     ...hotelSocketHandlers,
     ...(onRoomCreated ? { onRoomCreated } : {}),
@@ -177,7 +186,7 @@ export const bindHotelSocketEvents = ({
     ...(onRoomImportProgress ? { onRoomImportProgress } : {}),
     ...(onServiceImportProgress ? { onServiceImportProgress } : {}),
     ...(onRoomMatrixUpdated ? { onRoomMatrixUpdated } : {}),
-    ...(onRoomPolicyUpdated ? { onRoomPolicyUpdated } : {}),
+    ...(onRoomPolicyUpdated ? { onRoomPolicyUpdated: dispatchRoomPolicyUpdated } : {}),
     ...(onBuildingChanged ? { onBuildingChanged } : {}),
     ...(onFloorChanged ? { onFloorChanged } : {}),
     ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
@@ -197,6 +206,9 @@ export const bindHotelSocketEvents = ({
   const boundServiceHandler = onServiceChanged;
   const boundEmployeeHandler = onEmployeeChanged;
   const boundNewBookingHandler = onNewBookingNotification;
+  const boundRoomPolicyHandler = onRoomPolicyUpdated === dispatchRoomPolicyUpdated
+    ? undefined
+    : onRoomPolicyUpdated;
   const unbindNotificationHandler = () => {
     if (boundNotificationHandler && socket) {
       socket.off("notification_created", boundNotificationHandler);
@@ -211,6 +223,21 @@ export const bindHotelSocketEvents = ({
     if (boundEmployeeHandler && socket) {
       socket.off("employee_created", boundEmployeeHandler);
       socket.off("employee_updated", boundEmployeeHandler);
+    }
+    if (boundRoomPolicyHandler) {
+      roomPolicyUpdatedSubscribers.delete(boundRoomPolicyHandler);
+      if (socket) {
+        socket.off("room_policy_updated", dispatchRoomPolicyUpdated);
+        if (roomPolicyUpdatedSubscribers.size > 0) {
+          socket.on("room_policy_updated", dispatchRoomPolicyUpdated);
+        }
+      }
+      if (
+        roomPolicyUpdatedSubscribers.size === 0
+        && hotelSocketHandlers.onRoomPolicyUpdated === dispatchRoomPolicyUpdated
+      ) {
+        hotelSocketHandlers = { ...hotelSocketHandlers, onRoomPolicyUpdated: undefined };
+      }
     }
     if (hotelSocketHandlers.onNotificationCreated === boundNotificationHandler) {
       hotelSocketHandlers = { ...hotelSocketHandlers, onNotificationCreated: undefined };
@@ -463,7 +490,8 @@ export const initSocket = (token: string | null) => {
     console.log("✅ [Socket] connected:", socket?.id);
 
     const userId = getCurrentUserId();
-    const hotelId = getCurrentHotelId();
+    const isSuperAdmin = hasJwtRole(token, "ROLE_SUPER_ADMIN");
+    const hotelId = isSuperAdmin ? "" : requestedHotelRoomId ?? getCurrentHotelId();
 
     if (userId) {
       socket?.emit("join_user_room", String(userId));
@@ -471,11 +499,10 @@ export const initSocket = (token: string | null) => {
     }
 
     if (hotelId) {
-      socket?.emit("join_hotel_room", String(hotelId));
-      console.log("🏢 [Socket] join_hotel_room emitted:", hotelId);
+      joinHotelRoom(hotelId);
     }
 
-    if (superAdminRoomRequested || hasJwtRole(token, "ROLE_SUPER_ADMIN")) {
+    if (superAdminRoomRequested || isSuperAdmin) {
       requestSuperAdminRoomJoin();
     }
 
@@ -536,6 +563,7 @@ export const disconnectSocket = () => {
     socket.disconnect();
     socket = null;
   }
+  requestedHotelRoomId = null;
   superAdminRoomRequested = false;
 };
 
@@ -576,8 +604,38 @@ export const joinUserRoom = (userId: string | number | null) => {
 };
 
 export const joinHotelRoom = (hotelId: string | number | null) => {
-  if (!socket || !hotelId) return;
+  const token = localStorage.getItem("accessToken") ?? "";
+  if (hasJwtRole(token, "ROLE_SUPER_ADMIN")) {
+    requestedHotelRoomId = null;
+    console.info("🛡️ [Socket] Super Admin does not join a hotel room");
+    return;
+  }
 
-  socket.emit("join_hotel_room", String(hotelId));
-  console.log("🏢 [Socket] join_hotel_room manual:", hotelId);
+  const resolvedHotelId = hotelId === null || hotelId === ""
+    ? getCurrentHotelId()
+    : String(hotelId);
+  if (!resolvedHotelId) {
+    console.warn("🏢 [Socket] cannot join hotel room: no hotelId in auth state or token");
+    return;
+  }
+
+  requestedHotelRoomId = String(resolvedHotelId);
+  if (socket?.connected) {
+    socket.emit("join_hotel_room", requestedHotelRoomId, (result: unknown) => {
+      const response = result && typeof result === "object"
+        ? result as Record<string, unknown>
+        : {};
+      if (response.joined === true) {
+        console.log("🏢 [Socket] joined hotel room:", requestedHotelRoomId);
+      } else if (result === undefined || result === null) {
+        console.info("🏢 [Socket] join_hotel_room sent without server acknowledgement:", requestedHotelRoomId);
+      } else {
+        console.error(
+          "🏢 [Socket] failed to join hotel room:",
+          requestedHotelRoomId,
+          response.reason ?? result,
+        );
+      }
+    });
+  }
 };

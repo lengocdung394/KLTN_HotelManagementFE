@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bell, CheckCheck, LoaderCircle } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-import { useAppDispatch } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import {
   useGetNotificationsQuery,
@@ -9,37 +9,117 @@ import {
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
 } from "../services/notificationApi";
-import { bindHotelSocketEvents } from "../lib/socket";
+import { bindHotelSocketEvents, joinHotelRoom } from "../lib/socket";
+import {
+  formatEntityUpdateNotification,
+  formatRoomUpdateNotification,
+} from "../lib/roomUpdateNotification";
 
 const formatOccurredAt = (value: string) =>
   new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
 
 export default function NotificationBell() {
   const dispatch = useAppDispatch();
+  const hotelId = useAppSelector((state) => state.auth.hotelId);
   const [isOpen, setIsOpen] = useState(false);
-  const { data: pageResponse, isLoading, isError: isNotificationsError } = useGetNotificationsQuery({ page: 0, size: 8 });
-  const { data: summaryResponse, isError: isSummaryError } = useGetNotificationSummaryQuery();
+  const {
+    data: pageResponse,
+    isLoading,
+    isError: isNotificationsError,
+    refetch: refetchNotifications,
+  } = useGetNotificationsQuery({ page: 0, size: 8 });
+  const {
+    data: summaryResponse,
+    isError: isSummaryError,
+    refetch: refetchSummary,
+  } = useGetNotificationSummaryQuery();
   const [markRead, markReadState] = useMarkNotificationReadMutation();
   const [markAllRead, markAllState] = useMarkAllNotificationsReadMutation();
   const notifications = pageResponse?.result.content ?? [];
   const unreadCount = summaryResponse?.result.unreadCount ?? 0;
+
+  useEffect(() => {
+    joinHotelRoom(hotelId);
+  }, [hotelId]);
 
   useEffect(
     () => bindHotelSocketEvents({
       onEmployeeChanged: () => {
         dispatch(baseApi.util.invalidateTags(["Staff"]));
       },
-      onNotificationCreated: () => {
-        dispatch(baseApi.util.invalidateTags(["Notification"]));
+      onNotificationCreated: (payload) => {
+        if (import.meta.env.DEV) {
+          console.info("[NotificationBell] Received notification_created:", payload);
+        }
+        void refetchNotifications();
+        void refetchSummary();
       },
       onNewBookingNotification: () => {
         dispatch(baseApi.util.invalidateTags(["Notification"]));
+      },
+      onRoomUpdated: (payload) => {
+        dispatch(baseApi.util.invalidateTags(["Room", "Notification"]));
+        void refetchNotifications();
+        void refetchSummary();
+        toast({
+          title: "Phòng được cập nhật",
+          description: formatRoomUpdateNotification(payload),
+        });
+      },
+      onRoomPolicyUpdated: (payload) => {
+        dispatch(baseApi.util.invalidateTags(["BranchRoomPolicy", "Notification"]));
+        void refetchNotifications();
+        void refetchSummary();
+        toast({
+          title: "Chính sách phòng được cập nhật",
+          description: formatEntityUpdateNotification(payload, "Chính sách phòng"),
+        });
+      },
+      onBuildingChanged: (payload) => {
+        const event = payload && typeof payload === "object"
+          ? payload as Record<string, unknown>
+          : {};
+        const data = event.data && typeof event.data === "object"
+          ? event.data as Record<string, unknown>
+          : {};
+        const created = String(event.action ?? "").toUpperCase() === "CREATED";
+        const description = formatEntityUpdateNotification(
+          event,
+          `Tòa nhà${data.name ? ` ${String(data.name)}` : ""}`,
+        );
+        dispatch(baseApi.util.invalidateTags(["Notification"]));
+        void refetchNotifications();
+        void refetchSummary();
+        toast({
+          title: created ? "Tòa nhà mới được thêm" : "Tòa nhà được cập nhật",
+          description,
+        });
+      },
+      onFloorChanged: (payload) => {
+        const event = payload && typeof payload === "object"
+          ? payload as Record<string, unknown>
+          : {};
+        const data = event.data && typeof event.data === "object"
+          ? event.data as Record<string, unknown>
+          : {};
+        const created = String(event.action ?? "").toUpperCase() === "CREATED";
+        const description = formatEntityUpdateNotification(
+          event,
+          `Tầng${data.floorNumber != null ? ` ${String(data.floorNumber)}` : ""}`,
+        );
+        dispatch(baseApi.util.invalidateTags(["Notification"]));
+        void refetchNotifications();
+        void refetchSummary();
+        toast({
+          title: created ? "Tầng mới được thêm" : "Tầng được cập nhật",
+          description,
+        });
       },
       onServiceChanged: () => {
         dispatch(baseApi.util.invalidateTags(["Notification"]));
       },
     }),
-    [dispatch],
+    [dispatch, refetchNotifications, refetchSummary],
   );
 
   return (
