@@ -31,6 +31,13 @@ import { baseApi } from "../services/baseApi";
 import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
 import { uploadProvinceBackgroundToCloudinary } from "../services/cloudinaryUploadApi";
 import {
+  useGetNotificationsQuery,
+  useGetNotificationSummaryQuery,
+  useMarkAllNotificationsReadMutation,
+  useMarkNotificationReadMutation,
+  type NotificationRecord,
+} from "../services/notificationApi";
+import {
   useCreateSuperAdminBranchMutation,
   useCreateSuperAdminProvinceMutation,
   useGetSuperAdminBranchDetailsQuery,
@@ -75,18 +82,32 @@ type AdminSection =
   | "customer-accounts";
 
 type AdminNotification = {
-  id: string;
+  id: number;
   title: string;
   description: string;
   occurredAt: Date;
   read: boolean;
-  category: "booking" | "room" | "service" | "staff" | "other";
+  category: "booking" | "room" | "service" | "staff" | "promotion" | "other";
+  type: NotificationRecord["type"];
   hotelId: number | null;
 };
 
 type NotificationCategoryFilter = "all" | AdminNotification["category"];
 
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")} đ`;
+
+const getNotificationCategory = (type: NotificationRecord["type"]): AdminNotification["category"] => {
+  if (type.startsWith("BOOKING_")) return "booking";
+  if (
+    type.startsWith("ROOM_")
+    || type.startsWith("BUILDING_")
+    || type.startsWith("FLOOR_")
+  ) return "room";
+  if (type.startsWith("SERVICE_")) return "service";
+  if (type.startsWith("EMPLOYEE_")) return "staff";
+  if (type.startsWith("PROMOTION_")) return "promotion";
+  return "other";
+};
 
 const provinceColorThemes = [
   {
@@ -242,12 +263,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [uploadingProvinceId, setUploadingProvinceId] = useState<string | null>(null);
   const [provinceCardUploadError, setProvinceCardUploadError] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
+  const [branchDetailInitialCategory, setBranchDetailInitialCategory] = useState<BranchDetailCategory>("employees");
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
   const [branchRoomPolicies, setBranchRoomPolicies] = useState<SuperAdminRoomPolicy[]>([]);
   const [branchPolicyFileName, setBranchPolicyFileName] = useState("");
   const [branchPolicyError, setBranchPolicyError] = useState("");
   const [isParsingBranchPolicy, setIsParsingBranchPolicy] = useState(false);
-  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [notificationCategoryFilter, setNotificationCategoryFilter] = useState<NotificationCategoryFilter>("all");
   const [notificationBranchFilter, setNotificationBranchFilter] = useState("all");
   const [isNotificationSoundEnabled, setIsNotificationSoundEnabled] = useState(false);
@@ -260,6 +281,35 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [bedTypeError, setBedTypeError] = useState("");
   const [bedTypeMessage, setBedTypeMessage] = useState("");
   const [isParsingBedTypeFile, setIsParsingBedTypeFile] = useState(false);
+  const notificationHotelId = notificationBranchFilter === "all" ? undefined : Number(notificationBranchFilter);
+  const {
+    data: notificationPageResponse,
+    isLoading: isNotificationsLoading,
+    isError: isNotificationsError,
+  } = useGetNotificationsQuery({
+    hotelId: notificationHotelId,
+    page: 0,
+    size: 100,
+  });
+  const { data: notificationSummaryResponse } = useGetNotificationSummaryQuery(
+    notificationHotelId === undefined ? undefined : { hotelId: notificationHotelId },
+  );
+  const { data: allNotificationsSummaryResponse } = useGetNotificationSummaryQuery();
+  const [markNotificationRead] = useMarkNotificationReadMutation();
+  const [markAllNotificationsRead] = useMarkAllNotificationsReadMutation();
+  const notifications = useMemo(
+    () => (notificationPageResponse?.result.content ?? []).map((notification) => ({
+      id: notification.id,
+      title: notification.title,
+      description: notification.description,
+      occurredAt: new Date(notification.createdAt),
+      read: notification.read,
+      category: getNotificationCategory(notification.type),
+      type: notification.type,
+      hotelId: notification.hotelId,
+    })),
+    [notificationPageResponse],
+  );
 
   const playNotificationSound = async () => {
     try {
@@ -312,21 +362,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
   useEffect(() => {
     const addNotification = (
-      title: string,
-      description: string,
-      options: { category?: AdminNotification["category"]; hotelId?: number | null } = {},
-    ) => {
-      playNotificationSoundRef.current();
-      setNotifications((current) => [{
-        id: `${Date.now()}-${Math.random()}`,
-        title,
-        description,
-        occurredAt: new Date(),
-        read: false,
-        category: options.category ?? "other",
-        hotelId: options.hotelId ?? null,
-      }, ...current].slice(0, 100));
-    };
+      _title: string,
+      _description: string,
+      _options: { category?: AdminNotification["category"]; hotelId?: number | null } = {},
+    ) => dispatch(baseApi.util.invalidateTags(["Notification"]));
     const getHotelId = (payload: Record<string, unknown>) => {
       const hotel = getSocketPayload(payload.hotel);
       const hotelId = payload.hotelId ?? payload.hotelID ?? hotel.id ?? hotel.hotelId;
@@ -334,6 +373,22 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       return Number.isInteger(parsedHotelId) && parsedHotelId > 0 ? parsedHotelId : null;
     };
     const unbindSuperAdminEvents = bindSuperAdminSocketEvents({
+      onEmployeeChanged: () => {
+        dispatch(baseApi.util.invalidateTags(["SuperAdminAccounts", "SuperAdminBranch"]));
+      },
+      onNotificationCreated: () => {
+        playNotificationSoundRef.current();
+        dispatch(baseApi.util.invalidateTags(["Notification"]));
+      },
+      onServiceChanged: () => {
+        dispatch(baseApi.util.invalidateTags(["Notification", "Service"]));
+      },
+      onPromotionCreate: () => {
+        dispatch(baseApi.util.invalidateTags(["Notification", "Promotion"]));
+      },
+      onPromotionUpdate: () => {
+        dispatch(baseApi.util.invalidateTags(["Notification", "Promotion"]));
+      },
       onCustomerCreated: (payload) => {
         const data = getSocketPayload(payload);
         addNotification(
@@ -491,7 +546,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         const hotelLabel = hotelId == null ? "" : ` tại khách sạn #${hotelId}`;
         const description = `Booking ${bookingId}${hotelLabel} vừa được tạo.`;
         addNotification("Booking mới", description, { category: "booking", hotelId });
-        dispatch(baseApi.util.invalidateTags(["Booking", "SuperAdminBranch"]));
+        dispatch(baseApi.util.invalidateTags(["Booking", "Notification", "SuperAdminBranch"]));
       },
     });
     joinSuperAdminAccountsRoom();
@@ -690,23 +745,64 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     setSection("branches");
     setIsBranchMenuOpen(true);
     setSelectedBranchId(branch.id);
+    setBranchDetailInitialCategory("employees");
   };
 
-  const openBranchDetailsById = (branchId: number) => {
+  const openBranchDetailsById = (
+    branchId: number,
+    initialCategory: BranchDetailCategory = "employees",
+  ) => {
     const branch = branches.find((item) => item.id === branchId);
     if (branch) {
       openBranchDetails(branch);
+      setBranchDetailInitialCategory(initialCategory);
       return;
     }
     setSelectedProvinceId("");
     setSection("branches");
     setIsBranchMenuOpen(true);
     setSelectedBranchId(branchId);
+    setBranchDetailInitialCategory(initialCategory);
   };
-  const openNotificationBranch = (notification: AdminNotification) => {
+  const getNotificationDetailCategory = (notification: AdminNotification): BranchDetailCategory => {
+    if (notification.type.startsWith("BOOKING_")) return "bookings";
+    if (notification.type.startsWith("SERVICE_")) return "services";
+    if (notification.type.startsWith("PROMOTION_")) return "promotions";
+    if (notification.type.startsWith("EMPLOYEE_")) return "employees";
+    if (notification.type.startsWith("ROOM_POLICY_")) return "roomPolicies";
+    if (notification.type.startsWith("BUILDING_")) return "buildings";
+    if (notification.type.startsWith("FLOOR_")) return "floors";
+    return "rooms";
+  };
+  const getNotificationDetailLabel = (notification: AdminNotification) => {
+    const category = getNotificationDetailCategory(notification);
+    return ({
+      bookings: "booking",
+      services: "dịch vụ",
+      promotions: "khuyến mãi",
+      employees: "nhân viên",
+      roomPolicies: "cấu hình loại phòng",
+      buildings: "tòa nhà",
+      floors: "tầng",
+      rooms: "phòng",
+    })[category];
+  };
+  const openNotificationDetails = (notification: AdminNotification) => {
     if (notification.hotelId === null) return;
-    setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, read: true } : item));
-    openBranchDetailsById(notification.hotelId);
+    openBranchDetailsById(notification.hotelId, getNotificationDetailCategory(notification));
+  };
+
+  const handleMarkNotificationRead = (notificationId: number) => {
+    void markNotificationRead(notificationId).unwrap().catch(() => {
+      toast({ variant: "destructive", title: "Không thể cập nhật thông báo", description: "Vui lòng thử lại." });
+    });
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    const scope = notificationHotelId === undefined ? undefined : { hotelId: notificationHotelId };
+    void markAllNotificationsRead(scope).unwrap().catch(() => {
+      toast({ variant: "destructive", title: "Không thể cập nhật thông báo", description: "Vui lòng thử lại." });
+    });
   };
 
   const getBranchesForProvince = (provinceId: string) => {
@@ -730,6 +826,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     room: "Phòng",
     service: "Dịch vụ",
     staff: "Nhân viên",
+    promotion: "Khuyến mãi",
     other: "Khác",
   };
   const notificationCategoryStyles: Record<AdminNotification["category"], {
@@ -767,6 +864,13 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       tabActive: "bg-emerald-600 text-white ring-emerald-200",
       tabIdle: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
     },
+    promotion: {
+      card: "border-rose-600 bg-rose-50/50",
+      icon: "bg-rose-600 text-white",
+      badge: "bg-rose-600 text-white",
+      tabActive: "bg-rose-600 text-white ring-rose-200",
+      tabIdle: "bg-rose-50 text-rose-700 hover:bg-rose-100",
+    },
     other: {
       card: "border-slate-600 bg-slate-50/50",
       icon: "bg-slate-600 text-white",
@@ -779,11 +883,13 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     active: "bg-blue-600 text-white ring-blue-200",
     idle: "bg-blue-50 text-blue-700 hover:bg-blue-100",
   };
-  const notificationCountForCategory = (category: NotificationCategoryFilter) =>
-    notifications.filter((notification) =>
-      (category === "all" || notification.category === category)
-      && (notificationBranchFilter === "all" || String(notification.hotelId ?? "") === notificationBranchFilter),
-    ).length;
+  const notificationCountForCategory = (category: NotificationCategoryFilter) => {
+    const summary = notificationSummaryResponse?.result;
+    if (!summary) return 0;
+    if (category === "all") return summary.totalCount;
+    return Object.entries(summary.totalByType).reduce((count, [type, total]) =>
+      getNotificationCategory(type as NotificationRecord["type"]) === category ? count + total : count, 0);
+  };
   const filteredNotifications = notifications.filter((notification) =>
     (notificationCategoryFilter === "all" || notification.category === notificationCategoryFilter)
     && (notificationBranchFilter === "all" || String(notification.hotelId ?? "") === notificationBranchFilter),
@@ -800,9 +906,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   };
 
   const handleSectionSelect = (id: AdminSection) => {
-    if (id === "notifications") {
-      setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
-    }
     if (id === "branches") {
       setIsAccountMenuOpen(false);
       if (section === "branches") {
@@ -850,9 +953,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               >
                 <Icon size={18} />
                 <span className="flex-1">{label}</span>
-                {id === "notifications" && notifications.some((notification) => !notification.read) && (
+                {id === "notifications" && (allNotificationsSummaryResponse?.result.unreadCount ?? 0) > 0 && (
                   <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs text-white">
-                    {notifications.filter((notification) => !notification.read).length}
+                    {allNotificationsSummaryResponse?.result.unreadCount}
                   </span>
                 )}
                 {id === "branches" && (section === "branches" && isBranchMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />)}
@@ -1126,13 +1229,13 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Thông báo hệ thống</h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Các sự kiện nhận trực tiếp qua socket. Tối đa 100 thông báo trong phiên hiện tại.
+                    Thông báo được lưu lại và đồng bộ realtime giữa các phiên đăng nhập.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setNotifications((current) => current.map((item) => ({ ...item, read: true })))}
-                  disabled={!notifications.some((item) => !item.read)}
+                  onClick={handleMarkAllNotificationsRead}
+                  disabled={(notificationSummaryResponse?.result.unreadCount ?? 0) === 0}
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <CheckCheck size={16} />
@@ -1187,14 +1290,29 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                     className="h-9 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-400"
                   >
                     <option value="all">Tất cả chi nhánh</option>
-                    {branches.map((branch) => (
-                      <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
-                    ))}
+                    {branches.map((branch) => {
+                      const counts = notificationSummaryResponse?.result.branches.find(
+                        (item) => item.hotelId === branch.id,
+                      );
+                      return (
+                        <option key={branch.id} value={String(branch.id)}>
+                          {branch.name} ({counts?.unreadCount ?? 0} chưa đọc / {counts?.totalCount ?? 0})
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
               </div>
 
-              {filteredNotifications.length === 0 ? (
+              {isNotificationsError ? (
+                <div role="alert" className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-12 text-center text-sm text-rose-700">
+                  Không thể tải thông báo. Vui lòng thử lại sau.
+                </div>
+              ) : isNotificationsLoading ? (
+                <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-12 text-center text-sm text-slate-500">
+                  Đang tải thông báo...
+                </div>
+              ) : filteredNotifications.length === 0 ? (
                 <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-12 text-center">
                   <Bell size={24} className="mx-auto text-slate-400" />
                   <p className="mt-3 text-sm font-semibold text-slate-700">{notifications.length === 0 ? "Chưa có thông báo" : "Không có thông báo phù hợp"}</p>
@@ -1226,16 +1344,25 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                             </p>
                             <button
                               type="button"
-                              onClick={() => openNotificationBranch(notification)}
+                              onClick={() => openNotificationDetails(notification)}
                               className="mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
                             >
-                              Xem chi tiết chi nhánh
+                              Xem {getNotificationDetailLabel(notification)}
                             </button>
                           </>
                         )}
                         <time className="mt-1 block text-xs text-slate-400" dateTime={notification.occurredAt.toISOString()}>
                           {notification.occurredAt.toLocaleString("vi-VN")}
                         </time>
+                        {!notification.read && (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkNotificationRead(notification.id)}
+                            className="mt-2 text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                          >
+                            Đánh dấu đã đọc
+                          </button>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -1285,10 +1412,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
           {section === "branches" && selectedBranchId !== null && (
             <BranchDetailsPanel
-              key={selectedBranchId}
+              key={`${selectedBranchId}:${branchDetailInitialCategory}`}
               details={branchDetails}
               isLoading={isBranchDetailsLoading}
               isError={isBranchDetailsError}
+              initialCategory={branchDetailInitialCategory}
               onBack={() => setSelectedBranchId(null)}
             />
           )}
@@ -1754,17 +1882,19 @@ function BranchDetailsPanel({
   details,
   isLoading,
   isError,
+  initialCategory,
   onBack,
 }: {
   details?: SuperAdminBranchDetails;
   isLoading: boolean;
   isError: boolean;
+  initialCategory: BranchDetailCategory;
   onBack: () => void;
 }) {
   const [saveRoomPolicies, { isLoading: isSavingRoomPolicies }] = useSaveSuperAdminBranchRoomPoliciesMutation();
   const [roomPolicyMessage, setRoomPolicyMessage] = useState("");
   const [roomPolicyError, setRoomPolicyError] = useState("");
-  const [activeCategory, setActiveCategory] = useState<BranchDetailCategory>("employees");
+  const [activeCategory, setActiveCategory] = useState<BranchDetailCategory>(initialCategory);
 
   const categories: { id: BranchDetailCategory; label: string; count: number; icon: typeof LayoutDashboard }[] = [
     { id: "employees", label: "Nhân viên", count: details?.employees.length ?? 0, icon: Users },

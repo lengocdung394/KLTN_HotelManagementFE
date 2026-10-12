@@ -1,6 +1,7 @@
-import { Bell, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
+import NotificationBell from "./NotificationBell";
 
 type AppHeaderProps = {
   onMenuClick?: () => void;
@@ -78,10 +79,7 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
           </button>
         </div>
 
-        <button type="button" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition" aria-label="Notifications">
-          <Bell size={19} />
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-orange-500 ring-2 ring-white" />
-        </button>
+        <NotificationBell />
       </div>
     </header>
   );

@@ -36,6 +36,9 @@ type HotelSocketHandlers = {
   onBuildingChanged?: (data: unknown) => void;
   onFloorChanged?: (data: unknown) => void;
   onNewBookingNotification?: (data: unknown) => void;
+  onNotificationCreated?: (data: unknown) => void;
+  onServiceChanged?: (data: unknown) => void;
+  onEmployeeChanged?: (data: unknown) => void;
   onCustomerBookingUpdated?: (data: unknown) => void;
   onCustomerCreated?: (data: unknown) => void;
   onSeasonalRateAnnouncement?: (data: unknown) => void;
@@ -56,7 +59,12 @@ type SuperAdminSocketHandlers = {
   onRoomUpdated?: (data: unknown) => void;
   onRoomImportProgress?: (data: unknown) => void;
   onNewBookingNotification?: (data: unknown) => void;
+  onNotificationCreated?: (data: unknown) => void;
+  onEmployeeChanged?: (data: unknown) => void;
   onServiceImportProgress?: (data: unknown) => void;
+  onServiceChanged?: (data: unknown) => void;
+  onPromotionUpdate?: (data: unknown) => void;
+  onPromotionCreate?: (data: unknown) => void;
 };
 
 let hotelSocketHandlers: HotelSocketHandlers = {};
@@ -151,6 +159,9 @@ export const bindHotelSocketEvents = ({
   onBuildingChanged,
   onFloorChanged,
   onNewBookingNotification,
+  onNotificationCreated,
+  onServiceChanged,
+  onEmployeeChanged,
   onCustomerBookingUpdated,
   onCustomerCreated,
   onSeasonalRateAnnouncement,
@@ -170,6 +181,9 @@ export const bindHotelSocketEvents = ({
     ...(onBuildingChanged ? { onBuildingChanged } : {}),
     ...(onFloorChanged ? { onFloorChanged } : {}),
     ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
+    ...(onNotificationCreated ? { onNotificationCreated } : {}),
+    ...(onServiceChanged ? { onServiceChanged } : {}),
+    ...(onEmployeeChanged ? { onEmployeeChanged } : {}),
     ...(onCustomerBookingUpdated ? { onCustomerBookingUpdated } : {}),
     ...(onCustomerCreated ? { onCustomerCreated } : {}),
     ...(onSeasonalRateAnnouncement ? { onSeasonalRateAnnouncement } : {}),
@@ -179,7 +193,39 @@ export const bindHotelSocketEvents = ({
     ...(onLateCheckOutCalendar ? { onLateCheckOutCalendar } : {}),
   };
 
-  if (!socket) return;
+  const boundNotificationHandler = onNotificationCreated;
+  const boundServiceHandler = onServiceChanged;
+  const boundEmployeeHandler = onEmployeeChanged;
+  const boundNewBookingHandler = onNewBookingNotification;
+  const unbindNotificationHandler = () => {
+    if (boundNotificationHandler && socket) {
+      socket.off("notification_created", boundNotificationHandler);
+    }
+    if (boundServiceHandler && socket) {
+      socket.off("new_service_notification", boundServiceHandler);
+      socket.off("update_service_notification", boundServiceHandler);
+    }
+    if (boundNewBookingHandler && socket) {
+      socket.off("new_booking_notification", boundNewBookingHandler);
+    }
+    if (boundEmployeeHandler && socket) {
+      socket.off("employee_created", boundEmployeeHandler);
+      socket.off("employee_updated", boundEmployeeHandler);
+    }
+    if (hotelSocketHandlers.onNotificationCreated === boundNotificationHandler) {
+      hotelSocketHandlers = { ...hotelSocketHandlers, onNotificationCreated: undefined };
+    }
+    if (hotelSocketHandlers.onServiceChanged === boundServiceHandler) {
+      hotelSocketHandlers = { ...hotelSocketHandlers, onServiceChanged: undefined };
+    }
+    if (hotelSocketHandlers.onEmployeeChanged === boundEmployeeHandler) {
+      hotelSocketHandlers = { ...hotelSocketHandlers, onEmployeeChanged: undefined };
+    }
+    if (hotelSocketHandlers.onNewBookingNotification === boundNewBookingHandler) {
+      hotelSocketHandlers = { ...hotelSocketHandlers, onNewBookingNotification: undefined };
+    }
+  };
+  if (!socket) return unbindNotificationHandler;
 
   const eventHandlers: [string, ((data: unknown) => void) | undefined][] = [
     ["room_create", hotelSocketHandlers.onRoomCreated],
@@ -191,6 +237,11 @@ export const bindHotelSocketEvents = ({
     ["building_changed", hotelSocketHandlers.onBuildingChanged],
     ["floor_changed", hotelSocketHandlers.onFloorChanged],
     ["new_booking_notification", hotelSocketHandlers.onNewBookingNotification],
+    ["notification_created", hotelSocketHandlers.onNotificationCreated],
+    ["new_service_notification", hotelSocketHandlers.onServiceChanged],
+    ["update_service_notification", hotelSocketHandlers.onServiceChanged],
+    ["employee_created", hotelSocketHandlers.onEmployeeChanged],
+    ["employee_updated", hotelSocketHandlers.onEmployeeChanged],
     ["customer_booking_updated", hotelSocketHandlers.onCustomerBookingUpdated],
     ["customer_created", hotelSocketHandlers.onCustomerCreated],
     ["seasonal_rate_announcement", hotelSocketHandlers.onSeasonalRateAnnouncement],
@@ -239,6 +290,20 @@ export const bindHotelSocketEvents = ({
     socket.on("new_booking_notification", hotelSocketHandlers.onNewBookingNotification);
   }
 
+  if (hotelSocketHandlers.onNotificationCreated) {
+    socket.on("notification_created", hotelSocketHandlers.onNotificationCreated);
+  }
+
+  if (hotelSocketHandlers.onServiceChanged) {
+    socket.on("new_service_notification", hotelSocketHandlers.onServiceChanged);
+    socket.on("update_service_notification", hotelSocketHandlers.onServiceChanged);
+  }
+
+  if (hotelSocketHandlers.onEmployeeChanged) {
+    socket.on("employee_created", hotelSocketHandlers.onEmployeeChanged);
+    socket.on("employee_updated", hotelSocketHandlers.onEmployeeChanged);
+  }
+
   if (hotelSocketHandlers.onCustomerBookingUpdated) {
     socket.on("customer_booking_updated", hotelSocketHandlers.onCustomerBookingUpdated);
   }
@@ -266,6 +331,7 @@ export const bindHotelSocketEvents = ({
   if (hotelSocketHandlers.onLateCheckOutCalendar) {
     socket.on("late_check_out_calendar", hotelSocketHandlers.onLateCheckOutCalendar);
   }
+  return unbindNotificationHandler;
 };
 
 const attachSuperAdminSocketHandlers = () => {
@@ -282,7 +348,16 @@ const attachSuperAdminSocketHandlers = () => {
     ["room_update", superAdminSocketHandlers.onRoomUpdated],
     ["room_import_progress", superAdminSocketHandlers.onRoomImportProgress],
     ["new_booking_notification", superAdminSocketHandlers.onNewBookingNotification],
+    ["notification_created", superAdminSocketHandlers.onNotificationCreated],
+    ["employee_created", superAdminSocketHandlers.onEmployeeChanged],
+    ["employee_updated", superAdminSocketHandlers.onEmployeeChanged],
     ["service_import_progress", superAdminSocketHandlers.onServiceImportProgress],
+    ["service_created", superAdminSocketHandlers.onServiceChanged],
+    ["service_updated", superAdminSocketHandlers.onServiceChanged],
+    ["new_service_notification", superAdminSocketHandlers.onServiceChanged],
+    ["update_service_notification", superAdminSocketHandlers.onServiceChanged],
+    ["update_promotion_notification", superAdminSocketHandlers.onPromotionUpdate],
+    ["new_promotion_notification", superAdminSocketHandlers.onPromotionCreate],
   ];
   registrations.forEach(([event, handler]) => {
     if (handler) socket?.on(event, handler);
@@ -303,7 +378,16 @@ export const bindSuperAdminSocketEvents = (handlers: SuperAdminSocketHandlers) =
       ["room_update", previousHandlers.onRoomUpdated],
       ["room_import_progress", previousHandlers.onRoomImportProgress],
       ["new_booking_notification", previousHandlers.onNewBookingNotification],
+      ["notification_created", previousHandlers.onNotificationCreated],
+      ["employee_created", previousHandlers.onEmployeeChanged],
+      ["employee_updated", previousHandlers.onEmployeeChanged],
       ["service_import_progress", previousHandlers.onServiceImportProgress],
+      ["service_created", previousHandlers.onServiceChanged],
+      ["service_updated", previousHandlers.onServiceChanged],
+      ["new_service_notification", previousHandlers.onServiceChanged],
+      ["update_service_notification", previousHandlers.onServiceChanged],
+      ["update_promotion_notification", previousHandlers.onPromotionUpdate],
+      ["new_promotion_notification", previousHandlers.onPromotionCreate],
     ];
     previousRegistrations.forEach(([event, handler]) => {
       if (handler) socket?.off(event, handler);
@@ -326,7 +410,16 @@ export const bindSuperAdminSocketEvents = (handlers: SuperAdminSocketHandlers) =
         ["room_update", handlers.onRoomUpdated],
         ["room_import_progress", handlers.onRoomImportProgress],
         ["new_booking_notification", handlers.onNewBookingNotification],
+        ["notification_created", handlers.onNotificationCreated],
+        ["employee_created", handlers.onEmployeeChanged],
+        ["employee_updated", handlers.onEmployeeChanged],
         ["service_import_progress", handlers.onServiceImportProgress],
+        ["service_created", handlers.onServiceChanged],
+        ["service_updated", handlers.onServiceChanged],
+        ["new_service_notification", handlers.onServiceChanged],
+        ["update_service_notification", handlers.onServiceChanged],
+        ["update_promotion_notification", handlers.onPromotionUpdate],
+        ["new_promotion_notification", handlers.onPromotionCreate],
       ];
       registrations.forEach(([event, handler]) => {
         if (handler) socket?.off(event, handler);

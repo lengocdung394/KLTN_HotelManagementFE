@@ -389,7 +389,7 @@ export default function EventPricingCalendar() {
           variant: "default",
           title: "Cập nhật giá mùa vụ",
           description: `${String(rateLabel)} vừa được cập nhật. Danh sách giá đã được đồng bộ mới nhất.`,
-          duration: 15000,
+          duration: 10000,
         });
 
         refetch();
@@ -571,7 +571,7 @@ export default function EventPricingCalendar() {
           variant: "default",
           title: "Cập nhật giá mùa vụ",
           description: `Đã chỉnh sửa ${eventName.trim()} và đồng bộ thay đổi tới khách hàng.`,
-          duration: 15000,
+          duration: 10000,
         });
       } else {
         await createRoomSeasonalRate(seasonalRateRequests).unwrap();
@@ -579,7 +579,7 @@ export default function EventPricingCalendar() {
           variant: "success",
           title: "Cập nhật giá thành công",
           description: "Đã lưu cấu hình giá theo sự kiện cho các loại phòng đã chọn.",
-          duration: 15000,
+          duration: 10000,
         });
       }
 
@@ -596,7 +596,7 @@ export default function EventPricingCalendar() {
         variant: "destructive",
         title: editingEventId ? "Cập nhật cấu hình giá thất bại" : "Lưu cấu hình giá thất bại",
         description: errorMessage,
-        duration: 15000,
+        duration: 10000,
       });
     }
   };

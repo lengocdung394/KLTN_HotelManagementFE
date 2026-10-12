@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
@@ -77,7 +78,10 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
 
   useEffect(() => {
     if (!hasHotelId && !isSystemAdmin) return;
-    bindHotelSocketEvents({
+    return bindHotelSocketEvents({
+      onServiceChanged: () => {
+        dispatch(baseApi.util.invalidateTags(["Service", "Notification"]));
+      },
       onServiceImportProgress: (data) => {
         if (!data || typeof data !== "object") return;
         const payload = data as Record<string, unknown>;
@@ -537,10 +541,10 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
         progress={serviceImportUploadProgress || undefined}
         onUpload={importServicesFromFile}
       />
-      {showCreate && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 p-4" onMouseDown={() => setShowCreate(false)}>
+      {showCreate && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onMouseDown={() => setShowCreate(false)}>
           <form
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_25px_80px_rgba(15,23,42,0.18)]"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl shrink-0 overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_25px_80px_rgba(15,23,42,0.18)]"
             onSubmit={(event) => {
               event.preventDefault();
               void saveService();
@@ -700,7 +704,8 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );
