@@ -3,6 +3,8 @@ import { baseApi } from "./baseApi";
 export type NotificationType =
   | "BOOKING_CREATED"
   | "BOOKING_CANCELLED"
+  | "BOOKING_REFUND_REQUESTED"
+  | "BOOKING_REFUND_COMPLETED"
   | "ROOM_CREATED"
   | "ROOM_UPDATED"
   | "BUILDING_CREATED"

@@ -1,0 +1,43 @@
+export type VietnameseBank = {
+  shortName: string;
+  bin: string;
+};
+
+export const vietnameseBanks: VietnameseBank[] = [
+  { shortName: "ABBANK", bin: "970425" },
+  { shortName: "ACB", bin: "970416" },
+  { shortName: "Agribank", bin: "970405" },
+  { shortName: "Bac A Bank", bin: "970409" },
+  { shortName: "BaoVietBank", bin: "970438" },
+  { shortName: "BIDV", bin: "970418" },
+  { shortName: "CIMB", bin: "422589" },
+  { shortName: "COOPBANK", bin: "970446" },
+  { shortName: "Eximbank", bin: "970431" },
+  { shortName: "HDBank", bin: "970437" },
+  { shortName: "KBank", bin: "668888" },
+  { shortName: "KienlongBank", bin: "970452" },
+  { shortName: "LPBank", bin: "970449" },
+  { shortName: "MBBank", bin: "970422" },
+  { shortName: "MBV", bin: "970414" },
+  { shortName: "MSB", bin: "970426" },
+  { shortName: "Nam A Bank", bin: "970428" },
+  { shortName: "NCB", bin: "970419" },
+  { shortName: "OCB", bin: "970448" },
+  { shortName: "PGBank", bin: "970430" },
+  { shortName: "PVcomBank", bin: "970412" },
+  { shortName: "Sacombank", bin: "970403" },
+  { shortName: "SaigonBank", bin: "970400" },
+  { shortName: "SCB", bin: "970429" },
+  { shortName: "SeABank", bin: "970440" },
+  { shortName: "ShinhanBank", bin: "970424" },
+  { shortName: "SHB", bin: "970443" },
+  { shortName: "Techcombank", bin: "970407" },
+  { shortName: "TPBank", bin: "970423" },
+  { shortName: "VIB", bin: "970441" },
+  { shortName: "VietABank", bin: "970427" },
+  { shortName: "VietBank", bin: "970433" },
+  { shortName: "Vietcombank", bin: "970436" },
+  { shortName: "VietinBank", bin: "970415" },
+  { shortName: "VPBank", bin: "970432" },
+  { shortName: "Woori Bank", bin: "970457" },
+];

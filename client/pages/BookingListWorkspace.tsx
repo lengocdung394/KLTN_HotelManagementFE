@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import BankSelectionField from "../components/BankSelectionField";
 import {
   useGetBookingsByHotelQuery,
   useUpdateBookingMutation,
@@ -24,6 +25,7 @@ import {
 } from "../services/bookingApi";
 import { useCreatePaymentQrMutation, usePayWithCashMutation } from "../services/paymentApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
+import { useCancelBookingByStaffMutation } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
@@ -146,6 +148,17 @@ export default function BookingListWorkspace() {
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
   const [editingBooking, setEditingBooking] = useState<BookingListItem | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelRefundEmail, setCancelRefundEmail] = useState("");
+  const [cancelBankDetails, setCancelBankDetails] = useState({
+    bankName: "",
+    bankCode: "",
+    bankAccountName: "",
+    bankAccountNumber: "",
+  });
+  const [cancelError, setCancelError] = useState("");
+  const [cancelFeedback, setCancelFeedback] = useState("");
 
   // Edit form state
   const [editCustomerName, setEditCustomerName] = useState("");
@@ -180,6 +193,7 @@ export default function BookingListWorkspace() {
   const [createPaymentQr, { isLoading: isCreatingQr }] = useCreatePaymentQrMutation();
   const [payWithCash, { isLoading: isPayingCash }] = usePayWithCashMutation();
   const [updateBookingApi, { isLoading: isUpdatingBooking }] = useUpdateBookingMutation();
+  const [cancelBookingByStaff, { isLoading: isCancellingBooking }] = useCancelBookingByStaffMutation();
   const {
     data: fetchedBookings = [],
     isLoading,
@@ -426,6 +440,69 @@ export default function BookingListWorkspace() {
     return paidAmount >= finalAmount;
   })();
 
+  const canCancelSelectedBooking = !!selectedBooking
+    && ["PENDING", "CONFIRMED"].includes(
+      String(selectedBooking.bookingStatus ?? "").trim().toUpperCase(),
+    );
+
+  const handleCancelSelectedBooking = async () => {
+    if (!selectedBooking) return;
+    const id = bookingId(selectedBooking);
+    if (!id || id === "-") {
+      setCancelError("Không tìm thấy mã booking để hủy.");
+      return;
+    }
+    if (cancelRefundEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cancelRefundEmail.trim())) {
+      setCancelError("Vui lòng nhập email khách hàng hợp lệ.");
+      return;
+    }
+    const hasAnyBankDetail = Object.values(cancelBankDetails).some((value) => value.trim());
+    if (hasAnyBankDetail
+      && (!cancelBankDetails.bankName.trim()
+        || !cancelBankDetails.bankAccountName.trim()
+        || !/^[0-9]{6,50}$/.test(cancelBankDetails.bankAccountNumber.trim()))) {
+      setCancelError("Nếu nhập thông tin hoàn tiền, vui lòng nhập tên ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ (6–50 chữ số).");
+      return;
+    }
+    setCancelError("");
+    try {
+      const response = await cancelBookingByStaff({
+        bookingId: id,
+        request: {
+          ...(cancelReason.trim() ? { reason: cancelReason.trim() } : {}),
+          ...(cancelRefundEmail.trim() ? { refundEmail: cancelRefundEmail.trim() } : {}),
+          ...(hasAnyBankDetail ? {
+            bankName: cancelBankDetails.bankName.trim(),
+            bankCode: cancelBankDetails.bankCode.trim() || undefined,
+            bankAccountName: cancelBankDetails.bankAccountName.trim(),
+            bankAccountNumber: cancelBankDetails.bankAccountNumber.trim(),
+          } : {}),
+        },
+      }).unwrap();
+      const cancellationStatus = response?.result?.status;
+      const refundMessage = cancellationStatus === "REFUND_BANK_DETAILS_REQUIRED"
+        ? " Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn tiền."
+        : cancellationStatus === "REFUND_REVIEW_PENDING"
+        ? " Booking đã hủy; yêu cầu hoàn tiền đang chờ quản lý duyệt."
+        : cancellationStatus === "NO_REFUND_REQUIRED"
+        ? " Booking đã hủy; không phát sinh tiền hoàn."
+        : " Booking đã hủy thành công.";
+      setCancelFeedback(refundMessage.trim());
+      setSelectedBooking(null);
+      setShowCancelConfirmation(false);
+      setCancelReason("");
+      setCancelRefundEmail("");
+      setCancelBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
+    } catch (error: unknown) {
+      const apiError = error as { data?: unknown; message?: string };
+      const errorData = apiError.data as { message?: string; result?: { message?: string } } | string | undefined;
+      const message = typeof errorData === "string"
+        ? errorData
+        : errorData?.message ?? errorData?.result?.message ?? apiError.message ?? "Không thể hủy booking.";
+      setCancelError(message);
+    }
+  };
+
   return (
     <section className="booking-list-workspace mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
       {/* Header */}
@@ -447,6 +524,20 @@ export default function BookingListWorkspace() {
           Làm mới
         </button>
       </div>
+
+      {cancelFeedback && (
+        <div className="mx-5 mt-4 flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          <span>{cancelFeedback}</span>
+          <button
+            type="button"
+            onClick={() => setCancelFeedback("")}
+            aria-label="Đóng thông báo"
+            className="shrink-0 rounded p-0.5 text-emerald-700 hover:bg-emerald-100"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="border-b border-slate-100 p-5">
@@ -923,6 +1014,21 @@ export default function BookingListWorkspace() {
 
                 {/* Footer Payment Action */}
                 <div className="mt-6 border-t border-slate-100 pt-4 flex items-center justify-end gap-3">
+                  {canCancelSelectedBooking && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelReason("");
+                        setCancelRefundEmail("");
+                        setCancelBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
+                        setCancelError("");
+                        setShowCancelConfirmation(true);
+                      }}
+                      className="mr-auto rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50"
+                    >
+                      Hủy booking
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectedBooking(null)}
@@ -963,6 +1069,118 @@ export default function BookingListWorkspace() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCancelConfirmation && selectedBooking && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-booking-title"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-700">
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <h3 id="cancel-booking-title" className="text-lg font-bold text-slate-900">
+                  Xác nhận hủy booking {bookingId(selectedBooking)}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Booking và các phòng sẽ được hủy ngay. Nếu có tiền cần hoàn, yêu cầu sẽ chờ quản lý xử lý;
+                  nhân viên có thể nhập thông tin ngân hàng khách cung cấp bên dưới, khách không cần tài khoản web.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-5 block text-sm font-semibold text-slate-700">
+              Lý do hủy (không bắt buộc)
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder="Nhập lý do để lưu vào yêu cầu hủy..."
+                className="mt-2 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-rose-400"
+              />
+            </label>
+
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+              <p className="text-sm font-semibold text-slate-800">Thông tin nhận tiền hoàn (không bắt buộc)</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Hỏi khách và nhập tại đây. Nếu khách vãng lai, nhập email để gửi xác nhận hủy và thông báo hoàn tiền. Nếu chưa có thông tin lúc hủy, có thể bổ sung trong trang Phê duyệt hoàn tiền.
+              </p>
+              <label className="mt-3 block text-xs font-semibold text-slate-600">
+                Email khách nhận thông báo (không bắt buộc)
+                <input
+                  type="email"
+                  value={cancelRefundEmail}
+                  onChange={(event) => setCancelRefundEmail(event.target.value)}
+                  maxLength={254}
+                  placeholder="email@example.com"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                />
+              </label>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <BankSelectionField
+                  bankName={cancelBankDetails.bankName}
+                  bankCode={cancelBankDetails.bankCode}
+                  onChange={(bankName, bankCode) =>
+                    setCancelBankDetails((current) => ({ ...current, bankName, bankCode }))
+                  }
+                />
+                <label className="text-xs font-semibold text-slate-600">
+                  Tên chủ tài khoản
+                  <input
+                    value={cancelBankDetails.bankAccountName}
+                    onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountName: event.target.value }))}
+                    maxLength={120}
+                    placeholder="Tên in trên tài khoản"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                  />
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Số tài khoản
+                  <input
+                    inputMode="numeric"
+                    value={cancelBankDetails.bankAccountNumber}
+                    onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountNumber: event.target.value }))}
+                    maxLength={50}
+                    placeholder="6–50 chữ số"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {cancelError && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{cancelError}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={isCancellingBooking}
+                onClick={() => setShowCancelConfirmation(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Quay lại
+              </button>
+              <button
+                type="button"
+                disabled={isCancellingBooking}
+                onClick={() => void handleCancelSelectedBooking()}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                {isCancellingBooking ? "Đang hủy..." : "Xác nhận hủy"}
+              </button>
             </div>
           </div>
         </div>

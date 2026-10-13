@@ -33,6 +33,8 @@
     "cancelBooking": "Cancel",
     "branchManager": "Branch manager",
     "goodMorning": "Good morning, {{name}}",
+    "goodAfternoon": "Good afternoon, {{name}}",
+    "goodEvening": "Good evening, {{name}}",
     "comparedYesterday": "compared with yesterday",
     "comparedLastWeek": "compared with last week",
     "guestCount": "guests",

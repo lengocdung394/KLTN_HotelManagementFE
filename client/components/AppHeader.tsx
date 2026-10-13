@@ -13,6 +13,12 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
   const { t, i18n } = useTranslation();
   const auth = useAppSelector((state) => state.auth);
   const displayName = fullName?.trim() || auth.fullName?.trim() || auth.email?.trim() || "Người dùng";
+  const hour = new Date().getHours();
+  const greetingKey = hour >= 5 && hour < 12
+    ? "common.goodMorning"
+    : hour >= 12 && hour < 18
+      ? "common.goodAfternoon"
+      : "common.goodEvening";
   const currentDate = new Date().toLocaleDateString(i18n.language.startsWith("en") ? "en-US" : "vi-VN", {
     weekday: "long",
     day: "numeric",
@@ -43,7 +49,7 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
         )}
         <div className="min-w-0">
           <p className="text-xs font-medium capitalize text-slate-400">{currentDate}</p>
-          <h1 className="truncate text-lg font-bold tracking-tight text-slate-900">{t("common.goodMorning", { name: displayName })}</h1>
+          <h1 className="truncate text-lg font-bold tracking-tight text-slate-900">{t(greetingKey, { name: displayName })}</h1>
         </div>
       </div>
 

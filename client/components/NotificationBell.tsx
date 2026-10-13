@@ -4,10 +4,12 @@ import { toast } from "@/components/ui/use-toast";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import {
+  notificationApi,
   useGetNotificationsQuery,
   useGetNotificationSummaryQuery,
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
+  type NotificationRecord,
 } from "../services/notificationApi";
 import { bindHotelSocketEvents, joinHotelRoom } from "../lib/socket";
 import {
@@ -17,6 +19,57 @@ import {
 
 const formatOccurredAt = (value: string) =>
   new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+
+const isNullableNumber = (value: unknown): value is number | null =>
+  value === null || typeof value === "number";
+
+const isNullableString = (value: unknown): value is string | null =>
+  value === null || typeof value === "string";
+
+const toBookingNotification = (payload: unknown): NotificationRecord | null => {
+  if (!payload || typeof payload !== "object") return null;
+
+  const {
+    id,
+    hotelId,
+    type,
+    title,
+    description,
+    createdAt,
+    referenceType,
+    referenceId,
+  } = payload as Record<string, unknown>;
+  if (
+    type !== "BOOKING_CANCELLED"
+    && type !== "BOOKING_REFUND_REQUESTED"
+    && type !== "BOOKING_REFUND_COMPLETED"
+  ) {
+    return null;
+  }
+  if (
+    typeof id !== "number"
+    || !isNullableNumber(hotelId)
+    || typeof title !== "string"
+    || typeof description !== "string"
+    || typeof createdAt !== "string"
+    || !isNullableString(referenceType)
+    || !isNullableString(referenceId)
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    hotelId,
+    type,
+    title,
+    description,
+    createdAt,
+    referenceType,
+    referenceId,
+    read: false,
+  };
+};
 
 export default function NotificationBell() {
   const dispatch = useAppDispatch();
@@ -51,8 +104,61 @@ export default function NotificationBell() {
         if (import.meta.env.DEV) {
           console.info("[NotificationBell] Received notification_created:", payload);
         }
+        const incoming = toBookingNotification(payload);
+        if (incoming) {
+          dispatch(notificationApi.util.updateQueryData(
+            "getNotifications",
+            { page: 0, size: 8 },
+            (draft) => {
+              const page = draft.result;
+              if (page.content.some((notification) => notification.id === incoming.id)) return;
+              page.content.unshift(incoming);
+              if (page.content.length > page.size) page.content.pop();
+              page.totalElements += 1;
+              page.totalPages = Math.ceil(page.totalElements / page.size);
+            },
+          ));
+          dispatch(notificationApi.util.updateQueryData(
+            "getNotificationSummary",
+            undefined,
+            (draft) => {
+              const summary = draft.result;
+              summary.totalCount += 1;
+              summary.unreadCount += 1;
+              summary.totalByType[incoming.type] = (summary.totalByType[incoming.type] ?? 0) + 1;
+              summary.unreadByType[incoming.type] = (summary.unreadByType[incoming.type] ?? 0) + 1;
+
+              if (incoming.hotelId !== null) {
+                const branch = summary.branches.find((item) => item.hotelId === incoming.hotelId);
+                if (branch) {
+                  branch.totalCount += 1;
+                  branch.unreadCount += 1;
+                } else {
+                  summary.branches.push({
+                    hotelId: incoming.hotelId,
+                    totalCount: 1,
+                    unreadCount: 1,
+                  });
+                }
+              }
+            },
+          ));
+        }
         void refetchNotifications();
         void refetchSummary();
+        if (payload && typeof payload === "object") {
+          const notification = payload as { type?: unknown; title?: unknown; description?: unknown };
+          if (
+            notification.type === "BOOKING_CANCELLED"
+            || notification.type === "BOOKING_REFUND_REQUESTED"
+            || notification.type === "BOOKING_REFUND_COMPLETED"
+          ) {
+            toast({
+              title: typeof notification.title === "string" ? notification.title : "Cập nhật booking",
+              description: typeof notification.description === "string" ? notification.description : "",
+            });
+          }
+        }
       },
       onNewBookingNotification: () => {
         dispatch(baseApi.util.invalidateTags(["Notification"]));

@@ -33,6 +33,8 @@
     "cancelBooking": "Hủy bỏ",
     "branchManager": "Quản lý chi nhánh",
     "goodMorning": "Chào buổi sáng, {{name}}",
+    "goodAfternoon": "Chào buổi chiều, {{name}}",
+    "goodEvening": "Chào buổi tối, {{name}}",
     "comparedYesterday": "so với hôm qua",
     "comparedLastWeek": "so với tuần trước",
     "guestCount": "khách",
