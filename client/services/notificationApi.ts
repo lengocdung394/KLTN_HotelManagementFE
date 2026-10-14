@@ -2,9 +2,11 @@ import { baseApi } from "./baseApi";
 
 export type NotificationType =
   | "BOOKING_CREATED"
+  | "BOOKING_UPDATED"
   | "BOOKING_CANCELLED"
   | "BOOKING_REFUND_REQUESTED"
   | "BOOKING_REFUND_COMPLETED"
+  | "PAYMENT_RECEIVED"
   | "ROOM_CREATED"
   | "ROOM_UPDATED"
   | "BUILDING_CREATED"
@@ -45,10 +47,11 @@ export type NotificationPage = {
 
 export type NotificationSummary = {
   totalCount: number;
+  readCount: number;
   unreadCount: number;
   totalByType: Record<string, number>;
   unreadByType: Record<string, number>;
-  branches: { hotelId: number; totalCount: number; unreadCount: number }[];
+  branches: { hotelId: number; totalCount: number; readCount: number; unreadCount: number }[];
 };
 
 type ApiResponse<T> = {

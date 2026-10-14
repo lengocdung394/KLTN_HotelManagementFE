@@ -26,7 +26,7 @@ const isNullableNumber = (value: unknown): value is number | null =>
 const isNullableString = (value: unknown): value is string | null =>
   value === null || typeof value === "string";
 
-const toBookingNotification = (payload: unknown): NotificationRecord | null => {
+const toLiveNotification = (payload: unknown): NotificationRecord | null => {
   if (!payload || typeof payload !== "object") return null;
 
   const {
@@ -40,9 +40,16 @@ const toBookingNotification = (payload: unknown): NotificationRecord | null => {
     referenceId,
   } = payload as Record<string, unknown>;
   if (
-    type !== "BOOKING_CANCELLED"
+    type !== "BOOKING_CREATED"
+    && type !== "BOOKING_UPDATED"
+    && type !== "BOOKING_CANCELLED"
     && type !== "BOOKING_REFUND_REQUESTED"
     && type !== "BOOKING_REFUND_COMPLETED"
+    && type !== "PAYMENT_RECEIVED"
+    && type !== "PROMOTION_CREATED"
+    && type !== "PROMOTION_UPDATED"
+    && type !== "SERVICE_CREATED"
+    && type !== "SERVICE_UPDATED"
   ) {
     return null;
   }
@@ -89,6 +96,7 @@ export default function NotificationBell() {
   const [markRead, markReadState] = useMarkNotificationReadMutation();
   const [markAllRead, markAllState] = useMarkAllNotificationsReadMutation();
   const notifications = pageResponse?.result.content ?? [];
+  const readCount = summaryResponse?.result.readCount ?? 0;
   const unreadCount = summaryResponse?.result.unreadCount ?? 0;
 
   useEffect(() => {
@@ -104,7 +112,7 @@ export default function NotificationBell() {
         if (import.meta.env.DEV) {
           console.info("[NotificationBell] Received notification_created:", payload);
         }
-        const incoming = toBookingNotification(payload);
+        const incoming = toLiveNotification(payload);
         if (incoming) {
           dispatch(notificationApi.util.updateQueryData(
             "getNotifications",
@@ -137,6 +145,7 @@ export default function NotificationBell() {
                   summary.branches.push({
                     hotelId: incoming.hotelId,
                     totalCount: 1,
+                    readCount: 0,
                     unreadCount: 1,
                   });
                 }
@@ -148,10 +157,20 @@ export default function NotificationBell() {
         void refetchSummary();
         if (payload && typeof payload === "object") {
           const notification = payload as { type?: unknown; title?: unknown; description?: unknown };
+          if (notification.type === "PROMOTION_CREATED" || notification.type === "PROMOTION_UPDATED") {
+            dispatch(baseApi.util.invalidateTags(["Promotion"]));
+          }
           if (
-            notification.type === "BOOKING_CANCELLED"
+            notification.type === "BOOKING_CREATED"
+            || notification.type === "BOOKING_UPDATED"
+            || notification.type === "PAYMENT_RECEIVED"
+            || notification.type === "BOOKING_CANCELLED"
             || notification.type === "BOOKING_REFUND_REQUESTED"
             || notification.type === "BOOKING_REFUND_COMPLETED"
+            || notification.type === "PROMOTION_CREATED"
+            || notification.type === "PROMOTION_UPDATED"
+            || notification.type === "SERVICE_CREATED"
+            || notification.type === "SERVICE_UPDATED"
           ) {
             toast({
               title: typeof notification.title === "string" ? notification.title : "Cập nhật booking",
@@ -250,7 +269,9 @@ export default function NotificationBell() {
           <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900">Thông báo</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{unreadCount} thông báo chưa đọc</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {readCount} đã đọc · {unreadCount} chưa đọc
+              </p>
             </div>
             <button
               type="button"

@@ -12,7 +12,7 @@ export type CheckInOutService = {
 
 export type CheckInOutBookingDetail = {
   bookingId?: string;
-  bookingDetailId?: number;
+  bookingDetailId?: string | number;
   roomId?: string;
   roomNumber?: string;
   roomName?: string;
@@ -42,6 +42,8 @@ export type CheckInOutBookingDetail = {
   nameCustomer?: string;
   cccd?: string;
   customerName?: string;
+  phone?: string;
+  bookingDetailStatus?: string;
   identityNumber?: string;
   bookingServiceResponseForHotel?: CheckInOutService[];
   bookingServiceResponsesForHotels?: CheckInOutService[];

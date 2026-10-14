@@ -14,7 +14,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BankSelectionField from "../components/BankSelectionField";
 import {
@@ -64,6 +64,37 @@ const money = (value: unknown) => {
 };
 
 const bookingId = (booking: BookingListItem) => textOf(booking, ["bookingId", "orderId", "id"]);
+
+const bookingTotalIncludingSurcharges = (booking: BookingListItem) => {
+  const storedTotal = bookingAmount(booking, ["finalAmount", "totalAmount"]);
+  const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
+  const earlyCheckInTotal = details.reduce((total, detail) => {
+    if (isCancelledBookingDetail(detail)) return total;
+    const fee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
+    return total + (Number.isFinite(fee) ? fee : 0);
+  }, 0);
+  const storedSurchargeTotal = bookingAmount(booking, ["surchargeTotalAmount"], 0);
+  const roomTotal = bookingAmount(booking, ["roomTotal"], Number.NaN);
+  const serviceTotal = bookingAmount(booking, ["serviceTotal"], Number.NaN);
+
+  if (Number.isFinite(roomTotal) && Number.isFinite(serviceTotal)) {
+    const explicitDiscounts = [
+      bookingAmount(booking, ["discountRoomAmount", "roomDiscountAmount"], 0),
+      bookingAmount(booking, ["discountServiceAmount", "serviceDiscountAmount"], 0),
+      bookingAmount(booking, ["discountAmountTotal", "totalDiscountAmount"], 0),
+    ].reduce((total, discount) => total + discount, 0);
+    const totalDiscount = explicitDiscounts > 0
+      ? explicitDiscounts
+      : bookingAmount(booking, ["discountTotal"], 0);
+    const expectedTotal = Math.max(
+      0,
+      roomTotal + serviceTotal + Math.max(earlyCheckInTotal, storedSurchargeTotal) - totalDiscount,
+    );
+    return Math.max(storedTotal, expectedTotal);
+  }
+
+  return storedTotal + Math.max(0, earlyCheckInTotal - storedSurchargeTotal);
+};
 
 const formatDate = (value: unknown) => {
   if (!value) return "-";
@@ -194,6 +225,8 @@ export default function BookingListWorkspace() {
   const [payWithCash, { isLoading: isPayingCash }] = usePayWithCashMutation();
   const [updateBookingApi, { isLoading: isUpdatingBooking }] = useUpdateBookingMutation();
   const [cancelBookingByStaff, { isLoading: isCancellingBooking }] = useCancelBookingByStaffMutation();
+  const paymentRequestInFlight = useRef(false);
+  const bookingUpdateInFlight = useRef(false);
   const {
     data: fetchedBookings = [],
     isLoading,
@@ -308,12 +341,16 @@ export default function BookingListWorkspace() {
     };
 
     setEditError("");
+    if (bookingUpdateInFlight.current) return;
+    bookingUpdateInFlight.current = true;
     try {
       await updateBookingApi({ id, request: updatePayload }).unwrap();
       setEditSuccess("Cập nhật thông tin booking thành công!");
     } catch {
       // Fallback optimistic update if backend endpoint is mock/unavailable
       setEditSuccess("Đã lưu thông tin chỉnh sửa booking thành công!");
+    } finally {
+      bookingUpdateInFlight.current = false;
     }
 
     // Apply local update
@@ -352,93 +389,104 @@ export default function BookingListWorkspace() {
       return;
     }
 
-    if (paymentMethod === "cash") {
-      const id = bookingId(selectedBooking);
-      const amountPaid = Number(cashAmountPaid) || 0;
-      const orderId = String(selectedBooking.orderId ?? selectedBooking.bookingId ?? id);
-      if (!orderId || amountPaid <= 0) {
-        setPaymentError("Vui lòng nhập số tiền khách đưa hợp lệ.");
+    if (paymentRequestInFlight.current) return;
+    paymentRequestInFlight.current = true;
+    try {
+      if (paymentMethod === "cash") {
+        const id = bookingId(selectedBooking);
+        const amountPaid = Number(cashAmountPaid) || 0;
+        const orderId = String(selectedBooking.orderId ?? selectedBooking.bookingId ?? id);
+        if (!orderId || amountPaid <= 0) {
+          setPaymentError("Vui lòng nhập số tiền khách đưa hợp lệ.");
+          return;
+        }
+        const totalDue = bookingTotalIncludingSurcharges(selectedBooking);
+        const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+        const remainingDue = Math.max(0, totalDue - paidSoFar);
+        const totalPaidAfterPayment = paidSoFar + amountPaid;
+        const isFullyPaid = totalPaidAfterPayment >= totalDue;
+        const fallbackChange = Math.max(0, amountPaid - remainingDue);
+        try {
+          const paymentResponse = await payWithCash({ orderId, amountPaid, note: "Thanh toán tiền mặt tại quầy" }).unwrap();
+          const responseChange = Number(
+            paymentResponse?.changeAmount
+            ?? paymentResponse?.refundAmount
+            ?? paymentResponse?.cashChange
+            ?? paymentResponse?.change
+            ?? fallbackChange,
+          );
+          setCashChangeAmount(Number.isFinite(responseChange) ? responseChange : fallbackChange);
+          setLocalOverrides((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              paidAmount: totalPaidAfterPayment,
+              remainingAmount: Math.max(0, totalDue - totalPaidAfterPayment),
+              ...(isFullyPaid ? { bookingStatus: "CONFIRMED", paymentStatus: "PAID", invoiceStatus: "PAID" } : {}),
+            },
+          }));
+          dispatch(baseApi.util.invalidateTags(["Booking"]));
+          setPaymentSuccess(`Xác nhận đã thu ${money(amountPaid)} tiền mặt thành công!`);
+        } catch (error: any) {
+          const data = error?.data;
+          const message = typeof data === "string" ? data : data?.message ?? data?.result?.message ?? error?.message ?? "Không thể thanh toán tiền mặt.";
+          setPaymentError(String(message));
+        }
         return;
       }
-      const totalDue = Number(selectedBooking.finalAmount) || 0;
-      const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
-      const remainingDue = Math.max(0, totalDue - paidSoFar);
-      const totalPaidAfterPayment = paidSoFar + amountPaid;
-      const isFullyPaid = totalPaidAfterPayment >= totalDue;
-      const fallbackChange = Math.max(0, amountPaid - remainingDue);
-      try {
-        const paymentResponse = await payWithCash({ orderId, amountPaid, note: "Thanh toán tiền mặt tại quầy" }).unwrap();
-        const responseChange = Number(
-          paymentResponse?.changeAmount
-          ?? paymentResponse?.refundAmount
-          ?? paymentResponse?.cashChange
-          ?? paymentResponse?.change
-          ?? fallbackChange,
-        );
-        setCashChangeAmount(Number.isFinite(responseChange) ? responseChange : fallbackChange);
-        setLocalOverrides((prev) => ({
-          ...prev,
-          [id]: {
-            ...prev[id],
-            paidAmount: totalPaidAfterPayment,
-            remainingAmount: Math.max(0, totalDue - totalPaidAfterPayment),
-            ...(isFullyPaid ? { bookingStatus: "CONFIRMED", paymentStatus: "PAID", invoiceStatus: "PAID" } : {}),
-          },
-        }));
-        dispatch(baseApi.util.invalidateTags(["Booking"]));
-        setPaymentSuccess(`Xác nhận đã thu ${money(amountPaid)} tiền mặt thành công!`);
-      } catch (error: any) {
-        const data = error?.data;
-        const message = typeof data === "string" ? data : data?.message ?? data?.result?.message ?? error?.message ?? "Không thể thanh toán tiền mặt.";
-        setPaymentError(String(message));
-      }
-      return;
-    }
 
-    // Payment method === "bank"
-    const id = bookingId(selectedBooking);
-    const orderId = selectedBooking.orderId ?? selectedBooking.bookingId ?? "";
-    const amount = Number(selectedBooking.finalAmount) || 0;
+      const id = bookingId(selectedBooking);
+      const orderId = selectedBooking.orderId ?? selectedBooking.bookingId ?? "";
+      const amount = bookingTotalIncludingSurcharges(selectedBooking);
 
-    let qrUrl = "";
+      let qrUrl = "";
 
-    if (orderId) {
-      try {
-        const response = await createPaymentQr({ orderId }).unwrap();
-        if (response && response.checkoutUrl) {
-          qrUrl = response.checkoutUrl;
+      if (orderId) {
+        try {
+          const response = await createPaymentQr({ orderId }).unwrap();
+          if (response && response.checkoutUrl) {
+            qrUrl = response.checkoutUrl;
+          }
+        } catch {
+          // Backend endpoint not responding -> Fallback to VietQR image below
         }
-      } catch {
-        // Backend endpoint not responding -> Fallback to VietQR image below
       }
-    }
 
-    // Dynamic VietQR generator fallback (BIDV / PayOS template)
-    if (!qrUrl) {
-      const bankId = "BIDV";
-      const accountNo = "V3CAS6811679267";
-      const accountName = "NGUYEN LE ANH PHONG";
-      const addInfo = encodeURIComponent(`CSNH0USH216 Thanh toan HD${id}`);
-      qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${encodeURIComponent(accountName)}`;
-    }
+      if (!qrUrl) {
+        const bankId = "BIDV";
+        const accountNo = "V3CAS6811679267";
+        const accountName = "NGUYEN LE ANH PHONG";
+        const addInfo = encodeURIComponent(`CSNH0USH216 Thanh toan HD${id}`);
+        qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${encodeURIComponent(accountName)}`;
+      }
 
-    setCheckoutUrl(qrUrl);
-    setQrSecondsLeft(300);
-    setShowQrModal(true);
+      setCheckoutUrl(qrUrl);
+      setQrSecondsLeft(300);
+      setShowQrModal(true);
+    } finally {
+      paymentRequestInFlight.current = false;
+    }
   };
 
   const qrTimeLabel = `${String(Math.floor(qrSecondsLeft / 60)).padStart(2, "0")}:${String(qrSecondsLeft % 60).padStart(2, "0")}`;
-  const cashBillTotal = Number(selectedBooking?.finalAmount) || 0;
+  const selectedBookingTotal = selectedBooking ? bookingTotalIncludingSurcharges(selectedBooking) : 0;
+  const cashBillTotal = selectedBookingTotal;
   const enteredCashAmount = Number(cashAmountPaid) || 0;
   const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
   const cashRemainingDue = Math.max(0, cashBillTotal - paidSoFar);
   const computedCashChange = Math.max(0, enteredCashAmount - cashRemainingDue);
   const displayCashChange = cashChangeAmount ?? computedCashChange;
   const paymentBlocked = !!selectedBooking && (() => {
-    const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+    const finalAmount = selectedBookingTotal;
     const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
     return paidAmount >= finalAmount;
   })();
+  const earlyCheckinFeeTotal = (selectedBooking?.bookingDetails ?? [])
+    .filter((detail) => !isCancelledBookingDetail(detail))
+    .reduce((total, detail) => {
+      const fee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
+      return total + (Number.isFinite(fee) ? fee : 0);
+    }, 0);
 
   const canCancelSelectedBooking = !!selectedBooking
     && ["PENDING", "CONFIRMED"].includes(
@@ -591,7 +639,7 @@ export default function BookingListWorkspace() {
                   const isCancelled = isCancelledBooking(booking);
                   const bookingDiscount = valueOf(booking, ["discountAmountTotal", "discountTotal", "totalDiscountAmount"]) ?? valueOf(booking, ["discountRoomAmount", "discountServiceAmount"]);
                   const bookingPaid = valueOf(booking, ["paidAmount", "amountPaid", "totalPaidAmount"]);
-                  const finalAmountNumber = Number(booking.finalAmount ?? 0);
+                  const finalAmountNumber = bookingTotalIncludingSurcharges(booking);
                   const paidAmountNumber = Number(bookingPaid ?? 0);
                   const guestDue = finalAmountNumber - paidAmountNumber;
                   const isFullyPaid = guestDue === 0;
@@ -609,7 +657,7 @@ export default function BookingListWorkspace() {
                       <td className={`px-5 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
                         {isFullyPaid ? "0 đ" : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
                       </td>
-                      <td className="px-5 py-4 text-right font-bold text-blue-700">{money(booking.finalAmount)}</td>
+                      <td className="px-5 py-4 text-right font-bold text-blue-700">{money(finalAmountNumber)}</td>
                       <td className="px-5 py-4">
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -770,6 +818,10 @@ export default function BookingListWorkspace() {
                       <span className="font-semibold text-slate-900">{money(selectedBooking.serviceTotal)}</span>
                     </div>
                     <div className="flex justify-between text-slate-600">
+                      <span>Tổng phụ thu check-in sớm:</span>
+                      <span className="font-semibold text-amber-700">{money(earlyCheckinFeeTotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
                       <span>Tổng giảm giá phòng:</span>
                       <span className="font-semibold text-rose-600">{money(valueOf(selectedBooking, ["discountRoomAmount", "roomDiscountAmount"]))}</span>
                     </div>
@@ -786,7 +838,7 @@ export default function BookingListWorkspace() {
                       <span className="font-semibold">{money(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]))}</span>
                     </div>
                     {(() => {
-                      const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+                      const finalAmount = selectedBookingTotal;
                       const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                       const diff = finalAmount - paidAmount;
 
@@ -817,7 +869,7 @@ export default function BookingListWorkspace() {
                     })()}
                     <div className="flex justify-between border-t border-blue-200/60 pt-2.5 text-base font-bold text-blue-900">
                       <span>Tổng tiền booking:</span>
-                      <span>{money(selectedBooking.finalAmount)}</span>
+                      <span>{money(selectedBookingTotal)}</span>
                     </div>
                   </div>
                 </div>
@@ -943,7 +995,7 @@ export default function BookingListWorkspace() {
                       onClick={() => {
                         setPaymentMethod("cash");
                         if (!cashAmountPaid && selectedBooking) {
-                          const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+                          const finalAmount = selectedBookingTotal;
                           const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                           const due = Math.max(0, finalAmount - paidAmount);
                           setCashAmountPaid(String(due));
@@ -978,7 +1030,7 @@ export default function BookingListWorkspace() {
                           </div>
                           <span className="mt-1 block text-xs font-normal text-slate-500">
                             {(() => {
-                              const finalAmount = Number(selectedBooking?.finalAmount ?? 0);
+                              const finalAmount = selectedBookingTotal;
                               const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                               const remainingToCollect = Math.max(0, finalAmount - paidAmount);
                               return `Tổng cần thu: ${money(remainingToCollect)}`;
@@ -1051,14 +1103,14 @@ export default function BookingListWorkspace() {
                   >
                     {paymentBlocked ? (
                       (() => {
-                        const finalAmount = Number(selectedBooking?.finalAmount ?? 0);
+                        const finalAmount = selectedBookingTotal;
                         const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                         return paidAmount > finalAmount ? "Phải thanh toán cho khách hàng" : "Đã thanh toán đủ số tiền";
                       })()
                     ) : paymentMethod === "cash" ? (
                       <>
                         <Banknote size={16} />
-                        Xác nhận thu tiền mặt
+                        {isPayingCash ? "Đang ghi nhận..." : "Xác nhận thu tiền mặt"}
                       </>
                     ) : (
                       <>

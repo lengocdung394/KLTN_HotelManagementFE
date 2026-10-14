@@ -73,6 +73,7 @@ export type ManagementBookingModificationRequest = {
   serviceQuantityUpdates: ManagementBookingUpdateServiceQuantityRequest[];
   promotionRequest: ManagementBookingPromotionRequest | null;
   customerPromotionRequest: ManagementBookingCustomerPromotionRequest | null;
+  removePromotion?: boolean | null;
 };
 
 export type ManagementBookingCancellationRequest = {

@@ -18,12 +18,14 @@ type GuestRoom = {
   extraAdultFee?: number;
   extraChildFee?: number;
 };
-export type BookingGuest = { name: string; phone: string; identityNumber: string; customerId?: string };
+export type BookingGuest = { name: string; phone: string; identityNumber: string; email: string; emailOnFile?: boolean; customerId?: string };
 export type RoomGuestCounts = { adults: number; children: number; infants: number };
-export const isBookingGuestValid = (guest: BookingGuest) => Boolean(
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+export const isBookingGuestValid = (guest: BookingGuest, requireEmail = true) => Boolean(
   guest.name.trim()
   && /^\d{10}$/.test(guest.phone)
-  && /^\d{12}$/.test(guest.identityNumber),
+  && /^\d{12}$/.test(guest.identityNumber)
+  && (!requireEmail || guest.emailOnFile || isValidEmail(guest.email)),
 );
 type Customer = CustomerResponse;
 
@@ -59,7 +61,7 @@ export const setRoomGuestCache = (values: Record<string, RoomGuestCounts>) => {
   });
 };
 
-export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void }) {
+export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange, requireEmail = true }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void; requireEmail?: boolean }) {
   const { t } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: customers = [] } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
@@ -82,9 +84,18 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
       : field === "identityNumber"
         ? value.replace(/\D/g, "").slice(0, 12)
         : value;
-    onGuestChange({ ...guest, [field]: normalizedValue, customerId: undefined });
+    onGuestChange({
+      ...guest,
+      [field]: normalizedValue,
+      customerId: field === "email" ? guest.customerId : undefined,
+      emailOnFile: field === "email" ? guest.emailOnFile : false,
+    });
   };
-  const chooseCustomer = (customer: Customer) => { onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, customerId: customer.id }); setCustomerQuery(""); };
+  const chooseCustomer = (customer: Customer) => {
+    const email = customer.email.trim();
+    onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, email, emailOnFile: Boolean(email), customerId: customer.id });
+    setCustomerQuery("");
+  };
   const findCustomerByCode = async () => {
     const code = customerQuery.trim();
     if (!code) return;
@@ -98,10 +109,10 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     }
   };
   const createCustomer = async () => {
-    if (!isBookingGuestValid(guest) || guest.customerId || isCreatingCustomer) return;
+    if (!isBookingGuestValid(guest, requireEmail) || guest.customerId || isCreatingCustomer) return;
     try {
-      const customer = await createWalkInCustomer({ fullName: guest.name.trim(), phone: guest.phone.trim(), cccd: guest.identityNumber.trim() }).unwrap();
-      onGuestChange({ ...guest, customerId: String(customer.id) });
+      const customer = await createWalkInCustomer({ fullName: guest.name.trim(), phone: guest.phone.trim(), cccd: guest.identityNumber.trim(), email: guest.email.trim() }).unwrap();
+      onGuestChange({ ...guest, email: customer.email || guest.email.trim(), emailOnFile: Boolean(customer.email || guest.email.trim()), customerId: String(customer.id) });
       emitCustomerCreated(hotelId, {
         id: customer.id,
         name: customer.name,
@@ -152,7 +163,9 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-violet-100 text-violet-700"><UserRound size={16} /></div><div><p className="text-sm font-bold text-slate-900">{t("booking.stayingGuest", "Guest staying")}</p><p className="mt-0.5 text-xs text-slate-500">{rooms.length} {t("booking.rooms")}</p></div></div>
       <div className="relative mb-4"><label className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer", "Tìm khách hàng đã lưu")}</label><div className="relative mt-1.5"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={customerQuery} onChange={(event) => setCustomerQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void findCustomerByCode(); } }} placeholder={t("booking.searchCustomerPlaceholder", "Nhập mã khách hàng hoặc tìm theo tên, số điện thoại")} className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" />{isFindingCustomer && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Đang tìm...</span>}</div>{matches.length > 0 && <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">{matches.map((customer) => <button type="button" key={customer.id} onClick={() => chooseCustomer(customer)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-violet-50"><span className="font-semibold text-slate-700">{customer.name}</span><span className="text-xs text-slate-400">{customer.phone}</span></button>)}</div>}</div>
-        <div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-slate-700">{t("customer.fullName")}<span className="ml-1 text-red-500">*</span><input value={guest.name} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder", "Nguyễn Văn A")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.name)}`} /></label><label className="text-sm font-semibold text-slate-700">{t("customer.phone")}<span className="ml-1 text-red-500">*</span><input value={guest.phone} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.phone)}`} /></label><label className="text-sm font-semibold text-slate-700">{t("customer.identityNumber", "Số CCCD")}<span className="ml-1 text-red-500">*</span><input value={guest.identityNumber} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.identityNumber)}`} /></label></div><div className="mt-4 flex justify-end"><button type="button" disabled={!guest.name.trim() || !guest.phone.trim() || !guest.identityNumber.trim() || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingCustomer ? "Đang tạo khách hàng..." : guest.customerId ? "Đã có mã khách hàng" : "Tạo khách hàng"}</button></div>
+        <div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-slate-700">{t("customer.fullName")}<span className="ml-1 text-red-500">*</span><input value={guest.name} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder", "Nguyễn Văn A")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.name)}`} /></label><label className="text-sm font-semibold text-slate-700">{t("customer.phone")}<span className="ml-1 text-red-500">*</span><input value={guest.phone} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.phone)}`} /></label><label className="text-sm font-semibold text-slate-700">{t("customer.identityNumber", "Số CCCD")}<span className="ml-1 text-red-500">*</span><input value={guest.identityNumber} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.identityNumber)}`} /></label></div>
+        {requireEmail && !guest.emailOnFile && <label className="mt-4 block text-sm font-semibold text-slate-700">Email nhận xác nhận đặt phòng<span className="ml-1 text-red-500">*</span><input type="email" autoComplete="email" required value={guest.email} onChange={(event) => updateGuest("email", event.target.value)} placeholder="ten@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(isValidEmail(guest.email) ? guest.email : "")}`} /><span className="mt-1 block text-xs font-normal text-slate-500">Email sẽ được lưu vào hồ sơ khách hàng và dùng để gửi xác nhận booking.</span></label>}
+        <div className="mt-4 flex justify-end"><button type="button" disabled={!isBookingGuestValid(guest, requireEmail) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingCustomer ? "Đang tạo khách hàng..." : guest.customerId ? "Đã có mã khách hàng" : "Tạo khách hàng"}</button></div>
     </div>
     {rooms.map((room, index) => {
       const selected = getRoomGuests(room);

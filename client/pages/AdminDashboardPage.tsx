@@ -571,9 +571,17 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         const data = getSocketPayload(event.data ?? event);
         const hotelId = getHotelId(event) ?? getHotelId(data);
         const bookingId = getSocketText(data, "bookingId", getSocketText(data, "id", "mới"));
+        const customerName = getSocketText(data, "customerName", "Chưa cập nhật");
+        const customerPhone = getSocketText(data, "customerPhone", "Chưa cập nhật");
+        const totalAmount = Number(data.totalAmount);
+        const updated = String(event.action ?? data.action ?? "").toUpperCase() === "UPDATED";
         const hotelLabel = hotelId == null ? "" : ` tại khách sạn #${hotelId}`;
-        const description = `Booking ${bookingId}${hotelLabel} vừa được tạo.`;
-        addNotification("Booking mới", description, { category: "booking", hotelId });
+        const amountLabel = Number.isFinite(totalAmount) ? ` · Tổng tiền: ${formatMoney(totalAmount)}` : "";
+        const updateDescription = getSocketText(data, "description", "");
+        const description = updated && updateDescription
+          ? updateDescription
+          : `Mã booking: #${bookingId}${hotelLabel} · Khách hàng: ${customerName} · SĐT: ${customerPhone}${amountLabel}.`;
+        addNotification(updated ? "Booking đã được chỉnh sửa" : "Booking mới", description, { category: "booking", hotelId });
         dispatch(baseApi.util.invalidateTags(["Booking", "Notification", "SuperAdminBranch"]));
       },
     });
@@ -1259,6 +1267,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   <p className="mt-1 text-sm text-slate-500">
                     Thông báo được lưu lại và đồng bộ realtime giữa các phiên đăng nhập.
                   </p>
+                  <p className="mt-1 text-xs font-medium text-slate-600">
+                    {notificationSummaryResponse?.result.readCount ?? 0} đã đọc ·{" "}
+                    {notificationSummaryResponse?.result.unreadCount ?? 0} chưa đọc
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -1323,7 +1335,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       );
                       return (
                         <option key={branch.id} value={String(branch.id)}>
-                          {branch.name} ({counts?.unreadCount ?? 0} chưa đọc / {counts?.totalCount ?? 0})
+                          {branch.name} ({counts?.readCount ?? 0} đã đọc / {counts?.unreadCount ?? 0} chưa đọc)
                         </option>
                       );
                     })}

@@ -111,6 +111,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const canManagePromotions = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
   const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [targetHotelId, setTargetHotelId] = useState("");
   const { data: apiPromotions = [], isLoading, isError } = useGetPromotionsQuery(
     isSystemAdmin
       ? { ...(selectedBranchId ? { hotelId: Number(selectedBranchId) } : {}), page: 0, size: 100 }
@@ -254,6 +255,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const openCreatePromotion = () => {
     setEditingPromotion(null);
     setForm(initialForm);
+    setTargetHotelId("");
     setImageFile(null);
     setFormError("");
     setModalOpen(true);
@@ -338,7 +340,11 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
 
     try {
       pendingLocalPromotionName.current = promotionInfo.name;
-      await createPromotion({ promotionInfo, image: imageFile ?? undefined }).unwrap();
+      await createPromotion({
+        promotionInfo,
+        image: imageFile ?? undefined,
+        ...(isSystemAdmin && targetHotelId ? { hotelId: Number(targetHotelId) } : {}),
+      }).unwrap();
       window.setTimeout(() => {
         if (pendingLocalPromotionName.current === promotionInfo.name) pendingLocalPromotionName.current = "";
       }, 5000);
@@ -389,6 +395,24 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   <p className="mt-1 text-xs text-slate-500">{label("sectionGeneralDescription")}</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  {isSystemAdmin && !editingPromotion && (
+                    <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                      {label("promotionTarget")}
+                      <select
+                        value={targetHotelId}
+                        onChange={(event) => setTargetHotelId(event.target.value)}
+                        className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"
+                      >
+                        <option value="">{label("allSystemBranches")}</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-xs font-normal text-slate-500">
+                        {targetHotelId ? label("branchPromotionNotice") : label("systemPromotionNotice")}
+                      </span>
+                    </label>
+                  )}
                   <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                     {label("programName")} <span className="text-rose-500">*</span>
                     <input required value={form.name} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={label("exampleWeekendOffer")} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
@@ -785,7 +809,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                       <Eye size={14} />
                       {label("viewDetails")}
                     </button>
-                    {canManagePromotions && <button
+                    {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) && <button
                       type="button"
                       onClick={() => openEditPromotion(promotion)}
                       className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"

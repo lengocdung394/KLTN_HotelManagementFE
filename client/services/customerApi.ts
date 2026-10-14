@@ -17,6 +17,7 @@ export type WalkInCustomerRequest = {
 	fullName: string;
 	phone: string;
 	cccd: string;
+	email?: string;
 };
 
 export type CustomerUpdateRequest = {
