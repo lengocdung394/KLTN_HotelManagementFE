@@ -1,4 +1,3 @@
-  window.localStorage.removeItem("position");
 import "./global.css";
 import "./i18n";
 
@@ -9,6 +8,7 @@ import { useEffect, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Provider } from "react-redux";
 import { store } from "./store";
+import { logout } from "./store/authSlice";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
@@ -18,6 +18,7 @@ import CustomerPage from "./pages/CustomerPage";
 import LoginPage from "./pages/LoginPage";
 import { disconnectSocket, initSocket } from "./lib/socket";
 import { useAppSelector } from "./store/hooks";
+import ChatWidget from "./components/ChatWidget";
 
 type AppRoutesProps = {
   authenticated: boolean;
@@ -137,6 +138,9 @@ const App = () => {
   const handleLogout = () => {
     window.localStorage.removeItem("staywise-authenticated");
     window.localStorage.removeItem("accessToken");
+    window.localStorage.removeItem("senviet_admin_copilot_session_v3");
+    window.localStorage.removeItem("senviet_admin_copilot_messages_v3");
+    store.dispatch(logout());
     disconnectSocket();
     setAuthenticated(false);
   };
@@ -152,6 +156,7 @@ const App = () => {
             onLogin={() => setAuthenticated(true)}
             onLogout={handleLogout}
           />
+          {authenticated && <ChatWidget />}
         </BrowserRouter>
       </TooltipProvider>
     </Provider>
