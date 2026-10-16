@@ -473,7 +473,7 @@
     "yes": "Có",
     "no": "Không",
     "update": "Lưu chỉnh sửa",
-    "updatedLocally": "Đã cập nhật trên giao diện; chưa lưu thay đổi lên máy chủ.",
+    "updatedSuccessfully": "Cập nhật khuyến mãi thành công.",
     "active": "Đang hoạt động",
     "usesThisMonth": "Lượt sử dụng tháng này",
     "guestSavings": "Tiết kiệm cho khách",
@@ -529,6 +529,7 @@
     "createdSuccessfully": "Tạo khuyến mãi thành công.",
     "newPromotionNotification": "Chi nhánh vừa có khuyến mãi mới",
     "createFailed": "Tạo khuyến mãi thất bại.",
+    "updateFailed": "Cập nhật khuyến mãi thất bại.",
     "creating": "Đang lưu...",
     "codeGenerated": "Mã sẽ được cấp tự động",
     "copyCode": "Sao chép mã khuyến mãi"

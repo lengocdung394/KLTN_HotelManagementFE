@@ -1,12 +1,14 @@
-import { createXlsxWorkbook, downloadFile, readXlsxRows, readZipFiles } from "./bulkImportFiles";
+import { createXlsxWorkbook, downloadFile, readXlsxRowsByName, readZipFiles } from "./bulkImportFiles";
 
 export type RoomImportBuilding = { id: string; name: string };
 export type RoomImportFloor = { id: string; name: string; buildingId: string };
 export type RoomImportAmenity = { id: string; name: string };
+export type RoomImportBedType = { id: number; name: string };
 export type RoomImportOptions = {
   roomTypes: string[];
   statuses: string[];
   amenities: RoomImportAmenity[];
+  bedTypes: RoomImportBedType[];
   buildings: RoomImportBuilding[];
   floors: RoomImportFloor[];
 };
@@ -22,7 +24,7 @@ export type ImportedRoomData = {
   maxExtraGuests: number;
   extraAdultFee: number;
   extraChildFee: number;
-  bedType: string;
+  beds: Array<{ bedTypeId: number; bedTypeName: string; quantity: number }>;
   status: string;
   amenities: string[];
   description: string;
@@ -43,6 +45,7 @@ export type RoomImportResult = {
 };
 
 const IMAGE_HEADERS = Array.from({ length: 8 }, (_, index) => `Ảnh ${index + 1}`);
+const BED_HEADERS = ["Số phòng", "Loại giường", "Số lượng"];
 const ROOM_HEADERS = [
   "Số phòng", "Loại phòng", "Tòa", "Tầng", "Trạng thái",
   "Tiện ích (ID)", "Mô tả", ...IMAGE_HEADERS,
@@ -76,6 +79,9 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
   const amenities = [...new Map(options.amenities
     .filter((item) => item.id.trim() && item.name.trim())
     .map((item) => [item.id.trim(), { ...item, id: item.id.trim(), name: item.name.trim() }])).values()];
+  const bedTypes = [...new Map(options.bedTypes
+    .filter((item) => Number.isInteger(item.id) && item.id > 0 && item.name.trim())
+    .map((item) => [normalize(item.name), { ...item, name: item.name.trim() }])).values()];
   const buildings = options.buildings.filter((item) => item.id && item.name.trim());
   const floors = options.floors.filter((item) =>
     item.id && /^-?\d+$/.test(item.name.trim()) && buildings.some((building) => building.id === item.buildingId),
@@ -88,6 +94,9 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
   }
   if (floorNumbers.length === 0) {
     throw new Error("Không tải được danh sách số tầng hợp lệ của các tòa nhà từ máy chủ. Vui lòng thử lại sau.");
+  }
+  if (bedTypes.length === 0) {
+    throw new Error("Chưa có loại giường trong danh mục. Vui lòng thêm loại giường trước khi tải mẫu.");
   }
   const exampleValues: Record<string, string | number> = {
     "Số phòng": 101,
@@ -124,6 +133,11 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
   if (amenities.length > 0) {
     amenities.forEach((amenity, index) => catalogRows.push([index === 0 ? "Tiện ích" : "", amenity.id, amenity.name]));
   }
+  const bedTypeStartRow = catalogRows.length + 1;
+  bedTypes.forEach((bedType, index) => catalogRows.push([index === 0 ? "Loại giường" : "", bedType.name]));
+  const bedTypeEndRow = catalogRows.length;
+  namedRanges.push({ name: "BedTypes", formula: `'Danh mục'!$B$${bedTypeStartRow}:$B$${bedTypeEndRow}` });
+  namedRanges.push({ name: "RoomNumbers", formula: "'Dữ liệu phòng'!$A$2:$A$1000" });
 
   const listValidation = (header: string, rangeName: string) => ({
     range: `${excelColumnName(ROOM_HEADERS.indexOf(header))}2:${excelColumnName(ROOM_HEADERS.indexOf(header))}1000`,
@@ -160,16 +174,31 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
         ["Số phòng phải là số nguyên dương; ô này được kiểm tra dữ liệu ngay trong Excel."],
         ["Tiện ích dùng một ô duy nhất; nhập ID tiện ích, ngăn cách nhiều ID bằng dấu chấm phẩy (;). Có thể nhập nhiều ID, không giới hạn số lượng."],
         ["Tra ID và tên tiện ích trong sheet Danh mục. Chỉ nhập ID có trong danh mục; hệ thống sẽ kiểm tra từng ID và báo lỗi nếu ID sai."],
+        ["Sheet Giường phòng: mỗi dòng chọn Số phòng và Loại giường từ danh sách xổ xuống, nhập Số lượng là số nguyên từ 1 trở lên."],
+        ["Một phòng có thể có nhiều loại giường; thêm nhiều dòng cùng Số phòng. Mỗi loại giường chỉ khai báo một lần cho mỗi phòng."],
+        ["Mỗi phòng phải có ít nhất một cấu hình giường. Danh sách loại giường được lấy từ danh mục hiện tại."],
         ["Mỗi phòng cần từ 4 đến 8 ảnh. Nhập tên file ảnh bằng tay vào các cột Ảnh 1 đến Ảnh 8."],
         ["Tên ảnh phải khớp chính xác với file trong images, gồm phần mở rộng, ví dụ 101-1.jpg."],
         ["Tạo thư mục dulieuphong, đặt phong.xlsx và thư mục images bên trong, rồi nén thư mục dulieuphong thành dulieuphong.zip."],
-        ["Thông tin giá, diện tích, sức chứa, phụ thu và loại giường không cần nhập trong mẫu này."],
+        ["Thông tin giá, diện tích, sức chứa và phụ thu không cần nhập trong mẫu này."],
         ["Dữ liệu được gửi lên máy chủ để import khi tải file dulieuphong.zip."],
       ],
     },
     {
       name: "Danh mục",
       rows: catalogRows,
+    },
+    {
+      name: "Giường phòng",
+      rows: [
+        BED_HEADERS,
+        [101, bedTypes[0].name, 1],
+      ],
+      validations: [
+        { range: "A2:A1000", type: "list", formula1: "=RoomNumbers" },
+        { range: "B2:B1000", type: "list", formula1: "=BedTypes" },
+        { range: "C2:C1000", type: "whole", operator: "greaterThanOrEqual", formula1: "1" },
+      ],
     },
   ], namedRanges));
 };
@@ -200,11 +229,13 @@ export const parseRoomImportArchive = async (
   const imageDirectory = `${workbookDirectory}images/`.toLocaleLowerCase();
   const workbookBytes = new Uint8Array(workbook.content.byteLength);
   workbookBytes.set(workbook.content);
-  const rows = await readXlsxRows(workbookBytes);
+  const rows = await readXlsxRowsByName(workbookBytes, "Dữ liệu phòng");
+  const bedRows = await readXlsxRowsByName(workbookBytes, "Giường phòng");
   const headers = rows[0]?.map(normalize) ?? [];
   const missingHeaders = REQUIRED_ROOM_HEADERS.filter((header) => !headers.includes(normalize(header)));
   if (!headers.includes(normalize("Số phòng")) && !headers.includes(normalize("Mã phòng"))) missingHeaders.push("Số phòng");
   if (missingHeaders.length) throw new Error(`File phong.xlsx thiếu cột: ${missingHeaders.join(", ")}.`);
+  if (bedRows.length === 0) throw new Error('Sheet "Giường phòng" chưa có dòng tiêu đề.');
 
   const imageFiles = new Map<string, File[]>();
   entries.filter((entry) => {
@@ -225,6 +256,7 @@ export const parseRoomImportArchive = async (
   const roomTypes = byValue(options.roomTypes);
   const statuses = byValue(options.statuses);
   const amenities = new Map(options.amenities.map((amenity) => [amenity.id.trim(), amenity.name]));
+  const bedTypes = new Map(options.bedTypes.map((bedType) => [normalize(bedType.name), bedType]));
   const roomNumbers = new Set(existingRoomNumbers.map(normalize));
   const rowResults: RoomImportRowResult[] = [];
   const importedRooms: ImportedRoomData[] = [];
@@ -300,7 +332,7 @@ export const parseRoomImportArchive = async (
         maxExtraGuests: 0,
         extraAdultFee: 0,
         extraChildFee: 0,
-        bedType: "",
+        beds: [],
         status,
         amenities: roomAmenities,
         description: value("Mô tả"),
@@ -317,5 +349,71 @@ export const parseRoomImportArchive = async (
       });
     }
   });
-  return { rooms: importedRooms, rows: rowResults };
+
+  const bedHeaders = bedRows[0]?.map(normalize) ?? [];
+  const missingBedHeaders = BED_HEADERS.filter((header) => !bedHeaders.includes(normalize(header)));
+  if (missingBedHeaders.length) {
+    throw new Error(`Sheet Giường phòng thiếu cột: ${missingBedHeaders.join(", ")}.`);
+  }
+  const roomsByNumber = new Map(importedRooms.map((room) => [normalize(room.roomNumber), room]));
+  const invalidBedRooms = new Set<string>();
+  const assignedBedKeys = new Set<string>();
+  bedRows.slice(1).forEach((row, index) => {
+    if (row.every((cell) => !cell?.trim())) return;
+    const rowNumber = index + 2;
+    const value = (header: string) => {
+      const columnIndex = bedHeaders.indexOf(normalize(header));
+      return columnIndex < 0 ? "" : row[columnIndex]?.trim() ?? "";
+    };
+    const roomNumber = value("Số phòng");
+    const roomKey = normalize(roomNumber);
+    const room = roomsByNumber.get(roomKey);
+    try {
+      if (!room) throw new Error(`Không tìm thấy phòng "${roomNumber}" trong sheet Dữ liệu phòng.`);
+      const rawBedType = value("Loại giường");
+      const bedType = bedTypes.get(normalize(rawBedType));
+      if (!bedType) throw new Error(`Loại giường "${rawBedType}" không nằm trong danh mục.`);
+      const quantityText = value("Số lượng");
+      const quantity = Number(quantityText);
+      if (!quantityText || !Number.isSafeInteger(quantity) || quantity < 1) {
+        throw new Error("Số lượng phải là số nguyên từ 1 trở lên.");
+      }
+      const key = `${roomKey}:${bedType.id}`;
+      if (assignedBedKeys.has(key)) {
+        throw new Error(`Loại giường "${bedType.name}" bị khai báo trùng cho phòng ${roomNumber}.`);
+      }
+      assignedBedKeys.add(key);
+      room.beds.push({ bedTypeId: bedType.id, bedTypeName: bedType.name, quantity });
+      rowResults.push({
+        rowNumber,
+        roomNumber,
+        passed: true,
+        message: `Sheet Giường phòng: đã gán ${quantity} × ${bedType.name}.`,
+      });
+    } catch (error) {
+      if (roomKey) invalidBedRooms.add(roomKey);
+      rowResults.push({
+        rowNumber,
+        roomNumber,
+        passed: false,
+        message: error instanceof Error ? error.message : `Dòng ${rowNumber} ở sheet Giường phòng không hợp lệ.`,
+      });
+    }
+  });
+
+  importedRooms.forEach((room) => {
+    const roomKey = normalize(room.roomNumber);
+    if (room.beds.length === 0) {
+      invalidBedRooms.add(roomKey);
+      const roomResult = rowResults.find((result) =>
+        result.passed && normalize(result.roomNumber) === roomKey && !result.message?.startsWith("Sheet Giường phòng:"),
+      );
+      if (roomResult) {
+        roomResult.passed = false;
+        roomResult.message = `Phòng ${room.roomNumber} chưa có cấu hình giường trong sheet Giường phòng.`;
+      }
+    }
+  });
+  const validRooms = importedRooms.filter((room) => !invalidBedRooms.has(normalize(room.roomNumber)));
+  return { rooms: validRooms, rows: rowResults };
 };

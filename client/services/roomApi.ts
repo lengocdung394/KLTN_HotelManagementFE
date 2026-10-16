@@ -14,6 +14,13 @@ export type RoomResponse = {
   roomType?: string;
   roomName?: string;
   roomStatus?: string;
+  area?: number | string | null;
+  beds?: Array<{
+    bedTypeId?: number;
+    bedTypeName?: string;
+    quantity?: number;
+    [key: string]: unknown;
+  }>;
   basePrice?: number;
   price?: number;
   totalPrice?: number;
@@ -35,6 +42,7 @@ export type RoomCreateRequest = {
   roomType: string;
   defaultImageIndex: number;
   amenityIds: number[];
+  beds: Array<{ bedTypeId: number; quantity: number }>;
 };
 export type RoomUpdateRequest = RoomCreateRequest & {
   keptImageUrls: string[];
@@ -43,9 +51,19 @@ export type RoomTypeDetailResponse = {
   [key: string]: unknown;
 };
 export type BedTypeResponse = {
-  id?: string;
+  id?: number;
   name?: string;
+  bedTypeName?: string;
+  description?: string;
+  capacity?: number;
+  isExtraBed?: boolean;
   [key: string]: unknown;
+};
+export type BedTypeRequest = {
+  name: string;
+  description: string;
+  capacity: number;
+  isExtraBed: boolean;
 };
 export type RoomDailyPricesResponse = Record<string, Record<string, number>>;
 
@@ -201,6 +219,25 @@ export const roomApi = baseApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response: ApiResponse<BedTypeResponse[]>) => response?.result ?? [],
+      providesTags: ["BedType"],
+    }),
+
+    createBedType: builder.mutation<BedTypeResponse, BedTypeRequest>({
+      query: (data) => ({ url: "/bedTypes/createBedType", method: "POST", data }),
+      transformResponse: (response: ApiResponse<BedTypeResponse>) => response?.result,
+      invalidatesTags: ["BedType"],
+    }),
+
+    updateBedType: builder.mutation<BedTypeResponse, { id: number; bedType: BedTypeRequest }>({
+      query: ({ id, bedType }) => ({ url: `/bedTypes/updateBedType/${id}`, method: "PUT", data: bedType }),
+      transformResponse: (response: ApiResponse<BedTypeResponse>) => response?.result,
+      invalidatesTags: ["BedType"],
+    }),
+
+    importBedTypes: builder.mutation<BedTypeResponse[], BedTypeRequest[]>({
+      query: (data) => ({ url: "/bedTypes/importExcel", method: "POST", data }),
+      transformResponse: (response: ApiResponse<BedTypeResponse[]>) => response?.result ?? [],
+      invalidatesTags: ["BedType"],
     }),
 
     getRoomStatuses: builder.query<string[], void>({
@@ -350,4 +387,4 @@ export const roomApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useCreateRoomMutation, useUpdateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;
+export const { useCreateRoomMutation, useUpdateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useCreateBedTypeMutation, useUpdateBedTypeMutation, useImportBedTypesMutation, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;

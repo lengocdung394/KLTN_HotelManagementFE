@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
-import { useCreatePromotionMutation, useGetPromotionsQuery, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { useCreatePromotionMutation, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
+import type { SuperAdminBranch } from "../services/superAdminApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 
 type PromotionFormValues = {
@@ -91,24 +93,33 @@ const scopeLabelKeys: Record<PromotionScope, string> = {
 };
 
 const promotionErrorMessage = (error: unknown) => {
-  if (!error || typeof error !== "object") return "Không thể tạo khuyến mãi. Vui lòng thử lại.";
+  if (!error || typeof error !== "object") return "Không thể lưu khuyến mãi. Vui lòng thử lại.";
   const data = "data" in error ? error.data : undefined;
   if (typeof data === "string") return data;
   if (data && typeof data === "object" && "message" in data && typeof data.message === "string") return data.message;
   if ("error" in error && typeof error.error === "string") return error.error;
-  return "Không thể tạo khuyến mãi. Vui lòng thử lại.";
+  return "Không thể lưu khuyến mãi. Vui lòng thử lại.";
 };
 
 const isPercentageDiscount = (valueType: unknown) => String(valueType ?? "").toUpperCase().includes("PERCENT");
 
-export default function PromotionWorkspace() {
+export default function PromotionWorkspace({ branches = [] }: { branches?: SuperAdminBranch[] }) {
   const { t, i18n } = useTranslation();
   const dispatch = useAppDispatch();
   const { hotelId, roles } = useAppSelector((state) => state.auth);
+  const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const canManagePromotions = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
-  const { data: apiPromotions = [], isLoading, isError } = useGetPromotionsQuery(hasHotelId ? { hotelId: Number(hotelId), page: 0, size: 100 } : undefined, { skip: !hasHotelId });
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const { data: apiPromotions = [], isLoading, isError } = useGetPromotionsQuery(
+    isSystemAdmin
+      ? { ...(selectedBranchId ? { hotelId: Number(selectedBranchId) } : {}), page: 0, size: 100 }
+      : hasHotelId ? { hotelId: Number(hotelId), page: 0, size: 100 } : undefined,
+    { skip: !hasHotelId && !isSystemAdmin },
+  );
   const [createPromotion, { isLoading: isCreatingPromotion }] = useCreatePromotionMutation();
+  const [updatePromotion, { isLoading: isUpdatingPromotion }] = useUpdatePromotionMutation();
+  const isSavingPromotion = isCreatingPromotion || isUpdatingPromotion;
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -183,7 +194,7 @@ export default function PromotionWorkspace() {
   }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate, searchQuery, statusFilter]);
 
   useEffect(() => {
-    if (!hasHotelId) return;
+    if (!hasHotelId && !isSystemAdmin) return;
     const refreshPromotions = () => dispatch(baseApi.util.invalidateTags(["Promotion"]));
     bindHotelSocketEvents({
       onPromotionUpdate: refreshPromotions,
@@ -199,7 +210,7 @@ export default function PromotionWorkspace() {
         });
       },
     });
-  }, [dispatch, hasHotelId, t]);
+  }, [dispatch, hasHotelId, isSystemAdmin, t]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -301,34 +312,27 @@ export default function PromotionWorkspace() {
       endDate: `${form.endDate}:00`,
       usageLimit: optionalNumber(form.usageLimit),
       status: form.status,
-      isExclusive: form.isExclusive,
+      isExclusive: editingPromotion ? form.isExclusive : false,
     };
 
     if (editingPromotion) {
-      setPromotions(displayedPromotions.map((promotion) => promotion.id === editingPromotion.id
-        ? {
-          ...promotion,
-          name: promotionInfo.name,
-          description: promotionInfo.description ?? "",
-          type: promotionInfo.type,
-          value: promotionInfo.discountValue,
-          valueType: promotionInfo.discountType,
-          maxDiscountAmount: promotionInfo.maxDiscountAmount,
-          minBookingValue: promotionInfo.minBookingValue,
-          minRoomValue: promotionInfo.minRoomValue,
-          minServiceValue: promotionInfo.minServiceValue,
-          startDate: promotionInfo.startDate,
-          endDate: promotionInfo.endDate,
-          usageLimit: promotionInfo.usageLimit,
-          status: promotionInfo.status,
-          active: promotionInfo.status === "ACTIVE",
-          isExclusive: promotionInfo.isExclusive,
-        }
-        : promotion));
-      setModalOpen(false);
-      setEditingPromotion(null);
-      setForm(initialForm);
-      toast({ variant: "default", title: label("updatedLocally") });
+      try {
+        await updatePromotion({
+          id: editingPromotion.id,
+          promotionInfo,
+          image: imageFile ?? undefined,
+        }).unwrap();
+        setPromotions([]);
+        setForm(initialForm);
+        setImageFile(null);
+        setEditingPromotion(null);
+        setModalOpen(false);
+        toast({ variant: "promotion", title: label("updatedSuccessfully") });
+      } catch (error) {
+        const message = promotionErrorMessage(error);
+        setFormError(message);
+        toast({ variant: "destructive", title: label("updateFailed"), description: message });
+      }
       return;
     }
 
@@ -352,8 +356,8 @@ export default function PromotionWorkspace() {
     }
   };
   return (
-    <div className="mt-6 space-y-5">
-      {modalOpen && (
+    <div className="mt-2 space-y-5">
+      {modalOpen && createPortal((
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4">
           <form
             onSubmit={addPromotion}
@@ -404,11 +408,7 @@ export default function PromotionWorkspace() {
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
                     {label("image")} <span className="text-rose-500">*</span>
-                    <input type="file" accept="image/*" disabled={Boolean(editingPromotion)} onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-sm font-normal text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50" />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 sm:col-span-2">
-                    <input type="checkbox" checked={form.isExclusive} onChange={(event) => setForm({ ...form, isExclusive: event.target.checked })} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                    {label("exclusive")} <span className="text-rose-500">*</span>
+                    <input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-sm font-normal text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
                   </label>
                 </div>
               </section>
@@ -492,23 +492,23 @@ export default function PromotionWorkspace() {
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                disabled={isCreatingPromotion}
+                disabled={isSavingPromotion}
                 className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600"
               >
                 {label("cancel")}
               </button>
               <button
                 type="submit"
-                disabled={isCreatingPromotion}
+                disabled={isSavingPromotion}
                 className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isCreatingPromotion ? label("creating") : label(editingPromotion ? "update" : "save")}
+                {isSavingPromotion ? label("creating") : label(editingPromotion ? "update" : "save")}
               </button>
             </div>
           </form>
         </div>
-      )}
-      {detailPromotion && (
+      ), document.body)}
+      {detailPromotion && createPortal((
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4">
           <section
             role="dialog"
@@ -597,7 +597,7 @@ export default function PromotionWorkspace() {
             </div>
           </section>
         </div>
-      )}
+      ), document.body)}
       <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 p-5">
           <div className="flex items-start gap-3">
@@ -615,6 +615,22 @@ export default function PromotionWorkspace() {
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4 sm:px-5">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+            {isSystemAdmin && (
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                <span>Chi nhánh</span>
+                <select
+                  value={selectedBranchId}
+                  onChange={(event) => setSelectedBranchId(event.target.value)}
+                  aria-label="Lọc khuyến mãi theo chi nhánh"
+                  className="h-10 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">Tất cả chi nhánh</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="flex items-center gap-2">
               <DatePickerPopover
                 iconOnly
@@ -692,7 +708,7 @@ export default function PromotionWorkspace() {
           <p className="p-8 text-center text-sm text-rose-600">
             Không thể tải danh sách khuyến mãi.
           </p>
-        ) : !hasHotelId ? (
+        ) : !hasHotelId && !isSystemAdmin ? (
           <p className="p-8 text-center text-sm text-slate-500">
             Chưa xác định được chi nhánh hiện tại.
           </p>
@@ -711,13 +727,13 @@ export default function PromotionWorkspace() {
                 return (
                 <article
                   key={promotion.id}
-                  className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between"
+                  className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(410px,auto)] lg:items-center"
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
                     <div className={`grid h-10 w-10 place-items-center rounded-xl ${scopeColorClasses[scope]}`}>
                       <Tag size={18} />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="font-bold text-slate-900">
                           {promotion.name}
@@ -737,7 +753,7 @@ export default function PromotionWorkspace() {
                           </button>
                         ) : <span className="text-xs text-slate-400">{label("codeGenerated")}</span>}
                       </div>
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 truncate text-sm text-slate-500" title={promotion.description}>
                         {promotion.description}
                       </p>
                       <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
@@ -747,8 +763,8 @@ export default function PromotionWorkspace() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-3 lg:justify-end">
-                    <div>
+                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_auto_auto] lg:justify-items-end">
+                    <div className="text-right">
                       <p className="text-xs text-slate-400">
                         {label("offerLevel")}
                       </p>
@@ -756,9 +772,11 @@ export default function PromotionWorkspace() {
                         {formatValue(promotion)}
                       </p>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
-                      {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
-                    </span>
+                    <div className="flex w-[120px] justify-end">
+                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
+                        {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setDetailPromotion(promotion)}

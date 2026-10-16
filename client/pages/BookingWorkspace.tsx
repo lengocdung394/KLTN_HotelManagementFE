@@ -119,6 +119,18 @@ const matrixValue = (item: Record<string, unknown>, keys: string[]) => {
   return key ? item[key] : undefined;
 };
 
+const bookingPromotionApplyAt = (booking?: BookingListItem) => {
+  if (!booking) return null;
+  const nestedPromotion = [booking.promotion, booking.promotionInfo, booking.customerPromotion, booking.appliedPromotion]
+    .find((value) => value && typeof value === "object") as Record<string, unknown> | undefined;
+  const value = booking.applyAt
+    ?? booking.promotionApplyAt
+    ?? booking.promotionAppliedAt
+    ?? nestedPromotion?.applyAt
+    ?? nestedPromotion?.appliedAt;
+  return typeof value === "string" && value.trim() ? value : null;
+};
+
 const matrixRoomKey = (item: Record<string, unknown>) => {
   const value = matrixValue(item, ["roomId", "roomID", "room_id", "roomNumber", "roomNo", "roomCode", "roomCode"]);
   return value === undefined ? undefined : String(value);
@@ -188,6 +200,61 @@ const buildMatrixBusyMap = (matrix: RoomMatrixResponse[], excludedBookingId?: st
   };
   walk(matrix);
   return busy;
+};
+
+const matrixGuestName = (item: Record<string, unknown>) => {
+  const directName = matrixValue(item, ["customerName", "customerFullName", "guestName", "guestFullName", "fullName"]);
+  if (typeof directName === "string" && directName.trim()) return directName.trim();
+
+  const customer = item.customer && typeof item.customer === "object"
+    ? item.customer as Record<string, unknown>
+    : undefined;
+  const customerName = customer ? matrixValue(customer, ["fullName", "customerName", "name"]) : undefined;
+  return typeof customerName === "string" && customerName.trim() ? customerName.trim() : undefined;
+};
+
+const buildMatrixGuestNameMap = (matrix: RoomMatrixResponse[], excludedBookingId?: string) => {
+  const names = new Map<string, Map<string, string>>();
+  const addName = (roomKey: string | undefined, date: string, name: string | undefined) => {
+    if (!roomKey || !name) return;
+    const roomNames = names.get(roomKey) ?? new Map<string, string>();
+    if (!roomNames.has(date)) roomNames.set(date, name);
+    names.set(roomKey, roomNames);
+  };
+  const walk = (value: unknown, inheritedRoomKey?: string, inheritedGuestName?: string) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => walk(item, inheritedRoomKey, inheritedGuestName));
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+
+    const item = value as Record<string, unknown>;
+    const bookingId = matrixValue(item, ["bookingId", "bookingID", "booking_id", "orderId", "orderID"]);
+    if (excludedBookingId && bookingId !== undefined && String(bookingId) === excludedBookingId) return;
+
+    const roomKey = matrixRoomKey(item) ?? inheritedRoomKey;
+    const status = String(item.bookingStatus ?? item.status ?? "").toUpperCase();
+    if (status === "CANCELLED" || status === "CANCELED") return;
+
+    const guestName = matrixGuestName(item) ?? inheritedGuestName;
+    const start = matrixDate(matrixValue(item, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]));
+    const end = matrixDate(matrixValue(item, ["endDate", "end", "checkOutDate", "checkOut", "checkOutTime", "checkoutTime", "bookingEndDate"]));
+    if (start && end && start < end) {
+      for (let date = start; date < end; date = shiftDay(date, 1)) addName(roomKey, date, guestName);
+    }
+
+    const dates = item.dates ?? item.bookedDates ?? item.occupiedDates;
+    if (Array.isArray(dates)) {
+      dates.forEach((date) => {
+        const normalizedDate = matrixDate(date);
+        if (normalizedDate) addName(roomKey, normalizedDate, guestName);
+      });
+    }
+
+    Object.values(item).forEach((child) => walk(child, roomKey, guestName));
+  };
+  walk(matrix);
+  return names;
 };
 
 // Dịch 1 chuỗi ngày "YYYY-MM-DD" đi +/- delta ngày
@@ -431,6 +498,7 @@ function DesktopCalendar({
   }, [dispatch, hotelId]);
 
   const matrixBusyDays = useMemo(() => buildMatrixBusyMap(roomMatrix, editingBookingId), [roomMatrix, editingBookingId]);
+  const matrixGuestNames = useMemo(() => buildMatrixGuestNameMap(roomMatrix, editingBookingId), [roomMatrix, editingBookingId]);
   useEffect(() => {
     onDailyPricesChange?.(dailyRoomPrices);
   }, [dailyRoomPrices, onDailyPricesChange]);
@@ -946,6 +1014,10 @@ function DesktopCalendar({
                   ? roomKeysOf(room).flatMap((key) => booked[key] ?? []).find((item) => day >= item.start && day < item.end)
                   : undefined;
                 const matrixReserved = isMatrixReserved(room, day);
+                const bookedGuestName = roomKeysOf(room)
+                  .map((roomKey) => matrixGuestNames.get(roomKey)?.get(day))
+                  .find((name): name is string => Boolean(name))
+                  ?? (reservation?.guest);
                 const roomRange = selectedRanges[room.id];
                 const inRange = Boolean(roomRange) && day >= roomRange.checkIn && day < roomRange.checkOut;
                 const isOwnBookingDate = isBookingRoomDate(editingBookingRanges, roomKeysOf(room), day);
@@ -963,7 +1035,7 @@ function DesktopCalendar({
                     key={`${room.id}-${day}`}
                     onPointerDown={handlePointerDown(room.id, dayIndex)}
                     onPointerEnter={handlePointerEnter(room.id, dayIndex)}
-                    title={reservation ? `${reservation.guest} · đã đặt` : undefined}
+                    title={matrixReserved || reservation ? `${bookedGuestName ?? "Khách"} · đã đặt` : undefined}
                     className="p-1"
                   >
                     <div className={`flex h-full min-h-[72px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-2xs transition-all duration-150 ${
@@ -979,8 +1051,10 @@ function DesktopCalendar({
                         ? "border-blue-200 bg-blue-100/80 text-blue-900 font-bold"
                         : "border-slate-200/90 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50/80 hover:text-blue-900 shadow-2xs"
                     }`}>
-                      <span className="truncate text-center text-[10px] font-extrabold">
-                        {reservation || matrixReserved ? "Đã đặt" : `${money(roomPriceForDay(room, day))}/đêm`}
+                      <span className="whitespace-nowrap text-center text-[10px] font-extrabold">
+                        {reservation || matrixReserved
+                          ? bookedGuestName ?? "Đã đặt"
+                          : money(roomPriceForDay(room, day)).replace("đ", "Đ")}
                       </span>
                     </div>
                   </div>
@@ -1288,7 +1362,10 @@ export default function BookingWorkspace() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const selectedRooms = [...rooms, ...loadedBookingRooms].filter((room, index, allRooms) => selected.includes(room.id) && allRooms.findIndex((candidate) => candidate.id === room.id) === index);
+  const selectedRooms = useMemo(
+    () => [...rooms, ...loadedBookingRooms].filter((room, index, allRooms) => selected.includes(room.id) && allRooms.findIndex((candidate) => candidate.id === room.id) === index),
+    [rooms, loadedBookingRooms, selected],
+  );
   const detailRoomKeysOf = (detail: Record<string, unknown>) => [detail.roomId, detail.roomID, detail.roomNumber, detail.roomNo, detail.roomCode]
     .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
     .map(String);
@@ -1559,10 +1636,11 @@ export default function BookingWorkspace() {
     ));
     const promotionEligible = Boolean(appliedPromotion)
       && !promotionEligibilityMessage(
-        isPersistedPromotion ? { ...appliedPromotion, used: false } : appliedPromotion,
+        appliedPromotion,
         subtotal,
         roomTotal,
         serviceTotal,
+        { alreadyApplied: isPersistedPromotion, applyAt: bookingPromotionApplyAt(initialBooking) },
       );
     const isCustomerPromotion = Boolean((appliedPromotion as SelectedPromotion & { customerId?: string } | null)?.customerId);
 
@@ -1952,7 +2030,7 @@ export default function BookingWorkspace() {
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-sky-500" />{t("booking.available")}</span>
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-violet-500" />{t("booking.selecting")}</span>
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />{t("booking.booked")}</span>
-              
+
               <label className="flex items-center gap-1.5 text-slate-600"><input type="checkbox" checked={showFull} onChange={(event) => setShowFull(event.target.checked)} />{t("booking.showFullRooms")}</label>
             </div>
           </div>
@@ -2128,7 +2206,7 @@ export default function BookingWorkspace() {
         </div>
       ) : (
         <div className="grid gap-6 p-5 lg:grid-cols-[1fr_360px]">
-          {step === "promotion" && <PromotionSelector customerId={bookingGuest.customerId} initialPromotionId={initialBooking?.promotionId} initialCustomerPromotionId={initialBooking?.customerPromotionId} orderTotal={subtotal} roomTotal={roomTotal} serviceTotal={serviceTotal} onApply={setAppliedPromotion} onEligibilityChange={setPromotionBlocked} />}
+          {step === "promotion" && <PromotionSelector customerId={bookingGuest.customerId} initialPromotionId={initialBooking?.promotionId} initialCustomerPromotionId={initialBooking?.customerPromotionId} initialPromotionApplyAt={bookingPromotionApplyAt(initialBooking)} orderTotal={subtotal} roomTotal={roomTotal} serviceTotal={serviceTotal} onApply={setAppliedPromotion} onEligibilityChange={setPromotionBlocked} />}
           <div className={step === "promotion" ? "hidden" : "payment-column"}>
             {false && <div className="payment-heading flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3"><CreditCard size={16} className="text-blue-600" /><div><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-0.5 text-xs text-slate-500">{t("booking.paymentRequired")}</p></div></div>}
             {step === "guest" ? <><div className="mb-4 grid gap-2 sm:grid-cols-2">{selectedRooms.map((room) => <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600"><strong className="text-blue-700">Phòng {room.id}</strong><span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span></div>)}</div><GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} /></> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}

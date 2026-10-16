@@ -58,9 +58,18 @@ export type CreatePromotionRequest = {
   isExclusive: boolean;
 };
 
+export type UpdatePromotionRequest = CreatePromotionRequest;
+
 type PromotionApiResponse = Record<string, unknown>;
 
 const valueOf = (item: PromotionApiResponse, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
+
+const promotionFormData = (promotionInfo: CreatePromotionRequest, image?: File) => {
+  const formData = new FormData();
+  formData.append("promotionInfo", new Blob([JSON.stringify(promotionInfo)], { type: "application/json" }));
+  if (image) formData.append("image", image);
+  return formData;
+};
 
 const parseNumber = (value: unknown) => {
   const parsed = Number(value);
@@ -150,16 +159,20 @@ export const promotionApi = baseApi.injectEndpoints({
       providesTags: ["Promotion"],
     }),
     createPromotion: builder.mutation<Promotion, { promotionInfo: CreatePromotionRequest; image?: File }>({
-      query: ({ promotionInfo, image }) => {
-        const formData = new FormData();
-        formData.append("promotionInfo", new Blob([JSON.stringify(promotionInfo)], { type: "application/json" }));
-        if (image) formData.append("image", image);
-        return {
-          url: "/promotions",
-          method: "POST",
-          data: formData,
-        };
-      },
+      query: ({ promotionInfo, image }) => ({
+        url: "/promotions",
+        method: "POST",
+        data: promotionFormData(promotionInfo, image),
+      }),
+      transformResponse: (response: ApiResponse<PromotionApiResponse>) => normalizePromotion(response?.result ?? {}),
+      invalidatesTags: ["Promotion"],
+    }),
+    updatePromotion: builder.mutation<Promotion, { id: string; promotionInfo: UpdatePromotionRequest; image?: File }>({
+      query: ({ id, promotionInfo, image }) => ({
+        url: `/promotions/${id}`,
+        method: "PUT",
+        data: promotionFormData(promotionInfo, image),
+      }),
       transformResponse: (response: ApiResponse<PromotionApiResponse>) => normalizePromotion(response?.result ?? {}),
       invalidatesTags: ["Promotion"],
     }),
@@ -170,4 +183,9 @@ export const promotionApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useGetPromotionsQuery, useCreatePromotionMutation, useGetCustomerPromotionsQuery } = promotionApi;
+export const {
+  useGetPromotionsQuery,
+  useCreatePromotionMutation,
+  useUpdatePromotionMutation,
+  useGetCustomerPromotionsQuery,
+} = promotionApi;
