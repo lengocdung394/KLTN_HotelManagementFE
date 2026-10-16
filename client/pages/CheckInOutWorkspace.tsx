@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "../components/CheckoutSummary";
+import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from "../components/CheckoutSurplusRefundChoice";
 import CheckInOutBookingDetailModal from "../components/CheckInOutBookingDetailModal";
 import LateCheckoutPreview, { type LateCheckoutRecord } from "../components/LateCheckoutPreview";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -17,6 +18,7 @@ import {
   useBulkCheckOutMutation,
   useGetTodayCheckInsQuery,
   useGetTodayCheckOutsQuery,
+  type CheckoutSurplusRefundMethod as ApiCheckoutSurplusRefundMethod,
   type CheckInOutBookingDetail,
 } from "../services/checkInOutApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -175,6 +177,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     .find((entries) => entries.length > 0) ?? [];
   const groupedServices = new Map<string, ServiceCharge>();
   collectServiceEntries(rawServices).forEach((service) => {
+    if (service.cancelled === true || String(service.cancelled).toLowerCase() === "true" || service.cancelledAt) return;
     const nestedService = service.service && typeof service.service === "object"
       ? service.service as Record<string, unknown>
       : {};
@@ -214,7 +217,9 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     ? parsedPaidAmount
     : undefined;
   const parsedEarlyCheckInFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
-  const earlyCheckInFee = Number.isFinite(parsedEarlyCheckInFee) ? parsedEarlyCheckInFee : 0;
+  const earlyCheckInFee = flow === "check-out" && Number.isFinite(parsedEarlyCheckInFee) ? parsedEarlyCheckInFee : 0;
+  const parsedEstimatedEarlyCheckInFee = Number(detail.estimatedEarlyCheckInFee ?? 0);
+  const estimatedEarlyCheckInFee = Number.isFinite(parsedEstimatedEarlyCheckInFee) ? parsedEstimatedEarlyCheckInFee : 0;
   const rawLateFee = detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee;
   const parsedLateFee = rawLateFee === undefined || rawLateFee === null || rawLateFee === ""
     ? undefined
@@ -246,6 +251,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     roomAmount,
     totalAmount,
     earlyCheckInFee,
+    estimatedEarlyCheckInFee,
     lateFee,
     roomPaid,
     paidAmount,
@@ -415,8 +421,11 @@ export default function CheckInOutWorkspace() {
     [],
   );
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
+  const [batchCheckoutRefundMethods, setBatchCheckoutRefundMethods] = useState<Record<string, CheckoutSurplusRefundMethod>>({});
   const [groupCheckoutOpen, setGroupCheckoutOpen] = useState(false);
   const [groupCheckoutRecords, setGroupCheckoutRecords] = useState<DailyRecord[]>([]);
+  const [groupCheckoutRefundMethod, setGroupCheckoutRefundMethod] = useState<CheckoutSurplusRefundMethod | null>(null);
+  const [singleCheckoutRefundMethod, setSingleCheckoutRefundMethod] = useState<CheckoutSurplusRefundMethod | null>(null);
   const [warningAction, setWarningAction] = useState<{ id: string; flow: "check-in" | "check-out"; message: string; fee: number } | null>(null);
   const [bulkCheckIn, { isLoading: isBulkCheckInLoading }] = useBulkCheckInMutation();
   const [bulkCheckOut, { isLoading: isBulkCheckOutLoading }] = useBulkCheckOutMutation();
@@ -443,7 +452,6 @@ export default function CheckInOutWorkspace() {
         const remainingAmount = record.remainingAmount ?? fees?.remainingAmount;
         return {
           ...record,
-          earlyCheckInFee: fees?.earlyCheckInFee ?? record.earlyCheckInFee,
           lateFee: fees?.lateFee ?? record.lateFee,
           remainingAmount,
           roomPaid: remainingAmount !== undefined ? remainingAmount <= 0 : record.roomPaid,
@@ -610,8 +618,8 @@ export default function CheckInOutWorkspace() {
       setWarningAction({
         id: record.id,
         flow: record.flow,
-        fee: Number(record.earlyCheckInFee ?? 0),
-        message: `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.`,
+        fee: Number(record.estimatedEarlyCheckInFee ?? 0),
+        message: `Nếu check-in ngay trước giờ dự kiến ${record.time}, khách sẽ cần phụ thu thêm.`,
       });
     } else if (record.flow === "check-in") {
       void handleBulkCheckIn([record]);
@@ -714,8 +722,11 @@ export default function CheckInOutWorkspace() {
     }
   };
 
-  const handleBulkCheckOut = async (records: DailyRecord[]) => {
-    if (records.length === 0) return;
+  const handleBulkCheckOut = async (
+    records: DailyRecord[],
+    refundMethodsByBooking: Record<string, ApiCheckoutSurplusRefundMethod> = {},
+  ): Promise<boolean> => {
+    if (records.length === 0) return false;
     const invalidRecord = records.find((record) => !record.bookingId || normalizeDetailId(record.id) === null);
     if (invalidRecord) {
       toast({
@@ -723,7 +734,7 @@ export default function CheckInOutWorkspace() {
         title: "Không thể check-out",
         description: "Thiếu mã booking hoặc mã chi tiết phòng nên chưa gửi được yêu cầu.",
       });
-      return;
+      return false;
     }
 
     const grouped = records.reduce<Record<string, string[]>>((result, record) => {
@@ -736,7 +747,11 @@ export default function CheckInOutWorkspace() {
     try {
       await Promise.all(
         Object.entries(grouped).map(([bookingId, bookingDetailIds]) =>
-          bulkCheckOut({ bookingId, bookingDetailIds }).unwrap(),
+          bulkCheckOut({
+            bookingId,
+            bookingDetailIds,
+            surplusRefundMethod: refundMethodsByBooking[bookingId],
+          }).unwrap(),
         ),
       );
       records.forEach((record) => completeRecord(record.id, "check-out"));
@@ -745,6 +760,7 @@ export default function CheckInOutWorkspace() {
         title: "Check-out thành công",
         description: `Đã hoàn tất check-out cho ${records.length} phòng.`,
       });
+      return true;
     } catch (error) {
       console.error("Bulk check-out failed", error);
       const responseError = error as { data?: { message?: string; error?: string }; error?: string };
@@ -753,6 +769,7 @@ export default function CheckInOutWorkspace() {
         title: "Check-out thất bại",
         description: responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? "Không thể hoàn tất check-out. Vui lòng thử lại.",
       });
+      return false;
     }
   };
 
@@ -795,11 +812,20 @@ export default function CheckInOutWorkspace() {
 
   const confirmBatchCheckout = async () => {
     const selectedRecords = departureState.filter((record) => selectedDepartureIds.includes(record.id));
-    if (selectedRecords.length > 0) {
-      await handleBulkCheckOut(selectedRecords);
+    const selectedBookingIds = [...new Set(selectedRecords.map((record) => record.bookingId).filter((id): id is string => Boolean(id)))];
+    const finalBookingIds = selectedBookingIds.filter((bookingId) =>
+      departureState.filter((record) => record.bookingId === bookingId)
+        .every((record) => selectedDepartureIds.includes(record.id)),
+    );
+    const completed = selectedRecords.length > 0
+      && finalBookingIds.every((id) => batchCheckoutRefundMethods[id])
+      ? await handleBulkCheckOut(selectedRecords, batchCheckoutRefundMethods)
+      : false;
+    if (completed) {
+      setSelectedDepartureIds([]);
+      setBatchCheckoutOpen(false);
+      setBatchCheckoutRefundMethods({});
     }
-    setSelectedDepartureIds([]);
-    setBatchCheckoutOpen(false);
   };
 
   const groupArrivalComplete = groupArrivalState.rooms.every((room) => checkedInGroupRooms.includes(room));
@@ -812,6 +838,7 @@ export default function CheckInOutWorkspace() {
   }));
   const batchDialogRooms = departureState.filter((record) => record.status === "Đang ở").map((record) => ({
     id: record.id,
+    bookingId: record.bookingId,
     badge: record.room.split(" · ")[0].slice(-2),
     label: record.guest,
     meta: `Phòng ${record.room.split(" · ")[0]}`,
@@ -829,10 +856,26 @@ export default function CheckInOutWorkspace() {
     lateFee: record.lateFee,
   }));
 
+  const isFinalSingleCheckout = (record: DailyRecord) =>
+    departureState.filter((item) => item.bookingId === record.bookingId).length <= 1;
+
+  const closeSingleCheckout = () => {
+    setCheckoutRecord(null);
+    setSingleCheckoutRefundMethod(null);
+  };
+
   const confirmCheckout = async () => {
     if (!checkoutRecord) return;
-    await handleBulkCheckOut([checkoutRecord]);
-    setCheckoutRecord(null);
+    const completed = await handleBulkCheckOut(
+      [checkoutRecord],
+      isFinalSingleCheckout(checkoutRecord) && checkoutRecord.bookingId && singleCheckoutRefundMethod
+        ? { [checkoutRecord.bookingId]: singleCheckoutRefundMethod }
+        : {},
+    );
+    if (completed) {
+      setCheckoutRecord(null);
+      setSingleCheckoutRefundMethod(null);
+    }
   };
 
   const handleLateCheckout = (lateCheckout: LateCheckoutRecord) => {
@@ -1263,6 +1306,7 @@ export default function CheckInOutWorkspace() {
               onAction={(nextSelected) => {
                 if (nextSelected.length === 0) return;
                 setGroupCheckoutRecords(records.filter((record) => nextSelected.includes(record.id)));
+                setGroupCheckoutRefundMethod(null);
                 setGroupCheckoutOpen(true);
               }}
             />
@@ -1508,7 +1552,7 @@ export default function CheckInOutWorkspace() {
           return (
             <div
               className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
-              onMouseDown={() => setCheckoutRecord(null)}
+              onMouseDown={closeSingleCheckout}
             >
               <div
                 className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"
@@ -1529,7 +1573,7 @@ export default function CheckInOutWorkspace() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setCheckoutRecord(null)}
+                    onClick={closeSingleCheckout}
                     className="text-2xl leading-none text-slate-400"
                   >
                     ×
@@ -1603,10 +1647,19 @@ export default function CheckInOutWorkspace() {
                     </strong>
                   </div>
                 </div>
+                {isFinalSingleCheckout(checkoutRecord) && (
+                  <div className="mt-4">
+                    <CheckoutSurplusRefundChoice
+                      name={`checkout-refund-${checkoutRecord.bookingId ?? checkoutRecord.id}`}
+                      value={singleCheckoutRefundMethod}
+                      onChange={setSingleCheckoutRefundMethod}
+                    />
+                  </div>
+                )}
                 <div className="mt-6 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setCheckoutRecord(null)}
+                    onClick={closeSingleCheckout}
                     className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600"
                   >
                     Hủy
@@ -1614,6 +1667,7 @@ export default function CheckInOutWorkspace() {
                   <button
                     type="button"
                     onClick={confirmCheckout}
+                    disabled={(isFinalSingleCheckout(checkoutRecord) && !singleCheckoutRefundMethod) || isBulkCheckOutLoading}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                   >
                     <CreditCard size={16} />
@@ -1640,16 +1694,30 @@ export default function CheckInOutWorkspace() {
             <div className="mt-5">
               <CheckoutSummary rooms={checkoutRoomsFromRecords(groupCheckoutRecords)} />
             </div>
+            <div className="mt-4">
+              <CheckoutSurplusRefundChoice
+                name={`checkout-refund-${groupCheckoutRecords[0]?.bookingId ?? "group"}`}
+                value={groupCheckoutRefundMethod}
+                onChange={setGroupCheckoutRefundMethod}
+              />
+            </div>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" onClick={() => setGroupCheckoutOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600">Hủy</button>
               <button
                 type="button"
                 onClick={async () => {
-                  await handleBulkCheckOut(groupCheckoutRecords);
-                  setGroupCheckoutOpen(false);
-                  setGroupCheckoutRecords([]);
+                  const bookingId = groupCheckoutRecords[0]?.bookingId;
+                  const completed = await handleBulkCheckOut(
+                    groupCheckoutRecords,
+                    bookingId && groupCheckoutRefundMethod ? { [bookingId]: groupCheckoutRefundMethod } : {},
+                  );
+                  if (completed) {
+                    setGroupCheckoutOpen(false);
+                    setGroupCheckoutRecords([]);
+                    setGroupCheckoutRefundMethod(null);
+                  }
                 }}
-                disabled={isBulkCheckOutLoading || groupCheckoutRecords.length === 0}
+                disabled={isBulkCheckOutLoading || groupCheckoutRecords.length === 0 || !groupCheckoutRefundMethod}
                 className="flex w-56 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
               >
                 <CreditCard size={16} />Thanh toán & Check-out
@@ -1894,6 +1962,10 @@ export default function CheckInOutWorkspace() {
         rooms={batchDialogRooms}
         selectedIds={selectedDepartureIds}
         checkoutSummaryRooms={checkoutRoomsFromRecords(departureState.filter((record) => selectedDepartureIds.includes(record.id)))}
+        checkoutRefundMethods={batchCheckoutRefundMethods}
+        onCheckoutRefundMethodChange={(bookingId, method) =>
+          setBatchCheckoutRefundMethods((current) => ({ ...current, [bookingId]: method }))
+        }
         onToggle={toggleDepartureSelection}
         onClose={() => setBatchCheckoutOpen(false)}
         onConfirm={confirmBatchCheckout}

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   useGetTodayCheckInsQuery,
   useGetTodayCheckOutsQuery,
+  useGetEarlyCheckInsQuery,
   type CheckInOutBookingDetail,
 } from "../services/checkInOutApi";
 import { useAppSelector } from "../store/hooks";
@@ -109,12 +110,17 @@ export default function DashboardCheckInOut() {
   const { i18n } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const [selectedDate, setSelectedDate] = useState(() => localDateString(new Date()));
+  const [activeTab, setActiveTab] = useState<"arrivals" | "departures" | "early-checkins">("arrivals");
   const checkInQuery = useGetTodayCheckInsQuery(
     { date: selectedDate, status: "PENDING", bookingStatus: "CONFIRMED" },
     { skip: !hotelId },
   );
   const checkOutQuery = useGetTodayCheckOutsQuery(
     { date: selectedDate, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
+    { skip: !hotelId },
+  );
+  const earlyCheckInsQuery = useGetEarlyCheckInsQuery(
+    { date: selectedDate },
     { skip: !hotelId },
   );
   const today = localDateString(new Date());
@@ -162,36 +168,62 @@ export default function DashboardCheckInOut() {
       {!hotelId ? (
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Chưa xác định được chi nhánh cho tài khoản này.</p>
       ) : (
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <section className="rounded-xl bg-blue-50/60 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-800">Khách chờ check-in</h4>
-              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-blue-700">
-                {checkInQuery.currentData?.length ?? 0} phòng
-              </span>
-            </div>
-            <ScheduleList
-              records={checkInQuery.currentData ?? []}
-              flow="check-in"
-              date={selectedDate}
-              isLoading={checkInQuery.isFetching}
-              isError={checkInQuery.isError}
-            />
-          </section>
-          <section className="rounded-xl bg-amber-50/60 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-slate-800">Khách chờ check-out</h4>
-              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-700">
-                {checkOutQuery.currentData?.length ?? 0} phòng
-              </span>
-            </div>
-            <ScheduleList
-              records={checkOutQuery.currentData ?? []}
-              flow="check-out"
-              date={selectedDate}
-              isLoading={checkOutQuery.isFetching}
-              isError={checkOutQuery.isError}
-            />
+        <div className="mt-4">
+          <div role="tablist" aria-label="Danh sách check-in và check-out" className="flex flex-wrap gap-2 border-b border-slate-200">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "arrivals"}
+              onClick={() => setActiveTab("arrivals")}
+              className={`rounded-t-lg px-3 py-2 text-xs font-semibold ${activeTab === "arrivals" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              Khách chờ check-in <span className="ml-1 rounded-full bg-blue-50 px-2 py-0.5">{checkInQuery.currentData?.length ?? 0}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "departures"}
+              onClick={() => setActiveTab("departures")}
+              className={`rounded-t-lg px-3 py-2 text-xs font-semibold ${activeTab === "departures" ? "border-b-2 border-amber-600 text-amber-700" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              Khách chờ check-out <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5">{checkOutQuery.currentData?.length ?? 0}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "early-checkins"}
+              onClick={() => setActiveTab("early-checkins")}
+              className={`rounded-t-lg px-3 py-2 text-xs font-semibold ${activeTab === "early-checkins" ? "border-b-2 border-emerald-600 text-emerald-700" : "text-slate-500 hover:text-slate-800"}`}
+            >
+              Đã check-in sớm <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5">{earlyCheckInsQuery.currentData?.length ?? 0}</span>
+            </button>
+          </div>
+          <section role="tabpanel" className={`rounded-b-xl rounded-tr-xl p-4 ${activeTab === "arrivals" ? "bg-blue-50/60" : activeTab === "departures" ? "bg-amber-50/60" : "bg-emerald-50/60"}`}>
+            {activeTab === "arrivals" && (
+              <ScheduleList
+                records={checkInQuery.currentData ?? []}
+                flow="check-in"
+                date={selectedDate}
+                isLoading={checkInQuery.isFetching}
+                isError={checkInQuery.isError}
+              />
+            )}
+            {activeTab === "departures" && (
+              <ScheduleList
+                records={checkOutQuery.currentData ?? []}
+                flow="check-out"
+                date={selectedDate}
+                isLoading={checkOutQuery.isFetching}
+                isError={checkOutQuery.isError}
+              />
+            )}
+            {activeTab === "early-checkins" && (
+              <EarlyCheckInList
+                records={earlyCheckInsQuery.currentData ?? []}
+                isLoading={earlyCheckInsQuery.isFetching}
+                isError={earlyCheckInsQuery.isError}
+              />
+            )}
           </section>
         </div>
       )}
@@ -201,5 +233,49 @@ export default function DashboardCheckInOut() {
         </Link>
       </div>
     </section>
+  );
+}
+
+function EarlyCheckInList({
+  records,
+  isLoading,
+  isError,
+}: {
+  records: CheckInOutBookingDetail[];
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  if (isLoading) {
+    return <p className="py-8 text-center text-sm text-slate-400">Đang tải danh sách check-in sớm...</p>;
+  }
+  if (isError) {
+    return <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">Không tải được danh sách check-in sớm. Vui lòng thử tải lại.</p>;
+  }
+  if (records.length === 0) {
+    return <p className="py-8 text-center text-sm text-slate-400">Không có phòng nào check-in sớm trong ngày này.</p>;
+  }
+
+  return (
+    <div className="max-h-[350px] space-y-2 overflow-y-auto pr-1">
+      {records.map((record, index) => (
+        <article key={`${record.bookingDetailId ?? record.bookingId ?? "record"}-${index}`} className="flex items-center gap-3 rounded-xl border border-emerald-100 bg-white p-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
+            <LogIn size={17} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-2">
+              <strong className="text-sm text-slate-900">Phòng {record.roomNumber ?? "—"}</strong>
+              <span className="truncate text-xs text-slate-500">{record.roomName ?? record.roomTypeName ?? "Phòng"}</span>
+            </span>
+            <span className="mt-1 block truncate text-xs text-slate-600">{record.nameCustomer ?? "Chưa cập nhật khách"} · Booking {record.bookingId ?? "—"}</span>
+            <span className="mt-1 block text-[11px] text-slate-400">Giờ dự kiến: {formatTime(record.checkInTime)}</span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="block text-xs font-bold text-emerald-700">Đã nhận {formatTime(record.actualCheckInTime)}</span>
+            <span className="mt-1 block text-[11px] text-slate-500">Phụ thu {Number(record.earlyCheckInFee ?? 0).toLocaleString("vi-VN")}đ</span>
+          </span>
+        </article>
+      ))}
+    </div>
   );
 }

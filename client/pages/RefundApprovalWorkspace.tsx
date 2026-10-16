@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import BankSelectionField from "../components/BankSelectionField";
+import CheckoutRefundApprovalsPanel from "../components/CheckoutRefundApprovalsPanel";
 import DatePickerPopover from "../components/DatePickerPopover";
 import {
   useApproveBookingRefundMutation,
@@ -23,6 +24,7 @@ import {
 
 type CancellationAction = "approve" | "reject" | "confirm" | "bank-details";
 type CancellationFilter = "ALL" | BookingCancellationStatus;
+type RefundAccountChoice = "saved" | "alternate";
 
 const statusLabels: Record<BookingCancellationStatus, string> = {
   REFUND_BANK_DETAILS_REQUIRED: "Chờ thông tin ngân hàng",
@@ -75,7 +77,7 @@ const actionTitle: Record<CancellationAction, string> = {
 };
 
 const actionDescription: Record<CancellationAction, string> = {
-  approve: "Sau khi duyệt, quản lý thực hiện chuyển khoản thủ công đến tài khoản bên dưới.",
+  approve: "Đối chiếu chính sách và số tiền hoàn, xác nhận với khách tài khoản nhận tiền rồi mới duyệt.",
   reject: "Yêu cầu hoàn tiền sẽ bị từ chối. Vui lòng ghi rõ lý do.",
   confirm: "Chỉ xác nhận sau khi đã chuyển tiền hoàn cho khách ngoài hệ thống.",
   "bank-details": "Nhập thông tin khách cung cấp. Khách không cần có tài khoản trên website.",
@@ -99,6 +101,9 @@ export default function RefundApprovalWorkspace() {
     bankAccountName: "",
     bankAccountNumber: "",
   });
+  const [refundAccountChoice, setRefundAccountChoice] = useState<RefundAccountChoice>("saved");
+  const [refundAmountVerified, setRefundAmountVerified] = useState(false);
+  const [refundAccountConfirmed, setRefundAccountConfirmed] = useState(false);
   const [refundEmail, setRefundEmail] = useState("");
   const [actionError, setActionError] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -173,6 +178,14 @@ export default function RefundApprovalWorkspace() {
       bankAccountNumber: cancellation.bankAccountNumber ?? "",
     });
     setRefundEmail(cancellation.refundEmail ?? "");
+    const hasSavedAccount = Boolean(
+      cancellation.bankName?.trim()
+      && cancellation.bankAccountName?.trim()
+      && cancellation.bankAccountNumber?.trim(),
+    );
+    setRefundAccountChoice(hasSavedAccount ? "saved" : "alternate");
+    setRefundAmountVerified(false);
+    setRefundAccountConfirmed(false);
     setActionError("");
   };
 
@@ -198,6 +211,30 @@ export default function RefundApprovalWorkspace() {
       setActionError("Vui lòng nhập email khách hàng hợp lệ.");
       return;
     }
+    if (activeAction === "approve") {
+      if (!refundAmountVerified) {
+        setActionError("Vui lòng đối chiếu và xác nhận số tiền hoàn trước khi duyệt.");
+        return;
+      }
+      if (!refundAccountConfirmed) {
+        setActionError("Vui lòng xác nhận đã thống nhất tài khoản nhận hoàn với khách hàng.");
+        return;
+      }
+      if (refundAccountChoice === "saved"
+        && (!activeCancellation.bankName?.trim()
+          || !activeCancellation.bankAccountName?.trim()
+          || !/^[0-9]{6,50}$/.test(activeCancellation.bankAccountNumber?.trim() ?? ""))) {
+        setActionError("Tài khoản đã lưu chưa đầy đủ. Vui lòng nhập tài khoản nhận hoàn khác.");
+        return;
+      }
+      if (refundAccountChoice === "alternate"
+        && (!bankDetails.bankName.trim()
+          || !bankDetails.bankAccountName.trim()
+          || !/^[0-9]{6,50}$/.test(bankDetails.bankAccountNumber.trim()))) {
+        setActionError("Vui lòng nhập ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ (6–50 chữ số).");
+        return;
+      }
+    }
     if (activeAction === "bank-details"
       && (!bankDetails.bankName.trim()
         || !bankDetails.bankAccountName.trim()
@@ -220,11 +257,25 @@ export default function RefundApprovalWorkspace() {
         }).unwrap();
         setFeedback(`Đã lưu tài khoản nhận hoàn cho booking ${activeCancellation.bookingId}; yêu cầu đang chờ duyệt.`);
       } else if (activeAction === "approve") {
+        if (refundAccountChoice === "alternate") {
+          await submitBankDetails({
+            cancellationId: activeCancellation.id,
+            request: {
+              bankName: bankDetails.bankName.trim(),
+              bankCode: bankDetails.bankCode.trim() || undefined,
+              bankAccountName: bankDetails.bankAccountName.trim(),
+              bankAccountNumber: bankDetails.bankAccountNumber.trim(),
+              ...(refundEmail.trim() ? { refundEmail: refundEmail.trim() } : {}),
+            },
+          }).unwrap();
+        }
         await approveRefund({
           cancellationId: activeCancellation.id,
           note: actionNote.trim() || undefined,
+          refundAmountVerified,
+          refundAccountConfirmed,
         }).unwrap();
-        setFeedback(`Đã duyệt hoàn tiền cho booking ${activeCancellation.bookingId}.`);
+        setFeedback(`Đã duyệt hoàn ${money(activeCancellation.refundAmount)} cho booking ${activeCancellation.bookingId}; hãy chuyển khoản đúng tài khoản đã xác nhận với khách.`);
       } else if (activeAction === "reject") {
         await rejectRefund({
           cancellationId: activeCancellation.id,
@@ -243,6 +294,8 @@ export default function RefundApprovalWorkspace() {
       setActionNote("");
       setBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
       setRefundEmail("");
+      setRefundAmountVerified(false);
+      setRefundAccountConfirmed(false);
     } catch (submitError: unknown) {
       setActionError(errorMessage(submitError));
     }
@@ -271,6 +324,8 @@ export default function RefundApprovalWorkspace() {
         <StatCard label="Đã hoàn tiền" value={String(counts.refunded)} tone="green" />
         <StatCard label="Tổng tiền đã hoàn" value={money(counts.totalRefunded)} tone="slate" />
       </div>
+
+      <CheckoutRefundApprovalsPanel />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -384,16 +439,16 @@ export default function RefundApprovalWorkspace() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-left text-sm">
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[1380px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Booking / khách hàng</th>
-                  <th className="px-4 py-3">Ngày yêu cầu</th>
-                  <th className="px-4 py-3">Tài khoản nhận hoàn</th>
-                  <th className="px-4 py-3 text-right">Tiền hoàn</th>
-                  <th className="px-4 py-3">Trạng thái</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
+                  <th className="w-[220px] px-4 py-3">Booking / khách hàng</th>
+                  <th className="w-[170px] px-4 py-3">Ngày yêu cầu</th>
+                  <th className="w-[300px] px-4 py-3">Tài khoản nhận hoàn</th>
+                  <th className="w-[240px] px-4 py-3 text-right">Tiền hoàn</th>
+                  <th className="w-[210px] px-4 py-3">Trạng thái</th>
+                  <th className="w-[220px] px-4 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -472,15 +527,15 @@ export default function RefundApprovalWorkspace() {
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
+                      <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
                         {statusLabels[cancellation.status]}
                       </span>
                       {cancellation.reviewNote && (
                         <p className="mt-2 max-w-xs text-xs text-slate-500">Ghi chú: {cancellation.reviewNote}</p>
                       )}
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="flex justify-end gap-2">
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <div className="flex min-w-max justify-end gap-2">
                         {cancellation.status === "REFUND_REVIEW_PENDING" && (
                           <>
                             <button
@@ -503,7 +558,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "confirm")}
-                            className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                            className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                           >
                             <Banknote size={14} /> Xác nhận đã chuyển
                           </button>
@@ -512,7 +567,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "bank-details")}
-                            className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                            className="inline-flex shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
                           >
                             Nhập thông tin ngân hàng
                           </button>
@@ -533,7 +588,7 @@ export default function RefundApprovalWorkspace() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="refund-action-title"
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -572,9 +627,10 @@ export default function RefundApprovalWorkspace() {
                 <span className="text-slate-500">Số tiền hoàn</span>
                 <span className="font-bold text-blue-700">{money(activeCancellation.refundAmount)}</span>
               </div>
-              <div className="mt-3 border-t border-slate-200 pt-3">
-                <p className="font-semibold text-slate-700">Tài khoản nhận tiền</p>
-                {activeCancellation.bankAccountNumber ? (
+              {activeAction !== "approve" && (
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="font-semibold text-slate-700">Tài khoản nhận tiền</p>
+                  {activeCancellation.bankAccountNumber ? (
                   <div className="mt-2 space-y-1">
                     {[
                       ["Ngân hàng", activeCancellation.bankName, "bank"],
@@ -595,8 +651,140 @@ export default function RefundApprovalWorkspace() {
                 ) : (
                   <p className="mt-1 text-amber-700">Chưa có thông tin ngân hàng.</p>
                 )}
-              </div>
+                </div>
+              )}
             </div>
+
+            {activeAction === "approve" && (
+              <>
+                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+                  <h4 className="font-semibold text-slate-900">Đối chiếu chi tiết tiền hoàn</h4>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">Tổng tiền khách đã thanh toán</dt>
+                      <dd className="font-medium text-slate-900">{money(activeCancellation.paidAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">Tiền phòng trước phạt</dt>
+                      <dd className="font-medium text-slate-900">
+                        {money(Number(activeCancellation.roomRefundAmount ?? 0) + Number(activeCancellation.roomPenaltyAmount ?? 0))}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">Phạt hủy phòng</dt>
+                      <dd className="font-medium text-rose-700">−{money(activeCancellation.roomPenaltyAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">Tiền phòng hoàn sau phạt</dt>
+                      <dd className="font-medium text-slate-900">{money(activeCancellation.roomRefundAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">Tiền dịch vụ hoàn</dt>
+                      <dd className="font-medium text-slate-900">{money(activeCancellation.serviceRefundAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3 border-t border-blue-200 pt-2">
+                      <dt className="font-semibold text-slate-800">Tổng tiền chuyển lại</dt>
+                      <dd className="font-bold text-blue-700">{money(activeCancellation.refundAmount)}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-3 text-xs leading-5 text-slate-600">
+                    Chính sách: {activeCancellation.refundPolicy || "Không có thông tin"}
+                    {typeof activeCancellation.hoursBeforeCheckIn === "number"
+                      ? ` · Yêu cầu trước giờ nhận phòng ${activeCancellation.hoursBeforeCheckIn} giờ`
+                      : ""}
+                  </p>
+                  <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={refundAmountVerified}
+                      onChange={(event) => setRefundAmountVerified(event.target.checked)}
+                      className="mt-0.5 accent-blue-600"
+                    />
+                    <span>Tôi đã đối chiếu chính sách, số tiền đã thanh toán và xác nhận số tiền hoàn khớp thực tế.</span>
+                  </label>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <h4 className="font-semibold text-slate-900">Tài khoản thụ hưởng</h4>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Dùng tài khoản khách đã cung cấp/tự lấy từ giao dịch thanh toán nếu có, hoặc nhập tài khoản khác theo xác nhận của khách.
+                    </p>
+                  </div>
+                  {activeCancellation.bankName
+                    && activeCancellation.bankAccountName
+                    && activeCancellation.bankAccountNumber && (
+                    <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-3">
+                      <input
+                        type="radio"
+                        name="refund-account-choice"
+                        checked={refundAccountChoice === "saved"}
+                        onChange={() => setRefundAccountChoice("saved")}
+                        className="mt-1 accent-blue-600"
+                      />
+                      <span className="min-w-0 text-sm">
+                        <span className="block font-semibold text-slate-800">Tài khoản đã lưu</span>
+                        <span className="mt-1 block break-words text-slate-600">
+                          {activeCancellation.bankName} · {activeCancellation.bankAccountName} · {activeCancellation.bankAccountNumber}
+                        </span>
+                      </span>
+                    </label>
+                  )}
+                  <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-3">
+                    <input
+                      type="radio"
+                      name="refund-account-choice"
+                      checked={refundAccountChoice === "alternate"}
+                      onChange={() => {
+                        setRefundAccountChoice("alternate");
+                        setBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
+                      }}
+                      className="mt-1 accent-blue-600"
+                    />
+                    <span className="text-sm font-semibold text-slate-800">Nhập tài khoản khác</span>
+                  </label>
+                  {refundAccountChoice === "alternate" && (
+                    <div className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2">
+                      <BankSelectionField
+                        bankName={bankDetails.bankName}
+                        bankCode={bankDetails.bankCode}
+                        onChange={(bankName, bankCode) =>
+                          setBankDetails((current) => ({ ...current, bankName, bankCode }))
+                        }
+                      />
+                      <label className="text-sm font-semibold text-slate-700">
+                        Tên chủ tài khoản *
+                        <input
+                          value={bankDetails.bankAccountName}
+                          onChange={(event) => setBankDetails((current) => ({ ...current, bankAccountName: event.target.value }))}
+                          maxLength={120}
+                          className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                        />
+                      </label>
+                      <label className="text-sm font-semibold text-slate-700">
+                        Số tài khoản *
+                        <input
+                          inputMode="numeric"
+                          value={bankDetails.bankAccountNumber}
+                          onChange={(event) => setBankDetails((current) => ({ ...current, bankAccountNumber: event.target.value }))}
+                          maxLength={50}
+                          className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                        />
+                      </label>
+                    </div>
+                  )}
+                  <label className="flex items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={refundAccountConfirmed}
+                      onChange={(event) => setRefundAccountConfirmed(event.target.checked)}
+                      className="mt-0.5 accent-blue-600"
+                    />
+                    <span>Tôi đã xác nhận với khách hàng rằng đây là tài khoản nhận tiền hoàn.</span>
+                  </label>
+                </div>
+              </>
+            )}
 
             {activeAction === "bank-details" ? (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">

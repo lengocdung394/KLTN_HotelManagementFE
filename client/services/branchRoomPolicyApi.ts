@@ -31,7 +31,7 @@ export const branchRoomPolicyApi = baseApi.injectEndpoints({
         method: "PUT",
         data: request,
       }),
-      invalidatesTags: ["BranchRoomPolicy", "SuperAdminBranch"],
+      invalidatesTags: ["BranchRoomPolicy", "Room", "Booking", "SuperAdminBranch"],
     }),
   }),
 });

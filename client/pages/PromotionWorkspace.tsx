@@ -787,8 +787,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_auto_auto] lg:justify-items-end">
-                    <div className="text-right">
+                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_120px_90px] lg:justify-items-stretch">
+                    <div className="min-w-0 text-right">
                       <p className="text-xs text-slate-400">
                         {label("offerLevel")}
                       </p>
@@ -796,7 +796,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                         {formatValue(promotion)}
                       </p>
                     </div>
-                    <div className="flex w-[120px] justify-end">
+                    <div className="flex w-full justify-center">
                       <span className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
                         {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
                       </span>
@@ -804,19 +804,19 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     <button
                       type="button"
                       onClick={() => setDetailPromotion(promotion)}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     >
                       <Eye size={14} />
                       {label("viewDetails")}
                     </button>
-                    {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) && <button
+                    {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) ? <button
                       type="button"
                       onClick={() => openEditPromotion(promotion)}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     >
                       <Pencil size={14} />
                       {label("edit")}
-                    </button>}
+                    </button> : <span aria-hidden="true" />}
                   </div>
                 </article>
                 );

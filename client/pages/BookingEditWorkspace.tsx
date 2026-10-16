@@ -56,14 +56,17 @@ const serviceDetailIdOf = (service: BookingDetail) => String(
   ?? "",
 );
 
-const servicesOf = (detail: BookingDetail) => ([
-  detail.bookingServiceResponsesForHotels,
-  detail.bookingServiceResponseForHotels,
-  detail.bookingServiceDetails,
-  detail.serviceRequests,
-  detail.serviceResponses,
-  detail.services,
-].find(Array.isArray) ?? []) as BookingDetail[];
+const servicesOf = (detail: BookingDetail) => {
+  const services = ([
+    detail.bookingServiceResponsesForHotels,
+    detail.bookingServiceResponseForHotels,
+    detail.bookingServiceDetails,
+    detail.serviceRequests,
+    detail.serviceResponses,
+    detail.services,
+  ].find(Array.isArray) ?? []) as BookingDetail[];
+  return services.filter((service) => String(service.cancelled).toLowerCase() !== "true");
+};
 
 export default function BookingEditWorkspace() {
   const location = useLocation();

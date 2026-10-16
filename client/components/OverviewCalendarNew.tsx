@@ -28,14 +28,20 @@ const formatDate = (value: string, language: string) =>
   });
 
 const getScheduleStatusForDate = (schedule: RoomMatrixSchedule, date: string) => {
+  const roomStatus = schedule.roomStatus?.toUpperCase();
+  if (roomStatus === "CANCELLED") return undefined;
+  const isInHouse = roomStatus
+    ? roomStatus === "CHECKED_IN" || roomStatus === "CHECKED_OUT"
+    : schedule.bookingStatus?.toUpperCase() === "IN_HOUSE";
+
   const checkIn = schedule.checkinTime?.slice(0, 10);
   const checkOut = schedule.checkoutTime?.slice(0, 10);
   if (checkOut && date === checkOut) return "CHECK_OUT";
   if (checkIn && checkOut && date >= checkIn && date < checkOut) {
-    return schedule.bookingStatus?.toUpperCase() === "IN_HOUSE" ? "IN_HOUSE" : "WAITING";
+    return isInHouse ? "IN_HOUSE" : "WAITING";
   }
   if (schedule.occupiedDates?.some((occupiedDate) => occupiedDate.slice(0, 10) === date)) {
-    return schedule.bookingStatus?.toUpperCase() === "IN_HOUSE" ? "IN_HOUSE" : "WAITING";
+    return isInHouse ? "IN_HOUSE" : "WAITING";
   }
   return undefined;
 };

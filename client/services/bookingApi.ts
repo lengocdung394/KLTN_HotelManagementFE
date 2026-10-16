@@ -66,6 +66,7 @@ export type RoomMatrixSchedule = {
   checkinTime?: string;
   checkoutTime?: string;
   bookingStatus?: string;
+  roomStatus?: string;
   occupiedDates?: string[];
 };
 

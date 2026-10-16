@@ -94,6 +94,27 @@ export type BookingCancellationStatus =
   | "NO_REFUND_REQUIRED";
 
 export type BookingChannel = "ONLINE" | "OFFLINE";
+export type CheckoutRefundStatus = "PENDING" | "APPROVED" | "REFUNDED";
+
+export type CheckoutRefund = {
+  id: string;
+  bookingId: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  paidAmount: number;
+  finalAmount: number;
+  refundAmount: number;
+  refundMethod: "CASH" | "BANK" | "EWALLET";
+  status: CheckoutRefundStatus;
+  bankName?: string | null;
+  bankCode?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
+  note?: string | null;
+  requestedAt?: string | null;
+  approvedAt?: string | null;
+  refundedAt?: string | null;
+};
 
 export type BookingCancellation = {
   id: string;
@@ -103,10 +124,12 @@ export type BookingCancellation = {
   customerPhone?: string | null;
   status: BookingCancellationStatus;
   reason?: string | null;
+  paidAmount?: number;
   refundAmount: number;
   roomRefundAmount?: number;
   serviceRefundAmount?: number;
   roomPenaltyAmount?: number;
+  hoursBeforeCheckIn?: number;
   refundPolicy?: string | null;
   bankName?: string | null;
   bankCode?: string | null;
@@ -131,6 +154,13 @@ const unwrapCancellationList = (response: unknown): BookingCancellation[] => {
   if (!response || typeof response !== "object") return [];
   const result = (response as { result?: unknown }).result;
   return Array.isArray(result) ? result : [];
+};
+
+const unwrapCheckoutRefundList = (response: unknown): CheckoutRefund[] => {
+  if (Array.isArray(response)) return response as CheckoutRefund[];
+  if (!response || typeof response !== "object") return [];
+  const result = (response as { result?: unknown }).result;
+  return Array.isArray(result) ? result as CheckoutRefund[] : [];
 };
 
 export const managementBookingApi = baseApi.injectEndpoints({
@@ -168,12 +198,17 @@ export const managementBookingApi = baseApi.injectEndpoints({
     }),
     approveBookingRefund: builder.mutation<
       BookingCancellationApiResponse,
-      { cancellationId: string; note?: string }
+      {
+        cancellationId: string;
+        note?: string;
+        refundAmountVerified: boolean;
+        refundAccountConfirmed: boolean;
+      }
     >({
-      query: ({ cancellationId, note }) => ({
+      query: ({ cancellationId, note, refundAmountVerified, refundAccountConfirmed }) => ({
         url: `/management-bookings/cancellations/${cancellationId}/approve`,
         method: "PATCH",
-        data: note ? { note } : {},
+        data: { note, refundAmountVerified, refundAccountConfirmed },
       }),
       invalidatesTags: ["RefundCancellation"],
     }),
@@ -210,6 +245,48 @@ export const managementBookingApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ["RefundCancellation"],
     }),
+    getCheckoutRefunds: builder.query<CheckoutRefund[], void>({
+      query: () => ({
+        url: "/management-bookings/checkout-refunds",
+        method: "GET",
+      }),
+      transformResponse: unwrapCheckoutRefundList,
+      providesTags: ["CheckoutRefund"],
+      refetchOnMountOrArgChange: true,
+    }),
+    updateCheckoutRefundBankDetails: builder.mutation<
+      { result?: CheckoutRefund },
+      { refundId: string; request: ManagementBookingCancellationRequest }
+    >({
+      query: ({ refundId, request }) => ({
+        url: `/management-bookings/checkout-refunds/${refundId}/bank-details`,
+        method: "PATCH",
+        data: request,
+      }),
+      invalidatesTags: ["CheckoutRefund"],
+    }),
+    approveCheckoutRefund: builder.mutation<
+      { result?: CheckoutRefund },
+      { refundId: string; note?: string }
+    >({
+      query: ({ refundId, note }) => ({
+        url: `/management-bookings/checkout-refunds/${refundId}/approve`,
+        method: "PATCH",
+        data: { note, refundAmountVerified: true, refundAccountConfirmed: true },
+      }),
+      invalidatesTags: ["CheckoutRefund"],
+    }),
+    confirmCheckoutRefund: builder.mutation<
+      { result?: CheckoutRefund },
+      { refundId: string; note?: string }
+    >({
+      query: ({ refundId, note }) => ({
+        url: `/management-bookings/checkout-refunds/${refundId}/confirm-refund`,
+        method: "PATCH",
+        data: note ? { note } : {},
+      }),
+      invalidatesTags: ["CheckoutRefund"],
+    }),
   }),
 });
 
@@ -221,4 +298,8 @@ export const {
   useRejectBookingRefundMutation,
   useConfirmBookingRefundMutation,
   useSubmitRefundBankDetailsByStaffMutation,
+  useGetCheckoutRefundsQuery,
+  useUpdateCheckoutRefundBankDetailsMutation,
+  useApproveCheckoutRefundMutation,
+  useConfirmCheckoutRefundMutation,
 } = managementBookingApi;

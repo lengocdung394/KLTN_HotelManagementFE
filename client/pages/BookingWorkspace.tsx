@@ -8,7 +8,7 @@ import GuestRoomForms, { bookingCache, clearRoomGuestCache, isBookingGuestValid,
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
-import { useGetBranchRoomDailyPricesQuery, useGetRoomSeasonalRatesByMonthQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomDailyPricesResponse, type RoomSeasonalRate } from "../services/roomApi";
+import { useGetBranchRoomDailyPricesQuery, useGetRoomSeasonalRatesByMonthQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomSeasonalRate } from "../services/roomApi";
 import { useGetBuildingsByCurrentHotelQuery } from "../services/buildingApi";
 import { useGetFloorsByBuildingIdQuery } from "../services/floorApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
@@ -41,7 +41,7 @@ const booked: Record<string, { start: string; end: string; guest: string }[]> = 
 
 const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"];
 const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
-const serviceDetailIdOf = (service: Record<string, unknown>) => String(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? service.serviceId ?? "");
+const serviceDetailIdOf = (service: Record<string, unknown>) => String(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? "");
 const isCancelledBookingDetail = (detail: Record<string, unknown>) => String(detail.bookingStatusType ?? "").toUpperCase() === "CANCELLED";
 const bookingDetailIdOf = (detail: Record<string, unknown>) => String(detail.bookingDetailId ?? detail.bookingDetailsId ?? detail.bookingDetailID ?? detail.detailId ?? detail.detailID ?? detail.id ?? "");
 const bookingDetailStatusOf = (detail: Record<string, unknown>) => {
@@ -397,7 +397,6 @@ function DesktopCalendar({
   isAddingRoom,
   isAvailableForRange,
   hotelId,
-  onDailyPricesChange,
   editingBookingId,
   editingBookingRanges,
   isChangingRoom,
@@ -421,7 +420,6 @@ function DesktopCalendar({
   isAddingRoom: boolean;
   isAvailableForRange: (room: BookingRoom, start: string, end: string) => boolean;
   hotelId: number;
-  onDailyPricesChange?: (prices: RoomDailyPricesResponse) => void;
   editingBookingId?: string;
   editingBookingRanges: Map<string, BookingRoomRange[]>;
   isChangingRoom?: boolean;
@@ -504,9 +502,6 @@ function DesktopCalendar({
 
   const matrixBusyDays = useMemo(() => buildMatrixBusyMap(roomMatrix, editingBookingId), [roomMatrix, editingBookingId]);
   const matrixGuestNames = useMemo(() => buildMatrixGuestNameMap(roomMatrix, editingBookingId), [roomMatrix, editingBookingId]);
-  useEffect(() => {
-    onDailyPricesChange?.(dailyRoomPrices);
-  }, [dailyRoomPrices, onDailyPricesChange]);
   const roomPriceForDay = (room: BookingRoom, day: string) => {
     const prices = dailyRoomPrices[room.id] ?? (room.databaseId ? dailyRoomPrices[room.databaseId] : undefined);
     const value = prices?.[day];
@@ -1148,7 +1143,18 @@ export default function BookingWorkspace() {
   const rooms = useMemo(() => (apiRooms ?? []).map(mapApiRoom), [apiRooms]);
   const [loadedBookingRooms, setLoadedBookingRooms] = useState<BookingRoom[]>([]);
   const [bookingRoomPrices, setBookingRoomPrices] = useState<Record<string, number>>({});
-  const [dailyRoomPrices, setDailyRoomPrices] = useState<RoomDailyPricesResponse>({});
+  const dailyPriceRange = useMemo(() => {
+    const ranges = [ { checkIn, checkOut }, ...Object.values(selectedRanges) ]
+      .filter((range) => range.checkIn && range.checkOut && range.checkIn < range.checkOut);
+    return {
+      startDate: ranges.reduce((earliest, range) => range.checkIn < earliest ? range.checkIn : earliest, ranges[0]?.checkIn ?? checkIn),
+      endDate: ranges.reduce((latest, range) => range.checkOut > latest ? range.checkOut : latest, ranges[0]?.checkOut ?? checkOut),
+    };
+  }, [checkIn, checkOut, selectedRanges]);
+  const { data: dailyRoomPrices = {} } = useGetBranchRoomDailyPricesQuery(
+    { hotelId: Number(hotelId), ...dailyPriceRange },
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) || !dailyPriceRange.startDate || !dailyPriceRange.endDate },
+  );
   useEffect(() => {
     if (!initialBooking) return;
     const details = initialBookingDetails;
@@ -1872,20 +1878,22 @@ export default function BookingWorkspace() {
         }
 
         const currentSelections = getRoomServiceSelections(room);
-        const origServicesMap = new Map<string, { serviceId: string; originalQuantity: number; quantity: number }>();
+        const origServicesMap = new Map<string, { serviceId: string; originalQuantity: number; quantity: number; serviceDetailIds: string[] }>();
         (servicesOf(initialDetail) ?? []).forEach((srv) => {
           const nestedService = srv.service && typeof srv.service === "object" ? srv.service as Record<string, unknown> : undefined;
           const rawServiceName = String(srv.name ?? srv.serviceName ?? srv.nameService ?? nestedService?.name ?? nestedService?.serviceName ?? "").trim().toLowerCase();
           const catalogService = services.find((item) => rawServiceName && item.name.trim().toLowerCase() === rawServiceName);
           const sId = String(catalogService?.id ?? srv.serviceId ?? srv.serviceID ?? srv.service_id ?? nestedService?.serviceId ?? nestedService?.id ?? srv.id ?? "");
           if (!sId) return;
+          const dId = serviceDetailIdOf(srv);
           const qty = Number(srv.quantity ?? srv.serviceQuantity ?? srv.quantityService ?? srv.amount ?? 0);
           const existing = origServicesMap.get(sId);
           if (existing) {
             existing.originalQuantity += qty;
             existing.quantity += qty;
+            if (dId && !existing.serviceDetailIds.includes(dId)) existing.serviceDetailIds.push(dId);
           } else {
-            origServicesMap.set(sId, { serviceId: sId, originalQuantity: qty, quantity: qty });
+            origServicesMap.set(sId, { serviceId: sId, originalQuantity: qty, quantity: qty, serviceDetailIds: dId ? [dId] : [] });
           }
         });
         const origSelections = Array.from(origServicesMap.values());
@@ -1914,6 +1922,12 @@ export default function BookingWorkspace() {
               price: current?.price ?? serviceObj?.price,
               usedAt: current?.usedAt ?? new Date().toISOString().slice(0, 19),
             });
+            return;
+          }
+
+          if (currentQuantity === 0 && original?.serviceDetailIds.length) {
+            const cancelledIds = servicesToCancelMap[bookingDetailId] ?? [];
+            servicesToCancelMap[bookingDetailId] = [...new Set([...cancelledIds, ...original.serviceDetailIds])];
             return;
           }
 
@@ -2144,7 +2158,6 @@ export default function BookingWorkspace() {
               isAddingRoom={isAddingRoom}
               isAvailableForRange={isAvailableForRange}
               hotelId={Number(hotelId)}
-              onDailyPricesChange={setDailyRoomPrices}
               editingBookingId={editingBookingId}
               editingBookingRanges={editingBookingRanges}
               isChangingRoom={Boolean(roomChangeTargetRoomId)}
@@ -2237,7 +2250,22 @@ export default function BookingWorkspace() {
         </div>
       ) : step === "services" ? (<div className="space-y-5 p-5">
         <BookingServiceSelector
-          rooms={selectedRooms.map((room) => ({ ...room, databaseId: room.databaseId, guests: roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests, price: getRoomPrice(room) + (roomGuestSurcharges[room.id] ?? 0), dailyPrices: dailyRoomPrices[room.id] ?? (room.databaseId ? dailyRoomPrices[String(room.databaseId)] : undefined), nightlySurcharge: roomGuestSurcharges[room.id] ?? 0 }))}
+          rooms={selectedRooms.map((room) => {
+            const range = selectedRanges[room.id]
+              ?? (room.databaseId ? selectedRanges[String(room.databaseId)] : undefined)
+              ?? { checkIn, checkOut };
+            return {
+              ...room,
+              databaseId: room.databaseId,
+              guests: roomGuestCounts[room.id]
+                ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants
+                : room.guests,
+              price: getRoomPrice(room) + (roomGuestSurcharges[room.id] ?? 0),
+              roomTotal: getRoomRangeTotal(room, range),
+              dailyPrices: dailyRoomPrices[room.id] ?? (room.databaseId ? dailyRoomPrices[String(room.databaseId)] : undefined),
+              nightlySurcharge: roomGuestSurcharges[room.id] ?? 0,
+            };
+          })}
           services={services}
           servicesLoading={isServicesLoading}
           servicesError={isServicesError}
@@ -2250,7 +2278,6 @@ export default function BookingWorkspace() {
           roomRanges={selectedRanges}
           fallbackRange={{ checkIn, checkOut }}
           language={i18n.language}
-          nightsForRoom={nightsForRoom}
           continueLabel="Tiếp tục"
           skipLabel="Tiếp tục"
           onContinue={() => setStep("promotion")}

@@ -104,7 +104,7 @@ export default function CheckInOutBookingDetailModal({ records, onClose }: Check
             <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><CreditCard size={16} className="text-blue-600" />Thanh toán</h3>
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng tiền phòng</dt><dd className="font-semibold text-slate-900">{money(roomTotal)}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng phụ thu check-in sớm</dt><dd className="font-semibold text-slate-900">{money(earlyCheckInFeeTotal)}</dd></div>
+              {earlyCheckInFeeTotal > 0 && <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng phụ thu check-in sớm</dt><dd className="font-semibold text-slate-900">{money(earlyCheckInFeeTotal)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng tiền dịch vụ</dt><dd className="font-semibold text-slate-900">{money(serviceTotal)}</dd></div>
               <div className="flex justify-between gap-3 border-t border-blue-100 pt-2"><dt className="font-bold text-slate-800">Tổng tiền phòng và dịch vụ</dt><dd className="font-bold text-blue-700">{money(totalAmount)}</dd></div>
               {hasPaidAmount && <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng đã thanh toán</dt><dd className="font-semibold text-emerald-700">{money(paidTotal)}</dd></div>}
