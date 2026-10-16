@@ -41,7 +41,7 @@ export const buildingApi = baseApi.injectEndpoints({
 				data: body,
 			}),
 			transformResponse: (response: ApiResponse<BuildingResponse>) => response.result,
-			invalidatesTags: ["Building", "Floor"],
+			invalidatesTags: ["Building", "Floor", "SuperAdminBranch"],
 		}),
 	}),
 });

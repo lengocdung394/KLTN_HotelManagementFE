@@ -33,6 +33,8 @@
     "cancelBooking": "Hủy bỏ",
     "branchManager": "Quản lý chi nhánh",
     "goodMorning": "Chào buổi sáng, {{name}}",
+    "goodAfternoon": "Chào buổi chiều, {{name}}",
+    "goodEvening": "Chào buổi tối, {{name}}",
     "comparedYesterday": "so với hôm qua",
     "comparedLastWeek": "so với tuần trước",
     "guestCount": "khách",
@@ -447,6 +449,10 @@
     "editDescription": "Chỉnh sửa thông tin khuyến mãi. Thay đổi hiện chỉ áp dụng trên giao diện.",
     "sectionGeneral": "1. Thông tin cơ bản",
     "sectionGeneralDescription": "Thông tin nhận diện và hiển thị chương trình khuyến mãi.",
+    "promotionTarget": "Phạm vi phát hành",
+    "allSystemBranches": "Toàn hệ thống — gửi thông báo đến tất cả chi nhánh",
+    "branchPromotionNotice": "Khuyến mãi chỉ áp dụng tại chi nhánh đã chọn.",
+    "systemPromotionNotice": "Khuyến mãi dùng được tại mọi chi nhánh; hệ thống sẽ gửi thông báo đến tất cả chi nhánh.",
     "sectionDiscount": "2. Cấu hình giảm giá và phạm vi",
     "sectionDiscountDescription": "Thiết lập loại ưu đãi và phạm vi áp dụng.",
     "sectionConditions": "3. Điều kiện áp dụng và giới hạn",
@@ -604,6 +610,19 @@
     ,"thuShort": "T5"
     ,"friShort": "T6"
     ,"satShort": "T7"
+    ,"legend": "Chú thích"
+    ,"waitingCheckIn": "Đã đặt · chờ check-in"
+    ,"inHouse": "Đang lưu trú"
+    ,"checkOut": "Ngày check-out"
+    ,"noBookingsThisWeek": "Không có phòng nào được đặt trong tuần này."
+    ,"previousWeek": "Tuần trước"
+    ,"nextWeek": "Tuần sau"
+    ,"branchUnavailable": "Chưa xác định được chi nhánh."
+    ,"loadError": "Không tải được lịch đặt phòng. Vui lòng thử lại."
+    ,"bookingCount": "đặt phòng"
+    ,"guestNotProvided": "Chưa có tên khách"
+    ,"sameBookingMarker": "Cùng mã = cùng một booking"
+    ,"bookingMarker": "Booking"
   },
   "status": {
     "active": "Đang hoạt động",

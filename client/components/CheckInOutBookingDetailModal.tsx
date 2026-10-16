@@ -19,8 +19,21 @@ export default function CheckInOutBookingDetailModal({ records, onClose }: Check
   const serviceTotal = records.reduce((total, record) => total + (record.services ?? []).reduce((sum, service) => sum + service.amount, 0), 0);
   const earlyCheckInFeeTotal = records.reduce((total, record) => total + Number(record.earlyCheckInFee ?? 0), 0);
   const totalAmount = roomTotal + serviceTotal + earlyCheckInFeeTotal;
-  const paidAmounts = records.flatMap((record) => record.paidAmount === undefined ? [] : [record.paidAmount]);
-  const remainingAmounts = records.flatMap((record) => record.remainingAmount === undefined ? [] : [record.remainingAmount]);
+  const sumBookingAmounts = (selectAmount: (record: DailyRecord) => number | undefined) => {
+    const amountsByBooking = new Map<string, number>();
+    records.forEach((record, index) => {
+      const amount = selectAmount(record);
+      const bookingKey = record.bookingId ?? record.id ?? String(index);
+      if (amount !== undefined && Number.isFinite(amount) && !amountsByBooking.has(bookingKey)) {
+        amountsByBooking.set(bookingKey, amount);
+      }
+    });
+    return [...amountsByBooking.values()].reduce((total, amount) => total + amount, 0);
+  };
+  const paidTotal = sumBookingAmounts((record) => record.paidAmount);
+  const remainingTotal = sumBookingAmounts((record) => record.remainingAmount);
+  const hasPaidAmount = records.some((record) => record.paidAmount !== undefined);
+  const hasRemainingAmount = records.some((record) => record.remainingAmount !== undefined);
   const paymentStates = records.flatMap((record) => record.roomPaid === undefined ? [] : [record.roomPaid]);
   const groupPaid = paymentStates.length > 0 ? paymentStates.every(Boolean) : undefined;
 
@@ -74,8 +87,6 @@ export default function CheckInOutBookingDetailModal({ records, onClose }: Check
                     <div className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-xs">
                       <div className="flex justify-between gap-3"><span className="text-slate-600">Tiền phòng</span><strong>{money(record.roomAmount ?? 0)}</strong></div>
                       {earlyCheckInFee > 0 && <div className="flex justify-between gap-3 text-slate-600"><span>Phụ thu check-in sớm</span><strong>{money(earlyCheckInFee)}</strong></div>}
-                      {record.paidAmount !== undefined && <div className="flex justify-between gap-3 text-slate-600"><span>Đã thanh toán</span><strong>{money(record.paidAmount)}</strong></div>}
-                      {record.remainingAmount !== undefined && <div className="flex justify-between gap-3 text-slate-600"><span>Còn phải thanh toán</span><strong>{money(record.remainingAmount)}</strong></div>}
                       {roomServices.map((service, index) => (
                         <div key={`${service.serviceId ?? service.name}-${index}`} className="flex justify-between gap-3 text-slate-600">
                           <span>{service.name} × {service.quantity}</span><strong className="text-slate-900">{money(service.amount)}</strong>
@@ -93,11 +104,11 @@ export default function CheckInOutBookingDetailModal({ records, onClose }: Check
             <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><CreditCard size={16} className="text-blue-600" />Thanh toán</h3>
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng tiền phòng</dt><dd className="font-semibold text-slate-900">{money(roomTotal)}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng phụ thu check-in sớm</dt><dd className="font-semibold text-slate-900">{money(earlyCheckInFeeTotal)}</dd></div>
+              {earlyCheckInFeeTotal > 0 && <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng phụ thu check-in sớm</dt><dd className="font-semibold text-slate-900">{money(earlyCheckInFeeTotal)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng tiền dịch vụ</dt><dd className="font-semibold text-slate-900">{money(serviceTotal)}</dd></div>
               <div className="flex justify-between gap-3 border-t border-blue-100 pt-2"><dt className="font-bold text-slate-800">Tổng tiền phòng và dịch vụ</dt><dd className="font-bold text-blue-700">{money(totalAmount)}</dd></div>
-              {paidAmounts.length > 0 && <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng đã thanh toán</dt><dd className="font-semibold text-emerald-700">{money(paidAmounts.reduce((total, amount) => total + amount, 0))}</dd></div>}
-              {remainingAmounts.length > 0 && <div className="flex justify-between gap-3"><dt className="text-slate-600">Còn phải thanh toán</dt><dd className="font-semibold text-slate-900">{money(remainingAmounts.reduce((total, amount) => total + amount, 0))}</dd></div>}
+              {hasPaidAmount && <div className="flex justify-between gap-3"><dt className="text-slate-600">Tổng đã thanh toán</dt><dd className="font-semibold text-emerald-700">{money(paidTotal)}</dd></div>}
+              {hasRemainingAmount && <div className="flex justify-between gap-3"><dt className="text-slate-600">Còn phải thanh toán</dt><dd className="font-semibold text-slate-900">{money(remainingTotal)}</dd></div>}
               {groupPaid !== undefined && <div className="flex justify-between gap-3"><dt className="text-slate-600">Trạng thái thanh toán</dt><dd className={`font-semibold ${groupPaid ? "text-emerald-700" : "text-rose-700"}`}>{groupPaid ? "Đã thanh toán đủ" : "Chưa thanh toán đủ"}</dd></div>}
             </dl>
           </section>

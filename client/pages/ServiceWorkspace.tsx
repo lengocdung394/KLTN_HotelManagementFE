@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
@@ -32,6 +33,7 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
   const [detailService, setDetailService] = useState<HotelService | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editingService, setEditingService] = useState<HotelService | null>(null);
+  const [targetHotelId, setTargetHotelId] = useState("");
   const [newService, setNewService] = useState({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [saveError, setSaveError] = useState("");
@@ -77,7 +79,10 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
 
   useEffect(() => {
     if (!hasHotelId && !isSystemAdmin) return;
-    bindHotelSocketEvents({
+    return bindHotelSocketEvents({
+      onServiceChanged: () => {
+        dispatch(baseApi.util.invalidateTags(["Service", "Notification"]));
+      },
       onServiceImportProgress: (data) => {
         if (!data || typeof data !== "object") return;
         const payload = data as Record<string, unknown>;
@@ -116,6 +121,14 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
   const toggleServiceStatus = async (serviceId: string) => {
     const currentService = allServices.find((service) => service.id === serviceId);
     if (!currentService) return;
+    if (!isSystemAdmin && currentService.hotelId == null) {
+      toast({
+        variant: "destructive",
+        title: "Không thể chỉnh sửa dịch vụ hệ thống",
+        description: "Dịch vụ toàn hệ thống chỉ do Super Admin quản lý.",
+      });
+      return;
+    }
     const active = !currentService.active;
     try {
       await updateServiceRequest({
@@ -142,6 +155,7 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
 
   const openCreateForm = () => {
     setEditingService(null);
+    setTargetHotelId("");
     setSelectedImage(null);
     setSaveError("");
     setNewService({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
@@ -149,6 +163,14 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
   };
 
   const openEditForm = (service: HotelService) => {
+    if (!isSystemAdmin && service.hotelId == null) {
+      toast({
+        variant: "destructive",
+        title: "Không thể chỉnh sửa dịch vụ hệ thống",
+        description: "Dịch vụ toàn hệ thống chỉ do Super Admin quản lý.",
+      });
+      return;
+    }
     setEditingService(service);
     setSelectedImage(null);
     setSaveError("");
@@ -189,7 +211,11 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
       if (editingService) {
         await updateServiceRequest({ id: editingService.id, service, imageFile: selectedImage }).unwrap();
       } else {
-        await createServiceRequest({ service, imageFile: selectedImage }).unwrap();
+        await createServiceRequest({
+          service,
+          imageFile: selectedImage,
+          ...(isSystemAdmin && targetHotelId ? { hotelId: Number(targetHotelId) } : {}),
+        }).unwrap();
       }
       setShowCreate(false);
       setEditingService(null);
@@ -537,10 +563,10 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
         progress={serviceImportUploadProgress || undefined}
         onUpload={importServicesFromFile}
       />
-      {showCreate && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 p-4" onMouseDown={() => setShowCreate(false)}>
+      {showCreate && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onMouseDown={() => setShowCreate(false)}>
           <form
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_25px_80px_rgba(15,23,42,0.18)]"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl shrink-0 overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_25px_80px_rgba(15,23,42,0.18)]"
             onSubmit={(event) => {
               event.preventDefault();
               void saveService();
@@ -563,6 +589,24 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              {isSystemAdmin && !editingService && (
+                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                  Phạm vi dịch vụ
+                  <select
+                    value={targetHotelId}
+                    onChange={(event) => setTargetHotelId(event.target.value)}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800"
+                  >
+                    <option value="">Toàn hệ thống</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs font-normal text-slate-500">
+                    {targetHotelId ? "Dịch vụ chỉ áp dụng cho chi nhánh đã chọn." : "Dịch vụ sẽ áp dụng cho toàn bộ chi nhánh."}
+                  </span>
+                </label>
+              )}
               <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                 Tên dịch vụ <span className="text-rose-500">*</span>
                 <input
@@ -700,7 +744,8 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );

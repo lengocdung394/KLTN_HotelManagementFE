@@ -11,6 +11,7 @@ import RoomListTab from "../components/RoomListTab";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
 import BulkImportDialog from "../components/BulkImportDialog";
 import RoomImportProgressCard from "../components/RoomImportProgressCard";
+import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation } from "../services/roomApi";
 import { getAmenityImportStatus, isAmenityImportFinished, useGetAllAmenitiesQuery, useImportAmenitiesFromFileMutation, type AmenityResponse } from "../services/amenityApi.ts";
@@ -358,7 +359,7 @@ export default function RoomWorkspace() {
   useEffect(() => {
     if (!hotelId || Number.isNaN(Number(hotelId))) return;
 
-    bindHotelSocketEvents({
+    return bindHotelSocketEvents({
       onRoomCreated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
         const event = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
@@ -1026,7 +1027,7 @@ export default function RoomWorkspace() {
       await updateBranchRoomPolicy({
         policyId: entry.policyId,
         request: {
-          price: nextPrice,
+          basePrice: nextPrice,
           extraAdultFee: nextExtraAdultFee,
           extraChildFee: nextExtraChildFee,
           standardCapacity: nextStandardCapacity,
@@ -1063,6 +1064,7 @@ export default function RoomWorkspace() {
     if (buildingId) setSelectedBuildingId(buildingId); // Set selectedBuildingId if buildingId is available
     setEditingRoomId(room.id);
     setEditingRoomDatabaseId(room.databaseId ?? null);
+    setRoomImageFiles([]);
     setCreateRoomForm({ roomNumber: /^\d+$/.test(room.id) ? room.id : "", roomType: room.name, building: buildingId, floor: floorId, area, standardCapacity: String(room.standardCapacity || room.capacity), maxExtraGuests: String(room.maxExtraGuests), extraAdultFee: String(room.extraAdultFee || ""), extraChildFee: String(room.extraChildFee || ""), bedType: room.beds || roomTypeDetails[room.name]?.beds || "1 giường đơn (1m x 1,2m)", bedConfigurations: (room.bedConfigurations ?? []).map(({ bedTypeId, quantity }) => ({ bedTypeId, quantity })), description: room.description ?? "", amenities: room.services, images: room.images, defaultImage: room.images[0] ?? null, status: room.status || "Sẵn sàng" }); // Updated to use buildingId and floorId
     setShowCreateRoom(true);
   };
@@ -2160,7 +2162,7 @@ export default function RoomWorkspace() {
         <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button><button type="button" onClick={() => void saveFloor()} disabled={!floorForm.name.trim() || !selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? "Đang lưu..." : t("common.save")}</button></div>
       </div>
     </div>}
-    {showCreateRoom && (
+    {showCreateRoom && !editingRoomId && (
       <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateRoomModal}>
         <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[26px] border border-slate-200 bg-[#f3f4f6] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
@@ -2563,6 +2565,86 @@ export default function RoomWorkspace() {
           </div>
         </div>
       </div>
+    )}
+    {showCreateRoom && editingRoomId && (
+      <RoomEditForm
+        draft={{
+          roomNumber: createRoomForm.roomNumber,
+          roomType: roomTypeValues[createRoomForm.roomType] ?? createRoomForm.roomType,
+          floorId: createRoomForm.floor,
+          roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status,
+          area: createRoomForm.area,
+          standardCapacity: createRoomForm.standardCapacity,
+          maxExtraGuests: createRoomForm.maxExtraGuests,
+          extraAdultFee: createRoomForm.extraAdultFee,
+          extraChildFee: createRoomForm.extraChildFee,
+          images: createRoomForm.images,
+          defaultImageIndex: Math.max(0, createRoomForm.images.indexOf(createRoomForm.defaultImage ?? "")),
+          amenityIds: createRoomForm.amenities
+            .map((name) => amenityCatalog.find((amenity) => amenity.name === name)?.id)
+            .filter((id): id is number => id !== undefined),
+          beds: createRoomForm.bedConfigurations,
+        }}
+        onDraftChange={(draft: RoomEditDraft) => {
+          const floorOption = hotelFloorOptions.find((item) => item.id === draft.floorId);
+          setSelectedBuildingId(floorOption?.buildingId ?? createRoomForm.building);
+          setCreateRoomForm((current) => ({
+            ...current,
+            roomNumber: draft.roomNumber,
+            roomType: roomTypeLabel(draft.roomType),
+            building: floorOption?.buildingId ?? current.building,
+            floor: draft.floorId,
+            status: statusLabel(draft.roomStatus),
+            area: draft.area,
+            standardCapacity: draft.standardCapacity,
+            maxExtraGuests: draft.maxExtraGuests,
+            extraAdultFee: draft.extraAdultFee,
+            extraChildFee: draft.extraChildFee,
+            images: draft.images,
+            defaultImage: draft.images[draft.defaultImageIndex] ?? null,
+            amenities: draft.amenityIds
+              .map((id) => amenityCatalog.find((amenity) => amenity.id === id)?.name)
+              .filter((name): name is string => Boolean(name)),
+            bedConfigurations: draft.beds.map((bed) => ({
+              ...bed,
+              name: apiBedTypes?.find((item) => Number(item.id) === bed.bedTypeId)?.name
+                ?? apiBedTypes?.find((item) => Number(item.id) === bed.bedTypeId)?.bedTypeName,
+            })),
+          }));
+        }}
+        buildings={buildings.map((item) => ({ value: item.id, label: item.name }))}
+        floors={hotelFloorOptions.map((item) => ({
+          value: item.id,
+          label: `Tầng ${item.name}`,
+          buildingId: item.buildingId,
+        }))}
+        roomTypes={availableRoomTypes.map((label) => ({
+          value: roomTypeValues[label] ?? label,
+          label,
+        }))}
+        roomStatuses={availableRoomStatuses.map((label) => ({
+          value: statusValues[label] ?? label,
+          label,
+        }))}
+        amenities={amenityCatalog.map((amenity) => ({
+          id: amenity.id,
+          name: amenity.name,
+          price: amenity.price,
+        }))}
+        bedTypes={(apiBedTypes ?? [])
+          .filter((item) => item.id != null)
+          .map((item) => ({
+            id: Number(item.id),
+            name: String(item.name ?? item.bedTypeName ?? `Loại giường ${item.id}`),
+            isExtraBed: item.isExtraBed,
+          }))}
+        imageFiles={roomImageFiles}
+        onImageFilesChange={setRoomImageFiles}
+        isSaving={isUpdatingRoom}
+        error=""
+        onSave={() => void saveRoom()}
+        onCancel={closeCreateRoomModal}
+      />
     )}
     {galleryRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 p-4" onMouseDown={() => setGalleryRoom(null)}><div className="w-full max-w-4xl rounded-2xl bg-white p-4 shadow-2xl sm:p-5" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Thư viện ảnh</p><h3 className="mt-1 text-lg font-bold text-slate-900">Phòng {galleryRoom.id} · {galleryRoom.name}</h3></div><button type="button" onClick={() => setGalleryRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="relative mt-4 overflow-hidden rounded-xl bg-slate-100"><img src={galleryRoom.images[galleryIndex]} alt={`${galleryRoom.name} · ảnh ${galleryIndex + 1}`} className="h-[min(52vh,420px)] w-full object-cover" /><button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryRoom.images.length) % galleryRoom.images.length)} className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md">‹</button><button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryRoom.images.length)} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md">›</button></div><div className="mt-3 grid grid-cols-4 gap-2">{galleryRoom.images.map((image, index) => <button type="button" key={image} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-600" : "border-transparent"}`}><img src={image} alt={`Ảnh thu nhỏ ${index + 1}`} className="h-16 w-full object-cover" /></button>)}</div></div></div>}
     {assignmentRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4" onMouseDown={() => setAssignmentRoom(null)}><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-amber-600">{t("frontDesk.cleaningAssignment")}</p><h3 className="mt-1 text-lg font-bold text-slate-900">{t("room.roomLabel")} {assignmentRoom.id} · {assignmentRoom.name}</h3><p className="mt-1 text-sm text-slate-500">{t("frontDesk.cleaningDescription")}</p></div><button type="button" onClick={() => setAssignmentRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="mt-5 space-y-2">{employees.map((employee) => <button type="button" key={employee} onClick={() => { updateRoom(assignmentRoom.id, { cleaner: employee, status: "Đang dọn" }); setAssignmentRoom(null); }} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition hover:border-amber-300 hover:bg-amber-50"><span className="grid h-9 w-9 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">{employee.split(" ").map((part) => part[0]).slice(-2).join("")}</span><span><span className="block text-sm font-semibold text-slate-800">{employee}</span><span className="mt-0.5 block text-xs text-slate-500">Housekeeping · {t("room.housekeepingReady")}</span></span></button>)}</div><button type="button" onClick={() => setAssignmentRoom(null)} className="mt-5 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("common.cancel")}</button></div></div>}

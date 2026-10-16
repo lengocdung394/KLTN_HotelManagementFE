@@ -1,9 +1,11 @@
 import { toast } from "@/components/ui/use-toast";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "../components/CheckoutSummary";
+import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from "../components/CheckoutSurplusRefundChoice";
 import CheckInOutBookingDetailModal from "../components/CheckInOutBookingDetailModal";
 import LateCheckoutPreview, { type LateCheckoutRecord } from "../components/LateCheckoutPreview";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -16,6 +18,7 @@ import {
   useBulkCheckOutMutation,
   useGetTodayCheckInsQuery,
   useGetTodayCheckOutsQuery,
+  type CheckoutSurplusRefundMethod as ApiCheckoutSurplusRefundMethod,
   type CheckInOutBookingDetail,
 } from "../services/checkInOutApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -37,6 +40,16 @@ import {
 const toDateParam = (value?: Date) => value
   ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
   : undefined;
+
+const getCheckInErrorMessage = (error: unknown) => {
+  if (error && typeof error === "object" && "data" in error) {
+    const data = error.data;
+    if (data && typeof data === "object" && "message" in data && typeof data.message === "string") {
+      return data.message;
+    }
+  }
+  return "Không thể hoàn tất check-in. Vui lòng thử lại.";
+};
 
 const shiftDay = (dateStr: string, delta: number) => {
   const d = new Date(dateStr);
@@ -164,6 +177,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     .find((entries) => entries.length > 0) ?? [];
   const groupedServices = new Map<string, ServiceCharge>();
   collectServiceEntries(rawServices).forEach((service) => {
+    if (service.cancelled === true || String(service.cancelled).toLowerCase() === "true" || service.cancelledAt) return;
     const nestedService = service.service && typeof service.service === "object"
       ? service.service as Record<string, unknown>
       : {};
@@ -203,7 +217,9 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     ? parsedPaidAmount
     : undefined;
   const parsedEarlyCheckInFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
-  const earlyCheckInFee = Number.isFinite(parsedEarlyCheckInFee) ? parsedEarlyCheckInFee : 0;
+  const earlyCheckInFee = flow === "check-out" && Number.isFinite(parsedEarlyCheckInFee) ? parsedEarlyCheckInFee : 0;
+  const parsedEstimatedEarlyCheckInFee = Number(detail.estimatedEarlyCheckInFee ?? 0);
+  const estimatedEarlyCheckInFee = Number.isFinite(parsedEstimatedEarlyCheckInFee) ? parsedEstimatedEarlyCheckInFee : 0;
   const rawLateFee = detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee;
   const parsedLateFee = rawLateFee === undefined || rawLateFee === null || rawLateFee === ""
     ? undefined
@@ -235,6 +251,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     roomAmount,
     totalAmount,
     earlyCheckInFee,
+    estimatedEarlyCheckInFee,
     lateFee,
     roomPaid,
     paidAmount,
@@ -259,15 +276,34 @@ type RoomDetail = {
 };
 
 export default function CheckInOutWorkspace() {
+  const [searchParams] = useSearchParams();
+  const queryDate = searchParams.get("date");
+  const queryFlow = searchParams.get("flow");
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
   const dispatch = useAppDispatch();
   const { data: services = [], isLoading: isServicesLoading, isError: isServicesError } = useGetAllServicesQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
-  const [modifyBooking] = useModifyBookingMutation();
+  const [modifyBooking, { isLoading: isSavingService }] = useModifyBookingMutation();
+  const serviceSaveInFlight = useRef(false);
   const { t } = useTranslation();
-  const [activeFlow, setActiveFlow] = useState<DailyRecord["flow"]>("check-in");
+  const [activeFlow, setActiveFlow] = useState<DailyRecord["flow"]>(
+    queryFlow === "check-out" ? "check-out" : "check-in",
+  );
   const [query, setQuery] = useState("");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => {
+    if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+      const parsed = new Date(`${queryDate}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date();
+  });
+  useEffect(() => {
+    if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(queryDate)) {
+      const parsed = new Date(`${queryDate}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) setSelectedDate(parsed);
+    }
+    if (queryFlow === "check-in" || queryFlow === "check-out") setActiveFlow(queryFlow);
+  }, [queryDate, queryFlow]);
   const date = toDateParam(selectedDate);
   const checkInQuery = useGetTodayCheckInsQuery(
     { date, status: "PENDING", bookingStatus: "CONFIRMED" },
@@ -315,8 +351,9 @@ export default function CheckInOutWorkspace() {
   const { data: matrixData = [] } = useGetRoomMatrixQuery({ startDate: matrixStart, endDate: matrixEnd });
 
   const [matrixBlockedNotice, setMatrixBlockedNotice] = useState<{
-    roomNumber: string;
+    roomNumbers: string[];
     message: string;
+    hasExactRoomList: boolean;
   } | null>(null);
 
   const checkMatrixCheckInConflict = (record: DailyRecord) => {
@@ -384,19 +421,11 @@ export default function CheckInOutWorkspace() {
     [],
   );
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
-  const [groupDepartureState, setGroupDepartureState] = useState({
-    id: "",
-    guest: "",
-    rooms: [] as string[],
-    time: "",
-    guests: 0,
-    status: "Đã trả phòng",
-    roomAmounts: [] as number[],
-    services: [] as number[],
-  });
-  const [selectedGroupDepartureRooms, setSelectedGroupDepartureRooms] = useState<string[]>([]);
-  const [confirmedGroupDepartureRooms, setConfirmedGroupDepartureRooms] = useState<string[]>([]);
+  const [batchCheckoutRefundMethods, setBatchCheckoutRefundMethods] = useState<Record<string, CheckoutSurplusRefundMethod>>({});
   const [groupCheckoutOpen, setGroupCheckoutOpen] = useState(false);
+  const [groupCheckoutRecords, setGroupCheckoutRecords] = useState<DailyRecord[]>([]);
+  const [groupCheckoutRefundMethod, setGroupCheckoutRefundMethod] = useState<CheckoutSurplusRefundMethod | null>(null);
+  const [singleCheckoutRefundMethod, setSingleCheckoutRefundMethod] = useState<CheckoutSurplusRefundMethod | null>(null);
   const [warningAction, setWarningAction] = useState<{ id: string; flow: "check-in" | "check-out"; message: string; fee: number } | null>(null);
   const [bulkCheckIn, { isLoading: isBulkCheckInLoading }] = useBulkCheckInMutation();
   const [bulkCheckOut, { isLoading: isBulkCheckOutLoading }] = useBulkCheckOutMutation();
@@ -423,7 +452,6 @@ export default function CheckInOutWorkspace() {
         const remainingAmount = record.remainingAmount ?? fees?.remainingAmount;
         return {
           ...record,
-          earlyCheckInFee: fees?.earlyCheckInFee ?? record.earlyCheckInFee,
           lateFee: fees?.lateFee ?? record.lateFee,
           remainingAmount,
           roomPaid: remainingAmount !== undefined ? remainingAmount <= 0 : record.roomPaid,
@@ -548,7 +576,18 @@ export default function CheckInOutWorkspace() {
       return groups;
     }, {}),
   ).filter((records) => records.length > 1);
-  const groupedArrivalIds = new Set(groupedArrivalRecords.flatMap((records) => records.map((record) => record.id)));
+  const groupedDepartureRecords = Object.values(
+    departureState.reduce<Record<string, DailyRecord[]>>((groups, record) => {
+      const key = String(record.bookingId ?? record.id);
+      groups[key] = [...(groups[key] ?? []), record];
+      return groups;
+    }, {}),
+  ).map((records) => records.filter((record) => record.status === "Đang ở"))
+    .filter((records) => records.length > 1);
+  const groupedRecordIds = new Set([
+    ...groupedArrivalRecords.flatMap((records) => records.map((record) => record.id)),
+    ...groupedDepartureRecords.flatMap((records) => records.map((record) => record.id)),
+  ]);
 
   const handleRecordAction = (record: DailyRecord) => {
     if (record.flow === "check-out") {
@@ -570,7 +609,7 @@ export default function CheckInOutWorkspace() {
           title: "Chặn check-in sớm (Trùng ma trận phòng)",
           description: conflict.message,
         });
-        setMatrixBlockedNotice({ roomNumber: conflict.roomNumber, message: conflict.message });
+        setMatrixBlockedNotice({ roomNumbers: [conflict.roomNumber], message: conflict.message, hasExactRoomList: true });
         return;
       }
     }
@@ -579,8 +618,8 @@ export default function CheckInOutWorkspace() {
       setWarningAction({
         id: record.id,
         flow: record.flow,
-        fee: Number(record.earlyCheckInFee ?? 0),
-        message: `Khách đang check-in sớm hơn giờ dự kiến ${record.time}.`,
+        fee: Number(record.estimatedEarlyCheckInFee ?? 0),
+        message: `Nếu check-in ngay trước giờ dự kiến ${record.time}, khách sẽ cần phụ thu thêm.`,
       });
     } else if (record.flow === "check-in") {
       void handleBulkCheckIn([record]);
@@ -618,20 +657,20 @@ export default function CheckInOutWorkspace() {
   };
 
   const handleBulkCheckIn = async (records: DailyRecord[]) => {
-    for (const record of records) {
-      const conflict = checkMatrixCheckInConflict(record);
-      if (conflict) {
-        toast({
-          variant: "destructive",
-          title: "Chặn check-in sớm (Trùng ma trận phòng)",
-          description: conflict.message,
-        });
-        setMatrixBlockedNotice({
-          roomNumber: conflict.roomNumber,
-          message: conflict.message,
-        });
-        return;
-      }
+    const conflicts = records
+      .map((record) => checkMatrixCheckInConflict(record))
+      .filter((conflict): conflict is NonNullable<ReturnType<typeof checkMatrixCheckInConflict>> => conflict !== null);
+    if (conflicts.length > 0) {
+      const roomNumbers = [...new Set(conflicts.map((conflict) => conflict.roomNumber))];
+      const details = conflicts.map((conflict) => conflict.message);
+      const message = details.join("\n");
+      toast({
+        variant: "destructive",
+        title: `Không thể check-in sớm ${roomNumbers.length} phòng`,
+        description: `Phòng bị trùng lịch: ${roomNumbers.join(", ")}`,
+      });
+      setMatrixBlockedNotice({ roomNumbers, message, hasExactRoomList: true });
+      return;
     }
 
     const grouped = records.reduce<Record<string, string[]>>((result, record) => {
@@ -664,16 +703,30 @@ export default function CheckInOutWorkspace() {
       });
     } catch (error) {
       console.error("Bulk check-in failed", error);
-      toast({
-        variant: "destructive",
-        title: "Check-in thất bại",
-        description: "Không thể hoàn tất check-in. Vui lòng thử lại.",
+      const message = getCheckInErrorMessage(error);
+      const roomList = message.match(/các phòng\s+(.+?)\s+vì/i)?.[1];
+      const requestedRoomNumbers = [...new Set(
+        records.map((record) => record.room.split(" · ")[0].trim()).filter(Boolean),
+      )];
+      const hasExactRoomList = Boolean(roomList);
+      setMatrixBlockedNotice({
+        roomNumbers: roomList
+          ? roomList.split(",").map((room) => room.trim()).filter(Boolean)
+          : requestedRoomNumbers,
+        message: hasExactRoomList
+          ? message
+          : `${message}\n\nMáy chủ chưa trả về số phòng bị trùng. Danh sách bên dưới là các phòng trong lượt check-in này, chưa thể xác nhận phòng nào bị trùng.`,
+        hasExactRoomList,
       });
+      toast({ variant: "destructive", title: "Check-in thất bại", description: message });
     }
   };
 
-  const handleBulkCheckOut = async (records: DailyRecord[]) => {
-    if (records.length === 0) return;
+  const handleBulkCheckOut = async (
+    records: DailyRecord[],
+    refundMethodsByBooking: Record<string, ApiCheckoutSurplusRefundMethod> = {},
+  ): Promise<boolean> => {
+    if (records.length === 0) return false;
     const invalidRecord = records.find((record) => !record.bookingId || normalizeDetailId(record.id) === null);
     if (invalidRecord) {
       toast({
@@ -681,7 +734,7 @@ export default function CheckInOutWorkspace() {
         title: "Không thể check-out",
         description: "Thiếu mã booking hoặc mã chi tiết phòng nên chưa gửi được yêu cầu.",
       });
-      return;
+      return false;
     }
 
     const grouped = records.reduce<Record<string, string[]>>((result, record) => {
@@ -694,7 +747,11 @@ export default function CheckInOutWorkspace() {
     try {
       await Promise.all(
         Object.entries(grouped).map(([bookingId, bookingDetailIds]) =>
-          bulkCheckOut({ bookingId, bookingDetailIds }).unwrap(),
+          bulkCheckOut({
+            bookingId,
+            bookingDetailIds,
+            surplusRefundMethod: refundMethodsByBooking[bookingId],
+          }).unwrap(),
         ),
       );
       records.forEach((record) => completeRecord(record.id, "check-out"));
@@ -703,6 +760,7 @@ export default function CheckInOutWorkspace() {
         title: "Check-out thành công",
         description: `Đã hoàn tất check-out cho ${records.length} phòng.`,
       });
+      return true;
     } catch (error) {
       console.error("Bulk check-out failed", error);
       const responseError = error as { data?: { message?: string; error?: string }; error?: string };
@@ -711,6 +769,7 @@ export default function CheckInOutWorkspace() {
         title: "Check-out thất bại",
         description: responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? "Không thể hoàn tất check-out. Vui lòng thử lại.",
       });
+      return false;
     }
   };
 
@@ -735,16 +794,6 @@ export default function CheckInOutWorkspace() {
     setGroupArrivalState((current) => ({ ...current, status: "Chờ check-in" }));
   };
 
-  const undoGroupRoomCheckOut = (room: string) => {
-    setConfirmedGroupDepartureRooms((current) =>
-      current.filter((item) => item !== room),
-    );
-    setSelectedGroupDepartureRooms((current) =>
-      current.filter((item) => item !== room),
-    );
-    setGroupDepartureState((current) => ({ ...current, status: "Đang ở" }));
-  };
-
   const toggleGroupRoomImmediately = (room: string) => {
     if (checkedInGroupRooms.includes(room)) {
       undoGroupRoomCheckIn(room);
@@ -763,28 +812,23 @@ export default function CheckInOutWorkspace() {
 
   const confirmBatchCheckout = async () => {
     const selectedRecords = departureState.filter((record) => selectedDepartureIds.includes(record.id));
-    if (selectedRecords.length > 0) {
-      await handleBulkCheckOut(selectedRecords);
-    }
-    setSelectedDepartureIds([]);
-    setBatchCheckoutOpen(false);
-  };
-
-  const toggleGroupDepartureRoom = (room: string) => {
-    setSelectedGroupDepartureRooms((current) => current.includes(room) ? current.filter((item) => item !== room) : [...current, room]);
-  };
-
-  const completeGroupCheckout = () => {
-    if (selectedGroupDepartureRooms.length === 0) return;
-    const nextSelected = Array.from(new Set([...selectedGroupDepartureRooms]));
-    setSelectedGroupDepartureRooms(nextSelected);
-    if (nextSelected.length === groupDepartureState.rooms.length) {
-      setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
+    const selectedBookingIds = [...new Set(selectedRecords.map((record) => record.bookingId).filter((id): id is string => Boolean(id)))];
+    const finalBookingIds = selectedBookingIds.filter((bookingId) =>
+      departureState.filter((record) => record.bookingId === bookingId)
+        .every((record) => selectedDepartureIds.includes(record.id)),
+    );
+    const completed = selectedRecords.length > 0
+      && finalBookingIds.every((id) => batchCheckoutRefundMethods[id])
+      ? await handleBulkCheckOut(selectedRecords, batchCheckoutRefundMethods)
+      : false;
+    if (completed) {
+      setSelectedDepartureIds([]);
+      setBatchCheckoutOpen(false);
+      setBatchCheckoutRefundMethods({});
     }
   };
 
   const groupArrivalComplete = groupArrivalState.rooms.every((room) => checkedInGroupRooms.includes(room));
-  const groupDepartureComplete = groupDepartureState.rooms.every((room) => confirmedGroupDepartureRooms.includes(room));
 
   const groupDialogRooms = groupArrivalState.rooms.map((room) => ({
     id: room,
@@ -794,39 +838,13 @@ export default function CheckInOutWorkspace() {
   }));
   const batchDialogRooms = departureState.filter((record) => record.status === "Đang ở").map((record) => ({
     id: record.id,
+    bookingId: record.bookingId,
     badge: record.room.split(" · ")[0].slice(-2),
     label: record.guest,
     meta: `Phòng ${record.room.split(" · ")[0]}`,
     status: "pending" as const,
     amount: (record.services || []).reduce((total, service) => total + service.amount, 0) + (record.lateFee || 0),
   }));
-  const groupDepartureItems = groupDepartureState.rooms.map((room, index) => ({
-    id: room,
-    badge: room.slice(-2),
-    title: `Phòng ${room}`,
-    subtitle: `${groupDepartureState.id} · Dịch vụ/phụ thu: ${groupDepartureState.services[index].toLocaleString("vi-VN")}đ`,
-    status: confirmedGroupDepartureRooms.includes(room) ? "complete" as const : selectedGroupDepartureRooms.includes(room) ? "pending" as const : "pending" as const,
-  }));
-  const groupCheckoutSummaryRooms: CheckoutSummaryRoom[] = groupDepartureState.rooms
-    .filter((room) => selectedGroupDepartureRooms.includes(room))
-    .map((room) => {
-      const index = groupDepartureState.rooms.indexOf(room);
-      return {
-        id: room,
-        label: `Phòng ${room}`,
-        roomPaid: false,
-        roomAmount: groupDepartureState.roomAmounts[index],
-        services: groupDepartureState.services[index] > 0 ? [{ name: "Dịch vụ / phụ thu", quantity: 1, amount: groupDepartureState.services[index] }] : [],
-      };
-    });
-  const confirmGroupCheckout = (roomsToConfirm = selectedGroupDepartureRooms) => {
-    if (roomsToConfirm.length === 0) return;
-    const merged = Array.from(new Set([...confirmedGroupDepartureRooms, ...roomsToConfirm]));
-    setConfirmedGroupDepartureRooms(merged);
-    setSelectedGroupDepartureRooms([]);
-    setGroupCheckoutOpen(false);
-    if (merged.length === groupDepartureState.rooms.length) setGroupDepartureState((current) => ({ ...current, status: "Đã trả phòng" }));
-  };
   const checkoutRoomsFromRecords = (records: Array<Pick<DailyRecord, "id" | "bookingId" | "guest" | "room" | "roomAmount" | "roomPaid" | "remainingAmount" | "services" | "lateFee">>): CheckoutSummaryRoom[] => records.map((record) => ({
     id: record.id,
     bookingId: record.bookingId,
@@ -838,10 +856,26 @@ export default function CheckInOutWorkspace() {
     lateFee: record.lateFee,
   }));
 
+  const isFinalSingleCheckout = (record: DailyRecord) =>
+    departureState.filter((item) => item.bookingId === record.bookingId).length <= 1;
+
+  const closeSingleCheckout = () => {
+    setCheckoutRecord(null);
+    setSingleCheckoutRefundMethod(null);
+  };
+
   const confirmCheckout = async () => {
     if (!checkoutRecord) return;
-    await handleBulkCheckOut([checkoutRecord]);
-    setCheckoutRecord(null);
+    const completed = await handleBulkCheckOut(
+      [checkoutRecord],
+      isFinalSingleCheckout(checkoutRecord) && checkoutRecord.bookingId && singleCheckoutRefundMethod
+        ? { [checkoutRecord.bookingId]: singleCheckoutRefundMethod }
+        : {},
+    );
+    if (completed) {
+      setCheckoutRecord(null);
+      setSingleCheckoutRefundMethod(null);
+    }
   };
 
   const handleLateCheckout = (lateCheckout: LateCheckoutRecord) => {
@@ -952,6 +986,7 @@ export default function CheckInOutWorkspace() {
   };
 
   const saveRecordServices = async () => {
+    if (serviceSaveInFlight.current) return;
     if (!serviceRecord) return;
     const toServiceCharges = (roomSelections: ServiceSelection[]) => roomSelections.map((selection) => ({
       serviceId: selection.serviceId,
@@ -1051,6 +1086,7 @@ export default function CheckInOutWorkspace() {
       customerPromotionRequest: null,
     };
 
+    serviceSaveInFlight.current = true;
     try {
       await modifyBooking({ bookingId, request }).unwrap();
       setRecordServices((current) => ({ ...current, ...updatedServicesByRecordId }));
@@ -1063,6 +1099,8 @@ export default function CheckInOutWorkspace() {
         description: responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? "Không thể cập nhật dịch vụ.",
       });
       return;
+    } finally {
+      serviceSaveInFlight.current = false;
     }
 
     setServiceRecordIdsByRoom(null);
@@ -1235,37 +1273,48 @@ export default function CheckInOutWorkspace() {
               }}
             />
           )}
-        {!groupDepartureComplete && groupDepartureState.status === "Đang ở" &&
-          activeFlow === "check-out" &&
-          `${groupDepartureState.guest} ${groupDepartureState.id} ${groupDepartureState.rooms.join(" ")}`
-            .toLowerCase()
-            .includes(query.toLowerCase()) && (
+        {groupedDepartureRecords.map((records) => {
+          const firstRecord = records[0];
+          const groupLabel = `${firstRecord.guest} ${firstRecord.bookingId ?? firstRecord.id} ${records.map((record) => record.room).join(" ")}`;
+          if (activeFlow !== "check-out" || !groupLabel.toLowerCase().includes(query.toLowerCase())) return null;
+          return (
             <BatchStayCard
+              key={`checkout-group-${firstRecord.bookingId ?? firstRecord.id}`}
               mode="check-out"
-              title={groupDepartureState.guest}
-              description={`${groupDepartureState.rooms.length} phòng · ${groupDepartureState.guests} khách · Trả lúc ${groupDepartureState.time}`}
-              items={groupDepartureItems}
-              selectedIds={confirmedGroupDepartureRooms}
-              draftSelectedIds={selectedGroupDepartureRooms}
-              actionLabel="Check-out cả đoàn"
-              actionCount={groupDepartureState.rooms.length}
+              title={firstRecord.guest}
+              bookingCode={firstRecord.bookingId}
+              identityNumber={firstRecord.identityNumber}
+              description={`${records.length} phòng · ${records.reduce((total, record) => total + (record.guests ?? 0), 0)} khách · Trả lúc ${firstRecord.time}`}
+              items={records.map((record) => ({
+                id: record.id,
+                title: record.room,
+                subtitle: record.bookingId ?? "",
+                status: "pending" as const,
+                roomPaid: record.roomPaid,
+              }))}
+              selectedIds={[]}
+              draftSelectedIds={[]}
+              actionLabel="Check-out các phòng"
+              actionCount={records.length}
               actionDisabled={false}
-              onAddService={() => openGroupServiceSelector(groupDepartureState.id, groupDepartureState.guest, groupDepartureState.rooms, groupDepartureState.guests)}
-              checkoutSummaryRooms={groupCheckoutSummaryRooms}
+              onViewBooking={() => setBookingDetailRecords(records.map((record) => ({
+                ...record,
+                services: recordServices[record.id] ?? record.services,
+              })))}
+              onAddService={() => openGroupedRecordsServiceSelector(records)}
+              checkoutSummaryRooms={checkoutRoomsFromRecords(records)}
               onAction={(nextSelected) => {
                 if (nextSelected.length === 0) return;
-                setSelectedGroupDepartureRooms(nextSelected);
-                const selectedTotal = groupDepartureState.rooms
-                  .filter((room) => nextSelected.includes(room))
-                  .reduce((total, room) => { const index = groupDepartureState.rooms.indexOf(room); return total + groupDepartureState.roomAmounts[index] + groupDepartureState.services[index]; }, 0);
-                if (selectedTotal > 0) setGroupCheckoutOpen(true);
-                else confirmGroupCheckout(nextSelected);
+                setGroupCheckoutRecords(records.filter((record) => nextSelected.includes(record.id)));
+                setGroupCheckoutRefundMethod(null);
+                setGroupCheckoutOpen(true);
               }}
             />
-          )}
+          );
+        })}
         <CheckInOutRecordList
           records={filtered}
-          groupedRecordIds={groupedArrivalIds}
+          groupedRecordIds={groupedRecordIds}
           recordServices={recordServices}
           checkMatrixCheckInConflict={checkMatrixCheckInConflict}
           onRecordAction={handleRecordAction}
@@ -1309,8 +1358,9 @@ export default function CheckInOutWorkspace() {
                   description: conflict.message,
                 });
                 setMatrixBlockedNotice({
-                  roomNumber: conflict.roomNumber,
+                  roomNumbers: [conflict.roomNumber],
                   message: conflict.message,
+                  hasExactRoomList: true,
                 });
                 return;
               }
@@ -1336,16 +1386,41 @@ export default function CheckInOutWorkspace() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
-                  Chặn thủ tục Check-in sớm
+                  {matrixBlockedNotice.hasExactRoomList ? "Chặn thủ tục Check-in sớm" : "Không thể hoàn tất Check-in"}
                 </h3>
                 <p className="mt-0.5 text-xs text-rose-600 font-semibold">
-                  Trùng lịch bận trên Ma trận phòng (GetMatrix)
+                  {matrixBlockedNotice.hasExactRoomList
+                    ? "Đã xác định phòng trùng lịch trên ma trận phòng"
+                    : "Chưa nhận được danh sách phòng trùng chính xác từ máy chủ"}
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-xs font-medium text-slate-700 leading-relaxed">
-              {matrixBlockedNotice.message}
+            <div className="mt-4 space-y-3 rounded-xl border border-rose-200 bg-rose-50/70 p-4">
+              {matrixBlockedNotice.roomNumbers.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-rose-800">
+                    {matrixBlockedNotice.hasExactRoomList ? "Phòng bị trùng lịch" : "Các phòng trong lượt check-in"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {matrixBlockedNotice.roomNumbers.map((roomNumber) => (
+                      <span
+                        key={roomNumber}
+                        className={`rounded-lg border px-3 py-1.5 text-sm font-bold ${
+                          matrixBlockedNotice.hasExactRoomList
+                            ? "border-rose-300 bg-white text-rose-700"
+                            : "border-amber-300 bg-amber-50 text-amber-800"
+                        }`}
+                      >
+                        Phòng {roomNumber}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="whitespace-pre-line text-xs font-medium leading-relaxed text-slate-700">
+                {matrixBlockedNotice.message}
+              </p>
             </div>
 
             <div className="mt-6 flex justify-end">
@@ -1364,7 +1439,7 @@ export default function CheckInOutWorkspace() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setServiceRecord(null)}>
           <div className="booking-service-modal-scroll max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Dịch vụ cho khách</p><h3 className="mt-1 text-lg font-bold text-slate-900">{serviceRecord.guest} · {serviceRecord.room.split(" · ")[0]}</h3></div><button type="button" onClick={() => setServiceRecord(null)} className="text-2xl leading-none text-slate-400">×</button></div>
-            <BookingServiceSelector rooms={serviceSelectorRooms} services={services} servicesLoading={isServicesLoading} servicesError={isServicesError} serviceMode={serviceModalMode} setServiceMode={setServiceModalMode} allRoomServices={serviceAllSelections} setAllRoomServices={setServiceAllSelections} roomServices={serviceRoomSelections} setRoomServices={setServiceRoomSelections} roomRanges={{}} fallbackRange={{ checkIn: "2026-01-01", checkOut: "2026-01-02" }} language="vi" nightsForRoom={() => 1} onContinue={saveRecordServices} onSkip={() => setServiceRecord(null)} continueLabel="Xác nhận" skipLabel="Đóng" />
+            <BookingServiceSelector rooms={serviceSelectorRooms} services={services} servicesLoading={isServicesLoading} servicesError={isServicesError} serviceMode={serviceModalMode} setServiceMode={setServiceModalMode} allRoomServices={serviceAllSelections} setAllRoomServices={setServiceAllSelections} roomServices={serviceRoomSelections} setRoomServices={setServiceRoomSelections} roomRanges={{}} fallbackRange={{ checkIn: "2026-01-01", checkOut: "2026-01-02" }} language="vi" nightsForRoom={() => 1} onContinue={saveRecordServices} onSkip={() => setServiceRecord(null)} isSubmitting={isSavingService} continueLabel="Xác nhận" skipLabel="Đóng" />
           </div>
         </div>
       )}
@@ -1477,7 +1552,7 @@ export default function CheckInOutWorkspace() {
           return (
             <div
               className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
-              onMouseDown={() => setCheckoutRecord(null)}
+              onMouseDown={closeSingleCheckout}
             >
               <div
                 className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"
@@ -1498,7 +1573,7 @@ export default function CheckInOutWorkspace() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setCheckoutRecord(null)}
+                    onClick={closeSingleCheckout}
                     className="text-2xl leading-none text-slate-400"
                   >
                     ×
@@ -1572,10 +1647,19 @@ export default function CheckInOutWorkspace() {
                     </strong>
                   </div>
                 </div>
+                {isFinalSingleCheckout(checkoutRecord) && (
+                  <div className="mt-4">
+                    <CheckoutSurplusRefundChoice
+                      name={`checkout-refund-${checkoutRecord.bookingId ?? checkoutRecord.id}`}
+                      value={singleCheckoutRefundMethod}
+                      onChange={setSingleCheckoutRefundMethod}
+                    />
+                  </div>
+                )}
                 <div className="mt-6 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setCheckoutRecord(null)}
+                    onClick={closeSingleCheckout}
                     className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600"
                   >
                     Hủy
@@ -1583,6 +1667,7 @@ export default function CheckInOutWorkspace() {
                   <button
                     type="button"
                     onClick={confirmCheckout}
+                    disabled={(isFinalSingleCheckout(checkoutRecord) && !singleCheckoutRefundMethod) || isBulkCheckOutLoading}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                   >
                     <CreditCard size={16} />
@@ -1599,17 +1684,44 @@ export default function CheckInOutWorkspace() {
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Đối soát check-out cả đoàn</p>
-                <h3 className="mt-1 text-xl font-bold text-slate-900">{groupDepartureState.guest}</h3>
-                <p className="mt-1 text-sm text-slate-500">{selectedGroupDepartureRooms.length} phòng · Booking {groupDepartureState.id}</p>
+                <h3 className="mt-1 text-xl font-bold text-slate-900">{groupCheckoutRecords[0]?.guest ?? "Khách hàng"}</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {groupCheckoutRecords.length} phòng · Booking {groupCheckoutRecords[0]?.bookingId ?? "-"}
+                </p>
               </div>
               <button type="button" onClick={() => setGroupCheckoutOpen(false)} className="text-2xl leading-none text-slate-400">×</button>
             </div>
             <div className="mt-5">
-              <CheckoutSummary rooms={groupCheckoutSummaryRooms} />
+              <CheckoutSummary rooms={checkoutRoomsFromRecords(groupCheckoutRecords)} />
+            </div>
+            <div className="mt-4">
+              <CheckoutSurplusRefundChoice
+                name={`checkout-refund-${groupCheckoutRecords[0]?.bookingId ?? "group"}`}
+                value={groupCheckoutRefundMethod}
+                onChange={setGroupCheckoutRefundMethod}
+              />
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" onClick={() => setGroupCheckoutOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600">Hủy</button>
-              <button type="button" onClick={() => confirmGroupCheckout()} className="flex w-56 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><CreditCard size={16} />Thanh toán & Check-out</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const bookingId = groupCheckoutRecords[0]?.bookingId;
+                  const completed = await handleBulkCheckOut(
+                    groupCheckoutRecords,
+                    bookingId && groupCheckoutRefundMethod ? { [bookingId]: groupCheckoutRefundMethod } : {},
+                  );
+                  if (completed) {
+                    setGroupCheckoutOpen(false);
+                    setGroupCheckoutRecords([]);
+                    setGroupCheckoutRefundMethod(null);
+                  }
+                }}
+                disabled={isBulkCheckOutLoading || groupCheckoutRecords.length === 0 || !groupCheckoutRefundMethod}
+                className="flex w-56 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                <CreditCard size={16} />Thanh toán & Check-out
+              </button>
             </div>
           </div>
         </div>
@@ -1756,36 +1868,6 @@ export default function CheckInOutWorkspace() {
           </div>
         </div>
       )}
-      {selectedGroupDepartureRooms.length > 0 && activeFlow === "check-out" && (
-        <div className="border-t border-slate-100 bg-amber-50/40 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="font-bold text-slate-900">
-                Phòng đoàn đã check-out
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Bấm “Bỏ check-out” nếu chọn nhầm phòng để chọn lại.
-              </p>
-            </div>
-            <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-amber-700">
-              {selectedGroupDepartureRooms.length}/{groupDepartureState.rooms.length}{" "}
-              phòng
-            </span>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {selectedGroupDepartureRooms.map((room) => (
-              <button
-                type="button"
-                key={room}
-                onClick={() => undoGroupRoomCheckOut(room)}
-                className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
-              >
-                Phòng {room} · Bỏ check-out
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       {selectingGroupRoom && (
         <div
           className="fixed inset-0 z-60 grid place-items-center bg-slate-950/40 p-4"
@@ -1880,6 +1962,10 @@ export default function CheckInOutWorkspace() {
         rooms={batchDialogRooms}
         selectedIds={selectedDepartureIds}
         checkoutSummaryRooms={checkoutRoomsFromRecords(departureState.filter((record) => selectedDepartureIds.includes(record.id)))}
+        checkoutRefundMethods={batchCheckoutRefundMethods}
+        onCheckoutRefundMethodChange={(bookingId, method) =>
+          setBatchCheckoutRefundMethods((current) => ({ ...current, [bookingId]: method }))
+        }
         onToggle={toggleDepartureSelection}
         onClose={() => setBatchCheckoutOpen(false)}
         onConfirm={confirmBatchCheckout}

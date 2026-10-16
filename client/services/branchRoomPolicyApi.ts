@@ -3,9 +3,10 @@ import { baseApi } from "./baseApi";
 export type BranchRoomPolicy = Record<string, unknown>;
 
 export type BranchRoomPolicyUpdateRequest = {
-  price: number;
+  basePrice: number;
   extraAdultFee: number;
   extraChildFee: number;
+  area?: number;
   standardCapacity: number;
   maxExtraGuests: number;
 };
@@ -34,7 +35,7 @@ export const branchRoomPolicyApi = baseApi.injectEndpoints({
         method: "PUT",
         data: request,
       }),
-      invalidatesTags: ["BranchRoomPolicy"],
+      invalidatesTags: ["BranchRoomPolicy", "Room", "Booking", "SuperAdminBranch"],
     }),
   }),
 });

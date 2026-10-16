@@ -111,6 +111,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const canManagePromotions = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
   const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [targetHotelId, setTargetHotelId] = useState("");
   const { data: apiPromotions = [], isLoading, isError } = useGetPromotionsQuery(
     isSystemAdmin
       ? { ...(selectedBranchId ? { hotelId: Number(selectedBranchId) } : {}), page: 0, size: 100 }
@@ -254,6 +255,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const openCreatePromotion = () => {
     setEditingPromotion(null);
     setForm(initialForm);
+    setTargetHotelId("");
     setImageFile(null);
     setFormError("");
     setModalOpen(true);
@@ -338,7 +340,11 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
 
     try {
       pendingLocalPromotionName.current = promotionInfo.name;
-      await createPromotion({ promotionInfo, image: imageFile ?? undefined }).unwrap();
+      await createPromotion({
+        promotionInfo,
+        image: imageFile ?? undefined,
+        ...(isSystemAdmin && targetHotelId ? { hotelId: Number(targetHotelId) } : {}),
+      }).unwrap();
       window.setTimeout(() => {
         if (pendingLocalPromotionName.current === promotionInfo.name) pendingLocalPromotionName.current = "";
       }, 5000);
@@ -389,6 +395,24 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   <p className="mt-1 text-xs text-slate-500">{label("sectionGeneralDescription")}</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  {isSystemAdmin && !editingPromotion && (
+                    <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                      {label("promotionTarget")}
+                      <select
+                        value={targetHotelId}
+                        onChange={(event) => setTargetHotelId(event.target.value)}
+                        className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"
+                      >
+                        <option value="">{label("allSystemBranches")}</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-xs font-normal text-slate-500">
+                        {targetHotelId ? label("branchPromotionNotice") : label("systemPromotionNotice")}
+                      </span>
+                    </label>
+                  )}
                   <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                     {label("programName")} <span className="text-rose-500">*</span>
                     <input required value={form.name} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={label("exampleWeekendOffer")} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
@@ -763,8 +787,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_auto_auto] lg:justify-items-end">
-                    <div className="text-right">
+                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_120px_90px] lg:justify-items-stretch">
+                    <div className="min-w-0 text-right">
                       <p className="text-xs text-slate-400">
                         {label("offerLevel")}
                       </p>
@@ -772,7 +796,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                         {formatValue(promotion)}
                       </p>
                     </div>
-                    <div className="flex w-[120px] justify-end">
+                    <div className="flex w-full justify-center">
                       <span className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
                         {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
                       </span>
@@ -780,19 +804,19 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     <button
                       type="button"
                       onClick={() => setDetailPromotion(promotion)}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     >
                       <Eye size={14} />
                       {label("viewDetails")}
                     </button>
-                    {canManagePromotions && <button
+                    {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) ? <button
                       type="button"
                       onClick={() => openEditPromotion(promotion)}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     >
                       <Pencil size={14} />
                       {label("edit")}
-                    </button>}
+                    </button> : <span aria-hidden="true" />}
                   </div>
                 </article>
                 );

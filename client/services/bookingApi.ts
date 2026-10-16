@@ -24,6 +24,7 @@ export type BookingCreateRequest = {
   customerName?: string;
   customerPhone?: string;
   customerIdentityNumber?: string;
+  customerEmail?: string;
   employeeId?: string;
   bookingChannel: "ONLINE" | "OFFLINE";
   customerPromotionId: string | null;
@@ -59,7 +60,23 @@ export type BookingListItem = {
   [key: string]: unknown;
 };
 
-export type RoomMatrixResponse = Record<string, unknown>;
+export type RoomMatrixSchedule = {
+  bookingId?: string;
+  customerName?: string;
+  checkinTime?: string;
+  checkoutTime?: string;
+  bookingStatus?: string;
+  roomStatus?: string;
+  occupiedDates?: string[];
+};
+
+export type RoomMatrixResponse = {
+  roomId?: string;
+  roomNumber?: string;
+  roomTypeName?: string;
+  schedules?: RoomMatrixSchedule[];
+  [key: string]: unknown;
+};
 
 const extractBookingList = (response: unknown): BookingListItem[] => {
   if (Array.isArray(response)) return response as BookingListItem[];

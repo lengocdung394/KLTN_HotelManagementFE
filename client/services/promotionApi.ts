@@ -158,10 +158,11 @@ export const promotionApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<unknown>) => extractList(response).map(normalizePromotion).filter((promotion) => promotion.id),
       providesTags: ["Promotion"],
     }),
-    createPromotion: builder.mutation<Promotion, { promotionInfo: CreatePromotionRequest; image?: File }>({
-      query: ({ promotionInfo, image }) => ({
+    createPromotion: builder.mutation<Promotion, { promotionInfo: CreatePromotionRequest; image?: File; hotelId?: number }>({
+      query: ({ promotionInfo, image, hotelId }) => ({
         url: "/promotions",
         method: "POST",
+        params: hotelId == null ? undefined : { hotelId },
         data: promotionFormData(promotionInfo, image),
       }),
       transformResponse: (response: ApiResponse<PromotionApiResponse>) => normalizePromotion(response?.result ?? {}),

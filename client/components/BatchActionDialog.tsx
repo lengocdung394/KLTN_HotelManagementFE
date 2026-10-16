@@ -1,8 +1,10 @@
 import { CreditCard } from "lucide-react";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "./CheckoutSummary";
+import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from "./CheckoutSurplusRefundChoice";
 
 type BatchActionRoom = {
   id: string;
+  bookingId?: string;
   label: string;
   meta: string;
   status: "pending" | "complete";
@@ -18,6 +20,8 @@ type BatchActionDialogProps = {
   onClose: () => void;
   onConfirm: () => void;
   checkoutSummaryRooms?: CheckoutSummaryRoom[];
+  checkoutRefundMethods?: Record<string, CheckoutSurplusRefundMethod>;
+  onCheckoutRefundMethodChange?: (bookingId: string, method: CheckoutSurplusRefundMethod) => void;
 };
 
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")}đ`;
@@ -31,12 +35,23 @@ export default function BatchActionDialog({
   onClose,
   onConfirm,
   checkoutSummaryRooms,
+  checkoutRefundMethods = {},
+  onCheckoutRefundMethodChange,
 }: BatchActionDialogProps) {
   if (!open) return null;
 
   const isCheckIn = mode === "check-in";
   const selectedRooms = rooms.filter((room) => selectedIds.includes(room.id));
   const total = selectedRooms.reduce((sum, room) => sum + (room.amount || 0), 0);
+  const selectedBookings = [...new Map(
+    (checkoutSummaryRooms ?? [])
+      .filter((room) => selectedIds.includes(room.id) && room.bookingId)
+      .filter((selectedRoom) => rooms
+        .filter((room) => room.bookingId === selectedRoom.bookingId)
+        .every((room) => selectedIds.includes(room.id)))
+      .map((room) => [room.bookingId!, room]),
+  ).entries()];
+  const allRefundMethodsSelected = selectedBookings.every(([bookingId]) => checkoutRefundMethods[bookingId] != null);
 
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={onClose}>
     <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
@@ -63,9 +78,28 @@ export default function BatchActionDialog({
       </div>
 
       {!isCheckIn && checkoutSummaryRooms ? <div className="mt-4 border-t border-slate-200 pt-4"><CheckoutSummary rooms={checkoutSummaryRooms} compact /></div> : !isCheckIn && <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4"><span className="font-bold text-slate-900">Tổng cần thanh toán</span><strong className="text-lg text-amber-700">{formatMoney(total)}</strong></div>}
+      {!isCheckIn && selectedBookings.length > 0 && (
+        <div className="mt-4 space-y-3">
+          <p className="text-xs leading-5 text-slate-600">
+            Chọn cách xử lý khoản đã thu dư cho từng booking. Lựa chọn chỉ áp dụng khi booking đã trả hết phòng và phát sinh khoản hoàn.
+          </p>
+          {selectedBookings.map(([bookingId, room]) => (
+            <div key={bookingId}>
+              <p className="mb-1 text-xs font-semibold text-slate-700">
+                Booking {bookingId} · {room.label}
+              </p>
+              <CheckoutSurplusRefundChoice
+                name={`checkout-refund-${bookingId}`}
+                value={checkoutRefundMethods[bookingId] ?? null}
+                onChange={(method) => onCheckoutRefundMethodChange?.(bookingId, method)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mt-6 flex justify-end gap-3">
         <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Hủy</button>
-        {isCheckIn ? <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">Đóng</button> : <button type="button" disabled={selectedRooms.length === 0} onClick={onConfirm} className="flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><CreditCard size={16} />Thanh toán & Check-out</button>}
+        {isCheckIn ? <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">Đóng</button> : <button type="button" disabled={selectedRooms.length === 0 || !allRefundMethodsSelected} onClick={onConfirm} className="flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><CreditCard size={16} />Thanh toán & Check-out</button>}
       </div>
     </div>
   </div>;

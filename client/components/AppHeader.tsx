@@ -1,6 +1,7 @@
-import { Bell, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
+import NotificationBell from "./NotificationBell";
 
 type AppHeaderProps = {
   onMenuClick?: () => void;
@@ -12,6 +13,12 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
   const { t, i18n } = useTranslation();
   const auth = useAppSelector((state) => state.auth);
   const displayName = fullName?.trim() || auth.fullName?.trim() || auth.email?.trim() || "Người dùng";
+  const hour = new Date().getHours();
+  const greetingKey = hour >= 5 && hour < 12
+    ? "common.goodMorning"
+    : hour >= 12 && hour < 18
+      ? "common.goodAfternoon"
+      : "common.goodEvening";
   const currentDate = new Date().toLocaleDateString(i18n.language.startsWith("en") ? "en-US" : "vi-VN", {
     weekday: "long",
     day: "numeric",
@@ -42,7 +49,7 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
         )}
         <div className="min-w-0">
           <p className="text-xs font-medium capitalize text-slate-400">{currentDate}</p>
-          <h1 className="truncate text-lg font-bold tracking-tight text-slate-900">{t("common.goodMorning", { name: displayName })}</h1>
+          <h1 className="truncate text-lg font-bold tracking-tight text-slate-900">{t(greetingKey, { name: displayName })}</h1>
         </div>
       </div>
 
@@ -78,10 +85,7 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
           </button>
         </div>
 
-        <button type="button" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition" aria-label="Notifications">
-          <Bell size={19} />
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-orange-500 ring-2 ring-white" />
-        </button>
+        <NotificationBell />
       </div>
     </header>
   );

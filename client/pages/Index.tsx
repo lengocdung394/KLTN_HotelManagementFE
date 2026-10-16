@@ -1,15 +1,13 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-  CalendarDays,
   Download,
-  LogIn,
-  LogOut,
   Plus,
   Sparkles,
   UserRound,
 } from "lucide-react";
 import OverviewCalendar from "../components/OverviewCalendarNew";
+import DashboardCheckInOut from "../components/DashboardCheckInOut";
 import AppHeader from "../components/AppHeader";
 import AppSidebar from "../components/AppSidebar";
 import ScrollControls from "../components/ScrollControls";
@@ -19,97 +17,33 @@ import { useGetTodayCheckInsQuery, useGetTodayCheckOutsQuery } from "../services
 import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
 import { useGetOrdersQuery } from "../services/orderApi";
 
-function DashboardCheckInOut({
-  checkInsCount,
-  checkOutsCount,
-  earlyCheckInsCount,
-}: {
-  checkInsCount: number;
-  checkOutsCount: number;
-  earlyCheckInsCount: number;
-}) {
-  const { t } = useTranslation();
-  return (
-    <section className="mt-7 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <CalendarDays size={17} className="text-blue-600" />
-            <h3 className="font-bold text-slate-900">
-              {t("dashboard.todayCheckInOut")}
-            </h3>
-          </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {t("common.todayCheckInOutDescription")}
-          </p>
-        </div>
-        <Link
-          to="/check-in-out"
-          className="text-xs font-semibold text-blue-600 hover:underline"
-        >
-          {t("common.openFrontDesk")}
-        </Link>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="flex items-center justify-between rounded-xl bg-blue-50/70 p-4">
-          <div className="flex items-center gap-3">
-            <LogIn size={18} className="text-blue-600" />
-            <div>
-              <p className="text-xs font-semibold text-slate-700">
-                {t("common.upcomingCheckIns")}
-              </p>
-              <p className="mt-1 text-lg font-bold text-slate-900">
-                {String(checkInsCount).padStart(2, "0")}{" "}
-                <span className="text-xs font-medium text-slate-500">
-                  {t("common.todayTrips")}
-                </span>
-              </p>
-            </div>
-          </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-blue-700 shadow-sm">
-            {earlyCheckInsCount} {t("common.early")}
-          </span>
-        </div>
-        <div className="flex items-center justify-between rounded-xl bg-amber-50/70 p-4">
-          <div className="flex items-center gap-3">
-            <LogOut size={18} className="text-amber-600" />
-            <div>
-              <p className="text-xs font-semibold text-slate-700">
-                {t("common.upcomingCheckOuts")}
-              </p>
-              <p className="mt-1 text-lg font-bold text-slate-900">
-                {String(checkOutsCount).padStart(2, "0")}{" "}
-                <span className="text-xs font-medium text-slate-500">
-                  {t("common.todayTrips")}
-                </span>
-              </p>
-            </div>
-          </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-amber-700 shadow-sm">
-            {Math.max(1, Math.floor(checkOutsCount / 2))} {t("common.waiting")}
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-}
+const getLocalDateParam = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+};
 
 export default function Index({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
   const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
-  const { fullName, email, position, hotelName } = useAppSelector((state) => state.auth);
+  const { fullName, email, position, hotelId } = useAppSelector((state) => state.auth);
 
-  // Live API Hooks từ Backend
-  const { data: todayCheckIns = [] } = useGetTodayCheckInsQuery(undefined);
-  const { data: todayCheckOuts = [] } = useGetTodayCheckOutsQuery(undefined);
+  const todayCheckIns = useGetTodayCheckInsQuery(
+    { date: getLocalDateParam(), status: "PENDING", bookingStatus: "CONFIRMED" },
+    { skip: !hotelId },
+  );
+  const todayCheckOuts = useGetTodayCheckOutsQuery(
+    { date: getLocalDateParam(), status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
+    { skip: !hotelId },
+  );
   const { data: rooms = [] } = useGetRoomsByCurrentHotelQuery();
   const { data: orders = [] } = useGetOrdersQuery();
 
-  // Tính toán số liệu thực tế từ Backend
-  const checkInsCount = todayCheckIns.length;
-  const checkOutsCount = todayCheckOuts.length;
-  const earlyCheckInsCount = todayCheckIns.filter(
-    (item) => Boolean(item.isEarly) || (item.earlyHours ?? 0) > 0
+  const checkInsData = todayCheckIns.data ?? [];
+  const checkOutsData = todayCheckOuts.data ?? [];
+  const checkInsCount = checkInsData.length;
+  const checkOutsCount = checkOutsData.length;
+  const earlyCheckInsCount = checkInsData.filter(
+    (item: any) => Boolean(item.isEarly) || (item.earlyHours ?? 0) > 0
   ).length;
 
   const totalRooms = rooms.length;
@@ -217,26 +151,24 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {t("dashboard.arrivalsDepartures")}
               </p>
               <p className="mt-4 text-[26px] font-bold">
-                {checkInsCount}{" "}
+                {todayCheckIns.isLoading ? "—" : checkInsCount}{" "}
                 <span className="text-lg font-medium text-slate-400">
                   {t("common.arrivals")}
                 </span>{" "}
-                · {checkOutsCount}{" "}
+                · {todayCheckOuts.isLoading ? "—" : checkOutsCount}{" "}
                 <span className="text-lg font-medium text-slate-400">
                   {t("common.departures")}
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                {earlyCheckInsCount} {t("common.earlyCheckInRequests")}
+                {todayCheckIns.isError || todayCheckOuts.isError
+                  ? "Không tải được dữ liệu check-in/check-out"
+                  : `${earlyCheckInsCount} ${t("common.earlyCheckInRequests")}`}
               </p>
             </div>
           </section>
 
-          <DashboardCheckInOut
-            checkInsCount={checkInsCount}
-            checkOutsCount={checkOutsCount}
-            earlyCheckInsCount={earlyCheckInsCount}
-          />
+          <DashboardCheckInOut />
           <OverviewCalendar />
 
           <div className="mt-7 grid gap-5 xl:grid-cols-[1.35fr_1fr]">
@@ -269,12 +201,12 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                   ))
                 ) : null}
 
-                {todayCheckIns.length > 0 ? (
-                  todayCheckIns.slice(0, 2).map((item, idx) => (
+                {checkInsData.length > 0 ? (
+                  checkInsData.slice(0, 2).map((item: any, idx: number) => (
                     <div key={idx} className="flex items-center gap-3 rounded-xl bg-blue-50/70 p-3">
                       <UserRound size={16} className="text-blue-600" />
                       <p className="flex-1 text-xs font-semibold text-slate-800">
-                        Check-in · {item.customerName || item.guestName || "Khách hàng"}
+                        Check-in · {item.nameCustomer || item.customerName || item.guestName || "Khách hàng"}
                       </p>
                       <span className="text-[10px] font-semibold text-blue-700">
                         {t("common.upcoming")}
@@ -283,7 +215,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                   ))
                 ) : null}
 
-                {pendingCleaningRooms.length === 0 && todayCheckIns.length === 0 ? (
+                {pendingCleaningRooms.length === 0 && checkInsData.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
                     Không có công việc cần xử lý. Tất cả đã hoàn tất!
                   </div>
@@ -300,7 +232,12 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {roomDisplayList.map((room) => (
+                {(roomDisplayList.length > 0 ? roomDisplayList : [
+                  { number: "101", status: t("room.ready") },
+                  { number: "102", status: t("room.ready") },
+                  { number: "103", status: t("room.ready") },
+                  { number: "104", status: t("room.ready") },
+                ]).map((room) => (
                   <div
                     key={room.number}
                     className="flex items-center justify-between rounded-lg border border-slate-100 p-2.5"

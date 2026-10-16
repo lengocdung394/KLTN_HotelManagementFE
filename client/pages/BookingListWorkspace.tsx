@@ -14,8 +14,9 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import BankSelectionField from "../components/BankSelectionField";
 import {
   useGetBookingsByHotelQuery,
   useUpdateBookingMutation,
@@ -24,6 +25,7 @@ import {
 } from "../services/bookingApi";
 import { useCreatePaymentQrMutation, usePayWithCashMutation } from "../services/paymentApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
+import { useCancelBookingByStaffMutation } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
@@ -62,6 +64,37 @@ const money = (value: unknown) => {
 };
 
 const bookingId = (booking: BookingListItem) => textOf(booking, ["bookingId", "orderId", "id"]);
+
+const bookingTotalIncludingSurcharges = (booking: BookingListItem) => {
+  const storedTotal = bookingAmount(booking, ["finalAmount", "totalAmount"]);
+  const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
+  const earlyCheckInTotal = details.reduce((total, detail) => {
+    if (isCancelledBookingDetail(detail)) return total;
+    const fee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
+    return total + (Number.isFinite(fee) ? fee : 0);
+  }, 0);
+  const storedSurchargeTotal = bookingAmount(booking, ["surchargeTotalAmount"], 0);
+  const roomTotal = bookingAmount(booking, ["roomTotal"], Number.NaN);
+  const serviceTotal = bookingAmount(booking, ["serviceTotal"], Number.NaN);
+
+  if (Number.isFinite(roomTotal) && Number.isFinite(serviceTotal)) {
+    const explicitDiscounts = [
+      bookingAmount(booking, ["discountRoomAmount", "roomDiscountAmount"], 0),
+      bookingAmount(booking, ["discountServiceAmount", "serviceDiscountAmount"], 0),
+      bookingAmount(booking, ["discountAmountTotal", "totalDiscountAmount"], 0),
+    ].reduce((total, discount) => total + discount, 0);
+    const totalDiscount = explicitDiscounts > 0
+      ? explicitDiscounts
+      : bookingAmount(booking, ["discountTotal"], 0);
+    const expectedTotal = Math.max(
+      0,
+      roomTotal + serviceTotal + Math.max(earlyCheckInTotal, storedSurchargeTotal) - totalDiscount,
+    );
+    return Math.max(storedTotal, expectedTotal);
+  }
+
+  return storedTotal + Math.max(0, earlyCheckInTotal - storedSurchargeTotal);
+};
 
 const formatDate = (value: unknown) => {
   if (!value) return "-";
@@ -146,6 +179,17 @@ export default function BookingListWorkspace() {
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
   const [editingBooking, setEditingBooking] = useState<BookingListItem | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelRefundEmail, setCancelRefundEmail] = useState("");
+  const [cancelBankDetails, setCancelBankDetails] = useState({
+    bankName: "",
+    bankCode: "",
+    bankAccountName: "",
+    bankAccountNumber: "",
+  });
+  const [cancelError, setCancelError] = useState("");
+  const [cancelFeedback, setCancelFeedback] = useState("");
 
   // Edit form state
   const [editCustomerName, setEditCustomerName] = useState("");
@@ -180,6 +224,9 @@ export default function BookingListWorkspace() {
   const [createPaymentQr, { isLoading: isCreatingQr }] = useCreatePaymentQrMutation();
   const [payWithCash, { isLoading: isPayingCash }] = usePayWithCashMutation();
   const [updateBookingApi, { isLoading: isUpdatingBooking }] = useUpdateBookingMutation();
+  const [cancelBookingByStaff, { isLoading: isCancellingBooking }] = useCancelBookingByStaffMutation();
+  const paymentRequestInFlight = useRef(false);
+  const bookingUpdateInFlight = useRef(false);
   const {
     data: fetchedBookings = [],
     isLoading,
@@ -294,12 +341,16 @@ export default function BookingListWorkspace() {
     };
 
     setEditError("");
+    if (bookingUpdateInFlight.current) return;
+    bookingUpdateInFlight.current = true;
     try {
       await updateBookingApi({ id, request: updatePayload }).unwrap();
       setEditSuccess("Cập nhật thông tin booking thành công!");
     } catch {
       // Fallback optimistic update if backend endpoint is mock/unavailable
       setEditSuccess("Đã lưu thông tin chỉnh sửa booking thành công!");
+    } finally {
+      bookingUpdateInFlight.current = false;
     }
 
     // Apply local update
@@ -338,93 +389,167 @@ export default function BookingListWorkspace() {
       return;
     }
 
-    if (paymentMethod === "cash") {
-      const id = bookingId(selectedBooking);
-      const amountPaid = Number(cashAmountPaid) || 0;
-      const orderId = String(selectedBooking.orderId ?? selectedBooking.bookingId ?? id);
-      if (!orderId || amountPaid <= 0) {
-        setPaymentError("Vui lòng nhập số tiền khách đưa hợp lệ.");
+    if (paymentRequestInFlight.current) return;
+    paymentRequestInFlight.current = true;
+    try {
+      if (paymentMethod === "cash") {
+        const id = bookingId(selectedBooking);
+        const amountPaid = Number(cashAmountPaid) || 0;
+        const orderId = String(selectedBooking.orderId ?? selectedBooking.bookingId ?? id);
+        if (!orderId || amountPaid <= 0) {
+          setPaymentError("Vui lòng nhập số tiền khách đưa hợp lệ.");
+          return;
+        }
+        const totalDue = bookingTotalIncludingSurcharges(selectedBooking);
+        const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+        const remainingDue = Math.max(0, totalDue - paidSoFar);
+        const totalPaidAfterPayment = paidSoFar + amountPaid;
+        const isFullyPaid = totalPaidAfterPayment >= totalDue;
+        const fallbackChange = Math.max(0, amountPaid - remainingDue);
+        try {
+          const paymentResponse = await payWithCash({ orderId, amountPaid, note: "Thanh toán tiền mặt tại quầy" }).unwrap();
+          const responseChange = Number(
+            paymentResponse?.changeAmount
+            ?? paymentResponse?.refundAmount
+            ?? paymentResponse?.cashChange
+            ?? paymentResponse?.change
+            ?? fallbackChange,
+          );
+          setCashChangeAmount(Number.isFinite(responseChange) ? responseChange : fallbackChange);
+          setLocalOverrides((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              paidAmount: totalPaidAfterPayment,
+              remainingAmount: Math.max(0, totalDue - totalPaidAfterPayment),
+              ...(isFullyPaid ? { bookingStatus: "CONFIRMED", paymentStatus: "PAID", invoiceStatus: "PAID" } : {}),
+            },
+          }));
+          dispatch(baseApi.util.invalidateTags(["Booking"]));
+          setPaymentSuccess(`Xác nhận đã thu ${money(amountPaid)} tiền mặt thành công!`);
+        } catch (error: any) {
+          const data = error?.data;
+          const message = typeof data === "string" ? data : data?.message ?? data?.result?.message ?? error?.message ?? "Không thể thanh toán tiền mặt.";
+          setPaymentError(String(message));
+        }
         return;
       }
-      const totalDue = Number(selectedBooking.finalAmount) || 0;
-      const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
-      const remainingDue = Math.max(0, totalDue - paidSoFar);
-      const totalPaidAfterPayment = paidSoFar + amountPaid;
-      const isFullyPaid = totalPaidAfterPayment >= totalDue;
-      const fallbackChange = Math.max(0, amountPaid - remainingDue);
-      try {
-        const paymentResponse = await payWithCash({ orderId, amountPaid, note: "Thanh toán tiền mặt tại quầy" }).unwrap();
-        const responseChange = Number(
-          paymentResponse?.changeAmount
-          ?? paymentResponse?.refundAmount
-          ?? paymentResponse?.cashChange
-          ?? paymentResponse?.change
-          ?? fallbackChange,
-        );
-        setCashChangeAmount(Number.isFinite(responseChange) ? responseChange : fallbackChange);
-        setLocalOverrides((prev) => ({
-          ...prev,
-          [id]: {
-            ...prev[id],
-            paidAmount: totalPaidAfterPayment,
-            remainingAmount: Math.max(0, totalDue - totalPaidAfterPayment),
-            ...(isFullyPaid ? { bookingStatus: "CONFIRMED", paymentStatus: "PAID", invoiceStatus: "PAID" } : {}),
-          },
-        }));
-        dispatch(baseApi.util.invalidateTags(["Booking"]));
-        setPaymentSuccess(`Xác nhận đã thu ${money(amountPaid)} tiền mặt thành công!`);
-      } catch (error: any) {
-        const data = error?.data;
-        const message = typeof data === "string" ? data : data?.message ?? data?.result?.message ?? error?.message ?? "Không thể thanh toán tiền mặt.";
-        setPaymentError(String(message));
-      }
-      return;
-    }
 
-    // Payment method === "bank"
-    const id = bookingId(selectedBooking);
-    const orderId = selectedBooking.orderId ?? selectedBooking.bookingId ?? "";
-    const amount = Number(selectedBooking.finalAmount) || 0;
+      const id = bookingId(selectedBooking);
+      const orderId = selectedBooking.orderId ?? selectedBooking.bookingId ?? "";
+      const amount = bookingTotalIncludingSurcharges(selectedBooking);
 
-    let qrUrl = "";
+      let qrUrl = "";
 
-    if (orderId) {
-      try {
-        const response = await createPaymentQr({ orderId }).unwrap();
-        if (response && response.checkoutUrl) {
-          qrUrl = response.checkoutUrl;
+      if (orderId) {
+        try {
+          const response = await createPaymentQr({ orderId }).unwrap();
+          if (response && response.checkoutUrl) {
+            qrUrl = response.checkoutUrl;
+          }
+        } catch {
+          // Backend endpoint not responding -> Fallback to VietQR image below
         }
-      } catch {
-        // Backend endpoint not responding -> Fallback to VietQR image below
       }
-    }
 
-    // Dynamic VietQR generator fallback (BIDV / PayOS template)
-    if (!qrUrl) {
-      const bankId = "BIDV";
-      const accountNo = "V3CAS6811679267";
-      const accountName = "NGUYEN LE ANH PHONG";
-      const addInfo = encodeURIComponent(`CSNH0USH216 Thanh toan HD${id}`);
-      qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${encodeURIComponent(accountName)}`;
-    }
+      if (!qrUrl) {
+        const bankId = "BIDV";
+        const accountNo = "V3CAS6811679267";
+        const accountName = "NGUYEN LE ANH PHONG";
+        const addInfo = encodeURIComponent(`CSNH0USH216 Thanh toan HD${id}`);
+        qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${encodeURIComponent(accountName)}`;
+      }
 
-    setCheckoutUrl(qrUrl);
-    setQrSecondsLeft(300);
-    setShowQrModal(true);
+      setCheckoutUrl(qrUrl);
+      setQrSecondsLeft(300);
+      setShowQrModal(true);
+    } finally {
+      paymentRequestInFlight.current = false;
+    }
   };
 
   const qrTimeLabel = `${String(Math.floor(qrSecondsLeft / 60)).padStart(2, "0")}:${String(qrSecondsLeft % 60).padStart(2, "0")}`;
-  const cashBillTotal = Number(selectedBooking?.finalAmount) || 0;
+  const selectedBookingTotal = selectedBooking ? bookingTotalIncludingSurcharges(selectedBooking) : 0;
+  const cashBillTotal = selectedBookingTotal;
   const enteredCashAmount = Number(cashAmountPaid) || 0;
   const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
   const cashRemainingDue = Math.max(0, cashBillTotal - paidSoFar);
   const computedCashChange = Math.max(0, enteredCashAmount - cashRemainingDue);
   const displayCashChange = cashChangeAmount ?? computedCashChange;
   const paymentBlocked = !!selectedBooking && (() => {
-    const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+    const finalAmount = selectedBookingTotal;
     const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
     return paidAmount >= finalAmount;
   })();
+  const earlyCheckinFeeTotal = (selectedBooking?.bookingDetails ?? [])
+    .filter((detail) => !isCancelledBookingDetail(detail))
+    .reduce((total, detail) => {
+      const fee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
+      return total + (Number.isFinite(fee) ? fee : 0);
+    }, 0);
+
+  const canCancelSelectedBooking = !!selectedBooking
+    && ["PENDING", "CONFIRMED"].includes(
+      String(selectedBooking.bookingStatus ?? "").trim().toUpperCase(),
+    );
+
+  const handleCancelSelectedBooking = async () => {
+    if (!selectedBooking) return;
+    const id = bookingId(selectedBooking);
+    if (!id || id === "-") {
+      setCancelError("Không tìm thấy mã booking để hủy.");
+      return;
+    }
+    if (cancelRefundEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cancelRefundEmail.trim())) {
+      setCancelError("Vui lòng nhập email khách hàng hợp lệ.");
+      return;
+    }
+    const hasAnyBankDetail = Object.values(cancelBankDetails).some((value) => value.trim());
+    if (hasAnyBankDetail
+      && (!cancelBankDetails.bankName.trim()
+        || !cancelBankDetails.bankAccountName.trim()
+        || !/^[0-9]{6,50}$/.test(cancelBankDetails.bankAccountNumber.trim()))) {
+      setCancelError("Nếu nhập thông tin hoàn tiền, vui lòng nhập tên ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ (6–50 chữ số).");
+      return;
+    }
+    setCancelError("");
+    try {
+      const response = await cancelBookingByStaff({
+        bookingId: id,
+        request: {
+          ...(cancelReason.trim() ? { reason: cancelReason.trim() } : {}),
+          ...(cancelRefundEmail.trim() ? { refundEmail: cancelRefundEmail.trim() } : {}),
+          ...(hasAnyBankDetail ? {
+            bankName: cancelBankDetails.bankName.trim(),
+            bankCode: cancelBankDetails.bankCode.trim() || undefined,
+            bankAccountName: cancelBankDetails.bankAccountName.trim(),
+            bankAccountNumber: cancelBankDetails.bankAccountNumber.trim(),
+          } : {}),
+        },
+      }).unwrap();
+      const cancellationStatus = response?.result?.status;
+      const refundMessage = cancellationStatus === "REFUND_BANK_DETAILS_REQUIRED"
+        ? " Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn tiền."
+        : cancellationStatus === "REFUND_REVIEW_PENDING"
+        ? " Booking đã hủy; yêu cầu hoàn tiền đang chờ quản lý duyệt."
+        : cancellationStatus === "NO_REFUND_REQUIRED"
+        ? " Booking đã hủy; không phát sinh tiền hoàn."
+        : " Booking đã hủy thành công.";
+      setCancelFeedback(refundMessage.trim());
+      setSelectedBooking(null);
+      setShowCancelConfirmation(false);
+      setCancelReason("");
+      setCancelRefundEmail("");
+      setCancelBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
+    } catch (error: unknown) {
+      const apiError = error as { data?: unknown; message?: string };
+      const errorData = apiError.data as { message?: string; result?: { message?: string } } | string | undefined;
+      const message = typeof errorData === "string"
+        ? errorData
+        : errorData?.message ?? errorData?.result?.message ?? apiError.message ?? "Không thể hủy booking.";
+      setCancelError(message);
+    }
+  };
 
   return (
     <section className="booking-list-workspace mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -447,6 +572,20 @@ export default function BookingListWorkspace() {
           Làm mới
         </button>
       </div>
+
+      {cancelFeedback && (
+        <div className="mx-5 mt-4 flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          <span>{cancelFeedback}</span>
+          <button
+            type="button"
+            onClick={() => setCancelFeedback("")}
+            aria-label="Đóng thông báo"
+            className="shrink-0 rounded p-0.5 text-emerald-700 hover:bg-emerald-100"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="border-b border-slate-100 p-5">
@@ -500,7 +639,7 @@ export default function BookingListWorkspace() {
                   const isCancelled = isCancelledBooking(booking);
                   const bookingDiscount = valueOf(booking, ["discountAmountTotal", "discountTotal", "totalDiscountAmount"]) ?? valueOf(booking, ["discountRoomAmount", "discountServiceAmount"]);
                   const bookingPaid = valueOf(booking, ["paidAmount", "amountPaid", "totalPaidAmount"]);
-                  const finalAmountNumber = Number(booking.finalAmount ?? 0);
+                  const finalAmountNumber = bookingTotalIncludingSurcharges(booking);
                   const paidAmountNumber = Number(bookingPaid ?? 0);
                   const guestDue = finalAmountNumber - paidAmountNumber;
                   const isFullyPaid = guestDue === 0;
@@ -518,7 +657,7 @@ export default function BookingListWorkspace() {
                       <td className={`px-5 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
                         {isFullyPaid ? "0 đ" : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
                       </td>
-                      <td className="px-5 py-4 text-right font-bold text-blue-700">{money(booking.finalAmount)}</td>
+                      <td className="px-5 py-4 text-right font-bold text-blue-700">{money(finalAmountNumber)}</td>
                       <td className="px-5 py-4">
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -690,6 +829,10 @@ export default function BookingListWorkspace() {
                       <span className="font-semibold text-slate-900">{money(selectedBooking.serviceTotal)}</span>
                     </div>
                     <div className="flex justify-between text-slate-600">
+                      <span>Tổng phụ thu check-in sớm:</span>
+                      <span className="font-semibold text-amber-700">{money(earlyCheckinFeeTotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
                       <span>Tổng giảm giá phòng:</span>
                       <span className="font-semibold text-rose-600">{money(valueOf(selectedBooking, ["discountRoomAmount", "roomDiscountAmount"]))}</span>
                     </div>
@@ -706,7 +849,7 @@ export default function BookingListWorkspace() {
                       <span className="font-semibold">{money(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]))}</span>
                     </div>
                     {(() => {
-                      const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+                      const finalAmount = selectedBookingTotal;
                       const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                       const diff = finalAmount - paidAmount;
 
@@ -737,7 +880,7 @@ export default function BookingListWorkspace() {
                     })()}
                     <div className="flex justify-between border-t border-blue-200/60 pt-2.5 text-base font-bold text-blue-900">
                       <span>Tổng tiền booking:</span>
-                      <span>{money(selectedBooking.finalAmount)}</span>
+                      <span>{money(selectedBookingTotal)}</span>
                     </div>
                   </div>
                 </div>
@@ -863,7 +1006,7 @@ export default function BookingListWorkspace() {
                       onClick={() => {
                         setPaymentMethod("cash");
                         if (!cashAmountPaid && selectedBooking) {
-                          const finalAmount = Number(selectedBooking.finalAmount ?? 0);
+                          const finalAmount = selectedBookingTotal;
                           const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                           const due = Math.max(0, finalAmount - paidAmount);
                           setCashAmountPaid(String(due));
@@ -898,7 +1041,7 @@ export default function BookingListWorkspace() {
                           </div>
                           <span className="mt-1 block text-xs font-normal text-slate-500">
                             {(() => {
-                              const finalAmount = Number(selectedBooking?.finalAmount ?? 0);
+                              const finalAmount = selectedBookingTotal;
                               const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                               const remainingToCollect = Math.max(0, finalAmount - paidAmount);
                               return `Tổng cần thu: ${money(remainingToCollect)}`;
@@ -934,6 +1077,21 @@ export default function BookingListWorkspace() {
 
                 {/* Footer Payment Action */}
                 <div className="mt-6 border-t border-slate-100 pt-4 flex items-center justify-end gap-3">
+                  {canCancelSelectedBooking && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelReason("");
+                        setCancelRefundEmail("");
+                        setCancelBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
+                        setCancelError("");
+                        setShowCancelConfirmation(true);
+                      }}
+                      className="mr-auto rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50"
+                    >
+                      Hủy booking
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectedBooking(null)}
@@ -958,14 +1116,14 @@ export default function BookingListWorkspace() {
                       "Đơn đặt phòng đã bị hủy"
                     ) : paymentBlocked ? (
                       (() => {
-                        const finalAmount = Number(selectedBooking?.finalAmount ?? 0);
+                        const finalAmount = selectedBookingTotal;
                         const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                         return paidAmount > finalAmount ? "Phải thanh toán cho khách hàng" : "Đã thanh toán đủ số tiền";
                       })()
                     ) : paymentMethod === "cash" ? (
                       <>
                         <Banknote size={16} />
-                        Xác nhận thu tiền mặt
+                        {isPayingCash ? "Đang ghi nhận..." : "Xác nhận thu tiền mặt"}
                       </>
                     ) : (
                       <>
@@ -976,6 +1134,118 @@ export default function BookingListWorkspace() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCancelConfirmation && selectedBooking && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-booking-title"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-700">
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <h3 id="cancel-booking-title" className="text-lg font-bold text-slate-900">
+                  Xác nhận hủy booking {bookingId(selectedBooking)}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Booking và các phòng sẽ được hủy ngay. Nếu có tiền cần hoàn, yêu cầu sẽ chờ quản lý xử lý;
+                  nhân viên có thể nhập thông tin ngân hàng khách cung cấp bên dưới, khách không cần tài khoản web.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-5 block text-sm font-semibold text-slate-700">
+              Lý do hủy (không bắt buộc)
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder="Nhập lý do để lưu vào yêu cầu hủy..."
+                className="mt-2 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-rose-400"
+              />
+            </label>
+
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+              <p className="text-sm font-semibold text-slate-800">Thông tin nhận tiền hoàn (không bắt buộc)</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Hỏi khách và nhập tại đây. Nếu khách vãng lai, nhập email để gửi xác nhận hủy và thông báo hoàn tiền. Nếu chưa có thông tin lúc hủy, có thể bổ sung trong trang Phê duyệt hoàn tiền.
+              </p>
+              <label className="mt-3 block text-xs font-semibold text-slate-600">
+                Email khách nhận thông báo (không bắt buộc)
+                <input
+                  type="email"
+                  value={cancelRefundEmail}
+                  onChange={(event) => setCancelRefundEmail(event.target.value)}
+                  maxLength={254}
+                  placeholder="email@example.com"
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                />
+              </label>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <BankSelectionField
+                  bankName={cancelBankDetails.bankName}
+                  bankCode={cancelBankDetails.bankCode}
+                  onChange={(bankName, bankCode) =>
+                    setCancelBankDetails((current) => ({ ...current, bankName, bankCode }))
+                  }
+                />
+                <label className="text-xs font-semibold text-slate-600">
+                  Tên chủ tài khoản
+                  <input
+                    value={cancelBankDetails.bankAccountName}
+                    onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountName: event.target.value }))}
+                    maxLength={120}
+                    placeholder="Tên in trên tài khoản"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                  />
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Số tài khoản
+                  <input
+                    inputMode="numeric"
+                    value={cancelBankDetails.bankAccountNumber}
+                    onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountNumber: event.target.value }))}
+                    maxLength={50}
+                    placeholder="6–50 chữ số"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {cancelError && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{cancelError}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={isCancellingBooking}
+                onClick={() => setShowCancelConfirmation(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Quay lại
+              </button>
+              <button
+                type="button"
+                disabled={isCancellingBooking}
+                onClick={() => void handleCancelSelectedBooking()}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                {isCancellingBooking ? "Đang hủy..." : "Xác nhận hủy"}
+              </button>
             </div>
           </div>
         </div>
