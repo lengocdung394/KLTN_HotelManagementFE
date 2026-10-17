@@ -40,6 +40,7 @@ export type BookingListItem = {
   bookingId?: string;
   customerId?: string;
   employeeId?: string;
+  cccd?: string;
   promotionId?: string | null;
   customerPromotionId?: string | null;
   customerName?: string;

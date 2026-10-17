@@ -46,6 +46,7 @@ export type CheckInOutBookingDetail = {
   remain?: number | string;
   nameCustomer?: string;
   cccd?: string;
+  customerCccd?: string;
   customerName?: string;
   phone?: string;
   bookingDetailStatus?: string;
@@ -69,6 +70,12 @@ export type CheckInOutQuery = {
 export type BulkCheckInOutRequest = string[];
 export type CheckoutSurplusRefundMethod = "CASH" | "BANK";
 export type BulkCheckInOutResponse = Record<string, unknown>;
+export type CheckInOutSummary = {
+  waitingCheckIn: number;
+  inHouse: number;
+  waitingCheckOut: number;
+  completed: number;
+};
 
 const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => {
   const values = Array.isArray(response)
@@ -88,14 +95,24 @@ const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => 
       bookingId: detail.bookingId ?? booking.bookingId,
       nameCustomer: detail.nameCustomer ?? booking.nameCustomer,
       customerName: detail.customerName ?? booking.customerName,
-      cccd: detail.cccd ?? booking.cccd,
-      identityNumber: detail.identityNumber ?? booking.identityNumber,
+      cccd: [detail.cccd, detail.customerCccd, detail.identityNumber, booking.cccd, booking.customerCccd, booking.identityNumber]
+        .find((value) => typeof value === "string" && value.trim() !== ""),
+      identityNumber: [detail.identityNumber, detail.cccd, detail.customerCccd, booking.identityNumber, booking.cccd, booking.customerCccd]
+        .find((value) => typeof value === "string" && value.trim() !== ""),
     }));
   });
 };
 
 export const checkInOutApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getCheckInOutSummary: builder.query<CheckInOutSummary, { date?: string }>({
+      query: ({ date }) => ({
+        url: "/hotels/check-in-out-summary",
+        method: "GET",
+        params: { date },
+      }),
+      providesTags: ["Booking"],
+    }),
     getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
       query: ({ date, status, bookingStatus }) => ({
         url: "/hotels/today-checkins",
@@ -161,6 +178,7 @@ export const checkInOutApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetCheckInOutSummaryQuery,
   useGetTodayCheckInsQuery,
   useGetTodayCheckOutsQuery,
   useGetEarlyCheckInsQuery,
