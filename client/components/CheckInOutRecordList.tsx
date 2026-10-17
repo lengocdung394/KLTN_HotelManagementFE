@@ -21,10 +21,13 @@ export type DailyRecord = {
   roomAmount?: number;
   totalAmount?: number;
   earlyCheckInFee?: number;
+  estimatedEarlyCheckInFee?: number;
   remainingAmount?: number;
+  surplusAmount?: number;
   services?: ServiceCharge[];
   lateFee?: number;
   identityNumber?: string;
+  historical?: boolean;
 };
 
 type CheckInOutRecordListProps = {
@@ -56,7 +59,7 @@ export default function CheckInOutRecordList({
   const renderRecord = (record: DailyRecord) => {
     const isCheckIn = record.flow === "check-in";
     const canComplete = (isCheckIn && record.status === "Chờ check-in") || (!isCheckIn && record.status === "Đang ở");
-    const canUndo = (isCheckIn && record.status === "Đã check-in") || (!isCheckIn && record.status === "Đã trả phòng");
+    const canUndo = !record.historical && ((isCheckIn && record.status === "Đã check-in") || (!isCheckIn && record.status === "Đã trả phòng"));
     const services = recordServices[record.id] ?? record.services ?? [];
     const serviceTotal = services.reduce((total, service) => total + service.amount, 0) + (record.lateFee || 0);
     const totalAmount = Number(record.roomAmount ?? 0) + serviceTotal + Number(record.earlyCheckInFee ?? 0);
@@ -107,7 +110,11 @@ export default function CheckInOutRecordList({
           <button type="button" onClick={() => onViewBooking(record)} aria-label="Xem chi tiết booking" title="Xem chi tiết booking" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
             <Eye size={16} />
           </button>
-          {!isCheckIn && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === "Đã check-in" || record.status === "Đã trả phòng" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{statusLabel}</span>}
+          {(!isCheckIn || record.status === "Đã check-in") && (
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === "Đã check-in" || record.status === "Đã trả phòng" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+              {statusLabel}
+            </span>
+          )}
           {canComplete && (
             <button type="button" onClick={() => onRecordAction(record)} className={`flex w-36 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:shadow-md ${matrixConflict ? "bg-rose-600 hover:bg-rose-700" : isCheckIn ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-700"}`}>
               {isCheckIn ? "Check-in" : "Check-out"}
@@ -139,6 +146,10 @@ export default function CheckInOutRecordList({
 
   return <>
     {renderStatusGroup("Chờ xử lý", pendingRecords, false)}
-    {renderStatusGroup("Đã check-in / Đã trả phòng", completedRecords, true)}
+    {renderStatusGroup(
+      records[0]?.flow === "check-in" ? "Đã check-in hôm nay" : "Đã check-out hôm nay",
+      completedRecords,
+      true,
+    )}
   </>;
 }

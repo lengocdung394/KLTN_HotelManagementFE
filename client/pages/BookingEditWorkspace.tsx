@@ -1,5 +1,5 @@
 import { toast } from "@/components/ui/use-toast";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Calendar, RefreshCw, Save, Trash2, UserPlus, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
@@ -56,14 +56,17 @@ const serviceDetailIdOf = (service: BookingDetail) => String(
   ?? "",
 );
 
-const servicesOf = (detail: BookingDetail) => ([
-  detail.bookingServiceResponsesForHotels,
-  detail.bookingServiceResponseForHotels,
-  detail.bookingServiceDetails,
-  detail.serviceRequests,
-  detail.serviceResponses,
-  detail.services,
-].find(Array.isArray) ?? []) as BookingDetail[];
+const servicesOf = (detail: BookingDetail) => {
+  const services = ([
+    detail.bookingServiceResponsesForHotels,
+    detail.bookingServiceResponseForHotels,
+    detail.bookingServiceDetails,
+    detail.serviceRequests,
+    detail.serviceResponses,
+    detail.services,
+  ].find(Array.isArray) ?? []) as BookingDetail[];
+  return services.filter((service) => String(service.cancelled).toLowerCase() !== "true");
+};
 
 export default function BookingEditWorkspace() {
   const location = useLocation();
@@ -86,6 +89,7 @@ export default function BookingEditWorkspace() {
   );
   const { data: hotelRooms = [] } = useGetRoomsByCurrentHotelQuery();
   const [modifyBooking, { isLoading }] = useModifyBookingMutation();
+  const saveInFlight = useRef(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -410,6 +414,7 @@ export default function BookingEditWorkspace() {
   ]);
 
   const handleSave = async () => {
+    if (saveInFlight.current) return;
     console.log("==========================================");
     console.log("===> [handleSave TRIGGERED]");
     console.log("===> Booking ID:", booking?.bookingId ?? booking?.orderId);
@@ -423,6 +428,7 @@ export default function BookingEditWorkspace() {
       return setError("Không tìm thấy mã booking.");
     }
 
+    saveInFlight.current = true;
     try {
       console.log(`===> Calling modifyBooking mutation: PUT /management-bookings/${bookingId}/modify ...`);
       const res = await modifyBooking({ bookingId, request: currentPayload }).unwrap();
@@ -443,6 +449,8 @@ export default function BookingEditWorkspace() {
         description: errorMessage,
       });
       setError(errorMessage);
+    } finally {
+      saveInFlight.current = false;
     }
   };
 
@@ -869,6 +877,8 @@ export default function BookingEditWorkspace() {
             nightsForRoom={() => 1}
             onContinue={() => void handleSave()}
             onSkip={() => void handleSave()}
+            isSubmitting={isLoading}
+            submittingLabel="Đang cập nhật..."
             continueLabel={isLoading ? "Đang cập nhật..." : "Cập nhật"}
             skipLabel="Cập nhật"
           />

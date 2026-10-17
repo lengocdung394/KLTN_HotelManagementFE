@@ -15,6 +15,7 @@ export type HotelService = {
   category: string;
   active: boolean;
   imageUrl?: string;
+  hotelId?: number | null;
 };
 
 export type ServiceResponse = {
@@ -26,7 +27,7 @@ export type ServiceResponse = {
   category: string;
   imageUrl: string;
   active: boolean;
-  hotelId: number;
+  hotelId: number | null;
   hotelName: string;
 };
 
@@ -43,6 +44,7 @@ type SaveServiceArgs = {
   service: ServiceRequest;
   imageFile?: File | null;
   skipInvalidation?: boolean;
+  hotelId?: number;
 };
 
 const serviceFormData = ({ service, imageFile }: SaveServiceArgs) => {
@@ -61,6 +63,7 @@ const mapService = (service: ServiceResponse): HotelService => ({
   category: service.category,
   active: service.active ?? true,
   imageUrl: service.imageUrl || undefined,
+  hotelId: service.hotelId ?? null,
 });
 
 export const serviceApi = baseApi.injectEndpoints({
@@ -79,6 +82,7 @@ export const serviceApi = baseApi.injectEndpoints({
         url: "/services/createService",
         method: "POST",
         data: serviceFormData(body),
+        params: body.hotelId === undefined ? undefined : { hotelId: body.hotelId },
       }),
       transformResponse: (response: ApiResponse<ServiceResponse>) => response.result,
       invalidatesTags: (_result, _error, args) => args.skipInvalidation ? [] : ["Service"],

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
-import { useCreatePromotionMutation, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
@@ -111,6 +111,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const canManagePromotions = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
   const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [targetHotelId, setTargetHotelId] = useState("");
   const { data: apiPromotions = [], isLoading, isError } = useGetPromotionsQuery(
     isSystemAdmin
       ? { ...(selectedBranchId ? { hotelId: Number(selectedBranchId) } : {}), page: 0, size: 100 }
@@ -139,6 +140,20 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  const summaryMonth = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}`;
+  const {
+    data: promotionSummary,
+    isLoading: isPromotionSummaryLoading,
+    isError: isPromotionSummaryError,
+    refetch: refetchPromotionSummary,
+  } = useGetPromotionSummaryQuery({
+    month: summaryMonth,
+    ...(isSystemAdmin && selectedBranchId
+      ? { hotelId: Number(selectedBranchId) }
+      : !isSystemAdmin && hasHotelId
+        ? { hotelId: Number(hotelId) }
+        : {}),
+  }, { skip: !hasHotelId && !isSystemAdmin });
 
   const displayedPromotions = promotions.length > 0 ? promotions : apiPromotions;
   const locale = i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN";
@@ -188,6 +203,29 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const safePage = Math.min(page, totalPages);
   const paginatedPromotions = visiblePromotions.slice((safePage - 1) * pageSize, safePage * pageSize);
   const monthLabel = calendarMonth.toLocaleDateString(locale, { month: "long", year: "numeric" });
+  const summaryCards = [
+    {
+      label: "Đang hoạt động",
+      value: promotionSummary?.activePromotions,
+      format: (value: number) => value.toLocaleString(locale),
+      accent: true,
+    },
+    {
+      label: `Lượt sử dụng tháng ${calendarMonth.getMonth() + 1}`,
+      value: promotionSummary?.monthlyUsageCount,
+      format: (value: number) => value.toLocaleString(locale),
+    },
+    {
+      label: "Tiết kiệm cho khách",
+      value: promotionSummary?.monthlySavingsAmount,
+      format: (value: number) => `${value.toLocaleString(locale)}đ`,
+    },
+    {
+      label: "Sắp hết hạn (7 ngày tới)",
+      value: promotionSummary?.expiringSoonPromotions,
+      format: (value: number) => value.toLocaleString(locale),
+    },
+  ];
 
   useEffect(() => {
     setPage(1);
@@ -254,6 +292,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const openCreatePromotion = () => {
     setEditingPromotion(null);
     setForm(initialForm);
+    setTargetHotelId("");
     setImageFile(null);
     setFormError("");
     setModalOpen(true);
@@ -338,7 +377,11 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
 
     try {
       pendingLocalPromotionName.current = promotionInfo.name;
-      await createPromotion({ promotionInfo, image: imageFile ?? undefined }).unwrap();
+      await createPromotion({
+        promotionInfo,
+        image: imageFile ?? undefined,
+        ...(isSystemAdmin && targetHotelId ? { hotelId: Number(targetHotelId) } : {}),
+      }).unwrap();
       window.setTimeout(() => {
         if (pendingLocalPromotionName.current === promotionInfo.name) pendingLocalPromotionName.current = "";
       }, 5000);
@@ -357,6 +400,29 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   };
   return (
     <div className="mt-2 space-y-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê khuyến mãi">
+        {summaryCards.map((card) => (
+          <div key={card.label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${card.accent ? "bg-[#28233f] text-white" : "bg-white"}`}>
+            <p className={`text-xs font-medium ${card.accent ? "text-blue-200" : "text-slate-500"}`}>{card.label}</p>
+            <p className="mt-2 text-xl font-bold tracking-tight">
+              {isPromotionSummaryLoading ? "Đang tải…" : isPromotionSummaryError || card.value === undefined ? "—" : card.format(card.value)}
+            </p>
+            <p className={`mt-1 text-[11px] ${card.accent ? "text-blue-200" : "text-slate-400"}`}>
+              {card.label === "Tiết kiệm cho khách" || card.label.startsWith("Lượt sử dụng")
+                ? monthLabel
+                : "Dữ liệu cập nhật từ hệ thống"}
+            </p>
+          </div>
+        ))}
+      </section>
+      {isPromotionSummaryError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <span>Không tải được thống kê khuyến mãi.</span>
+          <button type="button" onClick={() => void refetchPromotionSummary()} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-rose-100">
+            Thử tải lại
+          </button>
+        </div>
+      )}
       {modalOpen && createPortal((
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4">
           <form
@@ -389,6 +455,24 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   <p className="mt-1 text-xs text-slate-500">{label("sectionGeneralDescription")}</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  {isSystemAdmin && !editingPromotion && (
+                    <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                      {label("promotionTarget")}
+                      <select
+                        value={targetHotelId}
+                        onChange={(event) => setTargetHotelId(event.target.value)}
+                        className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"
+                      >
+                        <option value="">{label("allSystemBranches")}</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-xs font-normal text-slate-500">
+                        {targetHotelId ? label("branchPromotionNotice") : label("systemPromotionNotice")}
+                      </span>
+                    </label>
+                  )}
                   <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                     {label("programName")} <span className="text-rose-500">*</span>
                     <input required value={form.name} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={label("exampleWeekendOffer")} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
@@ -763,8 +847,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_auto_auto] lg:justify-items-end">
-                    <div className="text-right">
+                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_120px_90px] lg:justify-items-stretch">
+                    <div className="min-w-0 text-right">
                       <p className="text-xs text-slate-400">
                         {label("offerLevel")}
                       </p>
@@ -772,7 +856,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                         {formatValue(promotion)}
                       </p>
                     </div>
-                    <div className="flex w-[120px] justify-end">
+                    <div className="flex w-full justify-center">
                       <span className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
                         {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
                       </span>
@@ -780,19 +864,19 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     <button
                       type="button"
                       onClick={() => setDetailPromotion(promotion)}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     >
                       <Eye size={14} />
                       {label("viewDetails")}
                     </button>
-                    {canManagePromotions && <button
+                    {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) ? <button
                       type="button"
                       onClick={() => openEditPromotion(promotion)}
-                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     >
                       <Pencil size={14} />
                       {label("edit")}
-                    </button>}
+                    </button> : <span aria-hidden="true" />}
                   </div>
                 </article>
                 );
