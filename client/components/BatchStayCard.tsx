@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, ChevronUp, Eye, LogIn, LogOut } from "lucide-react";
+import { localizedText } from "../i18n";
 import CheckoutSummary, { type CheckoutSummaryRoom } from "./CheckoutSummary";
 
 type BatchStayItem = {
@@ -31,6 +33,7 @@ type BatchStayCardProps = {
 };
 
 export default function BatchStayCard({ mode, title, description, bookingCode, identityNumber, items, selectedIds, draftSelectedIds, actionLabel, actionCount, actionDisabled, checkoutSummaryRooms, onAddService, onViewBooking, onAction }: BatchStayCardProps) {
+  useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [draftSelected, setDraftSelected] = useState<string[]>(draftSelectedIds ?? selectedIds ?? []);
 
@@ -88,33 +91,39 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
           type="button"
           onClick={() => setIsOpen((current) => !current)}
           className={`grid h-9 w-9 shrink-0 place-items-center rounded-full border ${colors.icon} border-current/10 transition hover:opacity-90`}
-          aria-label={isOpen ? "Thu gọn danh sách phòng" : "Mở danh sách phòng"}
+          aria-label={isOpen ? localizedText("Thu gọn danh sách phòng", "Collapse room list") : localizedText("Mở danh sách phòng", "Expand room list")}
         >
           {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
         <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${colors.icon}`}>{isCheckIn ? <LogIn size={17} /> : <LogOut size={17} />}</span>
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-slate-500">Tên:</span>
+            <span className="text-sm font-medium text-slate-500">{localizedText("Tên:", "Name:")}</span>
             <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-            {identityNumber && <span className="text-sm text-slate-500">CCCD: <strong className="text-slate-700">{identityNumber}</strong></span>}
+            {identityNumber && <span className="text-sm text-slate-500">{localizedText("CCCD", "National ID")}: <strong className="text-slate-700">{identityNumber}</strong></span>}
           </div>
-          {bookingCode && <p className="mt-1 text-sm font-medium text-slate-500">Mã booking: <strong className="text-slate-700">{bookingCode}</strong></p>}
+          {bookingCode && <p className="mt-1 text-sm font-medium text-slate-500">{localizedText("Mã booking", "Booking ID")}: <strong className="text-slate-700">{bookingCode}</strong></p>}
           <p className={`${bookingCode ? "mt-0.5" : "mt-1"} text-sm text-slate-600`}>{description}</p>
         </div>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-        {onViewBooking && <button type="button" onClick={onViewBooking} aria-label="Xem chi tiết booking nhóm" title="Xem chi tiết booking" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"><Eye size={16} /></button>}
-        {onAddService && <button type="button" onClick={onAddService} className="inline-flex h-10 w-56 items-center justify-center rounded-lg border border-blue-200 bg-white px-4 text-xs font-bold text-blue-700 hover:bg-blue-50">Thêm dịch vụ</button>}
+        {onViewBooking && <button type="button" onClick={onViewBooking} aria-label={localizedText("Xem chi tiết booking nhóm", "View group booking details")} title={localizedText("Xem chi tiết booking", "View booking details")} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"><Eye size={16} /></button>}
+        {onAddService && <button type="button" onClick={onAddService} className="inline-flex h-10 w-56 items-center justify-center rounded-lg border border-blue-200 bg-white px-4 text-xs font-bold text-blue-700 hover:bg-blue-50">{localizedText("Thêm dịch vụ", "Add service")}</button>}
         <button type="button" disabled={actionDisabled ?? availableIds.length === 0} onClick={toggleSelectAll} className={`flex h-10 w-56 items-center justify-center gap-1.5 rounded-lg px-4 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}>
           <Check size={14} />
-          {actionLabel} ({actionCount ?? availableIds.length})
+          {actionLabel === "Check-in các phòng"
+            ? localizedText(actionLabel, "Check in rooms")
+            : actionLabel === "Check-in cả đoàn"
+              ? localizedText(actionLabel, "Check in group")
+              : actionLabel === "Check-out các phòng"
+                ? localizedText(actionLabel, "Check out rooms")
+                : actionLabel} ({actionCount ?? availableIds.length})
         </button>
         {groupRoomPaid !== undefined && (
           <span
             role="img"
-            aria-label={groupRoomPaid ? "Cả nhóm đã thanh toán đủ" : "Còn phòng chưa thanh toán đủ"}
-            title={groupRoomPaid ? "Cả nhóm đã thanh toán đủ" : "Còn phòng chưa thanh toán đủ"}
+            aria-label={groupRoomPaid ? localizedText("Cả nhóm đã thanh toán đủ", "Group paid in full") : localizedText("Còn phòng chưa thanh toán đủ", "Some rooms have an outstanding balance")}
+            title={groupRoomPaid ? localizedText("Cả nhóm đã thanh toán đủ", "Group paid in full") : localizedText("Còn phòng chưa thanh toán đủ", "Some rooms have an outstanding balance")}
             className={`h-3 w-3 shrink-0 rounded-full ring-2 ring-white ${groupRoomPaid ? "bg-emerald-500" : "bg-rose-500"}`}
           />
         )}
@@ -140,11 +149,11 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
               </span>
               <span className="ml-auto flex shrink-0 items-center gap-2">
                 {alreadyConfirmed ? (
-                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-semibold text-emerald-700">Đã xác nhận</span>
+                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-semibold text-emerald-700">{localizedText("Đã xác nhận", "Confirmed")}</span>
                 ) : isCheckIn ? (
-                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{selected ? "Đã chọn" : "Chờ check-in"}</span>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{selected ? localizedText("Đã chọn", "Selected") : localizedText("Chờ check-in", "Awaiting check-in")}</span>
                 ) : (
-                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{selected ? "Đã chọn" : "Chờ check-out"}</span>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${selected ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>{selected ? localizedText("Đã chọn", "Selected") : localizedText("Chờ check-out", "Awaiting check-out")}</span>
                 )}
               </span>
             </button>;
@@ -158,7 +167,7 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
     <div className="mt-4 border-t border-slate-200/80 pt-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-slate-500">
-          {hasDraftSelection ? `${selectedCount} phòng đã chọn` : "Chưa chọn phòng nào"}
+          {hasDraftSelection ? `${selectedCount} ${localizedText("phòng đã chọn", "rooms selected")}` : localizedText("Chưa chọn phòng nào", "No rooms selected")}
         </p>
         <div className={`flex items-center gap-2 ${groupRoomPaid !== undefined ? "pr-5" : ""}`}>
           <button
@@ -167,7 +176,7 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
             onClick={handleClearDraft}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Bỏ chọn
+            {localizedText("Bỏ chọn", "Clear selection")}
           </button>
           <button
             type="button"
@@ -176,7 +185,7 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
             className={`flex h-10 w-56 shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <Check size={14} />
-            {isCheckIn ? "Xác nhận" : "Thanh toán & Check-out"} ({selectedCount})
+            {localizedText("Xác nhận", "Confirm")} ({selectedCount})
           </button>
         </div>
       </div>

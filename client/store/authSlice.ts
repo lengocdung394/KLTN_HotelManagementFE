@@ -172,6 +172,7 @@ const authSlice = createSlice({
       state.employeeId = null;
       state.roles = [];
       localStorage.clear();
+      sessionStorage.removeItem("accountPassword");
     },
   },
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Banknote, CalendarDays, CheckCircle2, Clock3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
 import { downloadServiceTemplate, parseServiceImportArchive, validateServiceImportArchive, type ServiceImportRowResult } from "../lib/serviceBulkImport";
@@ -15,6 +15,7 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { uploadServiceImagesToCloudinary } from "../services/cloudinaryUploadApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import type { SuperAdminBranch } from "../services/superAdminApi";
+import { useConfirmServiceUsedMutation, useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
 import BulkImportDialog from "../components/BulkImportDialog";
 import ServiceImportProgressCard from "../components/ServiceImportProgressCard";
 
@@ -28,7 +29,131 @@ const getSaveErrorMessage = (error: unknown) => {
   return "Không thể lưu dịch vụ. Vui lòng kiểm tra thông tin hoặc thử lại.";
 };
 
-export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAdminBranch[] }) {
+type ServiceUsageRow = {
+  bookingId: string;
+  bookingDetailId: string;
+  serviceDetailId: string;
+  serviceName: string;
+  quantity: number;
+  customerName: string;
+  roomNumber: string;
+  bookingCreatedAt: string;
+  checkInTime: string;
+  usedAt: string | null;
+  usedBy: string | null;
+};
+
+type BookingServiceUsageGroup = {
+  bookingId: string;
+  customerName: string;
+  bookingCreatedAt: string;
+  services: ServiceUsageRow[];
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" ? value as Record<string, unknown> : null;
+
+const getServiceUsageRows = (bookings: BookingListItem[]): ServiceUsageRow[] => {
+  return bookings.flatMap((bookingItem) => {
+    const booking = asRecord(bookingItem);
+    if (!booking || String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return [];
+    const bookingId = String(booking.bookingId ?? booking.id ?? "");
+    if (!bookingId) return [];
+    const bookingDetails = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
+    return bookingDetails.flatMap((detailValue) => {
+      const detail = asRecord(detailValue);
+      if (!detail || String(detail.bookingStatusType ?? detail.status ?? "").toUpperCase() === "CANCELLED") return [];
+      const services = [
+        detail.bookingServiceResponsForHotels,
+        detail.bookingServiceResponseForHotel,
+        detail.bookingServiceResponsesForHotels,
+        detail.bookingServiceDetails,
+        detail.services,
+      ].find(Array.isArray);
+      if (!Array.isArray(services)) return [];
+      return services.flatMap((serviceValue) => {
+        const service = asRecord(serviceValue);
+        const serviceDetailId = service?.bookingServiceDetailId ?? service?.id;
+        if (
+          !service
+          || !serviceDetailId
+          || service.cancelled === true
+          || Boolean(service.cancelledAt)
+          || service.used === true
+        ) return [];
+        return [{
+          bookingId,
+          bookingDetailId: String(detail.bookingDetailId ?? detail.id ?? ""),
+          serviceDetailId: String(serviceDetailId),
+          serviceName: String(service.name ?? service.serviceName ?? "Dịch vụ"),
+          quantity: Number(service.quantity ?? 1),
+          customerName: String(booking.customerName ?? detail.customerName ?? detail.nameCustomer ?? "Khách lưu trú"),
+          roomNumber: String(detail.roomNumber ?? detail.roomName ?? "—"),
+          bookingCreatedAt: String(booking.createdAt ?? ""),
+          checkInTime: String(detail.checkInTime ?? ""),
+          usedAt: typeof service.usedAt === "string" ? service.usedAt : null,
+          usedBy: typeof service.usedBy === "string" ? service.usedBy : null,
+        }];
+      });
+    });
+  });
+};
+
+const formatUsageDateTime = (value: string | null | undefined) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN");
+};
+
+const getTodayServiceStats = (bookings: BookingListItem[]) => {
+  const today = new Date().toDateString();
+  let bookedToday = 0;
+  let usedToday = 0;
+  let estimatedRevenue = 0;
+
+  bookings.forEach((bookingItem) => {
+    const booking = asRecord(bookingItem);
+    if (!booking || String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return;
+    const isBookingToday = typeof booking.createdAt === "string"
+      && !Number.isNaN(new Date(booking.createdAt).getTime())
+      && new Date(booking.createdAt).toDateString() === today;
+    const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
+
+    details.forEach((detailValue) => {
+      const detail = asRecord(detailValue);
+      if (!detail || String(detail.bookingStatusType ?? detail.status ?? "").toUpperCase() === "CANCELLED") return;
+      const serviceDetails = [
+        detail.bookingServiceResponsForHotels,
+        detail.bookingServiceResponseForHotel,
+        detail.bookingServiceResponsesForHotels,
+        detail.bookingServiceDetails,
+        detail.services,
+      ].find(Array.isArray);
+      if (!Array.isArray(serviceDetails)) return;
+
+      serviceDetails.forEach((serviceValue) => {
+        const service = asRecord(serviceValue);
+        if (!service || service.cancelled === true || Boolean(service.cancelledAt)) return;
+        const quantity = Number(service.quantity ?? 1);
+        const validQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+        if (isBookingToday) bookedToday += validQuantity;
+
+        if (service.used !== true || typeof service.usedAt !== "string") return;
+        const usedAt = new Date(service.usedAt);
+        if (Number.isNaN(usedAt.getTime()) || usedAt.toDateString() !== today) return;
+
+        usedToday += validQuantity;
+        const nestedService = asRecord(service.service);
+        const price = Number(service.price ?? service.unitPrice ?? service.servicePrice ?? nestedService?.price ?? 0);
+        if (Number.isFinite(price) && price > 0) estimatedRevenue += price * validQuantity;
+      });
+    });
+  });
+
+  return { bookedToday, usedToday, estimatedRevenue };
+};
+
+export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { branches?: SuperAdminBranch[]; mode?: "usage" | "catalog" }) {
   const dispatch = useAppDispatch();
   const [detailService, setDetailService] = useState<HotelService | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -50,18 +175,84 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
   const [pageSize, setPageSize] = useState(12);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [expandedUsageBookingIds, setExpandedUsageBookingIds] = useState<Set<string>>(() => new Set());
 
   const { hotelId, roles } = useAppSelector((state) => state.auth);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const canManageServices = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
   const hotelName = useAppSelector((state) => state.auth.hotelName);
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
+  const canConfirmServiceUsage = !isSystemAdmin && hasHotelId && roles.some((role) =>
+    ["ROLE_EMPLOYEE", "ROLE_MANAGER", "ROLE_ADMIN"].includes(role),
+  );
   const [selectedBranchId, setSelectedBranchId] = useState("");
+  const {
+    data: bookings = [],
+    isLoading: isLoadingUsage,
+    isError: isUsageError,
+  } = useGetBookingsByHotelQuery(Number(hotelId), { skip: mode !== "usage" || !hasHotelId || isSystemAdmin });
+  const [confirmServiceUsed, { isLoading: isConfirmingService }] = useConfirmServiceUsedMutation();
   const { data: services = [], isLoading, isError } = useGetAllServicesQuery(
     isSystemAdmin ? (selectedBranchId ? { hotelId: Number(selectedBranchId) } : undefined) : hasHotelId ? { hotelId: Number(hotelId) } : undefined,
-    { skip: !hasHotelId && !isSystemAdmin },
+    { skip: mode !== "catalog" || (!hasHotelId && !isSystemAdmin) },
   );
   const allServices = services;
+  const todayServiceStats = useMemo(() => getTodayServiceStats(bookings), [bookings]);
+  const pendingUsageRows = useMemo(() => getServiceUsageRows(bookings), [bookings]);
+  const pendingUsageGroups = useMemo(() => {
+    const groups = new Map<string, BookingServiceUsageGroup>();
+    pendingUsageRows.forEach((row) => {
+      const group = groups.get(row.bookingId);
+      if (group) {
+        group.services.push(row);
+      } else {
+        groups.set(row.bookingId, {
+          bookingId: row.bookingId,
+          customerName: row.customerName,
+          bookingCreatedAt: row.bookingCreatedAt,
+          services: [row],
+        });
+      }
+    });
+    return [...groups.values()];
+  }, [pendingUsageRows]);
+  const usedTodayRows = useMemo(() => {
+    const today = new Date().toDateString();
+    return bookings.flatMap((bookingItem) => {
+      const booking = asRecord(bookingItem);
+      if (!booking) return [];
+      const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
+      return details.flatMap((detailValue) => {
+        const detail = asRecord(detailValue);
+        const services = detail && [
+          detail.bookingServiceResponsForHotels,
+          detail.bookingServiceResponseForHotel,
+          detail.bookingServiceResponsesForHotels,
+          detail.bookingServiceDetails,
+          detail.services,
+        ].find(Array.isArray);
+        if (!Array.isArray(services)) return [];
+        return services.flatMap((serviceValue) => {
+          const service = asRecord(serviceValue);
+          if (!service || service.used !== true || typeof service.usedAt !== "string") return [];
+          if (new Date(service.usedAt).toDateString() !== today) return [];
+          return [{
+            bookingId: String(booking.bookingId ?? booking.id ?? ""),
+            bookingDetailId: String(detail?.bookingDetailId ?? detail?.id ?? ""),
+            serviceDetailId: String(service.bookingServiceDetailId ?? service.id ?? ""),
+            serviceName: String(service.name ?? service.serviceName ?? "Dịch vụ"),
+            quantity: Number(service.quantity ?? 1),
+            customerName: String(booking.customerName ?? detail?.customerName ?? detail?.nameCustomer ?? "Khách lưu trú"),
+            roomNumber: String(detail?.roomNumber ?? detail?.roomName ?? "—"),
+            bookingCreatedAt: String(booking.createdAt ?? ""),
+            checkInTime: String(detail?.checkInTime ?? ""),
+            usedAt: service.usedAt,
+            usedBy: typeof service.usedBy === "string" ? service.usedBy : null,
+          } satisfies ServiceUsageRow];
+        });
+      });
+    });
+  }, [bookings]);
   const filteredServices = useMemo(() => {
     const normalizedQuery = searchQuery.trim().normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
     return allServices.filter((service) => {
@@ -76,6 +267,23 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
     });
   }, [allServices, searchQuery, statusFilter]);
   const isSaving = isCreating || isUpdating;
+
+  const handleConfirmServiceUsed = async (row: ServiceUsageRow) => {
+    try {
+      await confirmServiceUsed({ bookingId: row.bookingId, serviceDetailId: row.serviceDetailId }).unwrap();
+      toast({
+        variant: "checkin",
+        title: "Đã xác nhận sử dụng dịch vụ",
+        description: `${row.serviceName} · Phòng ${row.roomNumber}`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Không thể xác nhận dịch vụ",
+        description: getSaveErrorMessage(error),
+      });
+    }
+  };
 
   useEffect(() => {
     if (!hasHotelId && !isSystemAdmin) return;
@@ -311,13 +519,33 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
   }, [dispatch, serviceImportRows]);
 
   return (
-    <section className="mt-2 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <div className="flex items-center gap-2 text-blue-600"><ConciergeBell size={18} /><p className="text-xs font-bold uppercase tracking-wider">Dịch vụ lưu trú</p></div>
-          <h3 className="mt-2 text-xl font-bold text-slate-900">Danh sách dịch vụ</h3>
-          <p className="mt-1 text-sm text-slate-500">Quản lý thông tin và trạng thái dịch vụ của khách sạn.</p>
+    <>
+      {mode === "usage" && (
+        <div className="mt-2 mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500"><CalendarDays size={16} /><p className="text-xs font-semibold">Dịch vụ đặt hôm nay</p></div>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : todayServiceStats.bookedToday}</p>
+            <p className="mt-1 text-xs text-slate-500">Lượt dịch vụ trong booking tạo hôm nay</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-emerald-600"><CheckCircle2 size={16} /><p className="text-xs font-semibold">Dịch vụ đã dùng hôm nay</p></div>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : todayServiceStats.usedToday}</p>
+            <p className="mt-1 text-xs text-slate-500">Lượt đã được nhân viên xác nhận</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-blue-600"><Banknote size={16} /><p className="text-xs font-semibold">Tiền dịch vụ ước tính hôm nay</p></div>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : `${todayServiceStats.estimatedRevenue.toLocaleString("vi-VN")}đ`}</p>
+            <p className="mt-1 text-xs text-slate-500">Tính theo dịch vụ đã xác nhận sử dụng</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-amber-600"><ConciergeBell size={16} /><p className="text-xs font-semibold">Dịch vụ chờ xác nhận</p></div>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : pendingUsageRows.reduce((total, row) => total + row.quantity, 0)}</p>
+            <p className="mt-1 text-xs text-slate-500">Lượt dịch vụ đang chờ nhân viên xử lý</p>
+          </article>
         </div>
+      )}
+    <section className={`${mode === "usage" ? "" : "mt-2"} rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm`}>
+      {mode === "catalog" && <div className="flex justify-end gap-3">
         <div className="flex flex-wrap gap-2">
           {canManageServices && !isSystemAdmin && <button
             type="button"
@@ -328,7 +556,92 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
           </button>}
           {canManageServices && <button type="button" onClick={openCreateForm} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />Thêm dịch vụ</button>}
         </div>
-      </div>
+      </div>}
+      {mode === "usage" && canConfirmServiceUsage && (
+        <section aria-labelledby="service-usage-title" className="mt-5 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-blue-700">
+                <CheckCircle2 size={18} />
+                <h4 id="service-usage-title" className="text-sm font-bold">Xác nhận dịch vụ đã sử dụng</h4>
+              </div>
+              <p className="mt-1 text-xs text-slate-600">Nhân viên xác nhận sau khi phục vụ xong. Hệ thống tự lưu thời gian và người xác nhận; dịch vụ đã dùng sẽ không thể hủy.</p>
+            </div>
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">{pendingUsageGroups.length} booking · {pendingUsageRows.length} dịch vụ chờ</span>
+          </div>
+          {isLoadingUsage && <p className="mt-4 rounded-lg bg-white p-4 text-center text-sm text-slate-500">Đang tải dịch vụ trong các booking...</p>}
+          {isUsageError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">Không thể tải danh sách dịch vụ cần xác nhận. Vui lòng tải lại trang.</p>}
+          {!isLoadingUsage && !isUsageError && pendingUsageRows.length === 0 && (
+            <p className="mt-4 rounded-lg bg-white p-4 text-center text-sm text-slate-500">Hiện không có dịch vụ nào đang chờ xác nhận.</p>
+          )}
+          {!isLoadingUsage && !isUsageError && pendingUsageRows.length > 0 && (
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {pendingUsageGroups.map((group) => (
+                <article key={group.bookingId} className="overflow-hidden rounded-lg border border-blue-100 bg-white">
+                  <header className="flex items-center justify-between gap-3 border-b border-blue-100 bg-blue-50/50 px-3 py-2.5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900">Booking {group.bookingId}</p>
+                        <p className="mt-0.5 text-xs text-slate-600">{group.customerName}</p>
+                      </div>
+                      <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-blue-700">{group.services.length} dịch vụ chờ</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedUsageBookingIds((current) => {
+                        const next = new Set(current);
+                        if (next.has(group.bookingId)) next.delete(group.bookingId);
+                        else next.add(group.bookingId);
+                        return next;
+                      })}
+                      aria-expanded={expandedUsageBookingIds.has(group.bookingId)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                    >
+                      {expandedUsageBookingIds.has(group.bookingId) ? "Thu gọn" : "Thao tác"}
+                    </button>
+                  </header>
+                  {expandedUsageBookingIds.has(group.bookingId) && <div className="px-3">
+                    <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />Đặt: {formatUsageDateTime(group.bookingCreatedAt)}</p>
+                    <div className="divide-y divide-slate-100">
+                    {group.services.map((row) => (
+                      <div key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900">{row.serviceName} <span className="font-normal text-slate-500">× {row.quantity}</span></p>
+                          <p className="mt-1 text-xs text-slate-600">Phòng {row.roomNumber}</p>
+                          {row.checkInTime && <p className="mt-1 text-[11px] text-slate-500">Nhận phòng: {formatUsageDateTime(row.checkInTime)}</p>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleConfirmServiceUsed(row)}
+                          disabled={isConfirmingService}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                        >
+                          <CheckCircle2 size={14} />Xác nhận đã dùng
+                        </button>
+                      </div>
+                    ))}
+                    </div>
+                  </div>}
+                </article>
+              ))}
+            </div>
+          )}
+          {!isLoadingUsage && !isUsageError && usedTodayRows.length > 0 && (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-600">Đã xác nhận hôm nay ({usedTodayRows.length})</summary>
+              <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                {usedTodayRows.map((row) => (
+                  <p key={`${row.bookingId}-${row.serviceDetailId}`} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-800">{row.serviceName} × {row.quantity}</span> · {row.customerName} · Phòng {row.roomNumber}
+                    <span className="block mt-1 text-[11px] text-slate-500">{formatUsageDateTime(row.usedAt)}{row.usedBy ? ` · Xác nhận bởi ${row.usedBy}` : ""}</span>
+                  </p>
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
+      )}
+      {mode === "catalog" && <>
       {(serviceImportTaskId || serviceImportRows.length > 0 || serviceImportArchiveError) && (
         <ServiceImportProgressCard
           taskId={serviceImportTaskId}
@@ -747,7 +1060,9 @@ export default function ServiceWorkspace({ branches = [] }: { branches?: SuperAd
         </div>,
         document.body,
       )}
+      </>}
     </section>
+    </>
   );
 }
    

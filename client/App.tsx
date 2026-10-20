@@ -79,7 +79,8 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
         <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />
         <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={onLogout} />} />
-        <Route path="/services" element={<ModulePage path="/services" onLogout={onLogout} />} />
+        <Route path="/services/usage" element={<ModulePage path="/services/usage" onLogout={onLogout} />} />
+        <Route path="/services" element={<Navigate to="/services/usage" replace />} />
         <Route path="/rooms" element={<ModulePage path="/rooms" onLogout={onLogout} />} />
         <Route path="/invoices" element={<ModulePage path="/invoices" onLogout={onLogout} />} />
         <Route path="/reports" element={<ModulePage path="/reports" onLogout={onLogout} />} />
@@ -100,7 +101,9 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
       <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
       <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />
       <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={onLogout} />} />
-      <Route path="/services" element={<ModulePage path="/services" onLogout={onLogout} />} />
+      <Route path="/services/usage" element={<ModulePage path="/services/usage" onLogout={onLogout} />} />
+      {isManager && <Route path="/services/catalog" element={<ModulePage path="/services/catalog" onLogout={onLogout} />} />}
+      <Route path="/services" element={<Navigate to="/services/usage" replace />} />
       <Route path="/rooms" element={<ModulePage path="/rooms" onLogout={onLogout} />} />
       <Route path="/invoices" element={<ModulePage path="/invoices" onLogout={onLogout} />} />
       <Route path="/staff" element={<ModulePage path="/staff" onLogout={onLogout} />} />

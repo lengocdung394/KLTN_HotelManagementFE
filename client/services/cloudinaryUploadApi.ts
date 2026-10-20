@@ -14,15 +14,16 @@ const getCloudinaryConfig = () => {
   return { cloudName, uploadPreset };
 };
 
-const getBranchImageFolder = (branchName: string, category: "rooms" | "services") => {
+const getBranchImageFolder = (branchName: string, category: "rooms" | "services" | "employees") => {
   const normalized = branchName.trim().normalize("NFD");
   const slug = normalized
     .replace(/[\u0300-\u036f]+/g, "")
+    .replace(/[đĐ]/g, "d")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "-")
     .replace(/-+/g, "-");
 
-  if (!slug) throw new Error("Không xác định được tên chi nhánh để lưu ảnh phòng.");
+  if (!slug) throw new Error("Không xác định được tên chi nhánh để lưu ảnh.");
   return `hotel-management/branches/${slug}/${category}`;
 };
 
@@ -53,7 +54,7 @@ const uploadImage = async (file: File, cloudName: string, uploadPreset: string, 
 export const uploadImagesToCloudinary = async (
   files: File[],
   branchName: string,
-  category: "rooms" | "services",
+  category: "rooms" | "services" | "employees",
   onProgress?: (uploaded: number, total: number) => void,
 ) => {
   const { cloudName, uploadPreset } = getCloudinaryConfig();
@@ -90,6 +91,13 @@ export const uploadServiceImagesToCloudinary = (
   branchName: string,
   onProgress?: (uploaded: number, total: number) => void,
 ) => uploadImagesToCloudinary(files, branchName, "services", onProgress);
+
+export const uploadEmployeeImageToCloudinary = (file: File, branchName: string) =>
+  uploadImagesToCloudinary([file], branchName, "employees").then((urls) => {
+    const imageUrl = urls.get(file.name.toLocaleLowerCase());
+    if (!imageUrl) throw new Error("Không tải được ảnh nhân viên lên Cloudinary.");
+    return imageUrl;
+  });
 
 export const uploadProvinceBackgroundToCloudinary = async (file: File, provinceName: string) => {
   const normalized = provinceName.trim().normalize("NFD");

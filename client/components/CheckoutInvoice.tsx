@@ -1,4 +1,6 @@
 import { Printer, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { localizedText } from "../i18n";
 import type { BookingListItem } from "../services/bookingApi";
 
 type InvoiceRoom = {
@@ -34,13 +36,13 @@ const readText = (source: Record<string, unknown>, keys: string[], fallback = ""
   return fallback;
 };
 
-const formatMoney = (amount: number) => `${Math.round(amount).toLocaleString("vi-VN")}đ`;
-const formatDateTime = (value: string) => {
+const formatMoney = (amount: number, language: string) => `${Math.round(amount).toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
+const formatDateTime = (value: string, language: string) => {
   if (!value) return "—";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
     ? value
-    : parsed.toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+    : parsed.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN", { dateStyle: "short", timeStyle: "short" });
 };
 
 const getRoomDetails = (booking: BookingListItem): InvoiceRoom[] => {
@@ -81,6 +83,8 @@ type CheckoutInvoiceProps = {
 };
 
 export default function CheckoutInvoice({ booking, onClose }: CheckoutInvoiceProps) {
+  const { i18n } = useTranslation();
+  const language = i18n.language;
   const rooms = getRoomDetails(booking);
   const roomTotal = rooms.reduce((sum, room) => sum + room.roomAmount, 0);
   const servicesTotal = rooms.reduce(
@@ -125,13 +129,13 @@ export default function CheckoutInvoice({ booking, onClose }: CheckoutInvoicePro
       <section
         id="checkout-invoice-print-area"
         className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-10"
-        aria-label="Hóa đơn thanh toán"
+        aria-label={localizedText("Hóa đơn thanh toán", "Payment invoice")}
       >
         <div className="checkout-invoice-actions mb-5 flex justify-end gap-2">
           <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
-            <Printer size={16} /> In / Lưu PDF
+            <Printer size={16} /> {localizedText("In / Lưu PDF", "Print / Save PDF")}
           </button>
-          <button type="button" onClick={onClose} aria-label="Đóng hóa đơn" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+          <button type="button" onClick={onClose} aria-label={localizedText("Đóng hóa đơn", "Close invoice")} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
             <X size={17} />
           </button>
         </div>
@@ -139,25 +143,25 @@ export default function CheckoutInvoice({ booking, onClose }: CheckoutInvoicePro
         <header className="flex flex-wrap items-start justify-between gap-5 border-b-2 border-slate-900 pb-5">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-700">Hotel Management</p>
-            <h1 className="mt-2 text-3xl font-black uppercase tracking-wide text-slate-900">Hóa đơn thanh toán</h1>
-            <p className="mt-1 text-sm text-slate-500">Chi tiết lưu trú và dịch vụ theo từng phòng</p>
+            <h1 className="mt-2 text-3xl font-black uppercase tracking-wide text-slate-900">{localizedText("Hóa đơn thanh toán", "Payment invoice")}</h1>
+            <p className="mt-1 text-sm text-slate-500">{localizedText("Chi tiết lưu trú và dịch vụ theo từng phòng", "Accommodation and service details by room")}</p>
           </div>
           <div className="text-right text-sm">
-            <p className="text-slate-500">Mã booking</p>
+            <p className="text-slate-500">{localizedText("Mã booking", "Booking ID")}</p>
             <p className="font-bold text-slate-900">{bookingId}</p>
-            <p className="mt-2 text-slate-500">Ngày hoàn tất</p>
-            <p className="font-semibold text-slate-800">{formatDateTime(latestCheckout)}</p>
+            <p className="mt-2 text-slate-500">{localizedText("Ngày hoàn tất", "Completion date")}</p>
+            <p className="font-semibold text-slate-800">{formatDateTime(latestCheckout, language)}</p>
           </div>
         </header>
 
         <div className="grid gap-4 border-b border-slate-200 py-5 text-sm sm:grid-cols-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Khách hàng</p>
-            <p className="mt-1 font-bold text-slate-900">{readText(booking, ["customerName", "nameCustomer"], "Chưa cập nhật")}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{localizedText("Khách hàng", "Guest")}</p>
+            <p className="mt-1 font-bold text-slate-900">{readText(booking, ["customerName", "nameCustomer"], localizedText("Chưa cập nhật", "Not provided"))}</p>
             <p className="text-slate-600">{readText(booking, ["customerPhone", "phone", "phoneNumber"], "—")}</p>
           </div>
           <div className="sm:text-right">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Mã đơn hàng</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{localizedText("Mã đơn hàng", "Order ID")}</p>
             <p className="mt-1 font-semibold text-slate-800">{readText(booking, ["orderId"], "—")}</p>
           </div>
         </div>
@@ -168,38 +172,38 @@ export default function CheckoutInvoice({ booking, onClose }: CheckoutInvoicePro
             return (
               <section key={`${room.room}-${index}`} className="break-inside-avoid rounded-xl border border-slate-200">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-xl bg-slate-50 px-4 py-3">
-                  <h2 className="font-bold text-slate-900">Phòng {room.room}</h2>
+                  <h2 className="font-bold text-slate-900">{localizedText("Phòng", "Room")} {room.room}</h2>
                   <span className="text-xs text-slate-500">
-                    {formatDateTime(room.checkIn)} – {formatDateTime(room.checkOut)}
+                    {formatDateTime(room.checkIn, language)} – {formatDateTime(room.checkOut, language)}
                   </span>
                 </div>
                 <div className="divide-y divide-slate-100 px-4">
                   <div className="flex justify-between gap-4 py-3 text-sm">
-                    <span className="text-slate-700">Tiền phòng</span>
-                    <span className="font-semibold text-slate-900">{formatMoney(room.roomAmount)}</span>
+                    <span className="text-slate-700">{localizedText("Tiền phòng", "Room charge")}</span>
+                    <span className="font-semibold text-slate-900">{formatMoney(room.roomAmount, language)}</span>
                   </div>
                   {room.services.map((service, serviceIndex) => (
                     <div key={`${service.name}-${serviceIndex}`} className="flex justify-between gap-4 py-3 text-sm">
                       <span className="text-slate-700">{service.name} <span className="text-slate-400">× {service.quantity}</span></span>
-                      <span className="font-semibold text-slate-900">{formatMoney(service.amount)}</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(service.amount, language)}</span>
                     </div>
                   ))}
                   {room.earlyFee > 0 && (
                     <div className="flex justify-between gap-4 py-3 text-sm">
-                      <span className="text-slate-700">Phụ thu check-in sớm</span>
-                      <span className="font-semibold text-slate-900">{formatMoney(room.earlyFee)}</span>
+                      <span className="text-slate-700">{localizedText("Phụ thu check-in sớm", "Early check-in surcharge")}</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(room.earlyFee, language)}</span>
                     </div>
                   )}
                   {room.lateFee > 0 && (
                     <div className="flex justify-between gap-4 py-3 text-sm">
-                      <span className="text-slate-700">Phụ thu check-out trễ</span>
-                      <span className="font-semibold text-slate-900">{formatMoney(room.lateFee)}</span>
+                      <span className="text-slate-700">{localizedText("Phụ thu check-out trễ", "Late check-out surcharge")}</span>
+                      <span className="font-semibold text-slate-900">{formatMoney(room.lateFee, language)}</span>
                     </div>
                   )}
                 </div>
                 <div className="flex justify-between rounded-b-xl bg-blue-50 px-4 py-3 text-sm">
-                  <span className="font-semibold text-blue-900">Tổng phòng {room.room}</span>
-                  <span className="font-bold text-blue-900">{formatMoney(roomSubtotal)}</span>
+                  <span className="font-semibold text-blue-900">{localizedText("Tổng phòng", "Room total")} {room.room}</span>
+                  <span className="font-bold text-blue-900">{formatMoney(roomSubtotal, language)}</span>
                 </div>
               </section>
             );
@@ -207,21 +211,21 @@ export default function CheckoutInvoice({ booking, onClose }: CheckoutInvoicePro
         </div>
 
         <section className="ml-auto max-w-sm space-y-2 border-t border-slate-200 pt-5 text-sm">
-          <div className="flex justify-between gap-4 text-slate-600"><span>Tiền phòng</span><span>{formatMoney(roomTotal)}</span></div>
-          <div className="flex justify-between gap-4 text-slate-600"><span>Dịch vụ</span><span>{formatMoney(servicesTotal)}</span></div>
-          <div className="flex justify-between gap-4 text-slate-600"><span>Phụ thu check-in sớm</span><span>{formatMoney(earlyFeesTotal)}</span></div>
-          <div className="flex justify-between gap-4 text-slate-600"><span>Phụ thu check-out trễ</span><span>{formatMoney(lateFeesTotal)}</span></div>
-          <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 text-slate-700"><span>Tạm tính</span><span>{formatMoney(itemSubtotal)}</span></div>
-          {discount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Giảm giá</span><span>−{formatMoney(discount)}</span></div>}
-          {Math.abs(adjustment) >= 1 && <div className="flex justify-between gap-4 text-slate-600"><span>Điều chỉnh theo booking</span><span>{formatMoney(adjustment)}</span></div>}
-          <div className="flex justify-between gap-4 border-t-2 border-slate-900 pt-3 text-lg font-black text-slate-950"><span>Tổng thanh toán</span><span>{formatMoney(total)}</span></div>
-          <div className="flex justify-between gap-4 text-slate-600"><span>Đã thanh toán</span><span>{formatMoney(paidAmount)}</span></div>
-          <div className="flex justify-between gap-4 font-bold text-emerald-700"><span>Còn phải thanh toán</span><span>{formatMoney(remainingAmount)}</span></div>
+          <div className="flex justify-between gap-4 text-slate-600"><span>{localizedText("Tiền phòng", "Room charges")}</span><span>{formatMoney(roomTotal, language)}</span></div>
+          <div className="flex justify-between gap-4 text-slate-600"><span>{localizedText("Dịch vụ", "Services")}</span><span>{formatMoney(servicesTotal, language)}</span></div>
+          <div className="flex justify-between gap-4 text-slate-600"><span>{localizedText("Phụ thu check-in sớm", "Early check-in surcharge")}</span><span>{formatMoney(earlyFeesTotal, language)}</span></div>
+          <div className="flex justify-between gap-4 text-slate-600"><span>{localizedText("Phụ thu check-out trễ", "Late check-out surcharge")}</span><span>{formatMoney(lateFeesTotal, language)}</span></div>
+          <div className="flex justify-between gap-4 border-t border-slate-100 pt-2 text-slate-700"><span>{localizedText("Tạm tính", "Subtotal")}</span><span>{formatMoney(itemSubtotal, language)}</span></div>
+          {discount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>{localizedText("Giảm giá", "Discount")}</span><span>−{formatMoney(discount, language)}</span></div>}
+          {Math.abs(adjustment) >= 1 && <div className="flex justify-between gap-4 text-slate-600"><span>{localizedText("Điều chỉnh theo booking", "Booking adjustment")}</span><span>{formatMoney(adjustment, language)}</span></div>}
+          <div className="flex justify-between gap-4 border-t-2 border-slate-900 pt-3 text-lg font-black text-slate-950"><span>{localizedText("Tổng thanh toán", "Total due")}</span><span>{formatMoney(total, language)}</span></div>
+          <div className="flex justify-between gap-4 text-slate-600"><span>{localizedText("Đã thanh toán", "Paid")}</span><span>{formatMoney(paidAmount, language)}</span></div>
+          <div className="flex justify-between gap-4 font-bold text-emerald-700"><span>{localizedText("Còn phải thanh toán", "Balance due")}</span><span>{formatMoney(remainingAmount, language)}</span></div>
         </section>
 
         <footer className="mt-10 border-t border-dashed border-slate-300 pt-5 text-center text-xs text-slate-500">
-          <p className="font-semibold text-slate-700">Cảm ơn Quý khách đã sử dụng dịch vụ!</p>
-          <p className="mt-1">Hóa đơn được lập sau khi toàn bộ phòng trong booking đã hoàn tất check-out.</p>
+          <p className="font-semibold text-slate-700">{localizedText("Cảm ơn Quý khách đã sử dụng dịch vụ!", "Thank you for staying with us!")}</p>
+          <p className="mt-1">{localizedText("Hóa đơn được lập sau khi toàn bộ phòng trong booking đã hoàn tất check-out.", "This invoice was issued after all rooms in the booking had checked out.")}</p>
         </footer>
       </section>
     </div>

@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertCircle, Banknote, Check, Clock3, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import BankSelectionField from "./BankSelectionField";
+import { localizedText } from "../i18n";
 import {
   useApproveCheckoutRefundMutation,
   useConfirmCheckoutRefundMutation,
@@ -10,25 +12,30 @@ import {
 } from "../services/managementBookingApi";
 
 const money = (amount: number) =>
-  `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}đ`;
+  `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}₫`;
 
 const dateTime = (value?: string | null) => {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN");
+  const language = localStorage.getItem("language") === "en" ? "en-US" : "vi-VN";
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(language);
 };
 
 const getErrorMessage = (error: unknown) => {
-  if (!error || typeof error !== "object") return "Đã xảy ra lỗi. Vui lòng thử lại.";
+  if (!error || typeof error !== "object") return localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "Something went wrong. Please try again.");
   const apiError = error as { data?: { message?: string }; error?: string; message?: string };
-  return apiError.data?.message ?? apiError.message ?? apiError.error ?? "Đã xảy ra lỗi. Vui lòng thử lại.";
+  return apiError.data?.message ?? apiError.message ?? apiError.error ?? localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "Something went wrong. Please try again.");
 };
 
 export default function CheckoutRefundApprovalsPanel() {
+  useTranslation();
   const { data: refunds = [], isLoading, isFetching, isError, error, refetch } = useGetCheckoutRefundsQuery();
   const pending = refunds.filter((refund) => refund.status === "PENDING");
   const approved = refunds.filter((refund) => refund.status === "APPROVED");
   const refunded = refunds.filter((refund) => refund.status === "REFUNDED");
+  const cashRefunds = refunds.filter((refund) => refund.refundMethod === "CASH");
+  const bankRefunds = refunds.filter((refund) => refund.refundMethod !== "CASH");
+  const pendingCashRefunds = cashRefunds.filter((refund) => refund.status === "PENDING");
 
   return (
     <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
@@ -38,12 +45,12 @@ export default function CheckoutRefundApprovalsPanel() {
             <Banknote size={20} />
           </span>
           <div>
-            <h3 className="font-bold text-slate-900">Hoàn khoản thu dư khi check-out</h3>
+            <h3 className="font-bold text-slate-900">{localizedText("Hoàn khoản thu dư khi check-out", "Checkout surplus refunds")}</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Quản lý đối chiếu và chuyển khoản thủ công trong 1–3 ngày; khoản tiền mặt đã hoàn được ghi nhận tại quầy.
+              {localizedText("Hoàn tiền mặt được nhân viên xác nhận tại đây; khoản hoàn ngân hàng được quản lý duyệt và xử lý chuyển khoản.", "Staff confirm cash refunds here; bank refunds are reviewed and transferred by a manager.")}
             </p>
             <p className="mt-2 text-xs font-medium text-slate-500">
-              {pending.length} chờ xử lý · {approved.length} chờ chuyển khoản · {refunded.length} đã hoàn
+              {pendingCashRefunds.length} {localizedText("chờ xác nhận tiền mặt", "cash refunds to confirm")} · {pending.length - pendingCashRefunds.length} {localizedText("chờ duyệt ngân hàng", "bank refunds to review")} · {approved.length} {localizedText("chờ chuyển khoản", "awaiting transfer")} · {refunded.length} {localizedText("đã hoàn", "refunded")}
             </p>
           </div>
         </div>
@@ -54,23 +61,44 @@ export default function CheckoutRefundApprovalsPanel() {
           className="inline-flex w-fit items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-amber-50 disabled:opacity-60"
         >
           <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
-          Làm mới
+          {localizedText("Làm mới", "Refresh")}
         </button>
       </header>
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500">
-          <LoaderCircle size={18} className="animate-spin" /> Đang tải yêu cầu hoàn dư...
+          <LoaderCircle size={18} className="animate-spin" /> {localizedText("Đang tải yêu cầu hoàn dư...", "Loading refund requests...")}
         </div>
       ) : isError ? (
         <div className="p-6 text-center">
-          <p className="text-sm font-semibold text-rose-700">Không tải được yêu cầu hoàn dư</p>
+          <p className="text-sm font-semibold text-rose-700">{localizedText("Không tải được yêu cầu hoàn dư", "Could not load refund requests")}</p>
           <p className="mt-1 text-sm text-slate-500">{getErrorMessage(error)}</p>
         </div>
       ) : refunds.length === 0 ? (
-        <p className="p-8 text-center text-sm text-slate-500">Chưa có yêu cầu hoàn dư qua ngân hàng.</p>
+        <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có khoản hoàn dư nào.", "There are no surplus refunds.")}</p>
       ) : (
         <div className="divide-y divide-slate-100">
-          {refunds.map((refund) => <CheckoutRefundCard key={refund.id} refund={refund} />)}
+          {cashRefunds.length > 0 && (
+            <section>
+              <header className="border-b border-emerald-100 bg-emerald-50/60 px-5 py-3">
+                <h4 className="font-semibold text-emerald-900">{localizedText("Hoàn tiền mặt tại quầy", "Cash refunds at front desk")}</h4>
+                <p className="mt-0.5 text-xs text-emerald-800">
+                  {localizedText("Nhân viên xác nhận tại đây sau khi đã giao tiền trực tiếp cho khách.", "Staff confirm here after handing the cash directly to the guest.")}
+                </p>
+              </header>
+              {cashRefunds.map((refund) => <CheckoutRefundCard key={refund.id} refund={refund} />)}
+            </section>
+          )}
+          {bankRefunds.length > 0 && (
+            <section>
+              <header className="border-b border-blue-100 bg-blue-50/60 px-5 py-3">
+                <h4 className="font-semibold text-blue-900">{localizedText("Hoàn tiền qua ngân hàng", "Bank refunds")}</h4>
+                <p className="mt-0.5 text-xs text-blue-800">
+                  {localizedText("Duyệt thông tin hoàn, sau đó xác nhận chuyển khoản.", "Review refund details, then confirm the bank transfer.")}
+                </p>
+              </header>
+              {bankRefunds.map((refund) => <CheckoutRefundCard key={refund.id} refund={refund} />)}
+            </section>
+          )}
         </div>
       )}
     </section>
@@ -78,6 +106,7 @@ export default function CheckoutRefundApprovalsPanel() {
 }
 
 function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
+  useTranslation();
   const [updateBankDetails, { isLoading: isSaving }] = useUpdateCheckoutRefundBankDetailsMutation();
   const [approveRefund, { isLoading: isApproving }] = useApproveCheckoutRefundMutation();
   const [confirmRefund, { isLoading: isConfirming }] = useConfirmCheckoutRefundMutation();
@@ -93,6 +122,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
   const [note, setNote] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const isWorking = isSaving || isApproving || isConfirming;
+  const isCashRefund = refund.refundMethod === "CASH";
   const hasBankAccount = Boolean(
     refund.bankName?.trim()
     && refund.bankAccountName?.trim()
@@ -101,7 +131,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
 
   const saveBank = async () => {
     if (!bank.bankName.trim() || !bank.bankAccountName.trim() || !/^[0-9]{6,50}$/.test(bank.bankAccountNumber.trim())) {
-      setErrorMessage("Vui lòng nhập ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ.");
+      setErrorMessage(localizedText("Vui lòng nhập ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ.", "Enter a valid bank, account holder name, and account number."));
       return;
     }
     setErrorMessage("");
@@ -123,7 +153,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
 
   const approve = async () => {
     if (!amountConfirmed || !customerConfirmed) {
-      setErrorMessage("Cần xác nhận số tiền và xác nhận đã hỏi khách về tài khoản nhận.");
+      setErrorMessage(localizedText("Cần xác nhận số tiền và xác nhận đã hỏi khách về tài khoản nhận.", "Confirm the refund amount and that the recipient account has been verified with the guest."));
       return;
     }
     setErrorMessage("");
@@ -135,8 +165,8 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
   };
 
   const completeRefund = async () => {
-    if (!note.trim()) {
-      setErrorMessage("Nhập mã giao dịch hoặc ghi chú chuyển khoản để hoàn tất.");
+    if (refund.refundMethod !== "CASH" && !note.trim()) {
+      setErrorMessage(localizedText("Nhập mã giao dịch hoặc ghi chú chuyển khoản để hoàn tất.", "Enter the transfer reference or a note to complete the refund."));
       return;
     }
     setErrorMessage("");
@@ -160,19 +190,28 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
                   ? "bg-blue-100 text-blue-800"
                   : "bg-emerald-100 text-emerald-800"
             }`}>
-              {refund.status === "PENDING" ? "Chờ duyệt" : refund.status === "APPROVED" ? "Chờ chuyển khoản" : "Đã hoàn"}
+              {refund.status === "PENDING"
+                ? refund.refundMethod === "CASH" ? localizedText("Chờ xác nhận tiền mặt", "Cash confirmation pending") : localizedText("Chờ duyệt", "Pending review")
+                : refund.status === "APPROVED" ? localizedText("Chờ chuyển khoản", "Awaiting transfer") : localizedText("Đã hoàn", "Refunded")}
+            </span>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              refund.refundMethod === "CASH"
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-blue-100 text-blue-800"
+            }`}>
+              {refund.refundMethod === "CASH" ? localizedText("Hoàn tiền mặt tại quầy", "Cash at front desk") : localizedText("Hoàn qua ngân hàng", "Bank transfer")}
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-700">
-            {refund.customerName || "Khách hàng"}{refund.customerPhone ? ` · ${refund.customerPhone}` : ""}
+            {refund.customerName || localizedText("Khách hàng", "Guest")}{refund.customerPhone ? ` · ${refund.customerPhone}` : ""}
             {" · "}{dateTime(refund.requestedAt)}
           </p>
           <div className="mt-3 grid gap-2 rounded-xl bg-slate-50 p-3 text-sm sm:grid-cols-3">
-            <p><span className="text-slate-500">Đã thu:</span> <strong>{money(refund.paidAmount)}</strong></p>
-            <p><span className="text-slate-500">Hóa đơn cuối:</span> <strong>{money(refund.finalAmount)}</strong></p>
-            <p><span className="text-slate-500">Cần hoàn:</span> <strong className="text-blue-700">{money(refund.refundAmount)}</strong></p>
+            <p><span className="text-slate-500">{localizedText("Đã thu:", "Collected:")}</span> <strong>{money(refund.paidAmount)}</strong></p>
+            <p><span className="text-slate-500">{localizedText("Hóa đơn cuối:", "Final invoice:")}</span> <strong>{money(refund.finalAmount)}</strong></p>
+            <p><span className="text-slate-500">{localizedText("Cần hoàn:", "Refund due:")}</span> <strong className="text-blue-700">{money(refund.refundAmount)}</strong></p>
           </div>
-          {refund.status !== "REFUNDED" && (
+          {refund.status !== "REFUNDED" && !isCashRefund && (
             <div className="mt-3">
               {editingBank ? (
                 <div className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
@@ -182,7 +221,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
                     onChange={(bankName, bankCode) => setBank((current) => ({ ...current, bankName, bankCode }))}
                   />
                   <label className="text-sm font-semibold text-slate-700">
-                    Tên chủ tài khoản *
+                    {localizedText("Tên chủ tài khoản *", "Account holder name *")}
                     <input
                       value={bank.bankAccountName}
                       onChange={(event) => setBank((current) => ({ ...current, bankAccountName: event.target.value }))}
@@ -191,7 +230,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
                     />
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
-                    Số tài khoản *
+                    {localizedText("Số tài khoản *", "Account number *")}
                     <input
                       inputMode="numeric"
                       value={bank.bankAccountNumber}
@@ -202,10 +241,10 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
                   </label>
                   <div className="flex items-end gap-2">
                     <button type="button" onClick={() => void saveBank()} disabled={isWorking} className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
-                      <Save size={14} /> Lưu tài khoản
+                      <Save size={14} /> {localizedText("Lưu tài khoản", "Save account")}
                     </button>
                     <button type="button" onClick={() => setEditingBank(false)} disabled={isWorking} className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-500">
-                      Hủy
+                      {localizedText("Hủy", "Cancel")}
                     </button>
                   </div>
                 </div>
@@ -216,7 +255,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
                       {refund.bankName} · {refund.bankAccountName} · <span className="font-mono">{refund.bankAccountNumber}</span>
                     </span>
                   ) : (
-                    <span className="font-medium text-amber-700">Chưa có tài khoản ngân hàng hợp lệ.</span>
+                    <span className="font-medium text-amber-700">{localizedText("Chưa có tài khoản ngân hàng hợp lệ.", "No valid bank account is available.")}</span>
                   )}
                   {refund.status === "PENDING" && (
                     <button
@@ -232,7 +271,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
                       }}
                       className="font-semibold text-blue-700 hover:underline"
                     >
-                      {hasBankAccount ? "Sửa tài khoản" : "Nhập tài khoản"}
+                      {hasBankAccount ? localizedText("Sửa tài khoản", "Edit account") : localizedText("Nhập tài khoản", "Enter account")}
                     </button>
                   )}
                 </div>
@@ -240,48 +279,68 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
             </div>
           )}
           {refund.status === "PENDING" && (
-            <div className="mt-3 space-y-2">
+            !isCashRefund ? <div className="mt-3 space-y-2">
               <label className="flex items-start gap-2 text-xs text-slate-700">
                 <input type="checkbox" checked={amountConfirmed} onChange={(event) => setAmountConfirmed(event.target.checked)} className="mt-0.5 accent-blue-600" />
-                Tôi đã đối chiếu số tiền thu và khoản hoàn dư.
+                {localizedText("Tôi đã đối chiếu số tiền thu và khoản hoàn dư.", "I have verified the collected amount and refund amount.")}
               </label>
               <label className="flex items-start gap-2 text-xs text-slate-700">
                 <input type="checkbox" checked={customerConfirmed} onChange={(event) => setCustomerConfirmed(event.target.checked)} className="mt-0.5 accent-blue-600" />
-                Tôi đã xác nhận tài khoản nhận với khách hàng.
+                {localizedText("Tôi đã xác nhận tài khoản nhận với khách hàng.", "I have confirmed the recipient account with the guest.")}
               </label>
-            </div>
+            </div> : (
+              <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-amber-700">
+                <Clock3 size={14} /> {localizedText("Chờ nhân viên xác nhận đã giao tiền mặt trực tiếp cho khách.", "Awaiting staff confirmation that cash was handed directly to the guest.")}
+              </p>
+            )
           )}
           {refund.status === "APPROVED" && (
             <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-blue-700">
-              <Clock3 size={14} /> Quản lý đã duyệt. Chuyển khoản thủ công và ghi nhận giao dịch trong 1–3 ngày.
+              <Clock3 size={14} /> {localizedText("Quản lý đã duyệt. Chuyển khoản thủ công và ghi nhận giao dịch trong 1–3 ngày.", "Approved by a manager. Complete the bank transfer and record it within 1–3 days.")}
+            </p>
+          )}
+          {refund.status === "REFUNDED" && refund.refundMethod === "CASH" && (
+            <p className="mt-3 flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+              <Check size={14} /> {localizedText("Đã hoàn tiền mặt trực tiếp cho khách khi check-out.", "Cash was refunded directly to the guest at check-out.")}
             </p>
           )}
           {refund.status === "REFUNDED" && refund.refundedAt && (
-            <p className="mt-2 text-xs text-emerald-700">Đã ghi nhận hoàn {dateTime(refund.refundedAt)}{refund.note ? ` · ${refund.note}` : ""}</p>
+            <p className="mt-2 text-xs text-emerald-700">{localizedText("Đã ghi nhận hoàn", "Refund recorded")} {dateTime(refund.refundedAt)}{refund.note ? ` · ${refund.note}` : ""}</p>
           )}
         </div>
         <div className="flex w-full flex-col gap-2 lg:w-72">
           {refund.status !== "REFUNDED" && (
             <label className="text-xs font-semibold text-slate-600">
-              {refund.status === "APPROVED" ? "Mã giao dịch chuyển khoản *" : "Ghi chú (không bắt buộc)"}
+              {refund.status === "APPROVED" ? localizedText("Mã giao dịch chuyển khoản *", "Bank transfer reference *") : localizedText("Ghi chú (không bắt buộc)", "Note (optional)")}
               <input
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 maxLength={500}
-                placeholder={refund.status === "APPROVED" ? "Nhập mã giao dịch ngân hàng..." : "Nhập ghi chú..."}
+                placeholder={refund.status === "APPROVED" ? localizedText("Nhập mã giao dịch ngân hàng...", "Enter bank transfer reference...") : isCashRefund ? localizedText("Ví dụ: đã giao tiền cho khách tại quầy...", "Example: cash handed to the guest at the front desk...") : localizedText("Nhập ghi chú...", "Enter a note...")}
                 className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal"
               />
             </label>
           )}
           {refund.status === "PENDING" && (
-            <button
-              type="button"
-              onClick={() => void approve()}
-              disabled={!hasBankAccount || !amountConfirmed || !customerConfirmed || isWorking}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isApproving ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} Duyệt hoàn ngân hàng
-            </button>
+            isCashRefund ? (
+              <button
+                type="button"
+                onClick={() => void completeRefund()}
+                disabled={isWorking}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50"
+              >
+                {isConfirming ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} {localizedText("Xác nhận đã hoàn tiền mặt", "Confirm cash refund")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void approve()}
+                disabled={!hasBankAccount || !amountConfirmed || !customerConfirmed || isWorking}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isApproving ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} {localizedText("Duyệt hoàn ngân hàng", "Approve bank refund")}
+              </button>
+            )
           )}
           {refund.status === "APPROVED" && (
             <button
@@ -290,7 +349,7 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
               disabled={!note.trim() || isWorking}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isConfirming ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} Xác nhận đã chuyển
+              {isConfirming ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} {localizedText("Xác nhận đã chuyển", "Confirm transfer")}
             </button>
           )}
         </div>
