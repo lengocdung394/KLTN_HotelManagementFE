@@ -36,12 +36,16 @@ export type CheckInOutBookingDetail = {
   roomTotal?: number;
   earlyCheckInFee?: number | string;
   estimatedEarlyCheckInFee?: number | string;
+  lateCheckOutFee?: number | string;
+  lateCheckoutFee?: number | string;
+  lateFee?: number | string;
   serviceSubTotal?: number;
   totalPrice?: number;
   paidAmount?: number | string;
   amountPaid?: number | string;
   totalPaidAmount?: number | string;
   remainingAmount?: number | string;
+  surplusAmount?: number | string | null;
   remainAmount?: number | string;
   remain?: number | string;
   nameCustomer?: string;
@@ -155,6 +159,21 @@ export const checkInOutApi = baseApi.injectEndpoints({
       },
       invalidatesTags: ["Booking"],
     }),
+    prepareBulkCheckOut: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: BulkCheckInOutRequest }>({
+      query: ({ bookingId, bookingDetailIds }) => ({
+        url: `/checkInOuts/${bookingId}/check-out/prepare`,
+        method: "POST",
+        data: bookingDetailIds,
+      }),
+      transformResponse: (response: unknown) => {
+        if (!response || typeof response !== "object") return {} as BulkCheckInOutResponse;
+        if ("result" in response && response.result && typeof response.result === "object") {
+          return response.result as BulkCheckInOutResponse;
+        }
+        return response as BulkCheckInOutResponse;
+      },
+      invalidatesTags: ["Booking", "CheckoutRefund"],
+    }),
     bulkCheckOut: builder.mutation<BulkCheckInOutResponse, {
       bookingId: string;
       bookingDetailIds: BulkCheckInOutRequest;
@@ -183,5 +202,6 @@ export const {
   useGetTodayCheckOutsQuery,
   useGetEarlyCheckInsQuery,
   useBulkCheckInMutation,
+  usePrepareBulkCheckOutMutation,
   useBulkCheckOutMutation,
 } = checkInOutApi;

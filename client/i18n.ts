@@ -5,6 +5,9 @@ import vi from "./locales/vi.json";
 
 const savedLanguage = localStorage.getItem("language");
 
+export const localizedText = (vietnamese: string, english: string) =>
+  i18n.language.startsWith("en") ? english : vietnamese;
+
 void i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },

@@ -11,7 +11,6 @@ export type ManagementBookingServiceAddition = {
   quantity: number;
   name?: string;
   price?: number;
-  usedAt?: string;
 };
 
 export type ManagementBookingRoomServiceAddition = {
@@ -31,12 +30,12 @@ export type ManagementBookingRoomToAdd = {
     quantity: number;
     name?: string;
     price?: number;
-    usedAt?: string;
   }[];
 };
 
 export type ManagementBookingServiceQuantityItem = {
   serviceId: string;
+  bookingServiceDetailId?: string;
   quantity: number;
 };
 

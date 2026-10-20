@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 interface DatePickerPopoverProps {
@@ -14,8 +15,6 @@ interface DatePickerPopoverProps {
   highlightDateMarkers?: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">>;
   iconOnly?: boolean;
 }
-
-const weekDays = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
 const normalizeCalendarDateKey = (value: Date | string) => {
   if (value instanceof Date) {
@@ -48,7 +47,7 @@ export default function DatePickerPopover({
   value,
   onChange,
   onMonthChange,
-  placeholder = "Chọn ngày",
+  placeholder,
   buttonClassName,
   align = "end",
   label,
@@ -56,6 +55,11 @@ export default function DatePickerPopover({
   highlightDateMarkers = {},
   iconOnly = false,
 }: DatePickerPopoverProps) {
+  const { i18n } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? (i18n.language.startsWith("en") ? "Select date" : "Chọn ngày");
+  const weekDays = i18n.language.startsWith("en")
+    ? ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+    : ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
   const [open, setOpen] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(() => {
     const current = value ?? new Date();
@@ -105,7 +109,7 @@ export default function DatePickerPopover({
   const daysInMonth = new Date(pickerYear, pickerMonthIndex + 1, 0).getDate();
   const today = new Date();
   const selectedDateLabel = value?.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const accessibleLabel = selectedDateLabel ? `${placeholder}: ${selectedDateLabel}` : placeholder;
+  const accessibleLabel = selectedDateLabel ? `${resolvedPlaceholder}: ${selectedDateLabel}` : resolvedPlaceholder;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -120,7 +124,7 @@ export default function DatePickerPopover({
           title={accessibleLabel}
         >
           <CalendarDays size={16} className="text-blue-600" />
-          {!iconOnly && <span>{label ? `${label}: ` : ""}{selectedDateLabel ?? placeholder}</span>}
+          {!iconOnly && <span>{label ? `${label}: ` : ""}{selectedDateLabel ?? resolvedPlaceholder}</span>}
         </button>
       </PopoverTrigger>
 
@@ -139,7 +143,7 @@ export default function DatePickerPopover({
               onMonthChange?.(nextMonth);
             }}
             className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Tháng trước"
+            aria-label={i18n.language.startsWith("en") ? "Previous month" : "Tháng trước"}
           >
             <ChevronLeft size={16} />
           </button>
@@ -154,7 +158,7 @@ export default function DatePickerPopover({
               onMonthChange?.(nextMonth);
             }}
             className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Tháng sau"
+            aria-label={i18n.language.startsWith("en") ? "Next month" : "Tháng sau"}
           >
             <ChevronRight size={16} />
           </button>
@@ -232,7 +236,7 @@ export default function DatePickerPopover({
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
         >
           <Check size={14} />
-          Hôm nay
+          {i18n.language.startsWith("en") ? "Today" : "Hôm nay"}
         </button>
       </PopoverContent>
     </Popover>

@@ -1,7 +1,9 @@
 import { toast } from "@/components/ui/use-toast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Calendar, RefreshCw, Save, Trash2, UserPlus, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import { localizedText } from "../i18n";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
@@ -69,11 +71,20 @@ const servicesOf = (detail: BookingDetail) => {
 };
 
 export default function BookingEditWorkspace() {
+  const { i18n } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
   const booking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
+  const bookingStatus = String(booking?.bookingStatus ?? "").trim().toUpperCase();
+  const isCheckedOutBooking = bookingStatus === "COMPLETED" || (
+    Array.isArray(booking?.bookingDetails)
+    && booking.bookingDetails.length > 0
+    && booking.bookingDetails
+      .filter((detail) => String(detail.bookingDetailStatus ?? detail.bookingStatusType ?? detail.status ?? "").toUpperCase() !== "CANCELLED")
+      .every((detail) => String(detail.bookingDetailStatus ?? detail.bookingStatusType ?? detail.status ?? "").toUpperCase() === "CHECKED_OUT")
+  );
   const rawBookingCustomer = booking?.customer ?? booking?.customerInfo ?? booking?.guest;
   const bookingCustomer = rawBookingCustomer && typeof rawBookingCustomer === "object" ? rawBookingCustomer as Record<string, unknown> : {};
   const customerId = String(booking?.customerId ?? booking?.customerID ?? booking?.customer_id ?? booking?.idCustomer ?? bookingCustomer.id ?? bookingCustomer.customerId ?? bookingCustomer.customerID ?? bookingCustomer.idCustomer ?? "");
@@ -232,7 +243,7 @@ export default function BookingEditWorkspace() {
 
   const handleAddNewRoom = () => {
     if (!selectedNewRoomId || !newRoomCheckIn || !newRoomCheckOut) {
-      setError("Vui lòng chọn phòng, ngày check-in và ngày check-out cho phòng mới.");
+      setError(localizedText("Vui lòng chọn phòng, ngày check-in và ngày check-out cho phòng mới.", "Select a room, check-in date, and check-out date for the new room."));
       return;
     }
     const newRoom: ManagementBookingRoomToAdd = {
@@ -336,7 +347,6 @@ export default function BookingEditWorkspace() {
             quantity: currentQty,
             name: curr.name ?? serviceObj?.name,
             price: curr.price ?? serviceObj?.price,
-            usedAt: curr.usedAt ?? new Date().toISOString().slice(0, 19),
           });
         } else if (currentQty > origQty) {
           const extraQty = currentQty - origQty;
@@ -346,7 +356,6 @@ export default function BookingEditWorkspace() {
             quantity: extraQty,
             name: curr.name ?? serviceObj?.name,
             price: curr.price ?? serviceObj?.price,
-            usedAt: curr.usedAt ?? new Date().toISOString().slice(0, 19),
           });
         } else if (currentQty < origQty) {
           quantityUpdatesForRoom.push({
@@ -424,8 +433,8 @@ export default function BookingEditWorkspace() {
     setError("");
     const bookingId = booking?.bookingId ?? booking?.orderId;
     if (bookingId === undefined) {
-      console.error("===> ERROR: Không tìm thấy mã booking (bookingId is undefined).");
-      return setError("Không tìm thấy mã booking.");
+      console.error("Cannot find booking ID (bookingId is undefined).");
+      return setError(localizedText("Không tìm thấy mã booking.", "Booking ID was not found."));
     }
 
     saveInFlight.current = true;
@@ -435,17 +444,20 @@ export default function BookingEditWorkspace() {
       console.log("===> [MODIFY BOOKING BE RESPONSE SUCCESS]:", res);
       toast({
         variant: "default",
-        title: "Cập nhật booking thành công!",
-        description: `Đã lưu các chỉnh sửa phòng và dịch vụ cho booking ${bookingId}.`,
+        title: localizedText("Cập nhật booking thành công!", "Booking updated successfully!"),
+        description: localizedText(
+          `Đã lưu các chỉnh sửa phòng và dịch vụ cho booking ${bookingId}.`,
+          `Room and service changes for booking ${bookingId} have been saved.`,
+        ),
       });
       setSuccess(true);
     } catch (requestError) {
       console.error("===> [MODIFY BOOKING BE ERROR]:", requestError);
       const responseError = requestError as { data?: { message?: string; error?: string }; error?: string };
-      const errorMessage = responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? "Không thể cập nhật booking.";
+      const errorMessage = responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? localizedText("Không thể cập nhật booking.", "Could not update booking.");
       toast({
         variant: "destructive",
-        title: "Cập nhật booking thất bại",
+        title: localizedText("Cập nhật booking thất bại", "Booking update failed"),
         description: errorMessage,
       });
       setError(errorMessage);
@@ -455,20 +467,36 @@ export default function BookingEditWorkspace() {
   };
 
   if (!booking) {
-    return <section className="mt-6 rounded-2xl border border-rose-200 bg-white p-6 text-sm text-rose-600">Không tìm thấy booking cần chỉnh sửa.</section>;
+    return <section className="mt-6 rounded-2xl border border-rose-200 bg-white p-6 text-sm text-rose-600">{localizedText("Không tìm thấy booking cần chỉnh sửa.", "Booking to edit was not found.")}</section>;
+  }
+
+  if (isCheckedOutBooking) {
+    return (
+      <section className="mt-6 rounded-2xl border border-amber-200 bg-white p-6">
+        <h2 className="font-bold text-amber-800">{localizedText("Booking đã checkout hoàn tất", "Booking checkout is complete")}</h2>
+        <p className="mt-2 text-sm text-slate-600">{localizedText("Booking đã checkout không thể chỉnh sửa.", "Checked-out bookings cannot be edited.")}</p>
+        <button
+          type="button"
+          onClick={() => navigate("/booking-list")}
+          className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+        >
+          {localizedText("Quay lại danh sách booking", "Back to booking list")}
+        </button>
+      </section>
+    );
   }
 
   if (success) {
     return (
       <section className="mt-6 rounded-2xl border border-emerald-200 bg-white p-8 text-center">
-        <h2 className="text-lg font-bold text-emerald-700">Cập nhật booking {booking.bookingId ?? booking.orderId} thành công</h2>
-        <p className="mt-2 text-sm text-slate-600">Mọi thay đổi phòng, dịch vụ và thời gian lưu trú đã được lưu vào hệ thống.</p>
+        <h2 className="text-lg font-bold text-emerald-700">{localizedText("Cập nhật booking", "Booking updated")} {booking.bookingId ?? booking.orderId} {localizedText("thành công", "successfully")}</h2>
+        <p className="mt-2 text-sm text-slate-600">{localizedText("Mọi thay đổi phòng, dịch vụ và thời gian lưu trú đã được lưu vào hệ thống.", "All room, service, and stay-date changes have been saved.")}</p>
         <button
           type="button"
           onClick={() => navigate("/booking-list")}
           className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
         >
-          Quay lại danh sách booking
+          {localizedText("Quay lại danh sách booking", "Back to booking list")}
         </button>
       </section>
     );
@@ -509,9 +537,9 @@ export default function BookingEditWorkspace() {
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Chỉnh sửa booking {booking.bookingId ?? booking.orderId}</h2>
+            <h2 className="text-xl font-bold text-slate-900">{localizedText("Chỉnh sửa booking", "Edit booking")} {booking.bookingId ?? booking.orderId}</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Quản lý đổi phòng, cập nhật thời gian, thêm/hủy phòng và dịch vụ cho đơn đặt phòng.
+              {localizedText("Quản lý đổi phòng, cập nhật thời gian, thêm/hủy phòng và dịch vụ cho đơn đặt phòng.", "Manage room changes, stay dates, and rooms or services added to or removed from this booking.")}
             </p>
           </div>
           <button
@@ -519,60 +547,60 @@ export default function BookingEditWorkspace() {
             onClick={() => navigate("/booking-list")}
             className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            <ArrowLeft size={16} /> Quay lại
+            <ArrowLeft size={16} /> {localizedText("Quay lại", "Back")}
           </button>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-        <h3 className="text-base font-bold text-slate-900">Thông tin khách hàng</h3>
-        <p className="mt-1 text-xs text-slate-500">Mã khách hàng: {customerId || "Chưa có"}</p>
-        {isCustomerError && <p className="mt-2 text-xs text-rose-600">Không lấy được thông tin khách hàng từ hệ thống.</p>}
+        <h3 className="text-base font-bold text-slate-900">{localizedText("Thông tin khách hàng", "Customer information")}</h3>
+        <p className="mt-1 text-xs text-slate-500">{localizedText("Mã khách hàng", "Customer ID")}: {customerId || localizedText("Chưa có", "Not available")}</p>
+        {isCustomerError && <p className="mt-2 text-xs text-rose-600">{localizedText("Không lấy được thông tin khách hàng từ hệ thống.", "Could not load customer information.")}</p>}
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <label className="text-sm font-semibold text-slate-700">
-            Họ và tên
-            <input readOnly value={isCustomerLoading ? "Đang tải..." : displayCustomerName} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
+            {localizedText("Họ và tên", "Full name")}
+            <input readOnly value={isCustomerLoading ? localizedText("Đang tải...", "Loading...") : displayCustomerName} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
           </label>
           <label className="text-sm font-semibold text-slate-700">
-            Số điện thoại
-            <input readOnly value={isCustomerLoading ? "Đang tải..." : displayCustomerPhone} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
+            {localizedText("Số điện thoại", "Phone number")}
+            <input readOnly value={isCustomerLoading ? localizedText("Đang tải...", "Loading...") : displayCustomerPhone} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
           </label>
           <label className="text-sm font-semibold text-slate-700">
-            Căn cước công dân
-            <input readOnly value={isCustomerLoading ? "Đang tải..." : displayCustomerIdentity} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
+            {localizedText("Căn cước công dân", "National ID")}
+            <input readOnly value={isCustomerLoading ? localizedText("Đang tải...", "Loading...") : displayCustomerIdentity} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-700 outline-none" />
           </label>
         </div>
       </div>
 
       <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 shadow-sm">
-        <h3 className="text-base font-bold text-slate-900">Khuyến mãi và giảm giá hiện tại</h3>
+        <h3 className="text-base font-bold text-slate-900">{localizedText("Khuyến mãi và giảm giá hiện tại", "Current promotions and discounts")}</h3>
         <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <p className="text-xs text-slate-500">Khuyến mãi</p>
-            <p className="mt-0.5 font-semibold text-slate-900">{promotionName || "Không có thông tin"}</p>
+            <p className="text-xs text-slate-500">{localizedText("Khuyến mãi", "Promotion")}</p>
+            <p className="mt-0.5 font-semibold text-slate-900">{promotionName || localizedText("Không có thông tin", "Not available")}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Mã khuyến mãi</p>
-            <p className="mt-0.5 font-semibold text-slate-900">{promotionCode || "Không có thông tin"}</p>
+            <p className="text-xs text-slate-500">{localizedText("Mã khuyến mãi", "Promotion code")}</p>
+            <p className="mt-0.5 font-semibold text-slate-900">{promotionCode || localizedText("Không có thông tin", "Not available")}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Tổng giảm giá phòng</p>
-            <p className="mt-0.5 font-semibold text-rose-700">{discountRoomAmount.toLocaleString("vi-VN")}đ</p>
+            <p className="text-xs text-slate-500">{localizedText("Tổng giảm giá phòng", "Total room discount")}</p>
+            <p className="mt-0.5 font-semibold text-rose-700">{discountRoomAmount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Tổng giảm giá dịch vụ</p>
-            <p className="mt-0.5 font-semibold text-rose-700">{discountServiceAmount.toLocaleString("vi-VN")}đ</p>
+            <p className="text-xs text-slate-500">{localizedText("Tổng giảm giá dịch vụ", "Total service discount")}</p>
+            <p className="mt-0.5 font-semibold text-rose-700">{discountServiceAmount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"}</p>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
-            <p className="text-xs text-slate-500">Tổng tiền giảm giá</p>
-            <p className="mt-0.5 text-base font-bold text-rose-700">{discountTotal.toLocaleString("vi-VN")}đ</p>
+            <p className="text-xs text-slate-500">{localizedText("Tổng tiền giảm giá", "Total discount")}</p>
+            <p className="mt-0.5 text-base font-bold text-rose-700">{discountTotal.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"}</p>
           </div>
         </div>
       </div>
 
       {/* 1. Phân đoạn danh sách phòng hiện có trong booking */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h3 className="text-base font-bold text-slate-900">1. Các phòng hiện có trong Booking</h3>
+        <h3 className="text-base font-bold text-slate-900">{localizedText("1. Các phòng hiện có trong Booking", "1. Rooms in this booking")}</h3>
         <div className="mt-4 space-y-4">
           {details.map((detail, index) => {
             const detailId = detailIdOf(detail);
@@ -597,11 +625,11 @@ export default function BookingEditWorkspace() {
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-900">
-                      Phòng #{String(rId || detail.roomNumber || index + 1)} ({String(detail.roomType ?? detail.roomName ?? "Phòng")})
+                      {localizedText("Phòng", "Room")} #{String(rId || detail.roomNumber || index + 1)} ({String(detail.roomType ?? detail.roomName ?? localizedText("Phòng", "Room"))})
                     </span>
                     {isCancelled && (
                       <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
-                        Đã đánh dấu Hủy
+                        {localizedText("Đã đánh dấu Hủy", "Marked for cancellation")}
                       </span>
                     )}
                   </div>
@@ -616,7 +644,7 @@ export default function BookingEditWorkspace() {
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
                     {isCancelled ? <RefreshCw size={14} /> : <Trash2 size={14} />}
-                    {isCancelled ? "Khôi phục phòng" : "Hủy phòng này"}
+                    {isCancelled ? localizedText("Khôi phục phòng", "Restore room") : localizedText("Hủy phòng này", "Cancel this room")}
                   </button>
                 </div>
 
@@ -625,7 +653,7 @@ export default function BookingEditWorkspace() {
                     {/* Đổi ngày check-in / check-out */}
                     <div className="rounded-lg bg-white p-3 border border-slate-200">
                       <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                        <Calendar size={14} className="text-blue-600" /> Ngày nhận / trả phòng:
+                        <Calendar size={14} className="text-blue-600" /> {localizedText("Ngày nhận / trả phòng:", "Check-in / check-out dates:")}
                       </label>
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         <div>
@@ -652,7 +680,7 @@ export default function BookingEditWorkspace() {
                     {/* Đổi phòng */}
                     <div className="rounded-lg bg-white p-3 border border-slate-200">
                       <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                        <RefreshCw size={14} className="text-amber-600" /> Đổi sang phòng khác:
+                        <RefreshCw size={14} className="text-amber-600" /> {localizedText("Đổi sang phòng khác:", "Change to another room:")}
                       </label>
                       <select
                         value={roomChanges[detailId] ?? rId}
@@ -660,14 +688,14 @@ export default function BookingEditWorkspace() {
                         onChange={(e) => handleRoomChange(detailId, String(e.target.value))}
                         className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                       >
-                        <option value={rId}>Giữ phòng hiện tại (#{rId})</option>
+                        <option value={rId}>{localizedText("Giữ phòng hiện tại", "Keep current room")} (#{rId})</option>
                         {hotelRooms
                           .filter((hr) => String(hr.id ?? hr.roomId) !== String(rId))
                           .map((hr) => {
                             const hrId = String(hr.id ?? hr.roomId ?? "");
                             return (
                               <option key={hrId} value={hrId}>
-                                Phòng #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? "Phòng")} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString("vi-VN")}đ)
+                                {localizedText("Phòng", "Room")} #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? localizedText("Phòng", "Room"))} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"})
                               </option>
                             );
                           })}
@@ -676,9 +704,9 @@ export default function BookingEditWorkspace() {
 
                     {/* Dịch vụ lẻ đã đặt của phòng */}
                     <div className="rounded-lg bg-white p-3 border border-slate-200 sm:col-span-2 lg:col-span-1">
-                      <label className="text-xs font-bold text-slate-700">Dịch vụ đã đặt:</label>
+                      <label className="text-xs font-bold text-slate-700">{localizedText("Dịch vụ đã đặt:", "Booked services:")}</label>
                       {existingServicesList.length === 0 ? (
-                        <p className="mt-1 text-xs text-slate-400">Chưa có dịch vụ lẻ nào.</p>
+                        <p className="mt-1 text-xs text-slate-400">{localizedText("Chưa có dịch vụ lẻ nào.", "No individual services booked.")}</p>
                       ) : (
                         <div className="mt-2 space-y-1.5 max-h-28 overflow-y-auto pr-1">
                           {existingServicesList.map((srv, sIdx) => {
@@ -698,7 +726,7 @@ export default function BookingEditWorkspace() {
                                   type="button"
                                   onClick={() => handleToggleCancelService(detailId, sDetailId)}
                                   className="text-slate-400 hover:text-rose-600"
-                                  title={isSrvCancelled ? "Khôi phục dịch vụ" : "Hủy dịch vụ này"}
+                                  title={isSrvCancelled ? localizedText("Khôi phục dịch vụ", "Restore service") : localizedText("Hủy dịch vụ này", "Cancel this service")}
                                 >
                                   {isSrvCancelled ? <RefreshCw size={12} /> : <X size={12} />}
                                 </button>
@@ -719,14 +747,14 @@ export default function BookingEditWorkspace() {
       {/* 2. Thêm phòng mới vào Booking (roomsToAdd) */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-900">2. Thêm phòng mới vào đơn đặt</h3>
+          <h3 className="text-base font-bold text-slate-900">{localizedText("2. Thêm phòng mới vào đơn đặt", "2. Add a room to the booking")}</h3>
           {!isAddingNewRoom && (
             <button
               type="button"
               onClick={() => setIsAddingNewRoom(true)}
               className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-100"
             >
-              <UserPlus size={14} /> Thêm phòng mới
+              <UserPlus size={14} /> {localizedText("Thêm phòng mới", "Add room")}
             </button>
           )}
         </div>
@@ -734,21 +762,21 @@ export default function BookingEditWorkspace() {
         {/* Form thêm phòng mới */}
         {isAddingNewRoom && (
           <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
-            <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wide">Nhập thông tin phòng mới</h4>
+            <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wide">{localizedText("Nhập thông tin phòng mới", "Enter new room details")}</h4>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
-                <label className="text-xs font-semibold text-slate-700">Chọn phòng:</label>
+                <label className="text-xs font-semibold text-slate-700">{localizedText("Chọn phòng:", "Select room:")}</label>
                 <select
                   value={selectedNewRoomId}
                   onChange={(e) => setSelectedNewRoomId(String(e.target.value))}
                   className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
                 >
-                  <option value="">-- Chọn phòng --</option>
+                  <option value="">-- {localizedText("Chọn phòng", "Select room")} --</option>
                   {hotelRooms.map((hr) => {
                     const hrId = String(hr.id ?? hr.roomId ?? "");
                     return (
                       <option key={hrId} value={hrId}>
-                        Phòng #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? "Phòng")} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString("vi-VN")}đ)
+                        {localizedText("Phòng", "Room")} #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? localizedText("Phòng", "Room"))} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"})
                       </option>
                     );
                   })}
@@ -776,7 +804,7 @@ export default function BookingEditWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Người lớn:</label>
+                <label className="text-xs font-semibold text-slate-700">{localizedText("Người lớn:", "Adults:")}</label>
                 <input
                   type="number"
                   min={1}
@@ -787,7 +815,7 @@ export default function BookingEditWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Trẻ em:</label>
+                <label className="text-xs font-semibold text-slate-700">{localizedText("Trẻ em:", "Children:")}</label>
                 <input
                   type="number"
                   min={0}
@@ -798,7 +826,7 @@ export default function BookingEditWorkspace() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Em bé:</label>
+                <label className="text-xs font-semibold text-slate-700">{localizedText("Em bé:", "Infants:")}</label>
                 <input
                   type="number"
                   min={0}
@@ -815,14 +843,14 @@ export default function BookingEditWorkspace() {
                 onClick={() => setIsAddingNewRoom(false)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Hủy
+                {localizedText("Hủy", "Cancel")}
               </button>
               <button
                 type="button"
                 onClick={handleAddNewRoom}
                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
               >
-                Xác nhận thêm phòng
+                {localizedText("Xác nhận thêm phòng", "Confirm room addition")}
               </button>
             </div>
           </div>
@@ -834,12 +862,12 @@ export default function BookingEditWorkspace() {
             {newRoomsToAdd.map((room, idx) => (
               <div key={idx} className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs">
                 <div>
-                  <span className="font-bold text-emerald-900">Phòng bổ sung #{room.roomId}</span>
+                  <span className="font-bold text-emerald-900">{localizedText("Phòng bổ sung", "Added room")} #{room.roomId}</span>
                   <span className="ml-2 text-slate-600">
                     ({room.checkInTime.slice(0, 10)} ➔ {room.checkOutTime.slice(0, 10)})
                   </span>
                   <span className="ml-2 text-slate-500">
-                    | Khách: {room.numAdults} người lớn, {room.numChildren} trẻ em, {room.numInfants} em bé
+                    | {localizedText("Khách", "Guests")}: {room.numAdults} {localizedText("người lớn", "adults")}, {room.numChildren} {localizedText("trẻ em", "children")}, {room.numInfants} {localizedText("em bé", "infants")}
                   </span>
                 </div>
                 <button
@@ -857,8 +885,8 @@ export default function BookingEditWorkspace() {
 
       {/* 3. Thêm dịch vụ mới cho phòng đang active */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h3 className="text-base font-bold text-slate-900">3. Thêm dịch vụ phát sinh cho các phòng đang chọn</h3>
-        <p className="mt-1 text-xs text-slate-500">Chọn dịch vụ mới bổ sung cho các phòng còn hoạt động trong booking.</p>
+        <h3 className="text-base font-bold text-slate-900">{localizedText("3. Thêm dịch vụ phát sinh cho các phòng đang chọn", "3. Add services to selected rooms")}</h3>
+        <p className="mt-1 text-xs text-slate-500">{localizedText("Chọn dịch vụ mới bổ sung cho các phòng còn hoạt động trong booking.", "Select additional services for active rooms in this booking.")}</p>
         <div className="mt-4">
           <BookingServiceSelector
             rooms={editRooms}
@@ -873,14 +901,14 @@ export default function BookingEditWorkspace() {
             setRoomServices={setRoomServices}
             roomRanges={ranges}
             fallbackRange={{ checkIn: "", checkOut: "" }}
-            language="vi"
+            language={i18n.language.startsWith("en") ? "en" : "vi"}
             nightsForRoom={() => 1}
             onContinue={() => void handleSave()}
             onSkip={() => void handleSave()}
             isSubmitting={isLoading}
-            submittingLabel="Đang cập nhật..."
-            continueLabel={isLoading ? "Đang cập nhật..." : "Cập nhật"}
-            skipLabel="Cập nhật"
+            submittingLabel={localizedText("Đang cập nhật...", "Updating...")}
+            continueLabel={isLoading ? localizedText("Đang cập nhật...", "Updating...") : localizedText("Cập nhật", "Update")}
+            skipLabel={localizedText("Cập nhật", "Update")}
           />
         </div>
       </div>
@@ -895,13 +923,13 @@ export default function BookingEditWorkspace() {
       {showDebugJson && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-emerald-400">
           <div className="flex items-center justify-between pb-2 border-b border-slate-700">
-            <span className="text-xs font-mono font-bold text-slate-300">Payload JSON (Gửi xuống BE /management-bookings/{booking.bookingId ?? booking.orderId}/modify)</span>
+            <span className="text-xs font-mono font-bold text-slate-300">Payload JSON ({localizedText("Gửi xuống BE", "Sent to backend")} /management-bookings/{booking.bookingId ?? booking.orderId}/modify)</span>
             <button
               type="button"
               onClick={() => setShowDebugJson(false)}
               className="text-xs text-slate-400 hover:text-white"
             >
-              Đóng
+              {localizedText("Đóng", "Close")}
             </button>
           </div>
           <pre className="mt-3 max-h-60 overflow-y-auto overflow-x-auto text-xs font-mono leading-relaxed">
@@ -916,7 +944,7 @@ export default function BookingEditWorkspace() {
           onClick={() => setShowDebugJson(!showDebugJson)}
           className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono font-semibold text-slate-700 hover:bg-slate-100"
         >
-          {showDebugJson ? "Ẩn Debug JSON" : "🔍 Xem Debug JSON Payload"}
+          {showDebugJson ? localizedText("Ẩn Debug JSON", "Hide debug JSON") : localizedText("🔍 Xem Debug JSON Payload", "🔍 View debug JSON payload")}
         </button>
         <div className="flex items-center gap-3">
           <button
@@ -924,7 +952,7 @@ export default function BookingEditWorkspace() {
             onClick={() => navigate("/booking-list")}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Hủy bỏ
+            {localizedText("Hủy bỏ", "Cancel")}
           </button>
           <button
             type="button"
@@ -933,7 +961,7 @@ export default function BookingEditWorkspace() {
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
           >
             <Save size={16} />
-            {isLoading ? "Đang lưu thay đổi..." : "Lưu tất cả thay đổi"}
+            {isLoading ? localizedText("Đang lưu thay đổi...", "Saving changes...") : localizedText("Lưu tất cả thay đổi", "Save all changes")}
           </button>
         </div>
       </div>

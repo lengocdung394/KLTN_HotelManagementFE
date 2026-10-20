@@ -61,6 +61,10 @@
     "invoices": "Quản lý hóa đơn",
     "promotions": "Quản lý khuyến mãi",
     "services": "Quản lý dịch vụ",
+    "serviceUsage": "Thao tác dịch vụ khách hàng",
+    "serviceCatalog": "Quản lý danh mục dịch vụ",
+    "refundApprovals": "Phê duyệt hoàn tiền",
+    "collapseMenu": "Thu gọn menu",
     "staff": "Nhân viên & ca làm",
     "permissions": "Phân quyền",
     "reports": "Báo cáo doanh thu",
@@ -147,6 +151,7 @@
   "pages": {
     "bookings": { "eyebrow": "Vận hành lưu trú", "title": "Đặt phòng", "description": "Quản lý lịch đặt phòng, khách lưu trú và lịch check-in / check-out.", "stats": ["Đặt phòng hôm nay", "Đang chờ xác nhận", "Check-in hôm nay", "Doanh thu dự kiến"] },
     "customers": { "eyebrow": "Quan hệ khách hàng", "title": "Quản lý khách hàng", "description": "Quản lý hồ sơ, lịch sử lưu trú và chăm sóc khách quay lại.", "stats": ["Tổng khách hàng", "Khách thân thiết", "Khách quay lại tháng này", "Chi tiêu trung bình"] },
+    "refundApprovals": { "eyebrow": "Tài chính chi nhánh", "title": "Phê duyệt hoàn tiền", "description": "Theo dõi khoản thu dư khi check-out, xác nhận hoàn tiền mặt tại quầy và xử lý yêu cầu chuyển khoản ngân hàng.", "stats": ["Chờ duyệt", "Đang xử lý", "Đã hoàn tiền", "Tổng tiền hoàn"] },
     "checkInOut": { "eyebrow": "Vận hành lễ tân", "title": "Check-in / Check-out", "description": "Quản lý nhận phòng, trả phòng và trạng thái lưu trú của khách trong ngày.", "stats": ["Chờ check-in", "Đang lưu trú", "Chờ check-out", "Đã hoàn tất"] },
     "promotions": { "eyebrow": "Kinh doanh & chăm sóc khách", "title": "Khuyến mãi", "description": "Tạo ưu đãi và quản lý mã giảm giá cho khách lưu trú tại Sen Việt.", "stats": ["Đang hoạt động", "Lượt sử dụng tháng này", "Tiết kiệm cho khách", "Sắp hết hạn"] },
     "rooms": { "eyebrow": "Quản lý tài sản", "title": "Quản lý phòng", "description": "Theo dõi tình trạng phòng, loại phòng và phân công dọn dẹp tại chi nhánh.", "stats": ["Tổng số phòng", "Sẵn sàng", "Đang sử dụng", "Bảo trì"] },
