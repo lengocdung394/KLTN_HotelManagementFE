@@ -2078,7 +2078,7 @@ export default function BookingWorkspace() {
           <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "rooms" ? "bg-violet-600 text-white" : "bg-emerald-500 text-white"}`}>{step === "rooms" ? "1" : <Check size={14} />}</span>
           <span className="text-xs font-semibold text-slate-500">{t("booking.dateAndRooms")}</span>
           <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "guest" ? "bg-violet-600 text-white" : step === "services" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "services" ? <Check size={14} /> : "2"}</span>
+          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "guest" ? "bg-violet-600 text-white" : step === "services" || step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "services" || step === "promotion" ? <Check size={14} /> : "2"}</span>
           <span className="text-xs font-semibold text-slate-500">{t("booking.guestInformation")}</span>
           <span className="h-px w-8 bg-slate-200" />
           <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "services" ? "bg-violet-600 text-white" : step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "promotion" ? <Check size={14} /> : "3"}</span>

@@ -105,6 +105,18 @@ const formatUsageDateTime = (value: string | null | undefined) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN");
 };
 
+const toLocalDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getBookingDateValue = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : toLocalDateInputValue(date);
+};
+
 const getTodayServiceStats = (bookings: BookingListItem[]) => {
   const today = new Date().toDateString();
   let bookedToday = 0;
@@ -176,6 +188,11 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [expandedUsageBookingIds, setExpandedUsageBookingIds] = useState<Set<string>>(() => new Set());
+  const [activeUsageTab, setActiveUsageTab] = useState<"pending" | "used-today">("pending");
+  const [usageDateFrom, setUsageDateFrom] = useState("");
+  const [usageDateTo, setUsageDateTo] = useState("");
+  const [usedDateFrom, setUsedDateFrom] = useState(() => toLocalDateInputValue(new Date()));
+  const [usedDateTo, setUsedDateTo] = useState(() => toLocalDateInputValue(new Date()));
 
   const { hotelId, roles } = useAppSelector((state) => state.auth);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
@@ -216,14 +233,20 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     });
     return [...groups.values()];
   }, [pendingUsageRows]);
-  const usedTodayRows = useMemo(() => {
-    const today = new Date().toDateString();
-    return bookings.flatMap((bookingItem) => {
+  const filteredPendingUsageGroups = useMemo(() => pendingUsageGroups.filter((group) => {
+    if (!usageDateFrom && !usageDateTo) return true;
+    const bookingDate = getBookingDateValue(group.bookingCreatedAt);
+    if (!bookingDate) return false;
+    return (!usageDateFrom || bookingDate >= usageDateFrom)
+      && (!usageDateTo || bookingDate <= usageDateTo);
+  }), [pendingUsageGroups, usageDateFrom, usageDateTo]);
+  const usedServiceRows = useMemo(() => bookings.flatMap((bookingItem) => {
       const booking = asRecord(bookingItem);
-      if (!booking) return [];
+      if (!booking || String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return [];
       const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
       return details.flatMap((detailValue) => {
         const detail = asRecord(detailValue);
+        if (!detail || String(detail.bookingStatusType ?? detail.status ?? "").toUpperCase() === "CANCELLED") return [];
         const services = detail && [
           detail.bookingServiceResponsForHotels,
           detail.bookingServiceResponseForHotel,
@@ -234,8 +257,8 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         if (!Array.isArray(services)) return [];
         return services.flatMap((serviceValue) => {
           const service = asRecord(serviceValue);
-          if (!service || service.used !== true || typeof service.usedAt !== "string") return [];
-          if (new Date(service.usedAt).toDateString() !== today) return [];
+          if (!service || service.used !== true || typeof service.usedAt !== "string" || service.cancelled === true || Boolean(service.cancelledAt)) return [];
+          if (Number.isNaN(new Date(service.usedAt).getTime())) return [];
           return [{
             bookingId: String(booking.bookingId ?? booking.id ?? ""),
             bookingDetailId: String(detail?.bookingDetailId ?? detail?.id ?? ""),
@@ -251,8 +274,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           } satisfies ServiceUsageRow];
         });
       });
-    });
-  }, [bookings]);
+    }), [bookings]);
+  const filteredUsedServiceRows = useMemo(() => usedServiceRows.filter((row) => {
+    const usedDate = getBookingDateValue(row.usedAt ?? "");
+    if (!usedDate) return false;
+    return (!usedDateFrom || usedDate >= usedDateFrom)
+      && (!usedDateTo || usedDate <= usedDateTo);
+  }), [usedServiceRows, usedDateFrom, usedDateTo]);
   const filteredServices = useMemo(() => {
     const normalizedQuery = searchQuery.trim().normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
     return allServices.filter((service) => {
@@ -558,86 +586,160 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         </div>
       </div>}
       {mode === "usage" && canConfirmServiceUsage && (
-        <section aria-labelledby="service-usage-title" className="mt-5 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-blue-700">
-                <CheckCircle2 size={18} />
-                <h4 id="service-usage-title" className="text-sm font-bold">Xác nhận dịch vụ đã sử dụng</h4>
-              </div>
-              <p className="mt-1 text-xs text-slate-600">Nhân viên xác nhận sau khi phục vụ xong. Hệ thống tự lưu thời gian và người xác nhận; dịch vụ đã dùng sẽ không thể hủy.</p>
+        <section aria-label="Thao tác dịch vụ khách hàng" className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div role="tablist" aria-label="Danh sách thao tác dịch vụ" className="flex w-fit flex-wrap gap-5 border-b border-slate-200 lg:shrink-0">
+              <button
+                type="button"
+                role="tab"
+                id="service-usage-pending-tab"
+                aria-selected={activeUsageTab === "pending"}
+                aria-controls="service-usage-pending-panel"
+                onClick={() => setActiveUsageTab("pending")}
+                className={`flex items-center gap-2 border-b-2 px-2 py-3 text-sm font-semibold transition ${activeUsageTab === "pending" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+              >
+                <ConciergeBell size={15} />
+                Booking có dịch vụ chờ
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{pendingUsageGroups.length}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="service-usage-used-tab"
+                aria-selected={activeUsageTab === "used-today"}
+                aria-controls="service-usage-used-panel"
+                onClick={() => setActiveUsageTab("used-today")}
+                className={`flex items-center gap-2 border-b-2 px-2 py-3 text-sm font-semibold transition ${activeUsageTab === "used-today" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+              >
+                <CheckCircle2 size={15} />
+                Đã thao tác
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">{filteredUsedServiceRows.length}</span>
+              </button>
             </div>
-            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">{pendingUsageGroups.length} booking · {pendingUsageRows.length} dịch vụ chờ</span>
+            <div className="flex flex-wrap items-end gap-3 lg:justify-end">
+                <label className="block text-xs font-semibold text-slate-500">
+                  {activeUsageTab === "pending" ? "Đặt từ ngày" : "Đã dùng từ ngày"}
+                  <input
+                    type="date"
+                    value={activeUsageTab === "pending" ? usageDateFrom : usedDateFrom}
+                    max={(activeUsageTab === "pending" ? usageDateTo : usedDateTo) || undefined}
+                    onChange={(event) => activeUsageTab === "pending" ? setUsageDateFrom(event.target.value) : setUsedDateFrom(event.target.value)}
+                    className="mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none transition hover:border-blue-300 focus:border-blue-400"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-slate-500">
+                  {activeUsageTab === "pending" ? "Đặt đến ngày" : "Đã dùng đến ngày"}
+                  <input
+                    type="date"
+                    value={activeUsageTab === "pending" ? usageDateTo : usedDateTo}
+                    min={(activeUsageTab === "pending" ? usageDateFrom : usedDateFrom) || undefined}
+                    onChange={(event) => activeUsageTab === "pending" ? setUsageDateTo(event.target.value) : setUsedDateTo(event.target.value)}
+                    className="mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none transition hover:border-blue-300 focus:border-blue-400"
+                  />
+                </label>
+                {(activeUsageTab === "pending" ? usageDateFrom || usageDateTo : usedDateFrom || usedDateTo) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeUsageTab === "pending") {
+                        setUsageDateFrom("");
+                        setUsageDateTo("");
+                      } else {
+                        setUsedDateFrom("");
+                        setUsedDateTo("");
+                      }
+                    }}
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    Xóa lọc
+                  </button>
+                )}
+              </div>
           </div>
-          {isLoadingUsage && <p className="mt-4 rounded-lg bg-white p-4 text-center text-sm text-slate-500">Đang tải dịch vụ trong các booking...</p>}
-          {isUsageError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">Không thể tải danh sách dịch vụ cần xác nhận. Vui lòng tải lại trang.</p>}
-          {!isLoadingUsage && !isUsageError && pendingUsageRows.length === 0 && (
-            <p className="mt-4 rounded-lg bg-white p-4 text-center text-sm text-slate-500">Hiện không có dịch vụ nào đang chờ xác nhận.</p>
-          )}
-          {!isLoadingUsage && !isUsageError && pendingUsageRows.length > 0 && (
-            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              {pendingUsageGroups.map((group) => (
-                <article key={group.bookingId} className="overflow-hidden rounded-lg border border-blue-100 bg-white">
-                  <header className="flex items-center justify-between gap-3 border-b border-blue-100 bg-blue-50/50 px-3 py-2.5">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900">Booking {group.bookingId}</p>
-                        <p className="mt-0.5 text-xs text-slate-600">{group.customerName}</p>
-                      </div>
-                      <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-blue-700">{group.services.length} dịch vụ chờ</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedUsageBookingIds((current) => {
-                        const next = new Set(current);
-                        if (next.has(group.bookingId)) next.delete(group.bookingId);
-                        else next.add(group.bookingId);
-                        return next;
-                      })}
-                      aria-expanded={expandedUsageBookingIds.has(group.bookingId)}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-                    >
-                      {expandedUsageBookingIds.has(group.bookingId) ? "Thu gọn" : "Thao tác"}
-                    </button>
-                  </header>
-                  {expandedUsageBookingIds.has(group.bookingId) && <div className="px-3">
-                    <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />Đặt: {formatUsageDateTime(group.bookingCreatedAt)}</p>
-                    <div className="divide-y divide-slate-100">
-                    {group.services.map((row) => (
-                      <div key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-900">{row.serviceName} <span className="font-normal text-slate-500">× {row.quantity}</span></p>
-                          <p className="mt-1 text-xs text-slate-600">Phòng {row.roomNumber}</p>
-                          {row.checkInTime && <p className="mt-1 text-[11px] text-slate-500">Nhận phòng: {formatUsageDateTime(row.checkInTime)}</p>}
+          {activeUsageTab === "pending" && (
+            <div id="service-usage-pending-panel" role="tabpanel" aria-labelledby="service-usage-pending-tab">
+              <div className="p-4">
+              {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Đang tải dịch vụ trong các booking...</p>}
+              {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">Không thể tải danh sách dịch vụ cần xác nhận. Vui lòng tải lại trang.</p>}
+              {!isLoadingUsage && !isUsageError && pendingUsageRows.length === 0 && (
+                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Hiện không có dịch vụ nào đang chờ xác nhận.</p>
+              )}
+              {!isLoadingUsage && !isUsageError && pendingUsageRows.length > 0 && filteredPendingUsageGroups.length === 0 && (
+                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Không có booking nào có dịch vụ chờ trong khoảng ngày đã chọn.</p>
+              )}
+              {!isLoadingUsage && !isUsageError && filteredPendingUsageGroups.length > 0 && (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {filteredPendingUsageGroups.map((group) => (
+                    <article key={group.bookingId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-3 py-2.5">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900">Booking {group.bookingId}</p>
+                            <p className="mt-0.5 text-xs text-slate-600">{group.customerName}</p>
+                          </div>
+                          <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-blue-700">{group.services.length} dịch vụ chờ</span>
                         </div>
                         <button
                           type="button"
-                          onClick={() => void handleConfirmServiceUsed(row)}
-                          disabled={isConfirmingService}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                          onClick={() => setExpandedUsageBookingIds((current) => {
+                            const next = new Set(current);
+                            if (next.has(group.bookingId)) next.delete(group.bookingId);
+                            else next.add(group.bookingId);
+                            return next;
+                          })}
+                          aria-expanded={expandedUsageBookingIds.has(group.bookingId)}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
                         >
-                          <CheckCircle2 size={14} />Xác nhận đã dùng
+                          {expandedUsageBookingIds.has(group.bookingId) ? "Thu gọn" : "Thao tác"}
                         </button>
-                      </div>
-                    ))}
-                    </div>
-                  </div>}
-                </article>
-              ))}
+                      </header>
+                      {expandedUsageBookingIds.has(group.bookingId) && <div className="px-3">
+                        <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />Đặt: {formatUsageDateTime(group.bookingCreatedAt)}</p>
+                        <div className="divide-y divide-slate-100">
+                          {group.services.map((row) => (
+                            <div key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-900">{row.serviceName} <span className="font-normal text-slate-500">× {row.quantity}</span></p>
+                                <p className="mt-1 text-xs text-slate-600">Phòng {row.roomNumber}</p>
+                                {row.checkInTime && <p className="mt-1 text-[11px] text-slate-500">Nhận phòng: {formatUsageDateTime(row.checkInTime)}</p>}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void handleConfirmServiceUsed(row)}
+                                disabled={isConfirmingService}
+                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                              >
+                                <CheckCircle2 size={14} />Xác nhận đã dùng
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>}
+                    </article>
+                  ))}
+                </div>
+              )}
+              </div>
             </div>
           )}
-          {!isLoadingUsage && !isUsageError && usedTodayRows.length > 0 && (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-xs font-semibold text-slate-600">Đã xác nhận hôm nay ({usedTodayRows.length})</summary>
-              <div className="mt-2 grid gap-2 lg:grid-cols-2">
-                {usedTodayRows.map((row) => (
-                  <p key={`${row.bookingId}-${row.serviceDetailId}`} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
-                    <span className="font-semibold text-slate-800">{row.serviceName} × {row.quantity}</span> · {row.customerName} · Phòng {row.roomNumber}
-                    <span className="block mt-1 text-[11px] text-slate-500">{formatUsageDateTime(row.usedAt)}{row.usedBy ? ` · Xác nhận bởi ${row.usedBy}` : ""}</span>
-                  </p>
-                ))}
-              </div>
-            </details>
+          {activeUsageTab === "used-today" && (
+            <div id="service-usage-used-panel" role="tabpanel" aria-labelledby="service-usage-used-tab" className="p-4">
+              {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Đang tải lịch sử thao tác dịch vụ...</p>}
+              {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">Không thể tải lịch sử thao tác dịch vụ. Vui lòng tải lại trang.</p>}
+              {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length === 0 && (
+                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Không có dịch vụ nào được xác nhận sử dụng trong khoảng ngày đã chọn.</p>
+              )}
+              {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length > 0 && (
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {filteredUsedServiceRows.map((row) => (
+                    <p key={`${row.bookingId}-${row.serviceDetailId}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600 shadow-sm">
+                      <span className="font-semibold text-slate-800">{row.serviceName} × {row.quantity}</span> · {row.customerName} · Phòng {row.roomNumber}
+                      <span className="block mt-1 text-[11px] text-slate-500">{formatUsageDateTime(row.usedAt)}{row.usedBy ? ` · Xác nhận bởi ${row.usedBy}` : ""}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </section>
       )}

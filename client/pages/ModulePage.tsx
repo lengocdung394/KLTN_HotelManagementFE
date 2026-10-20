@@ -38,7 +38,7 @@ const content: Record<string, { eyebrow: string; title: string; description: str
   "/invoices": { eyebrow: "Tài chính chi nhánh", title: "Hoá đơn", description: "Tra cứu hoá đơn, thanh toán và đối soát giao dịch của khách hàng.", stats: [] },
   "/staff": { eyebrow: "Quản trị nhân sự", title: "Nhân viên & ca làm", description: "Quản lý nhân viên, chức vụ, lịch làm việc và phân công trong chi nhánh.", stats: [["Tổng nhân viên", "18"], ["Đang làm việc", "08"], ["Ca hôm nay", "03"], ["Nghỉ phép", "02"]] },
   "/permissions": { eyebrow: "Quản trị hệ thống", title: "Phân quyền", description: "Thiết lập vai trò và quyền truy cập cho từng nhóm nhân viên trong chi nhánh.", stats: [["Vai trò", "04"], ["Nhân viên", "18"], ["Quyền truy cập", "06"], ["Cập nhật gần nhất", "Hôm nay"]] },
-  "/reports": { eyebrow: "Phân tích kinh doanh", title: "Báo cáo doanh thu", description: "Theo dõi công suất phòng, ADR, RevPAR và hiệu quả kinh doanh theo thời gian.", stats: [["Doanh thu tháng", "426,5tr"], ["Công suất phòng", "78%"], ["ADR", "1,42tr"], ["RevPAR", "1,11tr"]] },
+  "/reports": { eyebrow: "Phân tích kinh doanh", title: "Báo cáo doanh thu", description: "Theo dõi doanh thu dịch vụ, hiệu quả khuyến mãi và trạng thái phòng theo thời gian.", stats: [] },
   "/settings": { eyebrow: "Thiết lập hệ thống", title: "Cài đặt", description: "Cấu hình chi nhánh, loại phòng, thông báo và quyền truy cập tài khoản.", stats: [["Chi nhánh", ""], ["Múi giờ", "GMT+7"], ["Ngôn ngữ", "Tiếng Việt"], ["Vai trò", "Quản lý"]] },
 };
 
