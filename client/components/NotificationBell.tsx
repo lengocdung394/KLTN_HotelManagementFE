@@ -167,6 +167,16 @@ export default function NotificationBell() {
             || notification.type === "BOOKING_CANCELLED"
             || notification.type === "BOOKING_REFUND_REQUESTED"
             || notification.type === "BOOKING_REFUND_COMPLETED"
+          ) {
+            dispatch(baseApi.util.invalidateTags(["Booking", "Room"]));
+          }
+          if (
+            notification.type === "BOOKING_CREATED"
+            || notification.type === "BOOKING_UPDATED"
+            || notification.type === "PAYMENT_RECEIVED"
+            || notification.type === "BOOKING_CANCELLED"
+            || notification.type === "BOOKING_REFUND_REQUESTED"
+            || notification.type === "BOOKING_REFUND_COMPLETED"
             || notification.type === "PROMOTION_CREATED"
             || notification.type === "PROMOTION_UPDATED"
             || notification.type === "SERVICE_CREATED"
@@ -180,7 +190,7 @@ export default function NotificationBell() {
         }
       },
       onNewBookingNotification: () => {
-        dispatch(baseApi.util.invalidateTags(["Notification"]));
+        dispatch(baseApi.util.invalidateTags(["Notification", "Booking", "Room"]));
       },
       onRoomUpdated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["Room", "Notification"]));

@@ -561,6 +561,22 @@ export const initSocket = (token: string | null) => {
     console.log("📅 [Socket] late_check_out_calendar:", data);
   });
 
+  socket.off("customer_staff_chat_message");
+  socket.on("customer_staff_chat_message", (data) => {
+    console.log("📩 [Socket] customer_staff_chat_message received:", data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("customer_staff_chat_message", { detail: data }));
+    }
+  });
+
+  socket.off("staff_customer_chat_reply");
+  socket.on("staff_customer_chat_reply", (data) => {
+    console.log("💬 [Socket] staff_customer_chat_reply broadcast:", data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("staff_customer_chat_reply", { detail: data }));
+    }
+  });
+
   attachHotelSocketHandlers();
   attachSuperAdminSocketHandlers();
 
@@ -573,6 +589,25 @@ export const initSocket = (token: string | null) => {
   });
 
   return socket;
+};
+
+export const getStaffSocket = () => socket;
+
+export const emitStaffSendCustomerChat = (payload: {
+  customerId: string;
+  staffId?: string;
+  staffName?: string;
+  hotelId?: number | string | null;
+  branchName?: string;
+  message: string;
+  timestamp?: string;
+}) => {
+  if (socket && socket.connected) {
+    socket.emit("staff_send_customer_chat", payload);
+    console.log("💬 [Socket] staff_send_customer_chat emitted:", payload);
+  } else {
+    console.warn("⚠️ [Socket] Staff socket is not connected to emit staff_send_customer_chat");
+  }
 };
 
 export const disconnectSocket = () => {

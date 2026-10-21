@@ -26,8 +26,32 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
+import { toast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useSendChatMessageMutation, useLazyGetChatHistoryQuery, type ChatMessage as ChatMessageType } from "@/services/chatApi";
 import { useAppSelector } from "@/store/hooks";
+import { emitStaffSendCustomerChat } from "@/lib/socket";
+
+export interface CustomerLiveMessage {
+  id: string | number;
+  sender: "customer" | "staff";
+  senderName: string;
+  message: string;
+  timestamp: string;
+  branchName?: string;
+}
+
+export interface CustomerLiveSession {
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  branchName?: string;
+  hotelId?: number | string | null;
+  lastMessage: string;
+  lastTimestamp: string;
+  unreadCount: number;
+  messages: CustomerLiveMessage[];
+}
 
 interface Message {
   id: number;
@@ -220,6 +244,48 @@ function formatReply(text: string): string {
     .replace(/^\s*[-•]\s+(.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
     .replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul class="my-1 space-y-0.5">$&</ul>')
     .replace(/\n/g, "<br/>");
+}
+
+/**
+ * Phát chuông thông báo (Hospitality Chime) bằng Web Audio API
+ * Tự tổng hợp 2 nốt nhạc du dương D5 -> A5 không phụ thuộc file .mp3 bên ngoài
+ */
+export function playHospitalityChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    // Nốt thứ 1: D5 (587.33 Hz) - chuông ngân thanh nhẹ
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(587.33, now);
+    gain1.gain.setValueAtTime(0.25, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+
+    // Nốt thứ 2: A5 (880.00 Hz) - nốt cao vui vẻ, kết thúc ấm áp
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(880, now + 0.12);
+    gain2.gain.setValueAtTime(0.3, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.6);
+  } catch (e) {
+    console.warn("Could not play notification chime:", e);
+  }
 }
 
 function getUserStorageKey(email?: string | null, employeeId?: string | null): string {
@@ -463,21 +529,345 @@ export default function ChatWidget() {
     "🤖 Xếp lịch ca trực tuần mới bằng AI",
   ];
 
+  const [activeTab, setActiveTab] = useState<"ai" | "customer">("customer");
+  const [customerSessions, setCustomerSessions] = useState<Record<string, CustomerLiveSession>>(() => {
+    try {
+      const saved = localStorage.getItem("senviet_staff_customer_sessions");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [customerReplyInput, setCustomerReplyInput] = useState("");
+  const [unreadTotal, setUnreadTotal] = useState(0);
+  const customerScrollRef = useRef<HTMLDivElement>(null);
+  const processedMsgIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const handleCustomerMessage = (e: Event) => {
+      const customEvent = e as CustomEvent<any>;
+      const payload = customEvent.detail;
+      if (!payload || !payload.message) return;
+
+      const cId = String(payload.customerId || "guest");
+      const cName = payload.customerName || "Khách hàng";
+      const cPhone = payload.customerPhone || "";
+      const bName = payload.branchName || "Chi nhánh Sen Việt";
+      const hId = payload.hotelId;
+      const msg = payload.message;
+      const time = payload.timestamp || new Date().toISOString();
+
+      const msgId = String(payload.msgId || `${cId}_${time}_${msg}`);
+
+      // Chống lặp thông báo nếu đã xử lý msgId này
+      if (processedMsgIdsRef.current.has(msgId)) {
+        return;
+      }
+      processedMsgIdsRef.current.add(msgId);
+      if (processedMsgIdsRef.current.size > 200) {
+        const first = processedMsgIdsRef.current.values().next().value;
+        if (first) processedMsgIdsRef.current.delete(first);
+      }
+
+      setCustomerSessions((prev) => {
+        const existing = prev[cId] || {
+          customerId: cId,
+          customerName: cName,
+          customerPhone: cPhone,
+          branchName: bName,
+          hotelId: hId,
+          lastMessage: "",
+          lastTimestamp: time,
+          unreadCount: 0,
+          messages: [],
+        };
+
+        // KIỂM TRA TRÙNG LẶP TIN NHẮN TỪ KHÁCH HÀNG (DEDUPLICATION)
+        const isDuplicate = existing.messages.some((m) => {
+          if (payload.msgId && String(m.id) === String(payload.msgId)) return true;
+          return m.sender === "customer" && m.message === msg && Math.abs(new Date(m.timestamp).getTime() - new Date(time).getTime()) < 3000;
+        });
+
+        if (isDuplicate) {
+          console.log("⚠️ [Socket Staff] Bỏ qua tin nhắn trùng lặp từ khách:", msg);
+          return prev;
+        }
+
+        const newMsg: CustomerLiveMessage = {
+          id: msgId,
+          sender: "customer",
+          senderName: cName,
+          message: msg,
+          timestamp: time,
+          branchName: bName,
+        };
+
+        const isCurrentActive = activeTab === "customer" && selectedCustomerId === cId && open;
+        const updatedSessions = {
+          ...prev,
+          [cId]: {
+            ...existing,
+            customerName: cName || existing.customerName,
+            customerPhone: cPhone || existing.customerPhone,
+            branchName: bName || existing.branchName,
+            lastMessage: msg,
+            lastTimestamp: time,
+            unreadCount: isCurrentActive ? 0 : (existing.unreadCount || 0) + 1,
+            messages: [...existing.messages, newMsg],
+          },
+        };
+
+        try {
+          localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updatedSessions));
+        } catch {}
+
+        if (!isCurrentActive) {
+          setUnreadTotal((u) => u + 1);
+        }
+
+        return updatedSessions;
+      });
+
+      setSelectedCustomerId((curr) => curr || cId);
+
+      // 🔔 1. Phát chuông thông báo (Hospitality Chime) âm thanh trong trẻo
+      playHospitalityChime();
+
+      // 🔔 2. Hiển thị Toast thông báo nổi trên màn hình nhân viên nếu chưa đang mở đúng cuộc trò chuyện
+      const isCurrentActive = activeTab === "customer" && selectedCustomerId === cId && open;
+      if (!isCurrentActive) {
+        toast({
+          title: `💬 Khách hàng nhắn tin: ${cName}`,
+          description: `${bName ? `[${bName}] ` : ""}${msg.length > 70 ? msg.substring(0, 70) + "..." : msg}`,
+          variant: "booking",
+          action: (
+            <ToastAction
+              altText="Xem và trả lời"
+              className="bg-indigo-600 text-white hover:bg-indigo-700 border-none font-medium text-xs px-2.5 py-1 h-auto"
+              onClick={() => {
+                setOpen(true);
+                setActiveTab("customer");
+                setSelectedCustomerId(cId);
+              }}
+            >
+              Trả lời
+            </ToastAction>
+          ),
+        });
+      }
+    };
+
+    const handleStaffReplyBroadcast = (e: Event) => {
+      const customEvent = e as CustomEvent<any>;
+      const payload = customEvent.detail;
+      if (!payload || !payload.message) return;
+      const cId = String(payload.customerId || "");
+      if (!cId) return;
+
+      setCustomerSessions((prev) => {
+        const session = prev[cId];
+        if (!session) return prev;
+        const exists = session.messages.some((m) => {
+          if (payload.msgId && String(m.id) === String(payload.msgId)) return true;
+          return m.sender === "staff" && m.message === payload.message;
+        });
+        if (exists) return prev;
+
+        const newMsg: CustomerLiveMessage = {
+          id: payload.msgId || (Date.now() + Math.random()),
+          sender: "staff",
+          senderName: payload.staffName || "Lễ tân",
+          message: payload.message,
+          timestamp: payload.timestamp || new Date().toISOString(),
+          branchName: payload.branchName,
+        };
+
+        const updated = {
+          ...prev,
+          [cId]: {
+            ...session,
+            lastMessage: payload.message,
+            lastTimestamp: payload.timestamp || new Date().toISOString(),
+            messages: [...session.messages, newMsg],
+          },
+        };
+        try {
+          localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    };
+
+    window.addEventListener("customer_staff_chat_message", handleCustomerMessage);
+    window.addEventListener("staff_customer_chat_reply", handleStaffReplyBroadcast);
+    return () => {
+      window.removeEventListener("customer_staff_chat_message", handleCustomerMessage);
+      window.removeEventListener("staff_customer_chat_reply", handleStaffReplyBroadcast);
+    };
+  }, [activeTab, selectedCustomerId, open]);
+
+  // Tự động tải tất cả phiên chat và lịch sử từ PostgreSQL vào giao diện Nhân viên
+  useEffect(() => {
+    const fetchSessionsFromDb = async () => {
+      try {
+        const hotelQuery = auth?.hotelId ? `?hotelId=${auth.hotelId}` : "";
+        const res = await fetch(`/live-chat/sessions${hotelQuery}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverSessions = data.result;
+        if (Array.isArray(serverSessions) && serverSessions.length > 0) {
+          setCustomerSessions((prev) => {
+            const merged = { ...prev };
+            serverSessions.forEach((s: any) => {
+              const cId = s.customerId;
+              const msgs: CustomerLiveMessage[] = (s.messages || []).map((m: any) => ({
+                id: m.id || m.msgId,
+                sender: m.senderType === "CUSTOMER" ? "customer" : "staff",
+                senderName: m.senderName,
+                message: m.message,
+                timestamp: m.createdAt,
+                branchName: s.branchName,
+              }));
+
+              if (!merged[cId]) {
+                merged[cId] = {
+                  customerId: cId,
+                  customerName: s.customerName || "Khách hàng",
+                  customerPhone: s.customerPhone || "",
+                  branchName: s.branchName || "Chi nhánh Sen Việt",
+                  hotelId: s.hotelId,
+                  lastMessage: s.lastMessage || "",
+                  lastTimestamp: s.lastMessageAt || s.createdAt,
+                  unreadCount: 0,
+                  messages: msgs,
+                };
+              } else {
+                const existingMsgIds = new Set(merged[cId].messages.map((m) => String(m.id)));
+                msgs.forEach((m) => {
+                  if (!existingMsgIds.has(String(m.id))) {
+                    merged[cId].messages.push(m);
+                  }
+                });
+                merged[cId].customerName = s.customerName || merged[cId].customerName;
+                merged[cId].customerPhone = s.customerPhone || merged[cId].customerPhone;
+              }
+            });
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn("Could not load sessions from DB:", err);
+      }
+    };
+    fetchSessionsFromDb();
+  }, [auth?.hotelId]);
+
+  useEffect(() => {
+    const keys = Object.keys(customerSessions);
+    if (!selectedCustomerId && keys.length > 0) {
+      setSelectedCustomerId(keys[0]);
+    }
+  }, [customerSessions, selectedCustomerId]);
+
+  useEffect(() => {
+    if (activeTab === "customer") {
+      customerScrollRef.current?.scrollTo({
+        top: customerScrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [customerSessions, activeTab, selectedCustomerId]);
+
+  const handleSendStaffReply = () => {
+    const trimmed = customerReplyInput.trim();
+    if (!trimmed || !selectedCustomerId) return;
+
+    const currentSession = customerSessions[selectedCustomerId];
+    const staffName = auth?.fullName || "Trần Minh Tuấn (Lễ tân)";
+    const staffId = auth?.employeeId ? String(auth.employeeId) : "staff_1";
+    const hotelId = auth?.hotelId || currentSession?.hotelId || null;
+    const branchName = auth?.hotelName || currentSession?.branchName || "Chi nhánh Sen Việt";
+    const timestamp = new Date().toISOString();
+    const msgId = "staff_msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+
+    const payload = {
+      msgId,
+      customerId: selectedCustomerId,
+      staffId,
+      staffName,
+      hotelId,
+      branchName,
+      message: trimmed,
+      timestamp,
+    };
+
+    emitStaffSendCustomerChat(payload);
+
+    const newMsg: CustomerLiveMessage = {
+      id: msgId,
+      sender: "staff",
+      senderName: staffName,
+      message: trimmed,
+      timestamp,
+      branchName,
+    };
+
+    setCustomerSessions((prev) => {
+      const session = prev[selectedCustomerId] || {
+        customerId: selectedCustomerId,
+        customerName: "Khách hàng",
+        messages: [],
+        lastMessage: "",
+        lastTimestamp: "",
+        unreadCount: 0,
+      };
+      const updated = {
+        ...prev,
+        [selectedCustomerId]: {
+          ...session,
+          lastMessage: trimmed,
+          lastTimestamp: timestamp,
+          unreadCount: 0,
+          messages: [...session.messages, newMsg],
+        },
+      };
+      try {
+        localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setCustomerReplyInput("");
+  };
+
+  const selectedSession = selectedCustomerId ? customerSessions[selectedCustomerId] : null;
+
   return (
     <>
       {/* Floating toggle button */}
       <button
-        onClick={() => setOpen((o) => !o)}
-        aria-label="AI Assistant"
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-xl shadow-blue-600/30 transition-all duration-200 hover:scale-105 hover:bg-blue-700 active:scale-95"
+        onClick={() => {
+          setOpen((o) => !o);
+          if (!open && unreadTotal > 0) {
+            setActiveTab("customer");
+            setUnreadTotal(0);
+          }
+        }}
+        aria-label="Staff Assistant & Customer Chat"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 transition-all duration-200 hover:scale-105 hover:from-blue-700 hover:to-indigo-700 active:scale-95"
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
-        {!open && (
+        {!open && unreadTotal > 0 ? (
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white shadow border-2 border-white animate-bounce">
+            {unreadTotal}
+          </span>
+        ) : !open ? (
           <span className="absolute -top-1 -right-1 flex h-4 w-4">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex h-4 w-4 rounded-full bg-emerald-500 border-2 border-white"></span>
           </span>
-        )}
+        ) : null}
       </button>
 
       {/* Chat window */}
@@ -490,29 +880,33 @@ export default function ChatWidget() {
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3.5 text-white shadow-sm">
+          <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 text-white shadow-sm">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm border border-white/20">
-                <Bot className="h-5 w-5" />
+                {activeTab === "ai" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
               </span>
               <div>
                 <div className="text-base font-semibold leading-tight flex items-center gap-2">
-                  <span>Trợ lý AI Quản trị</span>
+                  <span>{activeTab === "ai" ? "Trợ lý AI Quản trị" : "Tư vấn Khách hàng (Live)"}</span>
                   <span className="rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
-                    Staff & Admin Copilot
+                    {auth?.hotelName || "Chi nhánh Sen Việt"}
                   </span>
                 </div>
-                <div className="text-[11px] text-blue-100/80">Điều hành chuỗi khách sạn · Google Gemini RAG</div>
+                <div className="text-[11px] text-blue-100/80">
+                  {activeTab === "ai" ? "Điều hành chuỗi khách sạn · Google Gemini RAG" : "Kênh chat trực tuyến 2 chiều qua Socket.IO"}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button
-                onClick={handleStartNewChat}
-                className="rounded-full p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"
-                title="Bắt đầu cuộc trò chuyện mới"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </button>
+              {activeTab === "ai" && (
+                <button
+                  onClick={handleStartNewChat}
+                  className="rounded-full p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"
+                  title="Bắt đầu cuộc trò chuyện mới"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+              )}
               <button
                 onClick={() => setIsExpanded((prev) => !prev)}
                 className="rounded-full p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"
@@ -529,6 +923,51 @@ export default function ChatWidget() {
               </button>
             </div>
           </div>
+
+          {/* Sub-header Tabs: AI Copilot vs Khách hàng Live Chat */}
+          <div className="flex border-b border-slate-200 bg-slate-100/90 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setActiveTab("ai")}
+              className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 transition ${
+                activeTab === "ai"
+                  ? "border-b-2 border-blue-600 bg-white font-semibold text-blue-600 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Bot className="h-4 w-4" />
+              <span>Trợ lý AI Quản trị</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("customer");
+                setUnreadTotal(0);
+                if (selectedCustomerId && customerSessions[selectedCustomerId]) {
+                  setCustomerSessions((prev) => ({
+                    ...prev,
+                    [selectedCustomerId]: { ...prev[selectedCustomerId], unreadCount: 0 },
+                  }));
+                }
+              }}
+              className={`relative flex flex-1 items-center justify-center gap-1.5 py-2.5 transition ${
+                activeTab === "customer"
+                  ? "border-b-2 border-indigo-600 bg-white font-semibold text-indigo-600 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <MessageCircle className="h-4 w-4" />
+              <span>Khách hàng Chat (Live)</span>
+              {unreadTotal > 0 && (
+                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white animate-pulse">
+                  {unreadTotal}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {activeTab === "ai" && (
+            <>
 
           {/* Messages area */}
           <div
@@ -729,8 +1168,158 @@ export default function ChatWidget() {
               <Send className="h-4 w-4" />
             </button>
           </form>
-        </div>
+        </>
       )}
+
+      {/* TAB 2: KHÁCH HÀNG LIVE CHAT */}
+      {activeTab === "customer" && (
+        <>
+          {/* Header bar with active customer selector */}
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-3.5 py-2 text-xs">
+            <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
+              <span className="shrink-0 font-medium text-slate-500">Khách chat:</span>
+              {Object.keys(customerSessions).length > 0 ? (
+                <select
+                  value={selectedCustomerId || ""}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedCustomerId(id);
+                    if (id && customerSessions[id]) {
+                      setCustomerSessions((prev) => ({
+                        ...prev,
+                        [id]: { ...prev[id], unreadCount: 0 },
+                      }));
+                    }
+                  }}
+                  className="truncate flex-1 max-w-[280px] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500"
+                >
+                  {Object.values(customerSessions).map((s) => (
+                    <option key={s.customerId} value={s.customerId}>
+                      👤 {s.customerName} {s.customerPhone ? `(${s.customerPhone})` : ""} - {s.branchName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="italic text-slate-400">Chưa có khách hàng kết nối</span>
+              )}
+            </div>
+            {selectedSession && (
+              <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                {selectedSession.branchName || "Chi nhánh"}
+              </span>
+            )}
+          </div>
+
+          {/* Customer chat messages area */}
+          <div
+            ref={customerScrollRef}
+            className={`flex-1 space-y-3.5 overflow-y-auto leading-relaxed bg-slate-50/50 ${
+              isExpanded ? "px-6 py-5 text-[15px]" : "px-4 py-3.5 text-[14px]"
+            }`}
+          >
+            {!selectedSession || selectedSession.messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center p-6 text-center text-slate-400">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-500 mb-3">
+                  <MessageCircle className="h-6 w-6" />
+                </div>
+                <p className="text-sm font-semibold text-slate-700">Đang chờ tin nhắn từ khách hàng</p>
+                <p className="mt-1 text-xs text-slate-400 max-w-xs">
+                  Khi khách hàng gửi tin nhắn từ cửa sổ chat tại website khách hàng, tin nhắn sẽ kết nối trực tiếp đến màn hình này theo thời gian thực (Socket.IO).
+                </p>
+              </div>
+            ) : (
+              selectedSession.messages.map((m) => {
+                if (m.sender === "staff") {
+                  return (
+                    <div key={m.id} className="space-y-1">
+                      <div className="text-right text-[11px] text-slate-400 font-medium">
+                        {m.senderName} (Bạn) · {new Date(m.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                      <div
+                        className={`ml-auto rounded-2xl bg-indigo-600 px-4 py-2.5 text-white shadow-sm ${
+                          isExpanded ? "max-w-[70%]" : "max-w-[85%]"
+                        }`}
+                      >
+                        {m.message}
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={m.id} className="space-y-1">
+                    <div className="text-left text-[11px] text-slate-500 font-medium flex items-center gap-1.5">
+                      <span className="font-semibold text-indigo-700">{m.senderName}</span>
+                      <span>·</span>
+                      <span className="text-slate-400">{new Date(m.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                    <div
+                      className={`mr-auto rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-800 shadow-sm ${
+                        isExpanded ? "max-w-[70%]" : "max-w-[85%]"
+                      }`}
+                    >
+                      {m.message}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Staff quick replies */}
+          <div className="border-t border-slate-100 bg-white px-3 py-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+              <span className="text-[11px] font-medium text-slate-400 shrink-0">Trả lời nhanh:</span>
+              {[
+                "Dạ Sen Việt xin chào quý khách!",
+                "Dạ em đã kiểm tra thông tin trên hệ thống ạ.",
+                "Quý khách cho em xin Mã đặt phòng hoặc SĐT nhé ạ!",
+                "Dạ bộ phận Lễ tân đã ghi nhận yêu cầu của anh/chị ạ.",
+              ].map((q, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCustomerReplyInput(q)}
+                  className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Staff input form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendStaffReply();
+            }}
+            className="flex items-center gap-2 border-t border-slate-200 bg-white p-3"
+          >
+            <input
+              type="text"
+              value={customerReplyInput}
+              onChange={(e) => setCustomerReplyInput(e.target.value)}
+              placeholder={
+                selectedCustomerId
+                  ? `Nhập tin nhắn trả lời khách hàng (${customerSessions[selectedCustomerId]?.customerName || "Khách"})...`
+                  : "Chưa có khách hàng để trả lời..."
+              }
+              disabled={!selectedCustomerId}
+              className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
+            />
+            <button
+              type="submit"
+              disabled={!customerReplyInput.trim() || !selectedCustomerId}
+              className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-40"
+              title="Gửi câu trả lời cho khách hàng"
+            >
+              <span>Gửi</span>
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        </>
+      )}
+    </div>
+  )}
     </>
   );
 }
