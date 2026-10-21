@@ -204,6 +204,15 @@ export const roomApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<RoomResponse>) => response?.result ?? {},
       invalidatesTags: ["Room", "Booking", "SuperAdminBranch"],
     }),
+    updateRoomStatus: builder.mutation<RoomResponse, { roomId: string; roomStatus: string }>({
+      query: ({ roomId, roomStatus }) => ({
+        url: `/room/${encodeURIComponent(roomId)}/status`,
+        method: "PATCH",
+        data: { roomStatus },
+      }),
+      transformResponse: (response: ApiResponse<RoomResponse>) => response?.result ?? {},
+      invalidatesTags: ["Room", "Booking"],
+    }),
     // Trả về mảng string[] từ Backend
     getRoomTypes: builder.query<string[], void>({
       query: () => ({
@@ -397,4 +406,4 @@ export const roomApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useCreateRoomMutation, useUpdateRoomMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useCreateBedTypeMutation, useUpdateBedTypeMutation, useImportBedTypesMutation, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useLazyGetRoomsByFloorIdQuery, useGetRoomByIdQuery, useLazyGetRoomByIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;
+export const { useCreateRoomMutation, useUpdateRoomMutation, useUpdateRoomStatusMutation, useCreateRoomSeasonalRateMutation, useUpdateRoomSeasonalRateMutation, useGetRoomTypesQuery, useGetAllBedTypesQuery, useCreateBedTypeMutation, useUpdateBedTypeMutation, useImportBedTypesMutation, useGetRoomStatusesQuery, useGetRoomsByFloorIdQuery, useLazyGetRoomsByFloorIdQuery, useGetRoomByIdQuery, useLazyGetRoomByIdQuery, useGetRoomsByCurrentHotelQuery, useGetBranchRoomDailyPricesQuery, useGetRoomTypeDetailQuery, useGetRoomSeasonalRatesQuery, useGetRoomSeasonalRatesByMonthQuery } = roomApi;

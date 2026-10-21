@@ -1,6 +1,7 @@
 import { baseApi } from "./baseApi";
 
 export type ShiftAssignment = {
+  id?: string;
   employeeId: string;
   employeeName: string;
   position: string;
@@ -30,6 +31,25 @@ export type WeeklyShiftSchedule = {
   days: DailyShiftSummary[];
 };
 
+export type ShiftAssignmentRequest = {
+  workDate: string;
+  shiftType: string;
+  shiftTime: string;
+  role: string;
+  employeeId: string;
+  task: string;
+};
+
+export type HousekeepingTask = {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  bookingDetailId: string;
+  status: "ASSIGNED" | "REASSIGNED" | string;
+  createdAt: string;
+  assignedAt: string | null;
+};
+
 type ApiResponse<T> = {
   result: T;
 };
@@ -43,8 +63,37 @@ export const shiftApi = baseApi.injectEndpoints({
         params: { weekStartDate },
       }),
       transformResponse: (response: ApiResponse<WeeklyShiftSchedule>) => response.result,
+      providesTags: ["Staff"],
+    }),
+    saveWeeklyShiftSchedule: builder.mutation<
+      WeeklyShiftSchedule,
+      { weekStartDate: string; assignments: ShiftAssignmentRequest[] }
+    >({
+      query: ({ weekStartDate, assignments }) => ({
+        url: "/staff-shifts/weekly",
+        method: "PUT",
+        params: { weekStartDate },
+        data: { assignments },
+      }),
+      transformResponse: (response: ApiResponse<WeeklyShiftSchedule>) => response.result,
+      invalidatesTags: ["Staff"],
+    }),
+    getMyHousekeepingTasks: builder.query<HousekeepingTask[], void>({
+      query: () => ({ url: "/housekeeping-tasks/my", method: "GET" }),
+      transformResponse: (response: ApiResponse<HousekeepingTask[]>) => response.result,
+      providesTags: ["Room"],
+    }),
+    completeHousekeepingTask: builder.mutation<HousekeepingTask, string>({
+      query: (taskId) => ({ url: `/housekeeping-tasks/${encodeURIComponent(taskId)}/complete`, method: "POST" }),
+      transformResponse: (response: ApiResponse<HousekeepingTask>) => response.result,
+      invalidatesTags: ["Room", "Notification"],
     }),
   }),
 });
 
-export const { useGetWeeklyShiftScheduleQuery } = shiftApi;
+export const {
+  useGetWeeklyShiftScheduleQuery,
+  useSaveWeeklyShiftScheduleMutation,
+  useGetMyHousekeepingTasksQuery,
+  useCompleteHousekeepingTaskMutation,
+} = shiftApi;

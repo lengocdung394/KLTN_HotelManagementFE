@@ -18,14 +18,17 @@ import {
   useApproveBookingRefundMutation,
   useConfirmBookingRefundMutation,
   useGetBookingCancellationsQuery,
+  useGetCheckoutRefundsQuery,
   useRejectBookingRefundMutation,
   useSubmitRefundBankDetailsByStaffMutation,
+  type BookingChannel,
   type BookingCancellation,
   type BookingCancellationStatus,
 } from "../services/managementBookingApi";
 
 type CancellationAction = "approve" | "reject" | "confirm" | "bank-details";
 type CancellationFilter = "ALL" | BookingCancellationStatus;
+type BookingChannelFilter = "ALL" | BookingChannel;
 type RefundAccountChoice = "saved" | "alternate";
 
 const statusLabels: Record<BookingCancellationStatus, [string, string]> = {
@@ -89,11 +92,13 @@ export default function RefundApprovalWorkspace() {
   useTranslation();
   const { data: cancellations = [], isLoading, isFetching, isError, error, refetch } =
     useGetBookingCancellationsQuery();
+  const { data: surplusRefunds = [] } = useGetCheckoutRefundsQuery();
   const [approveRefund, { isLoading: isApproving }] = useApproveBookingRefundMutation();
   const [rejectRefund, { isLoading: isRejecting }] = useRejectBookingRefundMutation();
   const [confirmRefund, { isLoading: isConfirming }] = useConfirmBookingRefundMutation();
   const [submitBankDetails, { isLoading: isSavingBankDetails }] = useSubmitRefundBankDetailsByStaffMutation();
   const [filter, setFilter] = useState<CancellationFilter>("ALL");
+  const [channelFilter, setChannelFilter] = useState<BookingChannelFilter>("ALL");
   const [selectedRequestDate, setSelectedRequestDate] = useState<string | null>(null);
   const [activeCancellation, setActiveCancellation] = useState<BookingCancellation | null>(null);
   const [activeAction, setActiveAction] = useState<CancellationAction | null>(null);
@@ -126,15 +131,30 @@ export default function RefundApprovalWorkspace() {
     }
   };
 
-  const counts = useMemo(() => ({
-    reviewPending: cancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length,
-    needsBankDetails: cancellations.filter((item) => item.status === "REFUND_BANK_DETAILS_REQUIRED").length,
-    processing: cancellations.filter((item) => item.status === "REFUND_APPROVED").length,
-    refunded: cancellations.filter((item) => item.status === "REFUNDED").length,
-    totalRefunded: cancellations
+  const counts = useMemo(() => {
+    const reviewPending = cancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length;
+    const needsBankDetails = cancellations.filter((item) => item.status === "REFUND_BANK_DETAILS_REQUIRED").length;
+    const checkoutPending = surplusRefunds.filter((item) => item.status === "PENDING").length;
+    const processing = cancellations.filter((item) => item.status === "REFUND_APPROVED").length
+      + surplusRefunds.filter((item) => item.status === "APPROVED").length;
+    const refunded = cancellations.filter((item) => item.status === "REFUNDED").length
+      + surplusRefunds.filter((item) => item.status === "REFUNDED").length;
+    const totalRefunded = cancellations
       .filter((item) => item.status === "REFUNDED")
-      .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0),
-  }), [cancellations]);
+      .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0)
+      + surplusRefunds
+        .filter((item) => item.status === "REFUNDED")
+        .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0);
+
+    return {
+      reviewPending,
+      needsBankDetails,
+      checkoutPending,
+      processing,
+      refunded,
+      totalRefunded,
+    };
+  }, [cancellations, surplusRefunds]);
 
   const refundRequestsByDate = useMemo(() => {
     const requestCounts = new Map<string, number>();
@@ -153,22 +173,25 @@ export default function RefundApprovalWorkspace() {
     const byStatus = filter === "ALL"
       ? cancellations
       : cancellations.filter((item) => item.status === filter);
+    const byChannel = channelFilter === "ALL"
+      ? byStatus
+      : byStatus.filter((item) => item.bookingChannel === channelFilter);
     const filtered = selectedRequestDate
-      ? byStatus.filter((item) => {
+      ? byChannel.filter((item) => {
           if (Number(item.refundAmount) <= 0 || !item.requestedAt) return false;
           const date = new Date(item.requestedAt);
           if (Number.isNaN(date.getTime())) return false;
           const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
           return key === selectedRequestDate;
         })
-      : byStatus;
+      : byChannel;
     return [...filtered].sort((first, second) =>
       new Date(second.requestedAt ?? 0).getTime() - new Date(first.requestedAt ?? 0).getTime(),
     );
-  }, [cancellations, filter, selectedRequestDate]);
+  }, [cancellations, channelFilter, filter, selectedRequestDate]);
 
   const isSubmitting = isApproving || isRejecting || isConfirming || isSavingBankDetails;
-  const pendingTotal = counts.reviewPending + counts.needsBankDetails;
+  const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending;
 
   const openAction = (cancellation: BookingCancellation, action: CancellationAction) => {
     setActiveCancellation(cancellation);
@@ -315,15 +338,15 @@ export default function RefundApprovalWorkspace() {
   ];
 
   return (
-    <section className="mt-6 space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="mt-4 space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label={localizedText("Chờ xử lý hoàn tiền", "Refunds pending action")}
           value={String(pendingTotal)}
-          detail={`${counts.reviewPending} ${localizedText("chờ duyệt", "pending review")} · ${counts.needsBankDetails} ${localizedText("chờ thông tin ngân hàng", "awaiting bank details")}`}
+          detail={`${counts.reviewPending + counts.needsBankDetails} ${localizedText("hoàn do hủy", "cancellation refunds")} · ${counts.checkoutPending} ${localizedText("hoàn do thanh toán dư", "overpayment refunds")}`}
           tone="violet"
         />
-        <StatCard label={localizedText("Đang xử lý chuyển khoản", "Transfers in progress")} value={String(counts.processing)} tone="blue" />
+        <StatCard label={localizedText("Đang xử lý hoàn tiền", "Refunds in progress")} value={String(counts.processing)} tone="blue" />
         <StatCard label={localizedText("Đã hoàn tiền", "Refunded")} value={String(counts.refunded)} tone="green" />
         <StatCard label={localizedText("Tổng tiền đã hoàn", "Total refunded")} value={money(counts.totalRefunded)} tone="slate" />
       </div>
@@ -337,9 +360,9 @@ export default function RefundApprovalWorkspace() {
               <ClipboardCheck size={20} />
             </span>
             <div>
-              <h3 className="font-bold text-slate-900">{localizedText("Yêu cầu hủy và hoàn tiền", "Cancellation and refund requests")}</h3>
+              <h3 className="font-bold text-slate-900">{localizedText("Hoàn tiền do hủy phòng", "Room cancellation refunds")}</h3>
               <p className="mt-1 text-sm text-slate-500">
-                {localizedText("Booking được hủy bởi khách hoặc nhân viên sẽ hiển thị tại đây nếu có tiền cần hoàn.", "Bookings cancelled by guests or staff appear here when a refund is due.")}
+                {localizedText("Các khoản hoàn phát sinh do hủy phòng; tiền được hoàn qua chuyển khoản theo thông tin ngân hàng của khách.", "Refunds caused by room cancellations; money is returned by bank transfer to the guest's account.")}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
@@ -412,6 +435,28 @@ export default function RefundApprovalWorkspace() {
           ))}
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
+          <span className="mr-1 text-xs font-semibold text-slate-500">{localizedText("Kênh đặt:", "Booking channel:")}</span>
+          {([
+            ["ALL", localizedText("Tất cả", "All")],
+            ["ONLINE", localizedText("Online", "Online")],
+            ["OFFLINE", localizedText("Tại quầy / Offline", "Front desk / Offline")],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setChannelFilter(value)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                channelFilter === value
+                  ? "bg-violet-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 p-12 text-sm text-slate-500">
             <LoaderCircle size={18} className="animate-spin" /> {localizedText("Đang tải yêu cầu hoàn tiền...", "Loading refund requests...")}
@@ -466,7 +511,23 @@ export default function RefundApprovalWorkspace() {
                               ? "bg-sky-50 text-sky-700"
                               : "bg-violet-50 text-violet-700"
                           }`}>
-                            {cancellation.bookingChannel}
+                            {cancellation.bookingChannel === "ONLINE"
+                              ? localizedText("Đặt online", "Online booking")
+                              : localizedText("Đặt tại quầy", "Front-desk booking")}
+                          </span>
+                        )}
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                          {localizedText("Hoàn do hủy phòng", "Room cancellation refund")}
+                        </span>
+                        {cancellation.refundMethod && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            cancellation.refundMethod === "CASH"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-indigo-50 text-indigo-700"
+                          }`}>
+                            {cancellation.refundMethod === "CASH"
+                              ? localizedText("Hoàn tiền mặt", "Cash refund")
+                              : localizedText("Hoàn vào tài khoản", "Bank refund")}
                           </span>
                         )}
                       </div>
@@ -490,7 +551,11 @@ export default function RefundApprovalWorkspace() {
                     </td>
                     <td className="px-4 py-4 text-slate-600">{dateTime(cancellation.requestedAt)}</td>
                     <td className="px-4 py-4">
-                      {cancellation.bankAccountNumber ? (
+                      {cancellation.refundMethod === "CASH" ? (
+                        <span className="text-xs font-semibold text-emerald-700">
+                          {localizedText("Hoàn tiền mặt tại khách sạn", "Cash refund at hotel")}
+                        </span>
+                      ) : cancellation.bankAccountNumber ? (
                         <div className="space-y-1">
                           {[
                             [localizedText("Ngân hàng", "Bank"), cancellation.bankName, "bank"],
@@ -920,10 +985,10 @@ function StatCard({
   };
 
   return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${toneClasses[tone]}`}>
-      <p className="text-sm font-medium opacity-80">{label}</p>
-      <p className="mt-3 text-2xl font-bold">{value}</p>
-      {detail && <p className="mt-1 text-xs opacity-75">{detail}</p>}
+    <div className={`rounded-xl border p-3 shadow-sm sm:p-4 ${toneClasses[tone]}`}>
+      <p className="text-xs font-medium opacity-80">{label}</p>
+      <p className="mt-1.5 text-xl font-bold">{value}</p>
+      {detail && <p className="mt-1 text-[11px] opacity-75">{detail}</p>}
     </div>
   );
 }

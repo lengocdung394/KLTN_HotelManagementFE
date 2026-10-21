@@ -30,12 +30,16 @@ const getErrorMessage = (error: unknown) => {
 export default function CheckoutRefundApprovalsPanel() {
   useTranslation();
   const { data: refunds = [], isLoading, isFetching, isError, error, refetch } = useGetCheckoutRefundsQuery();
+  const [channelFilter, setChannelFilter] = useState<"ALL" | "ONLINE" | "OFFLINE">("ALL");
   const pending = refunds.filter((refund) => refund.status === "PENDING");
   const approved = refunds.filter((refund) => refund.status === "APPROVED");
   const refunded = refunds.filter((refund) => refund.status === "REFUNDED");
-  const cashRefunds = refunds.filter((refund) => refund.refundMethod === "CASH");
-  const bankRefunds = refunds.filter((refund) => refund.refundMethod !== "CASH");
-  const pendingCashRefunds = cashRefunds.filter((refund) => refund.status === "PENDING");
+  const visibleRefunds = channelFilter === "ALL"
+    ? refunds
+    : refunds.filter((refund) => refund.bookingChannel === channelFilter);
+  const cashRefunds = visibleRefunds.filter((refund) => refund.refundMethod === "CASH");
+  const onlineRefunds = visibleRefunds.filter((refund) => refund.refundMethod !== "CASH");
+  const pendingCashRefunds = refunds.filter((refund) => refund.refundMethod === "CASH" && refund.status === "PENDING");
 
   return (
     <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
@@ -45,12 +49,12 @@ export default function CheckoutRefundApprovalsPanel() {
             <Banknote size={20} />
           </span>
           <div>
-            <h3 className="font-bold text-slate-900">{localizedText("Hoàn khoản thu dư khi check-out", "Checkout surplus refunds")}</h3>
+            <h3 className="font-bold text-slate-900">{localizedText("Hoàn tiền do khách thanh toán dư", "Refunds for guest overpayment")}</h3>
             <p className="mt-1 text-sm text-slate-600">
-              {localizedText("Hoàn tiền mặt được nhân viên xác nhận tại đây; khoản hoàn ngân hàng được quản lý duyệt và xử lý chuyển khoản.", "Staff confirm cash refunds here; bank refunds are reviewed and transferred by a manager.")}
+              {localizedText("Tách riêng với hoàn do hủy phòng. Chọn kênh đặt phòng và phương thức hoàn tiền bên dưới.", "Separate from room cancellation refunds. Choose the booking channel and refund method below.")}
             </p>
             <p className="mt-2 text-xs font-medium text-slate-500">
-              {pendingCashRefunds.length} {localizedText("chờ xác nhận tiền mặt", "cash refunds to confirm")} · {pending.length - pendingCashRefunds.length} {localizedText("chờ duyệt ngân hàng", "bank refunds to review")} · {approved.length} {localizedText("chờ chuyển khoản", "awaiting transfer")} · {refunded.length} {localizedText("đã hoàn", "refunded")}
+              {pendingCashRefunds.length} {localizedText("chờ xác nhận tiền mặt", "cash refunds to confirm")} · {pending.length - pendingCashRefunds.length} {localizedText("chờ duyệt hoàn online", "online refunds to review")} · {approved.length} {localizedText("chờ hoàn online", "awaiting online refund")} · {refunded.length} {localizedText("đã hoàn", "refunded")}
             </p>
           </div>
         </div>
@@ -76,28 +80,57 @@ export default function CheckoutRefundApprovalsPanel() {
       ) : refunds.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có khoản hoàn dư nào.", "There are no surplus refunds.")}</p>
       ) : (
-        <div className="divide-y divide-slate-100">
-          {cashRefunds.length > 0 && (
-            <section>
-              <header className="border-b border-emerald-100 bg-emerald-50/60 px-5 py-3">
-                <h4 className="font-semibold text-emerald-900">{localizedText("Hoàn tiền mặt tại quầy", "Cash refunds at front desk")}</h4>
-                <p className="mt-0.5 text-xs text-emerald-800">
-                  {localizedText("Nhân viên xác nhận tại đây sau khi đã giao tiền trực tiếp cho khách.", "Staff confirm here after handing the cash directly to the guest.")}
-                </p>
-              </header>
-              {cashRefunds.map((refund) => <CheckoutRefundCard key={refund.id} refund={refund} />)}
-            </section>
-          )}
-          {bankRefunds.length > 0 && (
-            <section>
-              <header className="border-b border-blue-100 bg-blue-50/60 px-5 py-3">
-                <h4 className="font-semibold text-blue-900">{localizedText("Hoàn tiền qua ngân hàng", "Bank refunds")}</h4>
-                <p className="mt-0.5 text-xs text-blue-800">
-                  {localizedText("Duyệt thông tin hoàn, sau đó xác nhận chuyển khoản.", "Review refund details, then confirm the bank transfer.")}
-                </p>
-              </header>
-              {bankRefunds.map((refund) => <CheckoutRefundCard key={refund.id} refund={refund} />)}
-            </section>
+        <div>
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
+            <span className="mr-1 text-xs font-semibold text-slate-500">{localizedText("Kênh đặt:", "Booking channel:")}</span>
+            {([
+              ["ALL", localizedText("Tất cả", "All")],
+              ["ONLINE", localizedText("Online", "Online")],
+              ["OFFLINE", localizedText("Tại quầy / Offline", "Front desk / Offline")],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setChannelFilter(value)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  channelFilter === value
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {visibleRefunds.length === 0 ? (
+            <p className="p-8 text-center text-sm text-slate-500">
+              {localizedText("Không có khoản hoàn nào thuộc kênh đặt phòng này.", "There are no refunds for this booking channel.")}
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {cashRefunds.length > 0 && (
+                <section>
+                  <header className="border-b border-emerald-100 bg-emerald-50/60 px-5 py-3">
+                    <h4 className="font-semibold text-emerald-900">{localizedText("Hoàn tiền mặt tại quầy", "Cash refunds at front desk")}</h4>
+                    <p className="mt-0.5 text-xs text-emerald-800">
+                      {localizedText("Nhân viên xác nhận tại đây sau khi đã giao tiền trực tiếp cho khách.", "Staff confirm here after handing the cash directly to the guest.")}
+                    </p>
+                  </header>
+                  {cashRefunds.map((refund) => <CheckoutRefundCard key={refund.id} refund={refund} />)}
+                </section>
+              )}
+              {onlineRefunds.length > 0 && (
+                <section>
+                  <header className="border-b border-blue-100 bg-blue-50/60 px-5 py-3">
+                    <h4 className="font-semibold text-blue-900">{localizedText("Hoàn tiền online", "Online refunds")}</h4>
+                    <p className="mt-0.5 text-xs text-blue-800">
+                      {localizedText("Duyệt thông tin hoàn, sau đó xác nhận chuyển khoản hoặc giao dịch ví điện tử.", "Review refund details, then confirm the bank transfer or e-wallet transaction.")}
+                    </p>
+                  </header>
+                  {onlineRefunds.map((refund) => <CheckoutRefundCard key={refund.id} refund={refund} />)}
+                </section>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -183,6 +216,20 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-bold text-blue-700">Booking {refund.bookingId}</span>
+            {refund.bookingChannel && (
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                refund.bookingChannel === "ONLINE"
+                  ? "bg-sky-50 text-sky-700"
+                  : "bg-violet-50 text-violet-700"
+              }`}>
+                {refund.bookingChannel === "ONLINE"
+                  ? localizedText("Đặt online", "Online booking")
+                  : localizedText("Đặt tại quầy", "Front-desk booking")}
+              </span>
+            )}
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+              {localizedText("Thanh toán dư", "Guest overpayment")}
+            </span>
             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
               refund.status === "PENDING"
                 ? "bg-amber-100 text-amber-800"
@@ -199,7 +246,11 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
                 ? "bg-emerald-100 text-emerald-800"
                 : "bg-blue-100 text-blue-800"
             }`}>
-              {refund.refundMethod === "CASH" ? localizedText("Hoàn tiền mặt tại quầy", "Cash at front desk") : localizedText("Hoàn qua ngân hàng", "Bank transfer")}
+              {refund.refundMethod === "CASH"
+                ? localizedText("Hoàn tiền mặt tại quầy", "Cash at front desk")
+                : refund.refundMethod === "EWALLET"
+                  ? localizedText("Hoàn qua ví điện tử", "E-wallet refund")
+                  : localizedText("Hoàn qua ngân hàng", "Bank transfer")}
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-700">

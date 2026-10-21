@@ -58,6 +58,11 @@ export type UpdateEmployeeRequest = Pick<
 
 export const employeeApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getMyHotelEmployees: builder.query<EmployeeRecord[], void>({
+      query: () => ({ url: "/employee/my-hotel", method: "GET" }),
+      transformResponse: (response: ApiResponse<EmployeeRecord[]>) => response.result,
+      providesTags: ["Staff"],
+    }),
     getEmployeesByHotel: builder.query<EmployeeRecord[], number>({
       query: (hotelId) => ({ url: `/employee/hotel/${hotelId}`, method: "GET" }),
       transformResponse: (response: ApiResponse<EmployeeRecord[]>) => response.result,
@@ -89,6 +94,7 @@ export const employeeApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetMyHotelEmployeesQuery,
   useGetEmployeesByHotelQuery,
   useCreateEmployeeMutation,
   useUpdateEmployeeMutation,

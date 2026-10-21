@@ -1341,6 +1341,7 @@ export default function BookingWorkspace() {
   const filteredRooms = useMemo(
     () =>
       rooms
+        .filter((room) => room.status !== "Bảo trì" && room.status !== "Đang dọn")
         .filter((room) => `${room.id} ${room.type}`.toLowerCase().includes(query.trim().toLowerCase()))
         .filter((room) => roomType === allRoomTypesLabel || room.type === roomType)
         .filter((room) => building === allBuildingsLabel || room.buildingName === building || room.buildingId === selectedBuilding?.id || room.id.startsWith(`${building}-`))

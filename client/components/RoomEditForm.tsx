@@ -45,7 +45,6 @@ export default function RoomEditForm({
   buildings,
   floors,
   roomTypes,
-  roomStatuses,
   amenities,
   bedTypes,
   imageFiles,
@@ -168,12 +167,6 @@ export default function RoomEditForm({
                   Tầng
                   <select value={draft.floorId} onChange={(event) => patch({ floorId: event.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal">
                     {availableFloors.map((floor) => <option key={floor.value} value={floor.value}>{floor.label}</option>)}
-                  </select>
-                </label>
-                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                  Trạng thái
-                  <select value={draft.roomStatus} onChange={(event) => patch({ roomStatus: event.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal">
-                    {roomStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
                   </select>
                 </label>
               </div>

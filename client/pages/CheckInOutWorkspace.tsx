@@ -6,6 +6,7 @@ import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { getCheckoutOutstandingAmount, getCheckoutSurplusAmount, type CheckoutSummaryRoom } from "../components/CheckoutSummary";
 import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from "../components/CheckoutSurplusRefundChoice";
+import CheckoutUnusedServicesWarning, { type CheckoutUnusedService } from "../components/CheckoutUnusedServicesWarning";
 import CheckInOutBookingDetailModal, { type BookingServiceQuantityEdit } from "../components/CheckInOutBookingDetailModal";
 import LateCheckoutPreview, { type LateCheckoutRecord } from "../components/LateCheckoutPreview";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -224,12 +225,12 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     const price = Number.isFinite(parsedPrice) ? parsedPrice : 0;
     return [{
       serviceId,
-      serviceDetailId: String(service.bookingServiceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailId ?? service.serviceDetailID ?? service.id ?? ""),
+      serviceDetailId: String(service.bookingServiceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailId ?? service.serviceDetailID ?? ""),
       name,
       quantity,
       amount: price * quantity,
       usedAt: typeof service.usedAt === "string" ? service.usedAt : undefined,
-      used: service.used === true,
+      used: service.used === true || String(service.used).toLowerCase() === "true",
     }];
   });
   const rawPaymentStatus = detail.paymentStatus ?? detail.bookingPaymentStatus ?? detail.paymentStatusType;
@@ -251,6 +252,8 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
   const surplusAmount = detail.surplusAmount === null ? 0 : toFiniteAmount(detail.surplusAmount);
   const parsedEarlyCheckInFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
   const earlyCheckInFee = flow === "check-out" && Number.isFinite(parsedEarlyCheckInFee) ? parsedEarlyCheckInFee : 0;
+  const parsedOtherSurcharges = Number(detail.otherSurcharges ?? 0);
+  const otherSurcharges = flow === "check-out" && Number.isFinite(parsedOtherSurcharges) ? parsedOtherSurcharges : 0;
   const parsedEstimatedEarlyCheckInFee = Number(detail.estimatedEarlyCheckInFee ?? 0);
   const estimatedEarlyCheckInFee = Number.isFinite(parsedEstimatedEarlyCheckInFee) ? parsedEstimatedEarlyCheckInFee : 0;
   const rawLateFee = detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee;
@@ -261,7 +264,10 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
   const lateFeeIncludedInRemainingAmount = lateFee !== undefined && remainingAmount !== undefined;
   const roomAmount = Number(detail.roomSubTotal ?? detail.roomSubtotal ?? detail.roomAmount ?? detail.roomTotal ?? detail.baseRoomPricePerNight ?? detail.roomPrice ?? detail.totalPrice ?? 0);
   const serviceTotal = services.reduce((total, service) => total + service.amount, 0);
-  const totalAmount = Number(detail.totalPrice ?? roomAmount + serviceTotal) + earlyCheckInFee;
+  const totalAmount = Number(detail.totalPrice ?? roomAmount + serviceTotal)
+    + earlyCheckInFee
+    + (lateFee ?? 0)
+    + otherSurcharges;
   const paidValue = detail.roomPaid ?? detail.isPaid ?? detail.paid;
   const roomPaid = remainingAmount !== undefined
     ? remainingAmount <= 0
@@ -285,6 +291,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     roomAmount,
     totalAmount,
     earlyCheckInFee,
+    otherSurcharges,
     estimatedEarlyCheckInFee,
     lateFee,
     lateFeeIncludedInRemainingAmount,
@@ -378,7 +385,7 @@ export default function CheckInOutWorkspace() {
     skip: !hotelId || Number.isNaN(Number(hotelId)),
   });
   const checkoutFeesByDetailId = useMemo(() => {
-    const fees = new Map<string, { earlyCheckInFee?: number; lateFee?: number; lateFeeIncludedInRemainingAmount?: boolean; remainingAmount?: number; paidAmount?: number; surplusAmount?: number }>();
+    const fees = new Map<string, { earlyCheckInFee?: number; lateFee?: number; otherSurcharges?: number; lateFeeIncludedInRemainingAmount?: boolean; remainingAmount?: number; paidAmount?: number; surplusAmount?: number }>();
     hotelBookings.forEach((booking) => {
       const rawRemainingAmount = booking.remainingAmount as unknown;
       const parsedRemainingAmount = rawRemainingAmount === undefined || rawRemainingAmount === null || rawRemainingAmount === ""
@@ -396,13 +403,16 @@ export default function CheckInOutWorkspace() {
         const detailId = String(detail.bookingDetailId ?? detail.bookingDetailID ?? detail.bookingDetailsId ?? "");
         const rawEarlyFee = detail.earlyCheckInFee ?? detail.earlyCheckinFee;
         const rawLateFee = detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee;
+        const rawOtherSurcharges = detail.otherSurcharges;
         const earlyFee = Number(rawEarlyFee);
         const lateFee = Number(rawLateFee);
+        const otherSurcharges = Number(rawOtherSurcharges);
         const hasLateFee = rawLateFee !== undefined && rawLateFee !== null && rawLateFee !== "";
         if (detailId) {
           fees.set(detailId, {
             earlyCheckInFee: Number.isFinite(earlyFee) ? earlyFee : undefined,
             lateFee: Number.isFinite(lateFee) ? lateFee : undefined,
+            otherSurcharges: Number.isFinite(otherSurcharges) ? otherSurcharges : undefined,
             lateFeeIncludedInRemainingAmount: hasLateFee && remainingAmount !== undefined,
             remainingAmount,
             paidAmount,
@@ -421,6 +431,7 @@ export default function CheckInOutWorkspace() {
       ...record,
       earlyCheckInFee: fees?.earlyCheckInFee ?? record.earlyCheckInFee,
       lateFee: fees?.lateFee ?? record.lateFee,
+      otherSurcharges: fees?.otherSurcharges ?? record.otherSurcharges,
       lateFeeIncludedInRemainingAmount: fees?.lateFeeIncludedInRemainingAmount ?? record.lateFeeIncludedInRemainingAmount,
       remainingAmount,
       paidAmount: record.paidAmount ?? fees?.paidAmount,
@@ -531,6 +542,7 @@ export default function CheckInOutWorkspace() {
   const [serviceAllSelections, setServiceAllSelections] = useState<ServiceSelection[]>([]);
   const [serviceRecordIdsByRoom, setServiceRecordIdsByRoom] = useState<Record<string, string> | null>(null);
   const [recordServices, setRecordServices] = useState<Record<string, ServiceCharge[]>>({});
+  const [isCancellingCheckoutServices, setIsCancellingCheckoutServices] = useState(false);
   const [checkoutClock, setCheckoutClock] = useState(() => Date.now());
 
   useEffect(() => {
@@ -555,8 +567,15 @@ export default function CheckInOutWorkspace() {
   }, [checkInQuery.data, checkoutFeesByDetailId]);
 
   useEffect(() => {
-    if (checkOutQuery.data) setDepartureState(fetchedDepartureRecords);
-  }, [checkOutQuery.data, fetchedDepartureRecords]);
+    if (!checkOutQuery.data) return;
+    setDepartureState(fetchedDepartureRecords);
+    setBookingDetailRecords((current) => current?.map((record) => {
+      const refreshedRecord = fetchedDepartureRecords.find((item) => item.id === record.id);
+      return refreshedRecord
+        ? { ...record, ...refreshedRecord, services: recordServices[record.id] ?? refreshedRecord.services }
+        : record;
+    }) ?? null);
+  }, [checkOutQuery.data, fetchedDepartureRecords, recordServices]);
   useEffect(() => {
     const resumeState = location.state && typeof location.state === "object"
       ? (location.state as { resumeCheckout?: unknown }).resumeCheckout
@@ -682,7 +701,10 @@ export default function CheckInOutWorkspace() {
   }, [date, hotelBookings]);
   useEffect(() => {
     if (!hotelId) return;
-    bindHotelSocketEvents({
+    return bindHotelSocketEvents({
+      onBookingStateUpdated: () => {
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+      },
       onLateCheckOutCalendar: (data) => {
         const notification = data && typeof data === "object" ? data as Record<string, unknown> : {};
         const bookingId = String(notification.bookingId ?? "");
@@ -739,6 +761,14 @@ export default function CheckInOutWorkspace() {
       a.time.localeCompare(b.time),
     );
   }, [arrivalState, departureState, completedRecordsByDate]);
+  useEffect(() => {
+    setBookingDetailRecords((current) => current?.map((record) => {
+      const refreshedRecord = dailyRecords.find((item) => item.id === record.id);
+      return refreshedRecord
+        ? { ...record, ...refreshedRecord, services: recordServices[record.id] ?? refreshedRecord.services }
+        : record;
+    }) ?? null);
+  }, [dailyRecords, recordServices]);
   const lateCheckoutRecords = useMemo<LateCheckoutRecord[]>(() => {
     const now = new Date(checkoutClock);
     const notificationRecords = new Map(
@@ -956,6 +986,14 @@ export default function CheckInOutWorkspace() {
     refundMethodsByBooking: Record<string, ApiCheckoutSurplusRefundMethod> = {},
   ): Promise<boolean> => {
     if (records.length === 0) return false;
+    if (unusedCheckoutServicesForRecords(records).length > 0) {
+      toast({
+        variant: "destructive",
+        title: localizedText("Chưa thể check-out", "Cannot check out yet"),
+        description: localizedText("Vui lòng hủy các dịch vụ chưa sử dụng và cập nhật khoản thu/hoàn trước.", "Cancel unused services and update the balance or refund first."),
+      });
+      return false;
+    }
     const outstandingAmount = getCheckoutOutstandingAmount(checkoutRoomsFromRecords(records));
     if (outstandingAmount > 0) {
       toast({
@@ -1088,9 +1126,12 @@ export default function CheckInOutWorkspace() {
     label: record.guest,
     meta: `Phòng ${record.room.split(" · ")[0]}`,
     status: "pending" as const,
-    amount: (record.services || []).reduce((total, service) => total + service.amount, 0) + (record.lateFee || 0),
+    amount: (record.services || []).reduce((total, service) => total + service.amount, 0)
+      + (record.earlyCheckInFee || 0)
+      + (record.lateFee || 0)
+      + (record.otherSurcharges || 0),
   }));
-  const checkoutRoomsFromRecords = (records: Array<Pick<DailyRecord, "id" | "bookingId" | "guest" | "room" | "roomAmount" | "roomPaid" | "remainingAmount" | "surplusAmount" | "services" | "earlyCheckInFee" | "lateFee" | "lateFeeIncludedInRemainingAmount">>): CheckoutSummaryRoom[] => records.map((record) => ({
+  const checkoutRoomsFromRecords = (records: Array<Pick<DailyRecord, "id" | "bookingId" | "guest" | "room" | "roomAmount" | "roomPaid" | "remainingAmount" | "surplusAmount" | "services" | "earlyCheckInFee" | "lateFee" | "otherSurcharges" | "lateFeeIncludedInRemainingAmount">>): CheckoutSummaryRoom[] => records.map((record) => ({
     id: record.id,
     bookingId: record.bookingId,
     label: `Phòng ${record.room.split(" · ")[0]} · ${record.guest}`,
@@ -1101,6 +1142,7 @@ export default function CheckInOutWorkspace() {
     services: record.services,
     earlyCheckInFee: record.earlyCheckInFee,
     lateFee: record.lateFee,
+    otherSurcharges: record.otherSurcharges,
     lateFeeIncludedInRemainingAmount: record.lateFeeIncludedInRemainingAmount,
   }));
 
@@ -1110,6 +1152,7 @@ export default function CheckInOutWorkspace() {
   const singleCheckoutOutstandingAmount = getCheckoutOutstandingAmount(singleCheckoutRooms);
   const singleCheckoutSurplusAmount = getCheckoutSurplusAmount(singleCheckoutRooms);
   const groupCheckoutSummaryRooms = checkoutRoomsFromRecords(groupCheckoutRecords);
+  const groupCheckoutUnusedServices = unusedCheckoutServicesForRecords(groupCheckoutRecords);
   const groupCheckoutOutstandingAmount = getCheckoutOutstandingAmount(groupCheckoutSummaryRooms);
   const groupCheckoutSurplusAmount = getCheckoutSurplusAmount(groupCheckoutSummaryRooms);
   const groupCheckoutBookingId = groupCheckoutRecords[0]?.bookingId;
@@ -1120,6 +1163,165 @@ export default function CheckInOutWorkspace() {
   const needsGroupRefundChoice = isFinalGroupCheckout
     && groupCheckoutOutstandingAmount === 0
     && groupCheckoutSurplusAmount > 0;
+
+  function unusedCheckoutServicesForRecords(records: DailyRecord[]): CheckoutUnusedService[] {
+    return records.flatMap((record) =>
+      (recordServices[record.id] ?? record.services ?? [])
+        .filter((service) => service.used !== true && !service.usedAt)
+        .map((service) => ({
+          room: record.room.split(" · ")[0],
+          name: service.name,
+          quantity: service.quantity,
+          amount: service.amount,
+        })),
+    );
+  }
+
+  const cancelUnusedCheckoutServices = async (records: DailyRecord[]) => {
+    const requestEmployeeId = String(employeeId ?? localStorage.getItem("id") ?? localStorage.getItem("employeeId") ?? "");
+    if (!requestEmployeeId) {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể hủy dịch vụ", "Could not cancel services"),
+        description: localizedText("Không tìm thấy mã nhân viên đang đăng nhập.", "The signed-in employee ID is unavailable."),
+      });
+      return false;
+    }
+
+    setIsCancellingCheckoutServices(true);
+    try {
+      const latestDetails = await checkOutQuery.refetch().unwrap();
+      const latestDepartureRecords = latestDetails.map((detail) => mapCheckInOutRecord(detail, "check-out"));
+      const latestRecords = records.map((record) =>
+        latestDepartureRecords.find((refreshed) => refreshed.id === record.id),
+      );
+      if (latestRecords.some((record) => !record)) {
+        toast({
+          variant: "destructive",
+          title: localizedText("Không thể hủy dịch vụ", "Could not cancel services"),
+          description: localizedText("Không tìm thấy một phòng trong danh sách check-out mới nhất. Vui lòng tải lại rồi thử lại.", "A room was not found in the latest check-out list. Refresh and try again."),
+        });
+        return false;
+      }
+      const currentRecords = latestRecords.filter((record): record is DailyRecord => Boolean(record));
+      const serviceEntries = currentRecords.flatMap((record) =>
+        (record.services ?? [])
+          .filter((service) => service.used !== true && !service.usedAt)
+          .map((service) => ({ record, service })),
+      );
+      if (serviceEntries.length === 0) {
+        setDepartureState((current) => current.map((record) =>
+          currentRecords.find((refreshed) => refreshed.id === record.id) ?? record,
+        ));
+        setRecordServices((current) => ({
+          ...current,
+          ...Object.fromEntries(currentRecords.map((record) => [record.id, record.services ?? []])),
+        }));
+        setCheckoutRecord((current) => current
+          ? currentRecords.find((record) => record.id === current.id) ?? current
+          : current);
+        setGroupCheckoutRecords((current) => current.map((record) =>
+          currentRecords.find((refreshed) => refreshed.id === record.id) ?? record,
+        ));
+        toast({
+          variant: "default",
+          title: localizedText("Dịch vụ đã được cập nhật", "Services are up to date"),
+          description: localizedText("Không còn dịch vụ chưa sử dụng cần hủy.", "There are no unused services left to cancel."),
+        });
+        return true;
+      }
+
+      const missingId = serviceEntries.find(({ service }) => !service.serviceDetailId?.trim());
+      if (missingId) {
+        toast({
+          variant: "destructive",
+          title: localizedText("Không thể hủy dịch vụ", "Could not cancel services"),
+          description: localizedText(`Thiếu mã chi tiết của dịch vụ "${missingId.service.name}". Vui lòng tải lại booking rồi thử lại.`, `The detail ID for "${missingId.service.name}" is missing. Refresh the booking and try again.`),
+        });
+        return false;
+      }
+
+      const cancellationsByBooking = new Map<string, Map<string, string[]>>();
+      for (const { record, service } of serviceEntries) {
+        if (!record.bookingId) {
+          toast({
+            variant: "destructive",
+            title: localizedText("Không thể hủy dịch vụ", "Could not cancel services"),
+            description: localizedText("Thiếu mã booking của một phòng.", "A room is missing its booking ID."),
+          });
+          return false;
+        }
+        const detailId = normalizeDetailId(record.id);
+        if (!detailId) {
+          toast({
+            variant: "destructive",
+            title: localizedText("Không thể hủy dịch vụ", "Could not cancel services"),
+            description: localizedText("Thiếu mã chi tiết phòng.", "A room is missing its detail ID."),
+          });
+          return false;
+        }
+        const bookingCancellations = cancellationsByBooking.get(record.bookingId) ?? new Map<string, string[]>();
+        bookingCancellations.set(detailId, [...(bookingCancellations.get(detailId) ?? []), service.serviceDetailId!]);
+        cancellationsByBooking.set(record.bookingId, bookingCancellations);
+      }
+
+      await Promise.all([...cancellationsByBooking].map(([bookingId, details]) => {
+        const servicesToCancel = [...details].map(([bookingDetailId, serviceDetailIds]) => ({
+          bookingDetailId,
+          serviceDetailIds,
+        }));
+        const request: ManagementBookingModificationRequest = {
+          employeeId: requestEmployeeId,
+          bookingDetailIdsToCancel: [],
+          servicesToCancel,
+          roomsToAdd: [],
+          roomsToChange: [],
+          servicesToAddForExistingRooms: [],
+          serviceQuantityUpdates: [],
+          promotionRequest: null,
+          customerPromotionRequest: null,
+          removePromotion: false,
+        };
+        return modifyBooking({ bookingId, request }).unwrap();
+      }));
+
+      const refreshedDetails = await checkOutQuery.refetch().unwrap();
+      const refreshedRecords = refreshedDetails.map((detail) => mapCheckInOutRecord(detail, "check-out"));
+      const updatedSelectedRecords = currentRecords.map((record) =>
+        refreshedRecords.find((refreshed) => refreshed.id === record.id) ?? record,
+      );
+      setDepartureState((current) => current.map((record) =>
+        updatedSelectedRecords.find((refreshed) => refreshed.id === record.id) ?? record,
+      ));
+      setRecordServices((current) => ({
+        ...current,
+        ...Object.fromEntries(updatedSelectedRecords.map((record) => [record.id, record.services ?? []])),
+      }));
+      setCheckoutRecord((current) => current
+        ? updatedSelectedRecords.find((record) => record.id === current.id) ?? current
+        : current);
+      setGroupCheckoutRecords((current) => current.map((record) =>
+        updatedSelectedRecords.find((updated) => updated.id === record.id) ?? record,
+      ));
+      toast({
+        variant: "checkout",
+        title: localizedText("Đã hủy dịch vụ chưa sử dụng", "Unused services canceled"),
+        description: localizedText("Đã cập nhật lại số tiền booking. Kiểm tra khoản cần thu/hoàn trước khi check-out.", "Booking totals have been updated. Review the balance or refund before checking out."),
+      });
+      return true;
+    } catch (error) {
+      console.error("Canceling unused checkout services failed", error);
+      const responseError = error as { data?: { message?: string; error?: string }; error?: string };
+      toast({
+        variant: "destructive",
+        title: localizedText("Hủy dịch vụ thất bại", "Could not cancel services"),
+        description: responseError.data?.message ?? responseError.data?.error ?? responseError.error ?? localizedText("Không thể hủy dịch vụ chưa sử dụng. Vui lòng thử lại.", "Could not cancel the unused services. Please try again."),
+      });
+      return false;
+    } finally {
+      setIsCancellingCheckoutServices(false);
+    }
+  };
 
   const closeSingleCheckout = () => {
     setCheckoutRecord(null);
@@ -1233,6 +1435,7 @@ export default function CheckInOutWorkspace() {
 
   const confirmCheckout = async () => {
     if (!checkoutRecord) return;
+    if (unusedCheckoutServicesForRecords([checkoutRecord]).length > 0) return;
     if (singleCheckoutOutstandingAmount > 0) return;
     const needsRefundChoice = isFinalSingleCheckout(checkoutRecord) && singleCheckoutSurplusAmount > 0;
     if (needsRefundChoice && !singleCheckoutRefundMethod) return;
@@ -2049,6 +2252,7 @@ export default function CheckInOutWorkspace() {
       {checkoutRecord &&
         (() => {
           const services = recordServices[checkoutRecord.id] ?? checkoutRecord.services ?? [];
+          const unusedCheckoutServices = unusedCheckoutServicesForRecords([checkoutRecord]);
           const earlyCheckInFee = checkoutRecord.earlyCheckInFee || 0;
           const lateFee = checkoutRecord.lateFee || 0;
           const isPreparingCheckout = checkoutPreparation?.recordId === checkoutRecord.id && !checkoutPreparation.error;
@@ -2148,6 +2352,11 @@ export default function CheckInOutWorkspace() {
                       </div>
                     )}
                   </div>
+                  <CheckoutUnusedServicesWarning
+                    services={unusedCheckoutServices}
+                    isCancelling={isCancellingCheckoutServices}
+                    onCancel={() => void cancelUnusedCheckoutServices([checkoutRecord])}
+                  />
                   <div className="flex items-center justify-between border-t border-slate-200 pt-4">
                     <span className="font-bold text-slate-900">
                       {localizedText("Còn phải thanh toán", "Balance due")}
@@ -2210,7 +2419,7 @@ export default function CheckInOutWorkspace() {
                   <button
                     type="button"
                     onClick={confirmCheckout}
-                    disabled={totalDue > 0 || isPreparingCheckout || Boolean(checkoutPreparationError) || (singleCheckoutSurplusAmount > 0 && isFinalSingleCheckout(checkoutRecord) && !singleCheckoutRefundMethod) || isBulkCheckOutLoading}
+                    disabled={totalDue > 0 || unusedCheckoutServices.length > 0 || isCancellingCheckoutServices || isPreparingCheckout || Boolean(checkoutPreparationError) || (singleCheckoutSurplusAmount > 0 && isFinalSingleCheckout(checkoutRecord) && !singleCheckoutRefundMethod) || isBulkCheckOutLoading}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                   >
                     <CreditCard size={16} />
@@ -2237,6 +2446,11 @@ export default function CheckInOutWorkspace() {
             <div className="mt-5">
               <CheckoutSummary rooms={groupCheckoutSummaryRooms} />
             </div>
+            <CheckoutUnusedServicesWarning
+              services={groupCheckoutUnusedServices}
+              isCancelling={isCancellingCheckoutServices}
+              onCancel={() => void cancelUnusedCheckoutServices(groupCheckoutRecords)}
+            />
             {groupCheckoutOutstandingAmount > 0 && (
               <div className="mt-3 rounded-lg bg-rose-50 p-3">
                 <p className="text-xs font-medium text-rose-700">
@@ -2274,7 +2488,7 @@ export default function CheckInOutWorkspace() {
                     setGroupCheckoutRefundMethod(null);
                   }
                 }}
-                disabled={isBulkCheckOutLoading || groupCheckoutRecords.length === 0 || groupCheckoutOutstandingAmount > 0 || (needsGroupRefundChoice && !groupCheckoutRefundMethod)}
+                disabled={isBulkCheckOutLoading || isCancellingCheckoutServices || groupCheckoutUnusedServices.length > 0 || groupCheckoutRecords.length === 0 || groupCheckoutOutstandingAmount > 0 || (needsGroupRefundChoice && !groupCheckoutRefundMethod)}
                 className="flex w-56 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
               >
                 <CreditCard size={16} />{localizedText("Xác nhận Check-out", "Confirm check-out")}
@@ -2518,6 +2732,9 @@ export default function CheckInOutWorkspace() {
         rooms={batchDialogRooms}
         selectedIds={selectedDepartureIds}
         checkoutSummaryRooms={checkoutRoomsFromRecords(departureState.filter((record) => selectedDepartureIds.includes(record.id)))}
+        checkoutUnusedServices={unusedCheckoutServicesForRecords(departureState.filter((record) => selectedDepartureIds.includes(record.id)))}
+        isCancellingUnusedServices={isCancellingCheckoutServices}
+        onCancelUnusedServices={() => void cancelUnusedCheckoutServices(departureState.filter((record) => selectedDepartureIds.includes(record.id)))}
         checkoutRefundMethods={batchCheckoutRefundMethods}
         onCheckoutRefundMethodChange={(bookingId, method) =>
           setBatchCheckoutRefundMethods((current) => ({ ...current, [bookingId]: method }))

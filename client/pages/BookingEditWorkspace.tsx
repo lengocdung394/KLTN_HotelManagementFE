@@ -18,6 +18,9 @@ import { useAppSelector } from "../store/hooks";
 
 type BookingDetail = Record<string, unknown>;
 
+const isRoomUnavailableForBooking = (room: Record<string, unknown>) =>
+  ["MAINTENANCE", "CLEANING"].includes(String(room.roomStatus ?? room.status ?? "").trim().toUpperCase());
+
 const roomIdOf = (detail: BookingDetail) => String(detail.roomId ?? detail.roomID ?? detail.id ?? "");
 const detailIdOf = (detail: BookingDetail) => String(
   detail.bookingDetailId
@@ -244,6 +247,11 @@ export default function BookingEditWorkspace() {
   const handleAddNewRoom = () => {
     if (!selectedNewRoomId || !newRoomCheckIn || !newRoomCheckOut) {
       setError(localizedText("Vui lòng chọn phòng, ngày check-in và ngày check-out cho phòng mới.", "Select a room, check-in date, and check-out date for the new room."));
+      return;
+    }
+    const selectedRoom = hotelRooms.find((room) => String(room.id ?? room.roomId ?? "") === selectedNewRoomId);
+    if (selectedRoom && isRoomUnavailableForBooking(selectedRoom)) {
+      setError(localizedText("Phòng đang bảo trì hoặc dọn dẹp nên không thể đặt.", "This room is under maintenance or being cleaned and cannot be booked."));
       return;
     }
     const newRoom: ManagementBookingRoomToAdd = {
@@ -690,6 +698,7 @@ export default function BookingEditWorkspace() {
                       >
                         <option value={rId}>{localizedText("Giữ phòng hiện tại", "Keep current room")} (#{rId})</option>
                         {hotelRooms
+                          .filter((hr) => !isRoomUnavailableForBooking(hr))
                           .filter((hr) => String(hr.id ?? hr.roomId) !== String(rId))
                           .map((hr) => {
                             const hrId = String(hr.id ?? hr.roomId ?? "");
@@ -772,7 +781,7 @@ export default function BookingEditWorkspace() {
                   className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
                 >
                   <option value="">-- {localizedText("Chọn phòng", "Select room")} --</option>
-                  {hotelRooms.map((hr) => {
+                  {hotelRooms.filter((hr) => !isRoomUnavailableForBooking(hr)).map((hr) => {
                     const hrId = String(hr.id ?? hr.roomId ?? "");
                     return (
                       <option key={hrId} value={hrId}>

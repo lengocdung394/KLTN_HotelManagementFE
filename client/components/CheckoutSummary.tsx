@@ -13,6 +13,7 @@ export type CheckoutSummaryRoom = {
   services?: { name: string; quantity: number; amount: number }[];
   earlyCheckInFee?: number;
   lateFee?: number;
+  otherSurcharges?: number;
   lateFeeIncludedInRemainingAmount?: boolean;
 };
 
@@ -35,7 +36,7 @@ export const getCheckoutOutstandingAmount = (rooms: CheckoutSummaryRoom[]) => {
     }
     const roomAmount = room.roomPaid ? 0 : room.roomAmount || 0;
     const serviceAmount = (room.services || []).reduce((serviceSum, service) => serviceSum + service.amount, 0);
-    return sum + roomAmount + serviceAmount + (room.earlyCheckInFee || 0) + (room.lateFee || 0);
+    return sum + roomAmount + serviceAmount + (room.earlyCheckInFee || 0) + (room.lateFee || 0) + (room.otherSurcharges || 0);
   }, 0);
 };
 
@@ -60,7 +61,7 @@ export default function CheckoutSummary({ rooms, compact = false }: CheckoutSumm
     {rooms.map((room) => {
       const roomAmount = room.roomPaid ? 0 : room.roomAmount || 0;
       const serviceAmount = (room.services || []).reduce((sum, service) => sum + service.amount, 0);
-      const amount = roomAmount + serviceAmount + (room.earlyCheckInFee || 0) + (room.lateFee || 0);
+      const amount = roomAmount + serviceAmount + (room.earlyCheckInFee || 0) + (room.lateFee || 0) + (room.otherSurcharges || 0);
       return <div key={room.id} className={`rounded-lg ${compact ? "bg-slate-50 px-3 py-2.5" : "border border-slate-200 p-3"}`}>
         <div className="flex items-center justify-between gap-3 text-sm">
           <span className="min-w-0">
@@ -69,6 +70,7 @@ export default function CheckoutSummary({ rooms, compact = false }: CheckoutSumm
             {serviceAmount > 0 && <span className="mt-1 block text-xs text-slate-500">{localizedText("Dịch vụ", "Services")}: {formatMoney(serviceAmount, language)}</span>}
             {(room.earlyCheckInFee || 0) > 0 && <span className="mt-1 block text-xs text-slate-500">{localizedText("Phụ thu check-in sớm", "Early check-in surcharge")}: {formatMoney(room.earlyCheckInFee || 0, language)}</span>}
             {(room.lateFee || 0) > 0 && <span className="mt-1 block text-xs text-slate-500">{localizedText("Phụ thu check-out trễ", "Late check-out surcharge")}: {formatMoney(room.lateFee || 0, language)}</span>}
+            {(room.otherSurcharges || 0) > 0 && <span className="mt-1 block text-xs text-slate-500">{localizedText("Phụ thu khác", "Other surcharges")}: {formatMoney(room.otherSurcharges || 0, language)}</span>}
           </span>
           <strong className="shrink-0 text-slate-900">{formatMoney(amount, language)}</strong>
         </div>

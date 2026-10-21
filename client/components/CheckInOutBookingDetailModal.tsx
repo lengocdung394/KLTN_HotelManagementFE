@@ -75,7 +75,9 @@ export default function CheckInOutBookingDetailModal({ records, onClose, onSaveS
   const roomTotal = records.reduce((total, record) => total + Number(record.roomAmount ?? 0), 0);
   const serviceTotal = records.reduce((total, record) => total + (record.services ?? []).reduce((sum, service) => sum + serviceAmount(record, service), 0), 0);
   const earlyCheckInFeeTotal = records.reduce((total, record) => total + Number(record.earlyCheckInFee ?? 0), 0);
-  const totalAmount = roomTotal + serviceTotal + earlyCheckInFeeTotal;
+  const lateCheckOutFeeTotal = records.reduce((total, record) => total + Number(record.lateFee ?? 0), 0);
+  const otherSurchargesTotal = records.reduce((total, record) => total + Number(record.otherSurcharges ?? 0), 0);
+  const totalAmount = roomTotal + serviceTotal + earlyCheckInFeeTotal + lateCheckOutFeeTotal + otherSurchargesTotal;
   const sumBookingAmounts = (selectAmount: (record: DailyRecord) => number | undefined) => {
     const amountsByBooking = new Map<string, number>();
     records.forEach((record, index) => {
@@ -132,7 +134,9 @@ export default function CheckInOutBookingDetailModal({ records, onClose, onSaveS
                 const roomServices = record.services ?? [];
                 const roomServiceTotal = roomServices.reduce((total, service) => total + serviceAmount(record, service), 0);
                 const earlyCheckInFee = Number(record.earlyCheckInFee ?? 0);
-                const recordTotal = Number(record.roomAmount ?? 0) + roomServiceTotal + earlyCheckInFee;
+                const lateCheckOutFee = Number(record.lateFee ?? 0);
+                const otherSurcharges = Number(record.otherSurcharges ?? 0);
+                const recordTotal = Number(record.roomAmount ?? 0) + roomServiceTotal + earlyCheckInFee + lateCheckOutFee + otherSurcharges;
                 return (
                   <div key={record.id} className="py-3 first:pt-0 last:pb-0">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -147,6 +151,8 @@ export default function CheckInOutBookingDetailModal({ records, onClose, onSaveS
                     <div className="mt-2 space-y-1 border-t border-slate-100 pt-2 text-xs">
                       <div className="flex justify-between gap-3"><span className="text-slate-600">{localizedText("Tiền phòng", "Room charge")}</span><strong>{money(record.roomAmount ?? 0, language)}</strong></div>
                       {earlyCheckInFee > 0 && <div className="flex justify-between gap-3 text-slate-600"><span>{localizedText("Phụ thu check-in sớm", "Early check-in surcharge")}</span><strong>{money(earlyCheckInFee, language)}</strong></div>}
+                      {lateCheckOutFee > 0 && <div className="flex justify-between gap-3 text-amber-700"><span>{localizedText("Phụ thu check-out trễ", "Late check-out surcharge")}</span><strong>{money(lateCheckOutFee, language)}</strong></div>}
+                      {otherSurcharges > 0 && <div className="flex justify-between gap-3 text-amber-700"><span>{localizedText("Phụ thu khác", "Other surcharges")}</span><strong>{money(otherSurcharges, language)}</strong></div>}
                       {roomServices.map((service, index) => (
                         <div key={`${service.serviceDetailId ?? service.serviceId ?? service.name}-${index}`} className="flex items-center justify-between gap-3 text-slate-600">
                           <span>{service.name} · {money(service.quantity > 0 ? service.amount / service.quantity : 0, language)} × {isEditingServices && canEditRecordServices(record) && service.serviceDetailId && service.used !== true
@@ -178,6 +184,8 @@ export default function CheckInOutBookingDetailModal({ records, onClose, onSaveS
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Tổng tiền phòng", "Room total")}</dt><dd className="font-semibold text-slate-900">{money(roomTotal, language)}</dd></div>
               {earlyCheckInFeeTotal > 0 && <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Tổng phụ thu check-in sớm", "Total early check-in surcharge")}</dt><dd className="font-semibold text-slate-900">{money(earlyCheckInFeeTotal, language)}</dd></div>}
+              {lateCheckOutFeeTotal > 0 && <div className="flex justify-between gap-3"><dt className="text-amber-700">{localizedText("Tổng phụ thu check-out trễ", "Total late check-out surcharge")}</dt><dd className="font-semibold text-amber-700">{money(lateCheckOutFeeTotal, language)}</dd></div>}
+              {otherSurchargesTotal > 0 && <div className="flex justify-between gap-3"><dt className="text-amber-700">{localizedText("Tổng phụ thu khác", "Total other surcharges")}</dt><dd className="font-semibold text-amber-700">{money(otherSurchargesTotal, language)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Tổng tiền dịch vụ", "Service total")}</dt><dd className="font-semibold text-slate-900">{money(serviceTotal, language)}</dd></div>
               <div className="flex justify-between gap-3 border-t border-blue-100 pt-2"><dt className="font-bold text-slate-800">{localizedText("Tổng tiền phòng và dịch vụ", "Rooms and services total")}</dt><dd className="font-bold text-blue-700">{money(totalAmount, language)}</dd></div>
               {hasPaidAmount && <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Tổng đã thanh toán", "Total paid")}</dt><dd className="font-semibold text-emerald-700">{money(paidTotal, language)}</dd></div>}

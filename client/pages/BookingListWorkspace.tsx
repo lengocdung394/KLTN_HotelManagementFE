@@ -14,7 +14,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/use-toast";
@@ -71,10 +71,15 @@ const bookingId = (booking: BookingListItem) => textOf(booking, ["bookingId", "o
 const bookingTotalIncludingSurcharges = (booking: BookingListItem) => {
   const storedTotal = bookingAmount(booking, ["finalAmount", "totalAmount"]);
   const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
-  const earlyCheckInTotal = details.reduce((total, detail) => {
+  const detailSurchargeTotal = details.reduce((total, detail) => {
     if (isCancelledBookingDetail(detail)) return total;
-    const fee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
-    return total + (Number.isFinite(fee) ? fee : 0);
+    const earlyFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
+    const lateFee = Number(detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee ?? 0);
+    const otherSurcharges = Number(detail.otherSurcharges ?? 0);
+    return total
+      + (Number.isFinite(earlyFee) ? earlyFee : 0)
+      + (Number.isFinite(lateFee) ? lateFee : 0)
+      + (Number.isFinite(otherSurcharges) ? otherSurcharges : 0);
   }, 0);
   const storedSurchargeTotal = bookingAmount(booking, ["surchargeTotalAmount"], 0);
   const roomTotal = bookingAmount(booking, ["roomTotal"], Number.NaN);
@@ -91,12 +96,12 @@ const bookingTotalIncludingSurcharges = (booking: BookingListItem) => {
       : bookingAmount(booking, ["discountTotal"], 0);
     const expectedTotal = Math.max(
       0,
-      roomTotal + serviceTotal + Math.max(earlyCheckInTotal, storedSurchargeTotal) - totalDiscount,
+      roomTotal + serviceTotal + Math.max(detailSurchargeTotal, storedSurchargeTotal) - totalDiscount,
     );
     return Math.max(storedTotal, expectedTotal);
   }
 
-  return storedTotal + Math.max(0, earlyCheckInTotal - storedSurchargeTotal);
+  return storedTotal + Math.max(0, detailSurchargeTotal - storedSurchargeTotal);
 };
 
 const formatDate = (value: unknown) => {
@@ -174,12 +179,15 @@ const bookingServices = (detail: Record<string, unknown>) => {
   const serviceFields = [
     detail.bookingServiceResponsesForHotels,
     detail.bookingServiceResponseForHotels,
+    detail.bookingServiceResponseForHotel,
+    detail.bookingServiceResponsForHotels,
     detail.bookingServiceDetails,
     detail.serviceRequests,
     detail.serviceResponses,
     detail.services,
   ];
-  const namedServices = serviceFields.find(Array.isArray);
+  const namedServices = serviceFields.find((services) => Array.isArray(services) && services.length > 0)
+    ?? serviceFields.find(Array.isArray);
   const detectedServices = Object.entries(detail).find(([key, value]) =>
     Array.isArray(value) && key.toLowerCase().includes("service"),
   )?.[1];
@@ -206,6 +214,8 @@ export default function BookingListWorkspace() {
   const [showQrModal, setShowQrModal] = useState(false);
   const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelRefundMethod, setCancelRefundMethod] = useState<"CASH" | "BANK">("BANK");
+  const [cashRefundConfirmed, setCashRefundConfirmed] = useState(false);
   const [cancelRefundEmail, setCancelRefundEmail] = useState("");
   const [cancelBankDetails, setCancelBankDetails] = useState({
     bankName: "",
@@ -273,21 +283,35 @@ export default function BookingListWorkspace() {
   useEffect(() => {
     if (!hotelId) return;
 
-    bindHotelSocketEvents({
+    return bindHotelSocketEvents({
       onRoomMatrixUpdated: () => {
         dispatch(baseApi.util.invalidateTags(["Booking"]));
       },
       onNewBookingNotification: () => {
         dispatch(baseApi.util.invalidateTags(["Booking"]));
       },
+      onBookingStateUpdated: () => {
+        dispatch(baseApi.util.invalidateTags(["Booking"]));
+      },
     });
   }, [dispatch, hotelId]);
 
   // Merge API bookings with local overrides
-  const bookings = fetchedBookings.filter((b) => Boolean(b) && typeof b === "object").map((b) => {
-    const id = bookingId(b);
-    return localOverrides[id] ? { ...b, ...localOverrides[id] } : b;
-  });
+  const bookings = useMemo(
+    () => fetchedBookings.filter((b) => Boolean(b) && typeof b === "object").map((b) => {
+      const id = bookingId(b);
+      return localOverrides[id] ? { ...b, ...localOverrides[id] } : b;
+    }),
+    [fetchedBookings, localOverrides],
+  );
+
+  useEffect(() => {
+    if (!selectedBooking) return;
+    const latestBooking = bookings.find((booking) => bookingId(booking) === bookingId(selectedBooking));
+    if (latestBooking && latestBooking !== selectedBooking) {
+      setSelectedBooking(latestBooking);
+    }
+  }, [bookings, selectedBooking]);
 
   useEffect(() => {
     const locationState = location.state;
@@ -583,6 +607,18 @@ export default function BookingListWorkspace() {
       const fee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
       return total + (Number.isFinite(fee) ? fee : 0);
     }, 0);
+  const lateCheckoutFeeTotal = (selectedBooking?.bookingDetails ?? [])
+    .filter((detail) => !isCancelledBookingDetail(detail))
+    .reduce((total, detail) => {
+      const fee = Number(detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee ?? 0);
+      return total + (Number.isFinite(fee) ? fee : 0);
+    }, 0);
+  const otherSurchargesTotal = (selectedBooking?.bookingDetails ?? [])
+    .filter((detail) => !isCancelledBookingDetail(detail))
+    .reduce((total, detail) => {
+      const amount = Number(detail.otherSurcharges ?? 0);
+      return total + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
 
   const canCancelSelectedBooking = !!selectedBooking
     && ["PENDING", "CONFIRMED"].includes(
@@ -600,8 +636,14 @@ export default function BookingListWorkspace() {
       setCancelError("Vui lòng nhập email khách hàng hợp lệ.");
       return;
     }
+    if (cancelRefundMethod === "CASH"
+      && bookingAmount(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) > 0
+      && !cashRefundConfirmed) {
+      setCancelError("Vui lòng xác nhận đã giao tiền mặt hoàn cho khách.");
+      return;
+    }
     const hasAnyBankDetail = Object.values(cancelBankDetails).some((value) => value.trim());
-    if (hasAnyBankDetail
+    if (cancelRefundMethod === "BANK" && hasAnyBankDetail
       && (!cancelBankDetails.bankName.trim()
         || !cancelBankDetails.bankAccountName.trim()
         || !/^[0-9]{6,50}$/.test(cancelBankDetails.bankAccountNumber.trim()))) {
@@ -614,8 +656,10 @@ export default function BookingListWorkspace() {
         bookingId: id,
         request: {
           ...(cancelReason.trim() ? { reason: cancelReason.trim() } : {}),
+          refundMethod: cancelRefundMethod,
+          ...(cancelRefundMethod === "CASH" ? { cashRefundConfirmed } : {}),
           ...(cancelRefundEmail.trim() ? { refundEmail: cancelRefundEmail.trim() } : {}),
-          ...(hasAnyBankDetail ? {
+          ...(cancelRefundMethod === "BANK" && hasAnyBankDetail ? {
             bankName: cancelBankDetails.bankName.trim(),
             bankCode: cancelBankDetails.bankCode.trim() || undefined,
             bankAccountName: cancelBankDetails.bankAccountName.trim(),
@@ -624,10 +668,13 @@ export default function BookingListWorkspace() {
         },
       }).unwrap();
       const cancellationStatus = response?.result?.status;
+      const actualRefundMethod = response?.result?.refundMethod ?? cancelRefundMethod;
       const refundMessage = cancellationStatus === "REFUND_BANK_DETAILS_REQUIRED"
         ? " Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn tiền."
         : cancellationStatus === "REFUND_REVIEW_PENDING"
         ? " Booking đã hủy; yêu cầu hoàn tiền đang chờ quản lý duyệt."
+        : cancellationStatus === "REFUNDED" && actualRefundMethod === "CASH"
+        ? " Booking đã hủy và đã ghi nhận hoàn tiền mặt cho khách."
         : cancellationStatus === "NO_REFUND_REQUIRED"
         ? " Booking đã hủy; không phát sinh tiền hoàn."
         : " Booking đã hủy thành công.";
@@ -635,6 +682,8 @@ export default function BookingListWorkspace() {
       setSelectedBooking(null);
       setShowCancelConfirmation(false);
       setCancelReason("");
+      setCancelRefundMethod("BANK");
+      setCashRefundConfirmed(false);
       setCancelRefundEmail("");
       setCancelBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
     } catch (error: unknown) {
@@ -919,6 +968,14 @@ export default function BookingListWorkspace() {
                       <span className="font-semibold text-amber-700">{money(earlyCheckinFeeTotal)}</span>
                     </div>
                     <div className="flex justify-between text-slate-600">
+                      <span>{localizedText("Tổng phụ thu check-out trễ:", "Late check-out surcharge:")}</span>
+                      <span className="font-semibold text-amber-700">{money(lateCheckoutFeeTotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>{localizedText("Tổng phụ thu khác:", "Other surcharges:")}</span>
+                      <span className="font-semibold text-amber-700">{money(otherSurchargesTotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
                       <span>{localizedText("Tổng giảm giá phòng:", "Room discount:")}</span>
                       <span className="font-semibold text-rose-600">{money(valueOf(selectedBooking, ["discountRoomAmount", "roomDiscountAmount"]))}</span>
                     </div>
@@ -987,31 +1044,68 @@ export default function BookingListWorkspace() {
                         const bookingCheckOutTime = detail.checkOutTime ?? null;
                         const extraFeeValue = detail.extraAdultFeePerNight ?? detail.extraAdultFee ?? detail.extraCharge ?? detail.surcharge ?? detail.additionalFee ?? 0;
                         const earlyCheckinFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
-                        const roomSubtotalWithEarlyCheckin = roomSubtotal + (Number.isFinite(earlyCheckinFee) ? earlyCheckinFee : 0);
+                        const lateCheckoutFee = Number(detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee ?? 0);
+                        const otherSurcharges = Number(detail.otherSurcharges ?? 0);
+                        const roomSubtotalWithSurcharges = roomSubtotal
+                          + (Number.isFinite(earlyCheckinFee) ? earlyCheckinFee : 0)
+                          + (Number.isFinite(lateCheckoutFee) ? lateCheckoutFee : 0)
+                          + (Number.isFinite(otherSurcharges) ? otherSurcharges : 0);
+                        const serviceSubtotal = serviceRequests.reduce((total, serviceRequest) => {
+                          const serviceId = String(serviceRequest.serviceId ?? serviceRequest.id ?? "");
+                          const service = hotelServices.find((item) => String(item.id) === serviceId);
+                          const quantity = Number(serviceRequest.quantity ?? 1);
+                          const price = Number(serviceRequest.price ?? service?.price ?? 0);
+                          const subTotal = serviceRequest.subTotal == null
+                            ? Number.NaN
+                            : Number(serviceRequest.subTotal);
+                          return total + (Number.isFinite(subTotal) ? subTotal : price * quantity);
+                        }, 0);
+                        const detailSubtotal = roomSubtotalWithSurcharges + serviceSubtotal;
                         const hasValue = (value: unknown) => Boolean(value !== null && value !== undefined && String(value).trim() && String(value).toUpperCase() !== "NULL");
                         const hasActualCheckInValue = hasValue(actualCheckInTime);
                         const hasActualCheckOutValue = hasValue(actualCheckOutTime);
                         const hasBookingCheckInValue = hasValue(bookingCheckInTime);
                         const hasBookingCheckOutValue = hasValue(bookingCheckOutTime);
                         const hasEarlyCheckinFeeValue = Number.isFinite(earlyCheckinFee) && earlyCheckinFee > 0;
+                        const hasLateCheckoutFeeValue = Number.isFinite(lateCheckoutFee) && lateCheckoutFee > 0;
+                        const hasOtherSurchargesValue = Number.isFinite(otherSurcharges) && otherSurcharges > 0;
+                        const roomStatus = String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").trim().toUpperCase();
+                        const isRoomStayCompleted = roomStatus === "CHECKED_OUT";
                         return <div key={idx} className="rounded-lg border border-slate-200 p-3 text-xs text-slate-700 bg-white">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="font-bold text-slate-800">{localizedText("Phòng", "Room")}: {String(detail.roomNumber ?? detail.roomId ?? "-")}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-bold text-slate-800">{localizedText("Phòng", "Room")}: {String(detail.roomNumber ?? detail.roomId ?? "-")}</p>
+                                {isRoomStayCompleted && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                    <Check size={12} aria-hidden="true" />
+                                    {localizedText("Đã hoàn thành", "Completed")}
+                                  </span>
+                                )}
+                              </div>
                               {roomName && <p className="mt-0.5 text-slate-500">{localizedText("Loại phòng", "Room type")}: {roomName}</p>}
                             </div>
-                            {(detail.roomSubTotal !== undefined || detail.roomSubtotal !== undefined || hasEarlyCheckinFeeValue) && <strong className="shrink-0 text-blue-700">{localizedText("Tạm tính", "Subtotal")}: {money(roomSubtotalWithEarlyCheckin)}</strong>}
+                            {(detail.roomSubTotal !== undefined || detail.roomSubtotal !== undefined || hasEarlyCheckinFeeValue || hasLateCheckoutFeeValue || hasOtherSurchargesValue || serviceRequests.length > 0) && (
+                              <div className="shrink-0 text-right">
+                                <strong className="text-blue-700">{localizedText("Tạm tính", "Subtotal")}: {money(detailSubtotal)}</strong>
+                                <p className="mt-0.5 text-[10px] text-slate-500">
+                                  {localizedText("Phòng + phụ thu", "Room + surcharges")} {money(roomSubtotalWithSurcharges)} + {localizedText("dịch vụ", "services")} {money(serviceSubtotal)}
+                                </p>
+                              </div>
+                            )}
                           </div>
                           <div className="mt-1 flex flex-wrap justify-between gap-2 text-slate-500">
                             {hasBookingCheckInValue && <span>{localizedText("Nhận", "Check-in")}: {formatDate(bookingCheckInTime)}</span>}
                             {hasBookingCheckOutValue && <span>{localizedText("Trả", "Check-out")}: {formatDate(bookingCheckOutTime)}</span>}
                           </div>
-                          {(hasActualCheckInValue || hasActualCheckOutValue || Number(extraFeeValue) > 0 || hasEarlyCheckinFeeValue) && (
+                          {(hasActualCheckInValue || hasActualCheckOutValue || Number(extraFeeValue) > 0 || hasEarlyCheckinFeeValue || hasLateCheckoutFeeValue || hasOtherSurchargesValue) && (
                             <div className="mt-1 grid gap-1 text-slate-500">
                               {hasActualCheckInValue && <div className="flex justify-between gap-3"><span>{localizedText("Check-in thực tế", "Actual check-in")}: {formatDate(actualCheckInTime)}</span></div>}
                               {hasActualCheckOutValue && <div className="flex justify-between gap-3"><span>{localizedText("Check-out thực tế", "Actual check-out")}: {formatDate(actualCheckOutTime)}</span></div>}
                               {Number(extraFeeValue) > 0 && <div className="flex justify-between gap-3"><span>{localizedText("Phụ thu", "Surcharge")}: {money(extraFeeValue)}</span></div>}
                               {hasEarlyCheckinFeeValue && <div className="flex justify-between gap-3"><span>{localizedText("Phí check-in sớm", "Early check-in fee")}: {money(earlyCheckinFee)}</span></div>}
+                              {hasLateCheckoutFeeValue && <div className="flex justify-between gap-3 text-amber-700"><span>{localizedText("Phí check-out trễ", "Late check-out fee")}: {money(lateCheckoutFee)}</span></div>}
+                              {hasOtherSurchargesValue && <div className="flex justify-between gap-3 text-amber-700"><span>{localizedText("Phụ thu khác", "Other surcharges")}: {money(otherSurcharges)}</span></div>}
                             </div>
                           )}
                           {roomPricePerNight !== undefined && <p className="mt-1 text-slate-500">{localizedText("Giá phòng/đêm", "Room rate/night")}: {money(roomPricePerNight)}</p>}
@@ -1019,10 +1113,11 @@ export default function BookingListWorkspace() {
                             <p className="font-semibold text-slate-600">{localizedText("Dịch vụ", "Services")} ({serviceRequests.length})</p>
                             {serviceRequests.length > 0 ? (
                               <div className="mt-1">
-                                <div className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] gap-3 border-b border-slate-100 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                                <div className="grid grid-cols-[minmax(0,1fr)_3rem_5rem_6rem] gap-3 border-b border-slate-100 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                   <span>{localizedText("Tên dịch vụ", "Service")}</span>
                                   <span className="text-right">{localizedText("Số lượng", "Quantity")}</span>
                                   <span className="text-right">{localizedText("Đơn giá", "Unit price")}</span>
+                                  <span className="text-right">{localizedText("Thành tiền", "Amount")}</span>
                                 </div>
                                 <div className="space-y-1">
                                 {serviceRequests.map((serviceRequest, serviceIndex) => {
@@ -1031,11 +1126,13 @@ export default function BookingListWorkspace() {
                                   const serviceName = String(serviceRequest.serviceName ?? serviceRequest.name ?? service?.name ?? `Dịch vụ #${serviceId || serviceIndex + 1}`);
                                   const quantity = Number(serviceRequest.quantity ?? 1);
                                   const price = serviceRequest.price ?? service?.price;
+                                  const subTotal = Number(serviceRequest.subTotal ?? Number(price ?? 0) * quantity);
                                   const usedAt = serviceRequest.used === true ? serviceRequest.usedAt : null;
-                                  return <div key={`${serviceId}-${serviceIndex}`} className="grid grid-cols-[minmax(0,1fr)_5rem_6rem] items-center gap-3 border-b border-slate-50 py-1 last:border-0 text-slate-500">
+                                  return <div key={`${serviceId}-${serviceIndex}`} className="grid grid-cols-[minmax(0,1fr)_3rem_5rem_6rem] items-center gap-3 border-b border-slate-50 py-1 last:border-0 text-slate-500">
                                     <span className="min-w-0 truncate" title={usedAt ? `${localizedText("Dùng", "Used")}: ${formatDate(usedAt)}` : undefined}>{serviceName}</span>
                                     <span className="whitespace-nowrap text-right tabular-nums">{quantity}</span>
                                     <strong className="whitespace-nowrap text-right tabular-nums text-blue-700">{price !== undefined ? money(Number(price)) : "-"}</strong>
+                                    <strong className="whitespace-nowrap text-right tabular-nums text-slate-700">{Number.isFinite(subTotal) ? money(subTotal) : "-"}</strong>
                                   </div>;
                                 })}
                                 </div>
@@ -1177,6 +1274,8 @@ export default function BookingListWorkspace() {
                       type="button"
                       onClick={() => {
                         setCancelReason("");
+                        setCancelRefundMethod("BANK");
+                        setCashRefundConfirmed(false);
                         setCancelRefundEmail("");
                         setCancelBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
                         setCancelError("");
@@ -1249,10 +1348,54 @@ export default function BookingListWorkspace() {
                   {localizedText("Xác nhận hủy booking", "Confirm booking cancellation")} {bookingId(selectedBooking)}
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {localizedText("Booking và các phòng sẽ được hủy ngay. Nếu có tiền cần hoàn, yêu cầu sẽ chờ quản lý xử lý; nhân viên có thể nhập thông tin ngân hàng khách cung cấp bên dưới, khách không cần tài khoản web.", "The booking and its rooms will be cancelled immediately. Any refund request will await manager review. Staff can enter the guest's bank details below; the guest does not need a web account.")}
+                  {localizedText("Chọn cách hoàn tiền cho khách. Hoàn tiền mặt sẽ được ghi nhận ngay sau khi xác nhận đã giao tiền; hoàn vào tài khoản sẽ chờ quản lý duyệt và chuyển khoản.", "Choose how to refund the guest. Cash is recorded immediately after confirming it was handed over; bank refunds await manager approval and transfer.")}
                 </p>
               </div>
             </div>
+
+            <fieldset className="mt-5">
+              <legend className="text-sm font-semibold text-slate-700">{localizedText("Phương thức hoàn tiền", "Refund method")}</legend>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
+                  cancelRefundMethod === "CASH" ? "border-emerald-300 bg-emerald-50" : "border-slate-200"
+                }`}>
+                  <input
+                    type="radio"
+                    name="cancelRefundMethod"
+                    value="CASH"
+                    checked={cancelRefundMethod === "CASH"}
+                    onChange={() => {
+                      setCancelRefundMethod("CASH");
+                      setCashRefundConfirmed(false);
+                    }}
+                    className="mt-1 accent-emerald-600"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-800">{localizedText("Tiền mặt tại khách sạn", "Cash at hotel")}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{localizedText("Nhân viên giao tiền trực tiếp và xác nhận ngay.", "Hand cash directly to the guest and confirm immediately.")}</span>
+                  </span>
+                </label>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
+                  cancelRefundMethod === "BANK" ? "border-blue-300 bg-blue-50" : "border-slate-200"
+                }`}>
+                  <input
+                    type="radio"
+                    name="cancelRefundMethod"
+                    value="BANK"
+                    checked={cancelRefundMethod === "BANK"}
+                    onChange={() => {
+                      setCancelRefundMethod("BANK");
+                      setCashRefundConfirmed(false);
+                    }}
+                    className="mt-1 accent-blue-600"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-800">{localizedText("Chuyển khoản vào tài khoản", "Refund to bank account")}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{localizedText("Quản lý duyệt rồi nhân viên chuyển khoản.", "Manager approves, then staff complete the transfer.")}</span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
 
             <label className="mt-5 block text-sm font-semibold text-slate-700">
               {localizedText("Lý do hủy (không bắt buộc)", "Cancellation reason (optional)")}
@@ -1267,11 +1410,45 @@ export default function BookingListWorkspace() {
             </label>
 
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-              <p className="text-sm font-semibold text-slate-800">{localizedText("Thông tin nhận tiền hoàn (không bắt buộc)", "Refund recipient information (optional)")}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {localizedText("Hỏi khách và nhập tại đây. Nếu khách vãng lai, nhập email để gửi xác nhận hủy và thông báo hoàn tiền. Nếu chưa có thông tin lúc hủy, có thể bổ sung trong trang Phê duyệt hoàn tiền.", "Ask the guest for these details and enter them here. For walk-in guests, enter an email to send the cancellation and refund updates. Details can also be added later on the Refund Approvals page.")}
-              </p>
-              <label className="mt-3 block text-xs font-semibold text-slate-600">
+              {cancelRefundMethod === "BANK" && (
+                <>
+                  <p className="text-sm font-semibold text-slate-800">{localizedText("Thông tin tài khoản nhận hoàn (không bắt buộc)", "Refund bank account (optional)")}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {localizedText("Hỏi khách và nhập tại đây. Nếu khách vãng lai, nhập email để gửi xác nhận hủy và thông báo hoàn tiền. Nếu chưa có thông tin lúc hủy, có thể bổ sung trong trang Phê duyệt hoàn tiền.", "Ask the guest for these details and enter them here. For walk-in guests, enter an email to send the cancellation and refund updates. Details can also be added later on the Refund Approvals page.")}
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <BankSelectionField
+                      bankName={cancelBankDetails.bankName}
+                      bankCode={cancelBankDetails.bankCode}
+                      onChange={(bankName, bankCode) =>
+                        setCancelBankDetails((current) => ({ ...current, bankName, bankCode }))
+                      }
+                    />
+                    <label className="text-xs font-semibold text-slate-600">
+                      {localizedText("Tên chủ tài khoản", "Account holder name")}
+                      <input
+                        value={cancelBankDetails.bankAccountName}
+                        onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountName: event.target.value }))}
+                        maxLength={120}
+                        placeholder={localizedText("Tên in trên tài khoản", "Name as shown on account")}
+                        className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                      />
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">
+                      {localizedText("Số tài khoản", "Account number")}
+                      <input
+                        inputMode="numeric"
+                        value={cancelBankDetails.bankAccountNumber}
+                        onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountNumber: event.target.value }))}
+                        maxLength={50}
+                        placeholder={localizedText("6–50 chữ số", "6–50 digits")}
+                        className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
+              <label className={`${cancelRefundMethod === "BANK" ? "mt-3" : ""} block text-xs font-semibold text-slate-600`}>
                 {localizedText("Email khách nhận thông báo (không bắt buộc)", "Guest notification email (optional)")}
                 <input
                   type="email"
@@ -1282,36 +1459,17 @@ export default function BookingListWorkspace() {
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
                 />
               </label>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <BankSelectionField
-                  bankName={cancelBankDetails.bankName}
-                  bankCode={cancelBankDetails.bankCode}
-                  onChange={(bankName, bankCode) =>
-                    setCancelBankDetails((current) => ({ ...current, bankName, bankCode }))
-                  }
-                />
-                <label className="text-xs font-semibold text-slate-600">
-                  {localizedText("Tên chủ tài khoản", "Account holder name")}
+              {cancelRefundMethod === "CASH" && (
+                <label className="mt-3 flex items-start gap-2 text-xs font-medium text-slate-700">
                   <input
-                    value={cancelBankDetails.bankAccountName}
-                    onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountName: event.target.value }))}
-                    maxLength={120}
-                    placeholder={localizedText("Tên in trên tài khoản", "Name as shown on account")}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+                    type="checkbox"
+                    checked={cashRefundConfirmed}
+                    onChange={(event) => setCashRefundConfirmed(event.target.checked)}
+                    className="mt-0.5 accent-emerald-600"
                   />
+                  {localizedText("Nếu có khoản hoàn, tôi xác nhận đã giao trực tiếp khoản tiền đó cho khách.", "If a refund is due, I confirm that I handed it directly to the guest.")}
                 </label>
-                <label className="text-xs font-semibold text-slate-600">
-                  {localizedText("Số tài khoản", "Account number")}
-                  <input
-                    inputMode="numeric"
-                    value={cancelBankDetails.bankAccountNumber}
-                    onChange={(event) => setCancelBankDetails((current) => ({ ...current, bankAccountNumber: event.target.value }))}
-                    maxLength={50}
-                    placeholder={localizedText("6–50 chữ số", "6–50 digits")}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
-                  />
-                </label>
-              </div>
+              )}
             </div>
 
             {cancelError && (

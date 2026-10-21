@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { CalendarCheck, CalendarDays, ClipboardCheck, ConciergeBell, DoorOpen, FileText, LayoutDashboard, LogOut, Settings, ShieldCheck, Tag, UserRound, Users, WalletCards, ChevronDown, PanelLeftClose } from "lucide-react";
+import { CalendarCheck, CalendarDays, ClipboardCheck, ClipboardList, ConciergeBell, DoorOpen, FileText, LayoutDashboard, LogOut, Settings, ShieldCheck, Tag, UserRound, Users, WalletCards, ChevronDown, PanelLeftClose } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
@@ -96,6 +96,9 @@ export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, 
         </div>
         <Link to="/refund-approvals" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
           <ClipboardCheck size={17} />{t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}
+        </Link>
+        <Link to="/hotel-rules" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/hotel-rules" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+          <ClipboardList size={17} />{t("navigation.hotelRules", "Nội quy khách sạn")}
         </Link>
         <div className={`rounded-xl ${roomsActive ? "bg-blue-900/50" : ""}`}>
           <div className={`flex items-center rounded-xl text-sm font-medium ${roomsActive ? "text-white" : "text-slate-400"}`}>
