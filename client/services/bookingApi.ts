@@ -67,6 +67,7 @@ export type BookingListItem = {
   remainingAmount?: number;
   customerDueAmount?: number;
   finalAmount?: number;
+  surchargeTotalAmount?: number;
   bookingDetails?: Record<string, unknown>[];
   [key: string]: unknown;
 };

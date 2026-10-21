@@ -22,6 +22,7 @@ export type DailyRecord = {
   roomAmount?: number;
   totalAmount?: number;
   earlyCheckInFee?: number;
+  otherSurcharges?: number;
   estimatedEarlyCheckInFee?: number;
   remainingAmount?: number;
   surplusAmount?: number;

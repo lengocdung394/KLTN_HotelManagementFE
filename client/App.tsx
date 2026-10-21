@@ -76,6 +76,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={onLogout} />} />
         <Route path="/booking-list" element={<ModulePage path="/booking-list" onLogout={onLogout} />} />
         <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
+        <Route path="/hotel-rules" element={<ModulePage path="/hotel-rules" onLogout={onLogout} />} />
         <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
         <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />
         <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={onLogout} />} />
@@ -98,6 +99,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
       <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={onLogout} />} />
       <Route path="/booking-list" element={<ModulePage path="/booking-list" onLogout={onLogout} />} />
       <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
+      <Route path="/hotel-rules" element={<ModulePage path="/hotel-rules" onLogout={onLogout} />} />
       <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
       <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />
       <Route path="/promotions" element={<ModulePage path="/promotions" onLogout={onLogout} />} />

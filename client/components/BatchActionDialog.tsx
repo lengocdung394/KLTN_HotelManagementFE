@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
 import CheckoutSummary, { getCheckoutOutstandingAmount, type CheckoutSummaryRoom } from "./CheckoutSummary";
 import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from "./CheckoutSurplusRefundChoice";
+import CheckoutUnusedServicesWarning, { type CheckoutUnusedService } from "./CheckoutUnusedServicesWarning";
 
 type BatchActionRoom = {
   id: string;
@@ -24,6 +25,9 @@ type BatchActionDialogProps = {
   checkoutSummaryRooms?: CheckoutSummaryRoom[];
   checkoutRefundMethods?: Record<string, CheckoutSurplusRefundMethod>;
   onCheckoutRefundMethodChange?: (bookingId: string, method: CheckoutSurplusRefundMethod) => void;
+  checkoutUnusedServices?: CheckoutUnusedService[];
+  isCancellingUnusedServices?: boolean;
+  onCancelUnusedServices?: () => void;
 };
 
 const formatMoney = (amount: number, language: string) => `${amount.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
@@ -39,6 +43,9 @@ export default function BatchActionDialog({
   checkoutSummaryRooms,
   checkoutRefundMethods = {},
   onCheckoutRefundMethodChange,
+  checkoutUnusedServices = [],
+  isCancellingUnusedServices = false,
+  onCancelUnusedServices,
 }: BatchActionDialogProps) {
   const { i18n } = useTranslation();
   const language = i18n.language;
@@ -112,9 +119,16 @@ export default function BatchActionDialog({
           {localizedText(`Khách còn phải thanh toán ${formatMoney(outstandingAmount, language)} trước khi check-out.`, `The guest must pay ${formatMoney(outstandingAmount, language)} before check-out.`)}
         </p>
       )}
+      {!isCheckIn && (
+        <CheckoutUnusedServicesWarning
+          services={checkoutUnusedServices}
+          isCancelling={isCancellingUnusedServices}
+          onCancel={() => onCancelUnusedServices?.()}
+        />
+      )}
       <div className="mt-6 flex justify-end gap-3">
         <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">{localizedText("Hủy", "Cancel")}</button>
-        {isCheckIn ? <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">{localizedText("Đóng", "Close")}</button> : <button type="button" disabled={selectedRooms.length === 0 || outstandingAmount > 0 || !allRefundMethodsSelected} onClick={onConfirm} className="flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><CreditCard size={16} />{localizedText("Thanh toán & Check-out", "Pay & Check out")}</button>}
+        {isCheckIn ? <button type="button" onClick={onClose} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white">{localizedText("Đóng", "Close")}</button> : <button type="button" disabled={selectedRooms.length === 0 || outstandingAmount > 0 || !allRefundMethodsSelected || checkoutUnusedServices.length > 0 || isCancellingUnusedServices} onClick={onConfirm} className="flex items-center gap-2 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><CreditCard size={16} />{localizedText("Thanh toán & Check-out", "Pay & Check out")}</button>}
       </div>
     </div>
   </div>;

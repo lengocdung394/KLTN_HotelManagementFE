@@ -77,6 +77,8 @@ export type ManagementBookingModificationRequest = {
 
 export type ManagementBookingCancellationRequest = {
   reason?: string;
+  refundMethod?: "CASH" | "BANK";
+  cashRefundConfirmed?: boolean;
   bankName?: string;
   bankCode?: string;
   bankAccountName?: string;
@@ -98,6 +100,7 @@ export type CheckoutRefundStatus = "PENDING" | "APPROVED" | "REFUNDED";
 export type CheckoutRefund = {
   id: string;
   bookingId: string;
+  bookingChannel?: BookingChannel | null;
   customerName?: string | null;
   customerPhone?: string | null;
   paidAmount: number;
@@ -122,6 +125,7 @@ export type BookingCancellation = {
   customerName?: string | null;
   customerPhone?: string | null;
   status: BookingCancellationStatus;
+  refundMethod?: "CASH" | "BANK" | null;
   reason?: string | null;
   paidAmount?: number;
   refundAmount: number;

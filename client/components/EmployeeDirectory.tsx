@@ -1,10 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Eye, EyeOff, Pencil, Plus, Upload, UserRound, X } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, EyeOff, Filter, Pencil, Plus, Search, Upload, UserRound, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { uploadEmployeeImageToCloudinary, uploadImagesToCloudinary } from "../services/cloudinaryUploadApi";
 import {
   useCreateEmployeeMutation,
-  useGetEmployeesByHotelQuery,
+  useGetMyHotelEmployeesQuery,
   useUpdateEmployeeMutation,
   type EmployeeRecord,
   type UpdateEmployeeRequest,
@@ -65,11 +65,15 @@ export default function EmployeeDirectory() {
   const { hotelId, hotelName, roles, position } = useAppSelector((state) => state.auth);
   const numericHotelId = hotelId ? Number(hotelId) : NaN;
   const hasHotelId = Number.isSafeInteger(numericHotelId) && numericHotelId > 0;
-  const { data: employees = [], isLoading, isError } = useGetEmployeesByHotelQuery(numericHotelId, { skip: !hasHotelId });
+  const { data: employees = [], isLoading, isError, error } = useGetMyHotelEmployeesQuery();
   const [createEmployee, { isLoading: isSaving }] = useCreateEmployeeMutation();
   const [updateEmployee, { isLoading: isUpdatingEmployee }] = useUpdateEmployeeMutation();
   const canManageBranchEmployees = isBranchManagerOrAdmin(roles, position);
   const [addOpen, setAddOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [positionFilter, setPositionFilter] = useState("all");
+  const [isAddingEmployee, setIsAddingEmployee] = useState(false);
+  const addEmployeeInProgress = useRef(false);
   const [name, setName] = useState("");
   const [role, setRole] = useState("Lễ tân");
   const [email, setEmail] = useState("");
@@ -97,6 +101,21 @@ export default function EmployeeDirectory() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [editError, setEditError] = useState("");
+  const filteredEmployees = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    return employees.filter((employee) => {
+      const matchesPosition = positionFilter === "all" || getEditablePosition(employee.position) === positionFilter;
+      if (!matchesPosition) return false;
+      if (!normalizedQuery) return true;
+      return [
+        employee.fullName,
+        employee.email,
+        employee.phone,
+        employee.cccd,
+        employee.position,
+      ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
+    });
+  }, [employees, positionFilter, searchQuery]);
 
   useEffect(() => () => {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
@@ -115,7 +134,7 @@ export default function EmployeeDirectory() {
   };
 
   const closeForm = () => {
-    if (isSaving) return;
+    if (isAddingEmployee || isSaving) return;
     setAddOpen(false);
     resetForm();
   };
@@ -145,6 +164,7 @@ export default function EmployeeDirectory() {
 
   const addEmployee = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (addEmployeeInProgress.current) return;
     if (!hasHotelId) {
       setSaveError("Không xác định được chi nhánh làm việc. Vui lòng đăng nhập lại hoặc liên hệ quản trị viên.");
       return;
@@ -153,6 +173,8 @@ export default function EmployeeDirectory() {
       setSaveError("Vui lòng chọn ảnh nhân viên.");
       return;
     }
+    addEmployeeInProgress.current = true;
+    setIsAddingEmployee(true);
     setSaveError("");
     try {
       const avatarUrl = await uploadEmployeeImageToCloudinary(imageFile, hotelName || `chi-nhanh-${numericHotelId}`);
@@ -171,6 +193,9 @@ export default function EmployeeDirectory() {
       resetForm();
     } catch (error) {
       setSaveError(getErrorMessage(error));
+    } finally {
+      addEmployeeInProgress.current = false;
+      setIsAddingEmployee(false);
     }
   };
 
@@ -312,13 +337,52 @@ export default function EmployeeDirectory() {
   };
 
   return <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-    <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><UserRound size={18} className="text-blue-600" /><h3 className="font-bold text-slate-900">Danh sách nhân viên</h3></div><p className="mt-1 text-sm text-slate-500">{employees.length} nhân viên đang làm việc tại chi nhánh.</p></div>{canManageBranchEmployees && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setIsBulkImportOpen(true)} className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Upload size={15} />Thêm bằng Excel</button><button type="button" onClick={() => setAddOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"><Plus size={15} />Thêm nhân viên</button></div>}</div>
-    {addOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeForm}><form onSubmit={addEmployee} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between border-b border-slate-100 pb-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Nhân viên</p><h3 className="mt-1 text-xl font-bold text-slate-900">Thêm nhân viên</h3><p className="mt-1 text-sm text-slate-500">Ảnh được tải trực tiếp từ trình duyệt lên Cloudinary theo thư mục chi nhánh.</p></div><button type="button" onClick={closeForm} className="text-2xl leading-none text-slate-400" aria-label="Đóng"><X size={20} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-slate-700 sm:col-span-2">Ảnh nhân viên <span className="text-red-500">*</span><input type="file" accept="image/jpeg,image/png,image/webp" required disabled={isSaving} onChange={(event) => selectImage(event.target.files?.[0])} className="mt-1.5 block h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700" />{imagePreview && <img src={imagePreview} alt="Xem trước ảnh nhân viên" className="mt-3 h-24 w-24 rounded-xl object-cover" />}</label><label className="text-sm font-semibold text-slate-700">Họ và tên <span className="text-red-500">*</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nhập họ và tên" required autoFocus disabled={isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">Chức vụ <span className="text-red-500">*</span><select value={role} onChange={(event) => setRole(event.target.value)} required disabled={isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"><option value={EMPLOYEE_ROLES[0]}>{EMPLOYEE_ROLES[0]}</option><option value={EMPLOYEE_ROLES[1]}>{EMPLOYEE_ROLES[1]}</option><option value={EMPLOYEE_ROLES[2]}>{EMPLOYEE_ROLES[2]}</option></select></label><label className="text-sm font-semibold text-slate-700">Email <span className="text-red-500">*</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@senviet.vn" required disabled={isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">CCCD <span className="text-red-500">*</span><input value={identityNumber} onChange={(event) => setIdentityNumber(event.target.value)} placeholder="Nhập số CCCD" required disabled={isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">Số điện thoại <span className="text-red-500">*</span><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="090 123 4567" required disabled={isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700 sm:col-span-2">Địa chỉ <span className="text-red-500">*</span><textarea value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Nhập địa chỉ hiện tại" required rows={3} disabled={isSaving} className="mt-1.5 w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-normal outline-none focus:border-blue-400" /></label></div>{saveError && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</p>}<div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={closeForm} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">Hủy</button><button type="submit" disabled={isSaving} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isSaving ? "Đang lưu..." : "Lưu nhân viên"}</button></div></form></div>}
-    {!hasHotelId && <p className="p-5 text-sm text-amber-700">Không xác định được chi nhánh để tải danh sách nhân viên.</p>}
-    {hasHotelId && isLoading && <p className="p-5 text-sm text-slate-500">Đang tải danh sách nhân viên...</p>}
-    {hasHotelId && isError && <p role="alert" className="p-5 text-sm text-red-700">Không thể tải danh sách nhân viên. Vui lòng tải lại trang hoặc thử lại sau.</p>}
-    {hasHotelId && !isLoading && !isError && <div className="overflow-x-auto">
-      {employees.length ? <table className="w-full min-w-[560px] border-collapse text-left">
+    <div className="border-b border-slate-100 p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2"><UserRound size={18} className="text-blue-600" /><h3 className="font-bold text-slate-900">Danh sách nhân viên</h3></div>
+          <p className="mt-1 text-sm text-slate-500">
+            {searchQuery || positionFilter !== "all"
+              ? `Hiển thị ${filteredEmployees.length}/${employees.length} nhân viên.`
+              : `${employees.length} nhân viên đang làm việc tại chi nhánh.`}
+          </p>
+        </div>
+        {canManageBranchEmployees && <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setIsBulkImportOpen(true)} className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Upload size={15} />Thêm bằng Excel</button>
+          <button type="button" onClick={() => setAddOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"><Plus size={15} />Thêm nhân viên</button>
+        </div>}
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+        <label className="relative block">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Tìm theo tên, email, SĐT hoặc CCCD..."
+            aria-label="Tìm nhân viên"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <label className="relative block">
+          <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <select
+            value={positionFilter}
+            onChange={(event) => setPositionFilter(event.target.value)}
+            aria-label="Lọc theo chức vụ"
+            className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          >
+            <option value="all">Tất cả chức vụ</option>
+            {EMPLOYEE_ROLES.map((employeeRole) => <option key={employeeRole} value={employeeRole}>{employeeRole}</option>)}
+          </select>
+        </label>
+      </div>
+    </div>
+    {addOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeForm}><form onSubmit={addEmployee} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between border-b border-slate-100 pb-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Nhân viên</p><h3 className="mt-1 text-xl font-bold text-slate-900">Thêm nhân viên</h3><p className="mt-1 text-sm text-slate-500">Ảnh được tải trực tiếp từ trình duyệt lên Cloudinary theo thư mục chi nhánh.</p></div><button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="text-2xl leading-none text-slate-400 disabled:opacity-50" aria-label="Đóng"><X size={20} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-slate-700 sm:col-span-2">Ảnh nhân viên <span className="text-red-500">*</span><input type="file" accept="image/jpeg,image/png,image/webp" required disabled={isAddingEmployee || isSaving} onChange={(event) => selectImage(event.target.files?.[0])} className="mt-1.5 block h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700" />{imagePreview && <img src={imagePreview} alt="Xem trước ảnh nhân viên" className="mt-3 h-24 w-24 rounded-xl object-cover" />}</label><label className="text-sm font-semibold text-slate-700">Họ và tên <span className="text-red-500">*</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nhập họ và tên" required autoFocus disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">Chức vụ <span className="text-red-500">*</span><select value={role} onChange={(event) => setRole(event.target.value)} required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"><option value={EMPLOYEE_ROLES[0]}>{EMPLOYEE_ROLES[0]}</option><option value={EMPLOYEE_ROLES[1]}>{EMPLOYEE_ROLES[1]}</option><option value={EMPLOYEE_ROLES[2]}>{EMPLOYEE_ROLES[2]}</option></select></label><label className="text-sm font-semibold text-slate-700">Email <span className="text-red-500">*</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@senviet.vn" required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">CCCD <span className="text-red-500">*</span><input value={identityNumber} onChange={(event) => setIdentityNumber(event.target.value)} placeholder="Nhập số CCCD" required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">Số điện thoại <span className="text-red-500">*</span><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="090 123 4567" required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700 sm:col-span-2">Địa chỉ <span className="text-red-500">*</span><textarea value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Nhập địa chỉ hiện tại" required rows={3} disabled={isAddingEmployee || isSaving} className="mt-1.5 w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-normal outline-none focus:border-blue-400" /></label></div>{saveError && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</p>}<div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">Hủy</button><button type="submit" disabled={isAddingEmployee || isSaving} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isAddingEmployee || isSaving ? "Đang lưu..." : "Lưu nhân viên"}</button></div></form></div>}
+    {isLoading && <p className="p-5 text-sm text-slate-500">Đang tải danh sách nhân viên...</p>}
+    {isError && <p role="alert" className="p-5 text-sm text-red-700">Không thể tải danh sách nhân viên{typeof error === "object" && error !== null && "status" in error ? ` (HTTP ${String(error.status)})` : ""}. Vui lòng kiểm tra tài khoản chi nhánh hoặc thử tải lại.</p>}
+    {!isLoading && !isError && <div className="overflow-x-auto">
+      {filteredEmployees.length ? <table className="w-full min-w-[560px] border-collapse text-left">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
             <th scope="col" className="px-5 py-3 font-semibold">Tên nhân viên</th>
@@ -327,7 +391,7 @@ export default function EmployeeDirectory() {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {employees.map((employee) => <tr key={employee.id} className="hover:bg-slate-50/70">
+          {filteredEmployees.map((employee) => <tr key={employee.id} className="hover:bg-slate-50/70">
             <td className="px-5 py-3">
               <div className="flex min-w-0 items-center gap-3">
                 {employee.avatarUrl
@@ -345,7 +409,9 @@ export default function EmployeeDirectory() {
             </td>
           </tr>)}
         </tbody>
-      </table> : <p className="px-5 py-5 text-sm text-slate-500">Chưa có nhân viên nào được ghi nhận tại chi nhánh này.</p>}
+      </table> : employees.length
+        ? <p className="px-5 py-5 text-sm text-slate-500">Không tìm thấy nhân viên phù hợp. Hãy thử từ khóa hoặc bộ lọc khác.</p>
+        : <p className="px-5 py-5 text-sm text-slate-500">Chưa có nhân viên nào được ghi nhận tại chi nhánh này.</p>}
     </div>}
     {importRows.length > 0 && <div className="border-t border-slate-100 p-5"><div className="flex items-center justify-between gap-2"><h4 className="text-sm font-bold text-slate-800">Kết quả nhập file</h4><span className="text-xs text-slate-500">{importRows.filter((row) => row.passed && row.message === "Đã tạo tài khoản thành công.").length} thành công · {importRows.filter((row) => !row.passed).length} cần kiểm tra</span></div><div className="mt-3 max-h-56 space-y-2 overflow-y-auto">{importRows.map((row) => <div key={row.rowNumber} className={`rounded-lg px-3 py-2 text-xs ${row.passed ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}><span className="font-semibold">Dòng {row.rowNumber} · {row.fullName}:</span> {row.message || "Hợp lệ."}</div>)}</div></div>}
     <BulkImportDialog

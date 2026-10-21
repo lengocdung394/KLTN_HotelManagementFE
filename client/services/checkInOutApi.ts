@@ -39,6 +39,7 @@ export type CheckInOutBookingDetail = {
   lateCheckOutFee?: number | string;
   lateCheckoutFee?: number | string;
   lateFee?: number | string;
+  otherSurcharges?: number | string;
   serviceSubTotal?: number;
   totalPrice?: number;
   paidAmount?: number | string;
