@@ -38,6 +38,13 @@ const roomStatusColors: Record<string, string> = {
   MAINTENANCE: "#f17b83",
 };
 
+const roomTypeLabels: Record<string, string> = {
+  STANDARD: "Phòng Tiêu chuẩn",
+  DELUXE: "Phòng Cao cấp",
+  SUITE: "Phòng Thượng hạng",
+  FAMILY: "Phòng Gia đình",
+};
+
 export default function ReportWorkspace() {
   const { t } = useTranslation();
   const { hotelId, roles } = useAppSelector((state) => state.auth);
@@ -78,6 +85,13 @@ export default function ReportWorkspace() {
     name: roomStatusLabels[item.status] ?? item.status,
     color: roomStatusColors[item.status] ?? "#94a3b8",
   }));
+  const roomTypeBookings = (report?.roomTypeBookings ?? [])
+    .map((item) => ({
+      ...item,
+      name: roomTypeLabels[item.roomType] ?? item.roomType,
+    }))
+    .sort((left, right) => right.bookingCount - left.bookingCount);
+  const mostBookedRoomType = roomTypeBookings[0];
   const cancelledBookings = report?.cancelledBookings ?? [];
   const cancelledBookingCount = report?.cancelledBookingCount ?? cancelledBookings.length;
   const onlineCancelledBookingCount = report?.onlineCancelledBookingCount
@@ -232,7 +246,7 @@ export default function ReportWorkspace() {
                 <p className="text-xs font-semibold">Doanh thu dịch vụ</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.serviceRevenue)}</p>
-              <p className="mt-1 text-xs text-slate-500">Từ {report.closedInvoiceCount} hóa đơn đã đóng</p>
+              <p className="mt-1 text-xs text-slate-500">Từ {report.serviceUsageCount} dịch vụ đã sử dụng</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-emerald-600">
@@ -273,7 +287,7 @@ export default function ReportWorkspace() {
               <div className="mb-5 flex items-start justify-between">
                 <div>
                   <h3 className="font-bold text-slate-900">Doanh thu dịch vụ theo ngày</h3>
-                  <p className="mt-1 text-xs text-slate-400">Tính theo ngày đóng hóa đơn · VNĐ</p>
+                  <p className="mt-1 text-xs text-slate-400">Tính theo ngày xác nhận sử dụng hoặc checkout · VNĐ</p>
                 </div>
                 <TrendingUp size={18} className="text-emerald-500" />
               </div>
@@ -314,6 +328,52 @@ export default function ReportWorkspace() {
               )}
             </section>
           </div>
+
+          <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900">Lượt đặt theo loại phòng</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  Số phòng được đặt trong booking tạo ở khoảng ngày đã chọn · không tính phòng hoặc booking đã hủy
+                </p>
+              </div>
+              {mostBookedRoomType && mostBookedRoomType.bookingCount > 0 && (
+                <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                  Được đặt nhiều nhất: {mostBookedRoomType.name} ({mostBookedRoomType.bookingCount} lượt)
+                </span>
+              )}
+            </div>
+            {roomTypeBookings.length === 0 ? (
+              <p className="py-10 text-center text-sm text-slate-400">Không có dữ liệu đặt phòng trong khoảng ngày này.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart
+                  data={roomTypeBookings}
+                  layout="vertical"
+                  margin={{ top: 4, right: 20, bottom: 4, left: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#edf0f5" />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={130}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: "#64748b" }}
+                  />
+                  <Tooltip formatter={(value) => [`${Number(value).toLocaleString("vi-VN")} lượt`, "Lượt đặt"]} />
+                  <Bar dataKey="bookingCount" name="Lượt đặt" fill="#2563eb" radius={[0, 5, 5, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </section>
 
           <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
             <div className="mb-3">

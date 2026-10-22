@@ -1,4 +1,4 @@
-import { Building2, BriefcaseBusiness, CalendarDays, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Mail, Pencil, Search, UserRound, X, Sparkles } from "lucide-react";
+import { Building2, BriefcaseBusiness, CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Mail, Pencil, Search, Sparkles, UserRound, X } from "lucide-react";
 import { useLocation} from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +26,11 @@ import { logout, updateProfile } from "../store/authSlice";
 import type { BookingListItem } from "../services/bookingApi";
 import { useUpdateMyProfileMutation } from "../services/employeeApi";
 import { useLoginMutation } from "../services/authApi";
+import { useGetBookingsByHotelQuery } from "../services/bookingApi";
+import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
+import { bindHotelSocketEvents } from "../lib/socket";
+import { baseApi } from "../services/baseApi";
+import { localizedText } from "../i18n";
 
 const content: Record<string, { eyebrow: string; title: string; description: string; stats: [string, string][] }> = {
   "/bookings": { eyebrow: "Vận hành lưu trú", title: "Quản lý đặt phòng", description: "Quản lý lịch đặt phòng, khách lưu trú và lịch check-in / check-out.", stats: [["Đặt phòng hôm nay", "12"], ["Đang chờ xác nhận", "04"], ["Check-in hôm nay", "08"], ["Doanh thu dự kiến", "18.650.000đ"]] },
@@ -51,6 +56,102 @@ const bookingRooms = [
   { id: "201", type: "Suite Garden", beds: "1 giường lớn", size: "45 m²", guests: 3, price: "2.450.000", amenity: "Bồn tắm · Vườn riêng", available: true },
   { id: "203", type: "Executive Suite", beds: "1 giường lớn", size: "52 m²", guests: 4, price: "3.100.000", amenity: "Phòng khách · Hướng sông", available: false },
 ];
+
+const localDateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const valueDateKey = (value: unknown) => {
+  if (typeof value !== "string" || !value.trim()) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value.slice(0, 10) : localDateKey(date);
+};
+const normalizedStatus = (value: unknown) => {
+  if (value && typeof value === "object") {
+    const status = value as Record<string, unknown>;
+    return String(status.code ?? status.name ?? status.status ?? "").trim().toUpperCase();
+  }
+  return String(value ?? "").trim().toUpperCase();
+};
+const isActiveBooking = (booking: BookingListItem) => {
+  const status = normalizedStatus(booking.bookingStatus ?? booking.status);
+  return !["CANCELLED", "CANCELED", "REFUNDED", "REJECTED"].includes(status);
+};
+const isCancelledDetail = (detail: Record<string, unknown>) =>
+  ["CANCELLED", "CANCELED"].includes(normalizedStatus(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status));
+const isCheckedInDetail = (detail: Record<string, unknown>) =>
+  ["CHECKED_IN", "CHECKED-IN", "CHECKEDIN", "CHECKED_OUT", "CHECKED-OUT", "CHECKEDOUT", "ĐÃ CHECK-IN", "ĐÃ TRẢ PHÒNG"]
+    .includes(normalizedStatus(detail.bookingStatusType ?? detail.bookingDetailStatusType ?? detail.bookingDetailStatus ?? detail.status));
+
+function BookingOverview({ onNewBooking }: { onNewBooking: () => void }) {
+  const dispatch = useAppDispatch();
+  const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const { data: bookings = [], isLoading: bookingsLoading, isError: bookingsError } = useGetBookingsByHotelQuery(
+    Number(hotelId),
+    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
+  );
+  const { data: rooms = [], isLoading: roomsLoading, isError: roomsError } = useGetRoomsByCurrentHotelQuery();
+
+  useEffect(() => {
+    if (!hotelId) return;
+    return bindHotelSocketEvents({
+      onRoomMatrixUpdated: () => dispatch(baseApi.util.invalidateTags(["Booking", "Room"])),
+      onNewBookingNotification: () => dispatch(baseApi.util.invalidateTags(["Booking", "Room"])),
+      onBookingStateUpdated: () => dispatch(baseApi.util.invalidateTags(["Booking", "Room"])),
+      onCustomerBookingUpdated: () => dispatch(baseApi.util.invalidateTags(["Booking", "Room"])),
+      onRoomCreated: () => dispatch(baseApi.util.invalidateTags(["Room"])),
+      onRoomUpdated: () => dispatch(baseApi.util.invalidateTags(["Room"])),
+    });
+  }, [dispatch, hotelId]);
+
+  const today = localDateKey(new Date());
+  const todayArrivals = bookings
+    .filter(isActiveBooking)
+    .flatMap((booking) => booking.bookingDetails ?? [])
+    .filter((detail) => !isCancelledDetail(detail)
+      && isCheckedInDetail(detail)
+      && valueDateKey(detail.actualCheckInTime ?? detail.actualCheckinTime ?? detail.checkInActualTime) === today).length;
+  const pendingBookings = bookings.filter((booking) => {
+    const status = normalizedStatus(booking.bookingStatus);
+    return status === "PENDING" || status.includes("WAITING") || status.includes("CHỜ");
+  }).length;
+  const readyRooms = rooms.filter((room) => {
+    const status = normalizedStatus(room.roomStatus ?? room.status);
+    return status === "READY" || status === "AVAILABLE" || status === "SẴN SÀNG";
+  }).length;
+  const isLoading = bookingsLoading || roomsLoading;
+  const hasError = bookingsError || roomsError;
+  const metric = (value: number) => isLoading ? "…" : hasError ? "—" : String(value).padStart(2, "0");
+  const todayLabel = new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+
+  return (
+    <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-600"><CalendarDays size={20} /></div>
+          <div>
+            <h3 className="font-bold text-slate-900">{localizedText("Lịch đặt phòng hôm nay", "Today's booking schedule")}</h3>
+            {hasError && <p role="alert" className="mt-1 text-sm text-rose-600">{localizedText("Không tải được số liệu đặt phòng hoặc phòng.", "Could not load booking or room data.")}</p>}
+          </div>
+        </div>
+        <button type="button" onClick={onNewBooking} className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700">
+          <CalendarPlus size={16} />{localizedText("Đặt phòng mới", "New booking")}
+        </button>
+      </div>
+      <div className="mt-6 grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+          <p className="text-xs font-bold text-slate-800">{localizedText(`Hôm nay · ${todayLabel}`, `Today · ${todayLabel}`)}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{metric(todayArrivals)} <span className="text-xs font-medium text-slate-400">{localizedText("check-in", "check-in")}</span></p>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+          <p className="text-xs font-bold text-slate-800">{localizedText("Đang chờ xác nhận", "Awaiting confirmation")}</p>
+          <p className="mt-2 text-2xl font-bold text-amber-600">{metric(pendingBookings)} <span className="text-xs font-medium text-slate-400">{localizedText("đặt phòng", "bookings")}</span></p>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+          <p className="text-xs font-bold text-slate-800">{localizedText("Sẵn sàng đón khách", "Ready for guests")}</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-600">{metric(readyRooms)} <span className="text-xs font-medium text-slate-400">{localizedText("phòng", "rooms")}</span></p>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function BookingWorkspace() {
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
@@ -443,9 +544,9 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     {mobileOpen && <div className="fixed inset-0 z-30 bg-slate-950/30 lg:hidden" onClick={closeMobile} />}
     <main className={`min-w-0 transition-[padding] duration-300 ease-in-out ${collapsed ? "lg:pl-0" : "lg:pl-72"}`}>
       <AppHeader onMenuClick={toggleSidebar} collapsed={collapsed} />
-        <div className={`mx-auto min-w-0 px-4 py-6 sm:px-6 lg:px-8 transition-[max-width] duration-300 ease-in-out ${collapsed ? "max-w-[1650px]" : "max-w-7xl"}`}><p className="mb-1 text-sm font-semibold text-blue-600">{page.eyebrow}</p><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-[28px] font-bold tracking-[-.03em] text-slate-900">{page.title}</h2>{path !== "/nhan-vien" && <p className="mt-2 max-w-xl text-sm text-slate-500">{page.description}</p>}</div>{path !== "/nhan-vien" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && !routePath.startsWith("/services/") && routePath !== "/invoices" && routePath !== "/promotions" && <button onClick={() => path === "/dat-phong" && setBookingOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><Sparkles size={16} />{path === "/dat-phong" ? t("common.newBookingEyebrow") : t("common.newAction")}</button>}</div>
+        <div className={`mx-auto min-w-0 px-4 py-6 sm:px-6 lg:px-8 transition-[max-width] duration-300 ease-in-out ${collapsed ? "max-w-[1650px]" : "max-w-7xl"}`}><p className="mb-1 text-sm font-semibold text-blue-600">{page.eyebrow}</p><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-[28px] font-bold tracking-[-.03em] text-slate-900">{page.title}</h2>{path !== "/nhan-vien" && <p className="mt-2 max-w-xl text-sm text-slate-500">{page.description}</p>}</div>{path !== "/dat-phong" && path !== "/nhan-vien" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && !routePath.startsWith("/services/") && routePath !== "/invoices" && routePath !== "/promotions" && <button onClick={() => path === "/dat-phong" && setBookingOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><Sparkles size={16} />{t("common.newAction")}</button>}</div>
         {path !== "/dat-phong" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && routePath !== "/check-in-out" && routePath !== "/invoices" && routePath !== "/promotions" && !routePath.startsWith("/services/") && <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{page.stats.map(([label, value], i) => <div key={label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${i === 0 ? "bg-[#28233f] text-white" : "bg-white"}`}><p className={`text-xs font-medium ${i === 0 ? "text-blue-200" : "text-slate-500"}`}>{label}</p><p className="mt-2 text-xl font-bold tracking-tight">{value}</p><p className={`mt-1 text-[11px] ${i === 0 ? "text-blue-200" : "text-slate-400"}`}>Cập nhật hôm nay</p></div>)}</section>}
-        {path === "/hotel-rules" ? <HotelRulesWorkspace /> : path === "/settings" ? <LanguageSettings onLogout={onLogout} /> : path === "/phe-duyet-hoan-tien" ? <RefundApprovalWorkspace /> : path === "/check-in-out" ? <CheckInOutWorkspace /> : routePath.startsWith("/services/") ? <ServiceWorkspace mode={routePath === "/services/usage" ? "usage" : "catalog"} /> : path === "/khuyen-mai" ? <PromotionWorkspace /> : path === "/phong" ? <RoomWorkspace /> : path === "/hoa-don" ? <InvoiceWorkspace /> : path === "/bao-cao" ? <ReportWorkspace /> : path === "/nhan-vien" ? <StaffTabsWorkspace /> : path === "/phan-quyen" ? <PermissionsWorkspace /> : path === "/danh-sach-booking" ? <BookingListWorkspace /> : path === "/dat-phong" ? (bookingOpen ? <BookingWorkspaceNew /> : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Lịch đặt phòng hôm nay</h3><p className="mt-1 text-sm text-slate-500">12 đặt phòng · 8 khách đến · 5 khách rời đi</p></div></div><button onClick={() => setBookingOpen(true)} className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Sparkles size={16} />Đặt phòng mới</button></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Hôm nay · 14/10</p><p className="mt-2 text-2xl font-bold text-slate-900">08 <span className="text-xs font-medium text-slate-400">check-in</span></p></div><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Đang chờ xác nhận</p><p className="mt-2 text-2xl font-bold text-amber-600">04 <span className="text-xs font-medium text-slate-400">đặt phòng</span></p></div><div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold text-slate-800">Sẵn sàng đón khách</p><p className="mt-2 text-2xl font-bold text-emerald-600">16 <span className="text-xs font-medium text-slate-400">phòng</span></p></div></div></section>) : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Không gian {page.title.toLowerCase()}</h3><p className="mt-1 text-sm text-slate-500">Các công cụ chi tiết cho {page.title.toLowerCase()} sẽ được hiển thị tại đây.</p></div></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Danh sách & bộ lọc</p><p className="mt-1 text-xs text-slate-400">Tra cứu nhanh dữ liệu theo chi nhánh.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Theo dõi trạng thái</p><p className="mt-1 text-xs text-slate-500">Theo dõi tiến độ theo thời gian thực.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Báo cáo & hành động mới.</p></div></div></section>}
+        {path === "/hotel-rules" ? <HotelRulesWorkspace /> : path === "/settings" ? <LanguageSettings onLogout={onLogout} /> : path === "/phe-duyet-hoan-tien" ? <RefundApprovalWorkspace /> : path === "/check-in-out" ? <CheckInOutWorkspace /> : routePath.startsWith("/services/") ? <ServiceWorkspace mode={routePath === "/services/usage" ? "usage" : "catalog"} /> : path === "/khuyen-mai" ? <PromotionWorkspace /> : path === "/phong" ? <RoomWorkspace /> : path === "/hoa-don" ? <InvoiceWorkspace /> : path === "/bao-cao" ? <ReportWorkspace /> : path === "/nhan-vien" ? <StaffTabsWorkspace /> : path === "/phan-quyen" ? <PermissionsWorkspace /> : path === "/danh-sach-booking" ? <BookingListWorkspace /> : path === "/dat-phong" ? (bookingOpen ? <BookingWorkspaceNew /> : <BookingOverview onNewBooking={() => setBookingOpen(true)} />) : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Không gian {page.title.toLowerCase()}</h3><p className="mt-1 text-sm text-slate-500">Các công cụ chi tiết cho {page.title.toLowerCase()} sẽ được hiển thị tại đây.</p></div></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Danh sách & bộ lọc</p><p className="mt-1 text-xs text-slate-400">Tra cứu nhanh dữ liệu theo chi nhánh.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Theo dõi trạng thái</p><p className="mt-1 text-xs text-slate-500">Theo dõi tiến độ theo thời gian thực.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Báo cáo & hành động mới.</p></div></div></section>}
         <ScrollControls />
       </div></main>
   </div>;

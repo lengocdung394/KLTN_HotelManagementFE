@@ -857,12 +857,20 @@ export default function CheckInOutWorkspace() {
   };
 
   const groupedArrivalRecords = Object.values(
-    arrivalState.reduce<Record<string, DailyRecord[]>>((groups, record) => {
-      const key = String(record.bookingId ?? record.id);
-      groups[key] = [...(groups[key] ?? []), record];
-      return groups;
-    }, {}),
-  ).filter((records) => records.length > 1);
+    dailyRecords
+      .filter((record) => record.flow === "check-in")
+      .reduce<Record<string, DailyRecord[]>>((groups, record) => {
+        const key = String(record.bookingId ?? record.id);
+        groups[key] = [...(groups[key] ?? []), record];
+        return groups;
+      }, {}),
+    ).filter((records) => records.length > 1);
+  const completedArrivalGroups = groupedArrivalRecords.filter((records) => {
+    const isCompleted = records.every((record) => record.status === "Đã check-in" || record.status === "Đã trả phòng");
+    const firstRecord = records[0];
+    const groupLabel = `${firstRecord.guest} ${firstRecord.bookingId ?? firstRecord.id} ${records.map((record) => record.room).join(" ")}`;
+    return isCompleted && groupLabel.toLowerCase().includes(query.toLowerCase());
+  });
   const groupedDepartureRecords = Object.values(
     departureState.reduce<Record<string, DailyRecord[]>>((groups, record) => {
       const key = String(record.bookingId ?? record.id);
@@ -1876,7 +1884,9 @@ export default function CheckInOutWorkspace() {
           const firstRecord = records[0];
           const groupLabel = `${firstRecord.guest} ${firstRecord.bookingId ?? firstRecord.id} ${records.map((record) => record.room).join(" ")}`;
           if (activeFlow !== "check-in" || !groupLabel.toLowerCase().includes(query.toLowerCase())) return null;
-          const completedIds = records.filter((record) => record.status === "Đã check-in").map((record) => record.id);
+          const completedIds = records
+            .filter((record) => record.status === "Đã check-in" || record.status === "Đã trả phòng")
+            .map((record) => record.id);
           return (
             <BatchStayCard
               key={`group-${firstRecord.bookingId ?? firstRecord.id}`}
@@ -1896,7 +1906,8 @@ export default function CheckInOutWorkspace() {
               draftSelectedIds={completedIds}
               actionLabel={localizedText("Check-in các phòng", "Check in rooms")}
               actionCount={pendingGroup.length}
-              actionDisabled={false}
+              actionDisabled={pendingGroup.length === 0}
+              showAction={pendingGroup.length > 0}
               onViewBooking={() => setBookingDetailRecords(records.map((record) => ({
                 ...record,
                 services: recordServices[record.id] ?? record.services,
@@ -1939,45 +1950,6 @@ export default function CheckInOutWorkspace() {
               }}
             />
           )}
-        {groupedDepartureRecords.map((records) => {
-          const firstRecord = records[0];
-          const groupLabel = `${firstRecord.guest} ${firstRecord.bookingId ?? firstRecord.id} ${records.map((record) => record.room).join(" ")}`;
-          if (activeFlow !== "check-out" || !groupLabel.toLowerCase().includes(query.toLowerCase())) return null;
-          return (
-            <BatchStayCard
-              key={`checkout-group-${firstRecord.bookingId ?? firstRecord.id}`}
-              mode="check-out"
-              title={firstRecord.guest}
-              bookingCode={firstRecord.bookingId}
-              identityNumber={firstRecord.identityNumber}
-              description={localizedText(`${records.length} phòng · ${records.reduce((total, record) => total + (record.guests ?? 0), 0)} khách · Trả lúc ${firstRecord.time}`, `${records.length} rooms · ${records.reduce((total, record) => total + (record.guests ?? 0), 0)} guests · Departure at ${firstRecord.time}`)}
-              items={records.map((record) => ({
-                id: record.id,
-                title: record.room,
-                subtitle: record.bookingId ?? "",
-                status: "pending" as const,
-                roomPaid: record.roomPaid,
-              }))}
-              selectedIds={[]}
-              draftSelectedIds={[]}
-              actionLabel={localizedText("Check-out các phòng", "Check out rooms")}
-              actionCount={records.length}
-              actionDisabled={false}
-              onViewBooking={() => setBookingDetailRecords(records.map((record) => ({
-                ...record,
-                services: recordServices[record.id] ?? record.services,
-              })))}
-              onAddService={() => openGroupedRecordsServiceSelector(records)}
-              checkoutSummaryRooms={checkoutRoomsFromRecords(records)}
-              onAction={(nextSelected) => {
-                if (nextSelected.length === 0) return;
-                setGroupCheckoutRecords(records.filter((record) => nextSelected.includes(record.id)));
-                setGroupCheckoutRefundMethod(null);
-                setGroupCheckoutOpen(true);
-              }}
-            />
-          );
-        })}
           {activeFlow === "check-out" && (
             <section className="mx-4 my-4 rounded-xl border border-blue-200 bg-blue-50/60 p-4 sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2024,12 +1996,30 @@ export default function CheckInOutWorkspace() {
           <CheckInOutRecordList
             records={filtered}
           groupedRecordIds={groupedRecordIds}
+          pendingGroupedRecords={activeFlow === "check-out" ? groupedDepartureRecords.filter((records) => {
+            const firstRecord = records[0];
+            const groupLabel = `${firstRecord.guest} ${firstRecord.bookingId ?? firstRecord.id} ${records.map((record) => record.room).join(" ")}`;
+            return groupLabel.toLowerCase().includes(query.toLowerCase());
+          }) : []}
+          completedGroupedRecords={activeFlow === "check-in" ? completedArrivalGroups : []}
           recordServices={recordServices}
           checkMatrixCheckInConflict={checkMatrixCheckInConflict}
           onRecordAction={handleRecordAction}
           onAddService={openServiceSelector}
+          onAddServiceGroup={openGroupedRecordsServiceSelector}
+          onCheckoutGroup={(records) => {
+            setGroupCheckoutRecords(records);
+            setGroupCheckoutRefundMethod(null);
+            setGroupCheckoutOpen(true);
+          }}
           onUndo={undoRecordAction}
-          onViewBooking={(record) => setBookingDetailRecords([{ ...record, services: recordServices[record.id] ?? record.services }])}
+          onViewBooking={(recordOrRecords) => {
+            const records = Array.isArray(recordOrRecords) ? recordOrRecords : [recordOrRecords];
+            setBookingDetailRecords(records.map((record) => ({
+              ...record,
+              services: recordServices[record.id] ?? record.services,
+            })));
+          }}
         />
       </div>
       {invoiceBooking && (
