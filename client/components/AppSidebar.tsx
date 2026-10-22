@@ -39,11 +39,14 @@ export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, 
   const [bookingMenuOpen, setBookingMenuOpen] = useState(() => location.pathname === "/bookings" || location.pathname === "/booking-list");
   const [roomsMenuOpen, setRoomsMenuOpen] = useState(() => location.pathname === "/rooms");
   const [servicesMenuOpen, setServicesMenuOpen] = useState(() => location.pathname.startsWith("/services"));
+  const [staffMenuOpen, setStaffMenuOpen] = useState(() => location.pathname === "/staff");
   const bookingActive = location.pathname === "/bookings" || location.pathname === "/booking-list";
   const roomsActive = location.pathname === "/rooms";
   const servicesActive = location.pathname.startsWith("/services");
+  const staffActive = location.pathname === "/staff";
   const canManageServices = roles.includes("ROLE_MANAGER");
   const currentRoomTab = new URLSearchParams(location.search).get("tab");
+  const currentStaffTab = new URLSearchParams(location.search).get("tab") ?? "today";
   const branchLabel = hotelName || t("common.allBranches", "Tất cả chi nhánh");
 
   useEffect(() => {
@@ -54,6 +57,7 @@ export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, 
     setBookingMenuOpen(isBookingRoute);
     setRoomsMenuOpen(isRoomRoute);
     setServicesMenuOpen(isServicesRoute);
+    setStaffMenuOpen(location.pathname === "/staff");
   }, [location.pathname]);
 
   return <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-blue-950 px-4 py-5 text-white transition-transform duration-300 ease-in-out ${mobile ? "translate-x-0" : "-translate-x-full"} ${collapsed ? "lg:-translate-x-full" : "lg:translate-x-0"}`}>
@@ -150,7 +154,39 @@ export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, 
             <Link to="/reports" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/reports" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><FileText size={17} />{t("navigation.reports")}</Link>
             <Link to="/settings" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/settings" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Settings size={17} />{t("navigation.settings")}</Link>
           </>
-        ) : adminItems.map(([href, label, Icon]) => <Link key={href} to={href} onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon size={17} />{t(`navigation.${label}`)}</Link>)}
+        ) : adminItems.filter(([href]) => href !== "/staff").map(([href, label, Icon]) => <Link key={href} to={href} onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon size={17} />{t(`navigation.${label}`)}</Link>)}
+        {!isEmployee && (
+          <div className={`rounded-xl ${staffActive ? "bg-blue-900/50" : ""}`}>
+            <div className={`flex items-center rounded-xl text-sm font-medium ${staffActive ? "text-white" : "text-slate-400"}`}>
+              <Link to="/staff?tab=today" onClick={onCloseMobile} className="flex min-w-0 flex-1 items-center gap-3 whitespace-nowrap px-3 py-2.5 hover:text-white">
+                <Users size={17} />{t("navigation.staff", "Nhân viên & ca làm")}
+              </Link>
+              <button type="button" onClick={() => setStaffMenuOpen((current) => !current)} className="rounded-lg p-2.5 hover:bg-white/10" aria-label={t("navigation.staff", "Nhân viên & ca làm")}>
+                <ChevronDown size={15} className={`transition-transform ${staffMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+            {staffMenuOpen && (
+              <div className="space-y-1 pb-2 pl-9 pr-2">
+                <Link to="/staff?tab=today" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "today" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+                  Ca làm hôm nay
+                </Link>
+                <Link to="/staff?tab=employees" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "employees" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+                  Danh sách nhân viên
+                </Link>
+                {roles.includes("ROLE_MANAGER") && (
+                  <Link to="/staff?tab=shifts" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "shifts" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+                    Phân ca làm
+                  </Link>
+                )}
+                {(roles.includes("ROLE_MANAGER") || roles.includes("ROLE_ADMIN")) && (
+                  <Link to="/staff?tab=tasks" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+                    Phân công công việc
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
     </div>
     <UserProfileCard onLogout={onLogout} fullName={fullName} position={position} />

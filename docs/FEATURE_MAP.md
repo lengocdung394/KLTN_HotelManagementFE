@@ -46,8 +46,13 @@ Các route alias như `/dat-phong`, `/nhan-vien`, `/phan-quyen`, `/bao-cao`, `/c
 - Nhân viên/ca làm: [`client/services/employeeApi.ts`](../client/services/employeeApi.ts), [`client/services/shiftApi.ts`](../client/services/shiftApi.ts).
 - Danh sách nhân viên cho trang `/staff` lấy từ `GET /employee/my-hotel`; backend xác định chi nhánh từ tài khoản đang đăng nhập thay vì phụ thuộc `hotelId` giải mã ở frontend.
 - Tạo nhân viên khóa biểu mẫu trong suốt quá trình tải ảnh và lưu; backend kiểm tra trùng email, số điện thoại và CCCD trước khi tạo tài khoản/hồ sơ.
+- Menu bên trái “Nhân viên & ca làm” có submenu “Ca làm hôm nay”, “Danh sách nhân viên”, “Phân ca làm” và “Phân công công việc” (các mục quản lý chỉ dành cho quản lý/quản trị); lựa chọn được định tuyến qua `/staff?tab=...`. Ca hôm nay được nhóm theo từng ca, mỗi ca sắp xếp Lễ tân → Buồng phòng → Bảo vệ và dùng màu riêng cho từng nhóm.
 - Phân ca tuần dùng `GET/PUT /staff-shifts/weekly`; nhân viên xem lịch ở `EmployeeShiftSchedule`, quản lý lập đủ 3 ca tại `ManagerShiftPlanner`.
-- Checkout tạo việc dọn phòng; nhân viên xem/xác nhận qua `GET /housekeeping-tasks/my` và `POST /housekeeping-tasks/{id}/complete`. Backend chuyển việc cho nhân viên dự phòng sau 1 giờ nếu chưa xác nhận.
+- Quản lý chọn được tuần cần lập và sao chép lịch đã lưu từ một tuần nguồn qua `POST /staff-shifts/weekly/copy`; tuần đích được xác nhận trước khi thay thế, còn những ngày đã qua luôn được giữ nguyên.
+- Bản nháp phân ca được lưu trong localStorage theo chi nhánh/tuần. Khi chuyển tuần hoặc rời tab phân ca với thay đổi chưa lưu, quản lý có lựa chọn lưu bản nháp, bỏ thay đổi hoặc tiếp tục chỉnh sửa.
+- Hôm nay và ngày đã qua chỉ xem được: frontend khóa ô phân công, backend từ chối sửa/xóa từng ca và chỉ thay thế/làm trống từ ngày mai trở đi. Tuần không còn ngày tương lai sẽ bị khóa thao tác thay đổi.
+- Quản lý có thể làm trống phân công đã lưu từ ngày mai trở đi trong tuần đang mở bằng `DELETE /staff-shifts/weekly`; thao tác xóa có xác nhận và giữ nguyên lịch hôm nay/ngày đã qua.
+- Checkout tạo việc dọn phòng ở trạng thái `NEEDS_ASSIGNMENT` và thông báo để quản lý phân công. Quản lý theo dõi danh sách tại `/staff?tab=tasks` qua `GET /housekeeping-tasks/management`, phân công/chuyển nhân viên qua `PUT /housekeeping-tasks/{id}/assign`; chỉ nhân viên buồng phòng thuộc cùng chi nhánh mới được chọn. Tại màn quản lý, nút `Xác nhận đã dọn xong` gọi `POST /housekeeping-tasks/{id}/management-complete`; nhân viên cũng có thể xem/xác nhận việc được giao qua `GET /housekeeping-tasks/my` và `POST /housekeeping-tasks/{id}/complete`. Hoàn tất chuyển phòng sang READY và phát sự kiện cập nhật trạng thái. Nếu quá 1 giờ chưa hoàn tất, task được đưa lại hàng chờ quản lý phân công.
 - `EmployeeShiftSessionGuard` nhắc trước 5 phút và đăng xuất tài khoản nhân viên ở trình duyệt khi ca kết thúc; đăng xuất này không thu hồi JWT phía backend.
 - Redux store/auth: [`client/store/index.ts`](../client/store/index.ts), [`client/store/authSlice.ts`](../client/store/authSlice.ts).
 - Đăng ký và khởi tạo socket: [`client/lib/socket.ts`](../client/lib/socket.ts). Workspace đăng ký callback qua `bindHotelSocketEvents`; sau event thường invalidate tag RTK Query tương ứng.
@@ -78,8 +83,8 @@ Các controller module khác thường nằm tại `src/main/java/iuh/fit/se/hot
 1. Quản lý lập lịch tuần tại `client/pages/ManagerShiftPlanner.tsx`; API và lưu lịch tuần nằm ở backend module `shift` (`ShiftController`, `ShiftServiceImpl`, `ShiftAssignmentRepository`).
 2. Mỗi ngày có ba ca: 06:00–14:00, 14:00–22:00 và 22:00–06:00; mỗi ca cần 2 lễ tân, 2 buồng phòng và 1 bảo vệ. Backend kiểm tra định mức, chức vụ, chi nhánh và không cho phân một nhân viên hai lần trong cùng ngày; sang ngày khác có thể phân lại nhân viên đó.
 3. `ShiftScheduleReminderScheduler` gửi thông báo cho quản lý lúc 15:00 thứ Bảy để lập lịch tuần kế tiếp.
-4. Checkout tạo task dọn phòng trong `booking/HousekeepingTaskService`; lịch sử phân ca của ca hiện hành được ưu tiên, nhân viên buồng phòng trong chi nhánh được dùng làm dự phòng nếu cần. Task chưa được xác nhận sau 1 giờ sẽ chuyển cho người dự phòng và phát thông báo.
-5. Nhân viên xác nhận task tại `client/pages/EmployeeShiftSchedule.tsx`; backend chuyển phòng sang READY và phát event cập nhật trạng thái.
+4. Checkout tạo task dọn phòng `NEEDS_ASSIGNMENT` trong `booking/HousekeepingTaskService`; quản lý phân công nhân viên buồng phòng cùng chi nhánh tại `client/pages/HousekeepingTaskManagement.tsx` và có thể xác nhận dọn xong ngay trên tab này. Nếu quá 1 giờ chưa hoàn tất, task trở lại hàng chờ và quản lý nhận thông báo phân công lại.
+5. Nhân viên xem/xác nhận task tại `client/pages/EmployeeShiftSchedule.tsx`; backend chuyển phòng sang READY và phát event cập nhật trạng thái.
 6. `client/components/EmployeeShiftSessionGuard.tsx` nhắc trước giờ hết ca 5 phút và tự đăng xuất frontend khi hết ca. Do JWT backend hiện stateless, thao tác này chỉ kết thúc phiên trên trình duyệt đang mở.
 
 ## Cách tra cứu cho yêu cầu mới
