@@ -9,7 +9,7 @@ type ApiResponse<T> = {
 export type DailyServiceRevenue = {
   date: string;
   revenue: number;
-  closedInvoiceCount: number;
+  serviceUsageCount: number;
 };
 
 export type PromotionUsageReport = {
@@ -23,6 +23,11 @@ export type PromotionUsageReport = {
 export type RoomStatusReport = {
   status: "READY" | "MAINTENANCE" | "IN_USE" | "CLEANING" | string;
   roomCount: number;
+};
+
+export type RoomTypeBookingReport = {
+  roomType: string;
+  bookingCount: number;
 };
 
 export type BookingCancellationReport = {
@@ -41,7 +46,7 @@ export type HotelReport = {
   cashChangeReturned?: number;
   netCashReceived?: number;
   serviceRevenue: number;
-  closedInvoiceCount: number;
+  serviceUsageCount: number;
   dailyServiceRevenue: DailyServiceRevenue[];
   promotionUsageCount: number;
   promotionSavings: number;
@@ -52,6 +57,7 @@ export type HotelReport = {
   cancelledBookings?: BookingCancellationReport[];
   totalRoomCount: number;
   roomStatuses: RoomStatusReport[];
+  roomTypeBookings: RoomTypeBookingReport[];
 };
 
 export type HotelReportArgs = {
@@ -73,6 +79,7 @@ export const reportApi = baseApi.injectEndpoints({
         },
       }),
       transformResponse: (response: ApiResponse<HotelReport>) => response.result,
+      providesTags: ["Booking", "Room"],
     }),
   }),
 });

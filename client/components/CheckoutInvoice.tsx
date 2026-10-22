@@ -50,20 +50,31 @@ const getRoomDetails = (booking: BookingListItem): InvoiceRoom[] => {
   return details.map((value) => {
     const detail = asRecord(value);
     const servicesValue = detail.bookingServiceResponseForHotel
+      ?? detail.bookingServiceResponsForHotels
       ?? detail.bookingServiceResponsesForHotels
       ?? detail.bookingServiceDetails
       ?? detail.services;
-    const services = (Array.isArray(servicesValue) ? servicesValue : []).map((value) => {
-      const service = asRecord(value);
-      const quantity = Math.max(0, readAmount(service, ["quantity", "serviceQuantity", "quantityService", "count"]) || 1);
-      const amount = readAmount(service, ["totalAmount", "subTotal", "subtotal"])
-        || readAmount(service, ["price", "unitPrice", "servicePrice"]) * quantity;
-      return {
-        name: readText(service, ["name", "serviceName", "nameService"], "Dịch vụ"),
-        quantity,
-        amount,
-      };
-    });
+    const services = (Array.isArray(servicesValue) ? servicesValue : [])
+      .filter((value) => !Boolean(asRecord(value).cancelled))
+      .map((value) => {
+        const service = asRecord(value);
+        const quantity = Math.max(0, readAmount(service, ["quantity", "serviceQuantity", "quantityService", "count"]) || 1);
+        const amount = readAmount(service, ["totalAmount", "subTotal", "subtotal"])
+          || readAmount(service, ["price", "unitPrice", "servicePrice"]) * quantity;
+        return {
+          name: readText(service, ["name", "serviceName", "nameService"], "Dịch vụ"),
+          quantity,
+          amount,
+        };
+      });
+    const serviceSubtotal = readAmount(detail, ["serviceSubTotal", "serviceSubtotal", "serviceTotal"]);
+    if (!Array.isArray(servicesValue) && serviceSubtotal > 0) {
+      services.push({
+        name: "Dịch vụ",
+        quantity: 1,
+        amount: serviceSubtotal,
+      });
+    }
 
     return {
       room: readText(detail, ["roomNumber", "roomName", "roomId"], "—"),

@@ -18,7 +18,7 @@ Tài liệu tra cứu nhanh vị trí triển khai các màn hình và luồng n
 | `/overview` | Tổng quan chi nhánh | [`client/pages/Index.tsx`](../client/pages/Index.tsx), các thẻ tổng quan dùng component trong `client/components/` |
 | `/bookings` | Lịch đặt phòng; mở luồng tạo/chỉnh sửa booking từ nút hành động | `ModulePage` → [`client/pages/BookingWorkspace.tsx`](../client/pages/BookingWorkspace.tsx). Route chuẩn nội bộ của module là `/dat-phong`. |
 | `/booking-list` | Tìm kiếm, chi tiết, thanh toán và hủy booking | [`client/pages/BookingListWorkspace.tsx`](../client/pages/BookingListWorkspace.tsx) |
-| `/check-in-out` | Check-in, check-out, phụ thu, chi tiết phòng/booking | [`client/pages/CheckInOutWorkspace.tsx`](../client/pages/CheckInOutWorkspace.tsx); danh sách: [`client/components/CheckInOutRecordList.tsx`](../client/components/CheckInOutRecordList.tsx); modal chi tiết: [`client/components/CheckInOutBookingDetailModal.tsx`](../client/components/CheckInOutBookingDetailModal.tsx); tổng kết checkout: [`client/components/CheckoutSummary.tsx`](../client/components/CheckoutSummary.tsx) |
+| `/check-in-out` | Check-in, check-out, phụ thu, chi tiết phòng/booking; nhóm phòng cùng booking chuyển chung vào phần “Đã check-in hôm nay” sau khi toàn bộ phòng check-in và sắp xếp theo thời điểm xử lý, mới nhất ở trên | [`client/pages/CheckInOutWorkspace.tsx`](../client/pages/CheckInOutWorkspace.tsx); thẻ nhóm: [`client/components/BatchStayCard.tsx`](../client/components/BatchStayCard.tsx); danh sách: [`client/components/CheckInOutRecordList.tsx`](../client/components/CheckInOutRecordList.tsx); modal chi tiết: [`client/components/CheckInOutBookingDetailModal.tsx`](../client/components/CheckInOutBookingDetailModal.tsx); tổng kết checkout: [`client/components/CheckoutSummary.tsx`](../client/components/CheckoutSummary.tsx) |
 | `/rooms` | Danh sách phòng, trạng thái, dọn phòng, tòa/tầng và giá | [`client/pages/RoomWorkspace.tsx`](../client/pages/RoomWorkspace.tsx); thẻ/list phòng: [`client/components/RoomListTab.tsx`](../client/components/RoomListTab.tsx); API: [`client/services/roomApi.ts`](../client/services/roomApi.ts) |
 | `/customers` | Khách hàng | [`client/pages/CustomerPage.tsx`](../client/pages/CustomerPage.tsx) và [`client/pages/CustomerWorkspace.tsx`](../client/pages/CustomerWorkspace.tsx) |
 | `/refund-approvals` | Duyệt hoàn tiền checkout/hủy booking | [`client/pages/RefundApprovalWorkspace.tsx`](../client/pages/RefundApprovalWorkspace.tsx); component checkout: [`client/components/CheckoutRefundApprovalsPanel.tsx`](../client/components/CheckoutRefundApprovalsPanel.tsx) |
@@ -29,7 +29,7 @@ Tài liệu tra cứu nhanh vị trí triển khai các màn hình và luồng n
 | `/invoices` | Hóa đơn | [`client/pages/InvoiceWorkspace.tsx`](../client/pages/InvoiceWorkspace.tsx) |
 | `/staff` | Quản lý nhân viên, ca hôm nay và phân ca tuần; nhân viên xem lịch và xác nhận việc dọn | [`client/pages/StaffTabsWorkspace.tsx`](../client/pages/StaffTabsWorkspace.tsx), [`client/pages/ManagerShiftPlanner.tsx`](../client/pages/ManagerShiftPlanner.tsx), [`client/pages/EmployeeShiftSchedule.tsx`](../client/pages/EmployeeShiftSchedule.tsx) |
 | `/permissions` | Phân quyền | [`client/pages/PermissionsWorkspace.tsx`](../client/pages/PermissionsWorkspace.tsx) |
-| `/reports` | Báo cáo | [`client/pages/ReportWorkspace.tsx`](../client/pages/ReportWorkspace.tsx) |
+| `/reports` | Báo cáo hoạt động, doanh thu, trạng thái phòng, booking theo loại phòng | [`client/pages/ReportWorkspace.tsx`](../client/pages/ReportWorkspace.tsx) |
 | `/settings` | Cài đặt/ngôn ngữ và hồ sơ | `LanguageSettings` và phần hồ sơ trong [`client/pages/ModulePage.tsx`](../client/pages/ModulePage.tsx) |
 | `/admin` | Quản trị hệ thống | [`client/pages/AdminDashboardPage.tsx`](../client/pages/AdminDashboardPage.tsx) |
 
@@ -42,6 +42,7 @@ Các route alias như `/dat-phong`, `/nhan-vien`, `/phan-quyen`, `/bao-cao`, `/c
 - Check-in/check-out/summary: [`client/services/checkInOutApi.ts`](../client/services/checkInOutApi.ts).
 - Chỉnh sửa booking, hủy và hoàn tiền checkout: [`client/services/managementBookingApi.ts`](../client/services/managementBookingApi.ts).
 - Thanh toán: [`client/services/paymentApi.ts`](../client/services/paymentApi.ts).
+- Báo cáo `GET /reports/hotel-summary`, gồm số lượt đặt theo bốn loại phòng trong khoảng ngày: `client/services/reportApi.ts`; backend: `modular/report/controllers/ReportController`, `modular/report/services/HotelReportService`.
 - Phòng, trạng thái phòng, loại phòng: [`client/services/roomApi.ts`](../client/services/roomApi.ts).
 - Nhân viên/ca làm: [`client/services/employeeApi.ts`](../client/services/employeeApi.ts), [`client/services/shiftApi.ts`](../client/services/shiftApi.ts).
 - Danh sách nhân viên cho trang `/staff` lấy từ `GET /employee/my-hotel`; backend xác định chi nhánh từ tài khoản đang đăng nhập thay vì phụ thuộc `hotelId` giải mã ở frontend.

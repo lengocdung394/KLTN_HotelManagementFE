@@ -20,6 +20,8 @@ export type CheckoutSummaryRoom = {
 type CheckoutSummaryProps = {
   rooms: CheckoutSummaryRoom[];
   compact?: boolean;
+  showRoomBreakdown?: boolean;
+  showTotal?: boolean;
 };
 
 const formatMoney = (amount: number, language: string) => `${amount.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
@@ -50,7 +52,7 @@ export const getCheckoutSurplusAmount = (rooms: CheckoutSummaryRoom[]) => {
   }, 0);
 };
 
-export default function CheckoutSummary({ rooms, compact = false }: CheckoutSummaryProps) {
+export default function CheckoutSummary({ rooms, compact = false, showRoomBreakdown = true, showTotal = true }: CheckoutSummaryProps) {
   const { i18n } = useTranslation();
   const language = i18n.language;
   const hasRemainingAmount = rooms.some((room) => room.remainingAmount !== undefined);
@@ -58,7 +60,7 @@ export default function CheckoutSummary({ rooms, compact = false }: CheckoutSumm
   const surplus = useMemo(() => getCheckoutSurplusAmount(rooms), [rooms]);
 
   return <div className={compact ? "space-y-2" : "space-y-3"}>
-    {rooms.map((room) => {
+    {showRoomBreakdown && rooms.map((room) => {
       const roomAmount = room.roomPaid ? 0 : room.roomAmount || 0;
       const serviceAmount = (room.services || []).reduce((sum, service) => sum + service.amount, 0);
       const amount = roomAmount + serviceAmount + (room.earlyCheckInFee || 0) + (room.lateFee || 0) + (room.otherSurcharges || 0);
@@ -76,10 +78,10 @@ export default function CheckoutSummary({ rooms, compact = false }: CheckoutSumm
         </div>
       </div>;
     })}
-    <div className="flex items-center justify-between border-t border-slate-200 pt-4">
-      <span className="font-bold text-slate-900">{hasRemainingAmount ? localizedText("Còn phải thanh toán", "Balance due") : localizedText("Tổng cần thanh toán", "Total due")}</span>
-      <strong className="text-lg text-blue-700">{formatMoney(total, language)}</strong>
-    </div>
+    {showTotal && <div className={`flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/80 ${compact ? "px-3 py-3" : "px-4 py-3.5"}`}>
+      <span className="text-sm font-semibold text-slate-700">{hasRemainingAmount ? localizedText("Còn phải thanh toán", "Balance due") : localizedText("Tổng cần thanh toán", "Total due")}</span>
+      <strong className="shrink-0 text-lg font-bold tabular-nums text-blue-700">{formatMoney(total, language)}</strong>
+    </div>}
     {surplus > 0 && <div className="flex items-center justify-between text-sm">
       <span className="font-semibold text-amber-800">{localizedText("Khách sạn cần hoàn", "Refund due to guest")}</span>
       <strong className="text-amber-800">{formatMoney(surplus, language)}</strong>

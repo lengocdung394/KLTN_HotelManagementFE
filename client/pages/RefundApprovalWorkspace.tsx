@@ -30,6 +30,7 @@ type CancellationAction = "approve" | "reject" | "confirm" | "bank-details";
 type CancellationFilter = "ALL" | BookingCancellationStatus;
 type BookingChannelFilter = "ALL" | BookingChannel;
 type RefundAccountChoice = "saved" | "alternate";
+type RefundQueue = "overpayment" | "cancellation";
 
 const statusLabels: Record<BookingCancellationStatus, [string, string]> = {
   REFUND_BANK_DETAILS_REQUIRED: ["Chờ thông tin ngân hàng", "Awaiting bank details"],
@@ -99,6 +100,7 @@ export default function RefundApprovalWorkspace() {
   const [submitBankDetails, { isLoading: isSavingBankDetails }] = useSubmitRefundBankDetailsByStaffMutation();
   const [filter, setFilter] = useState<CancellationFilter>("ALL");
   const [channelFilter, setChannelFilter] = useState<BookingChannelFilter>("ALL");
+  const [activeQueue, setActiveQueue] = useState<RefundQueue>("overpayment");
   const [selectedRequestDate, setSelectedRequestDate] = useState<string | null>(null);
   const [activeCancellation, setActiveCancellation] = useState<BookingCancellation | null>(null);
   const [activeAction, setActiveAction] = useState<CancellationAction | null>(null);
@@ -351,8 +353,66 @@ export default function RefundApprovalWorkspace() {
         <StatCard label={localizedText("Tổng tiền đã hoàn", "Total refunded")} value={money(counts.totalRefunded)} tone="slate" />
       </div>
 
-      <CheckoutRefundApprovalsPanel />
+      <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label={localizedText("Loại yêu cầu hoàn tiền", "Refund request type")}>
+        {([
+          {
+            value: "overpayment" as const,
+            icon: Banknote,
+            title: localizedText("Thanh toán dư", "Overpayment"),
+            description: localizedText("Hoàn tiền từ giao dịch checkout", "Refunds from checkout payments"),
+            count: counts.checkoutPending,
+            tone: "amber",
+          },
+          {
+            value: "cancellation" as const,
+            icon: ClipboardCheck,
+            title: localizedText("Hủy phòng", "Room cancellation"),
+            description: localizedText("Duyệt và theo dõi hoàn tiền booking", "Review and track booking refunds"),
+            count: counts.reviewPending + counts.needsBankDetails,
+            tone: "blue",
+          },
+        ]).map((queue) => {
+          const Icon = queue.icon;
+          const selected = activeQueue === queue.value;
 
+          return (
+            <button
+              key={queue.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setActiveQueue(queue.value)}
+              className={`flex min-w-0 items-center gap-3 rounded-xl border p-4 text-left transition ${
+                selected
+                  ? queue.tone === "amber"
+                    ? "border-amber-300 bg-amber-50 shadow-sm"
+                    : "border-blue-300 bg-blue-50 shadow-sm"
+                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
+                queue.tone === "amber" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
+              }`}>
+                <Icon size={20} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-slate-900">{queue.title}</span>
+                <span className="mt-0.5 block text-xs text-slate-500">{queue.description}</span>
+              </span>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                selected
+                  ? queue.tone === "amber" ? "bg-amber-200 text-amber-900" : "bg-blue-200 text-blue-900"
+                  : "bg-slate-100 text-slate-600"
+              }`}>
+                {queue.count} {localizedText("chờ xử lý", "pending")}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {activeQueue === "overpayment" ? (
+        <CheckoutRefundApprovalsPanel />
+      ) : (
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
@@ -488,51 +548,30 @@ export default function RefundApprovalWorkspace() {
           </div>
         ) : (
           <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[1380px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+            <table className="w-[max(900px,100%)] table-fixed text-left text-sm">
+              <thead className="bg-blue-50 text-[11px] uppercase tracking-wide text-blue-800">
                 <tr>
-                  <th className="w-[220px] px-4 py-3">{localizedText("Booking / khách hàng", "Booking / guest")}</th>
-                  <th className="w-[170px] px-4 py-3">{localizedText("Ngày yêu cầu", "Request date")}</th>
-                  <th className="w-[300px] px-4 py-3">{localizedText("Tài khoản nhận hoàn", "Refund recipient account")}</th>
-                  <th className="w-[240px] px-4 py-3 text-right">{localizedText("Tiền hoàn", "Refund amount")}</th>
-                  <th className="w-[210px] px-4 py-3">{localizedText("Trạng thái", "Status")}</th>
-                  <th className="w-[220px] px-4 py-3 text-right">{localizedText("Thao tác", "Actions")}</th>
+                  <th className="w-[23%] px-3 py-3">{localizedText("Booking / khách", "Booking / guest")}</th>
+                  <th className="w-[13%] px-3 py-3">{localizedText("Ngày yêu cầu", "Request date")}</th>
+                  <th className="w-[21%] px-3 py-3">{localizedText("Tài khoản nhận", "Recipient account")}</th>
+                  <th className="w-[18%] px-3 py-3">{localizedText("Chi tiết hoàn", "Refund details")}</th>
+                  <th className="w-[25%] px-3 py-3">{localizedText("Trạng thái / thao tác", "Status / actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleCancellations.map((cancellation) => (
-                  <tr key={cancellation.id} className="align-top hover:bg-slate-50/70">
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-blue-700">{cancellation.bookingId}</p>
-                        {cancellation.bookingChannel && (
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            cancellation.bookingChannel === "ONLINE"
-                              ? "bg-sky-50 text-sky-700"
-                              : "bg-violet-50 text-violet-700"
+                  <tr key={cancellation.id} className="align-top transition-colors hover:bg-slate-50/70">
+                    <td className="px-3 py-4">
+                      <p className="break-words font-semibold text-blue-700">{cancellation.bookingId}</p>
+                      {cancellation.bookingChannel && (
+                          <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            cancellation.bookingChannel === "ONLINE" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700"
                           }`}>
-                            {cancellation.bookingChannel === "ONLINE"
-                              ? localizedText("Đặt online", "Online booking")
-                              : localizedText("Đặt tại quầy", "Front-desk booking")}
+                            {cancellation.bookingChannel === "ONLINE" ? "Online" : localizedText("Tại quầy", "Front desk")}
                           </span>
-                        )}
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                          {localizedText("Hoàn do hủy phòng", "Room cancellation refund")}
-                        </span>
-                        {cancellation.refundMethod && (
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            cancellation.refundMethod === "CASH"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-indigo-50 text-indigo-700"
-                          }`}>
-                            {cancellation.refundMethod === "CASH"
-                              ? localizedText("Hoàn tiền mặt", "Cash refund")
-                              : localizedText("Hoàn vào tài khoản", "Bank refund")}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex items-center gap-1.5">
-                        <p className="text-slate-800">{cancellation.customerName || localizedText("Khách hàng", "Guest")}</p>
+                      )}
+                      <div className="mt-2 flex min-w-0 items-center gap-1">
+                        <p className="truncate font-medium text-slate-800">{cancellation.customerName || localizedText("Khách hàng", "Guest")}</p>
                         {cancellation.customerName && (
                           <CopyValueButton
                             label={localizedText("tên khách hàng", "guest name")}
@@ -546,77 +585,104 @@ export default function RefundApprovalWorkspace() {
                         <p className="mt-0.5 text-xs text-slate-500">{cancellation.customerPhone}</p>
                       )}
                       {cancellation.reason && (
-                        <p className="mt-2 max-w-xs text-xs text-slate-500">{localizedText("Lý do:", "Reason:")} {cancellation.reason}</p>
+                        <p className="mt-2 line-clamp-2 text-xs leading-4 text-slate-500" title={cancellation.reason}>
+                          {localizedText("Lý do:", "Reason:")} {cancellation.reason}
+                        </p>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-slate-600">{dateTime(cancellation.requestedAt)}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-4 text-xs leading-5 text-slate-600">{dateTime(cancellation.requestedAt)}</td>
+                    <td className="px-3 py-4">
                       {cancellation.refundMethod === "CASH" ? (
-                        <span className="text-xs font-semibold text-emerald-700">
+                        <span className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-700">
                           {localizedText("Hoàn tiền mặt tại khách sạn", "Cash refund at hotel")}
                         </span>
                       ) : cancellation.bankAccountNumber ? (
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           {[
                             [localizedText("Ngân hàng", "Bank"), cancellation.bankName, "bank"],
                             [localizedText("Chủ tài khoản", "Account holder"), cancellation.bankAccountName, "name"],
                             [localizedText("Số tài khoản", "Account number"), cancellation.bankAccountNumber, "number"],
                           ].map(([label, value, field]) => value && (
-                            <div key={field} className="flex items-center gap-1.5">
-                              <span className={`min-w-0 truncate ${field === "number" ? "font-mono text-xs text-slate-500" : field === "name" ? "text-slate-700" : "font-semibold text-slate-800"}`}>
+                            <div key={field} className="min-w-0">
+                              <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-400">{label}</span>
+                              <div className="flex items-center gap-1">
+                                <span className={`min-w-0 truncate text-xs ${field === "number" ? "font-mono text-slate-600" : field === "name" ? "text-slate-700" : "font-semibold text-slate-800"}`}>
                                 {value}
-                              </span>
-                              <CopyValueButton
-                                label={label}
-                                value={value}
-                                copied={copiedField === `${cancellation.id}:${field}`}
-                                onCopy={() => void copyValue(value, `${cancellation.id}:${field}`)}
-                              />
+                                </span>
+                                <CopyValueButton
+                                  label={label}
+                                  value={value}
+                                  copied={copiedField === `${cancellation.id}:${field}`}
+                                  onCopy={() => void copyValue(value, `${cancellation.id}:${field}`)}
+                                />
+                              </div>
                             </div>
                           ))}
                           {cancellation.refundEmail && (
-                            <p className="pt-1 text-xs text-slate-500">Email: {cancellation.refundEmail}</p>
+                            <p className="truncate border-t border-slate-100 pt-2 text-xs text-slate-500" title={cancellation.refundEmail}>{cancellation.refundEmail}</p>
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-amber-700">{localizedText("Khách chưa cung cấp thông tin", "Guest has not provided account details")}</span>
+                        <span className="inline-flex rounded-lg bg-amber-50 px-2.5 py-2 text-xs leading-4 text-amber-700">
+                          {cancellation.status === "NO_REFUND_REQUIRED"
+                            ? localizedText("Không cần tài khoản nhận", "No recipient account needed")
+                            : localizedText("Chưa có thông tin ngân hàng", "Bank details not provided")}
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-4 text-right">
-                      <p className="font-bold text-slate-900">{money(cancellation.refundAmount)}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {localizedText("Phòng (trước phạt)", "Room (before penalty)")} {money(
-                          Number(cancellation.roomRefundAmount ?? 0)
-                          + Number(cancellation.roomPenaltyAmount ?? 0),
-                        )} · {localizedText("Dịch vụ hoàn", "Service refund")} {money(cancellation.serviceRefundAmount)}
-                      </p>
+                    <td className="px-3 py-4">
+                      <p className="text-base font-bold tabular-nums text-slate-900">{money(cancellation.refundAmount)}</p>
+                      <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">{localizedText("Tổng tiền hoàn", "Total refund")}</p>
+                      {Number(cancellation.refundAmount ?? 0) > 0 ? (
+                        <div className="space-y-1 border-t border-slate-100 pt-2 text-xs">
+                          <div className="flex justify-between gap-2">
+                            <span className="text-slate-500">{localizedText("Phòng (trước phạt)", "Room (before penalty)")}</span>
+                            <span className="whitespace-nowrap tabular-nums text-slate-700">
+                              {money(Number(cancellation.roomRefundAmount ?? 0) + Number(cancellation.roomPenaltyAmount ?? 0))}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <span className="text-slate-500">{localizedText("Dịch vụ", "Services")}</span>
+                            <span className="whitespace-nowrap tabular-nums text-slate-700">{money(cancellation.serviceRefundAmount)}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="border-t border-slate-100 pt-2 text-xs text-slate-500">
+                          {localizedText("Không phát sinh tiền hoàn", "No refund due")}
+                        </p>
+                      )}
                       {Number(cancellation.roomPenaltyAmount) > 0 && (
-                        <p className="mt-1 text-xs text-rose-600">{localizedText("Phạt phòng", "Room penalty")} {money(cancellation.roomPenaltyAmount)}</p>
+                        <div className="mt-1 flex justify-between gap-2 border-t border-slate-100 pt-1 text-xs">
+                          <span className="text-rose-600">{localizedText("Phạt phòng", "Room penalty")}</span>
+                          <span className="whitespace-nowrap tabular-nums text-rose-600">{money(cancellation.roomPenaltyAmount)}</span>
+                        </div>
                       )}
                     </td>
-                    <td className="px-4 py-4">
-                      <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
-                        {localizedText(...statusLabels[cancellation.status])}
+                    <td className="px-3 py-4">
+                      <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
+                        {cancellation.status === "NO_REFUND_REQUIRED"
+                          ? localizedText("Không hoàn", "No refund")
+                          : localizedText(...statusLabels[cancellation.status])}
                       </span>
                       {cancellation.reviewNote && (
-                        <p className="mt-2 max-w-xs text-xs text-slate-500">{localizedText("Ghi chú:", "Note:")} {cancellation.reviewNote}</p>
+                        <p className="mt-2 line-clamp-2 text-xs leading-4 text-slate-500" title={cancellation.reviewNote}>
+                          {localizedText("Ghi chú:", "Note:")} {cancellation.reviewNote}
+                        </p>
                       )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4">
-                      <div className="flex min-w-max justify-end gap-2">
+                      <div className="mt-3 flex flex-col items-start gap-2">
                         {cancellation.status === "REFUND_REVIEW_PENDING" && (
                           <>
                             <button
                               type="button"
                               onClick={() => openAction(cancellation, "approve")}
-                              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                             >
                               <Check size={14} /> {localizedText("Duyệt", "Approve")}
                             </button>
                             <button
                               type="button"
                               onClick={() => openAction(cancellation, "reject")}
-                              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
                             >
                               <X size={14} /> {localizedText("Từ chối", "Reject")}
                             </button>
@@ -626,7 +692,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "confirm")}
-                            className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                          className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                           >
                             <Banknote size={14} /> {localizedText("Xác nhận đã chuyển", "Confirm transfer")}
                           </button>
@@ -635,7 +701,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "bank-details")}
-                            className="inline-flex shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                          className="inline-flex whitespace-nowrap rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
                           >
                             {localizedText("Nhập thông tin ngân hàng", "Enter bank details")}
                           </button>
@@ -649,6 +715,7 @@ export default function RefundApprovalWorkspace() {
           </div>
         )}
       </div>
+      )}
 
       {activeCancellation && activeAction && (
         <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
