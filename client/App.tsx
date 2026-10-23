@@ -1,4 +1,3 @@
-  window.localStorage.removeItem("position");
 import "./global.css";
 import "./i18n";
 
@@ -9,6 +8,7 @@ import { useEffect, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Provider } from "react-redux";
 import { store } from "./store";
+import { logout } from "./store/authSlice";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
@@ -18,6 +18,7 @@ import CustomerPage from "./pages/CustomerPage";
 import LoginPage from "./pages/LoginPage";
 import { disconnectSocket, initSocket } from "./lib/socket";
 import { useAppSelector } from "./store/hooks";
+import ChatWidget from "./components/ChatWidget";
 
 type AppRoutesProps = {
   authenticated: boolean;
@@ -30,7 +31,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const isBranchAdmin = roles.includes("ROLE_ADMIN");
   const isManager = roles.includes("ROLE_MANAGER");
-  const isEmployee = roles.includes("ROLE_EMPLOYEE");
+  const isEmployee = roles.includes("ROLE_EMPLOYEE") || roles.includes("ROLE_RECEPTIONIST") || roles.includes("ROLE_STAFF");
 
   if (!authenticated) {
     return (
@@ -46,6 +47,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
       <Routes>
         <Route path="/" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<AdminDashboardPage onLogout={onLogout} />} />
+        <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     );
@@ -144,6 +146,9 @@ const App = () => {
   const handleLogout = () => {
     window.localStorage.removeItem("staywise-authenticated");
     window.localStorage.removeItem("accessToken");
+    window.localStorage.removeItem("senviet_admin_copilot_session_v3");
+    window.localStorage.removeItem("senviet_admin_copilot_messages_v3");
+    store.dispatch(logout());
     disconnectSocket();
     setAuthenticated(false);
   };
@@ -159,6 +164,7 @@ const App = () => {
             onLogin={() => setAuthenticated(true)}
             onLogout={handleLogout}
           />
+          {authenticated && <ChatWidget />}
         </BrowserRouter>
       </TooltipProvider>
     </Provider>

@@ -186,7 +186,6 @@ export const managementBookingApi = baseApi.injectEndpoints({
       }),
       transformResponse: unwrapCancellationList,
       providesTags: ["RefundCancellation"],
-      refetchOnMountOrArgChange: true,
     }),
     cancelBookingByStaff: builder.mutation<
       BookingCancellationApiResponse,
@@ -255,7 +254,6 @@ export const managementBookingApi = baseApi.injectEndpoints({
       }),
       transformResponse: unwrapCheckoutRefundList,
       providesTags: ["CheckoutRefund"],
-      refetchOnMountOrArgChange: true,
     }),
     updateCheckoutRefundBankDetails: builder.mutation<
       { result?: CheckoutRefund },

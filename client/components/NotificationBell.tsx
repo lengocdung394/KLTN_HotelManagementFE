@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Bell, CheckCheck, LoaderCircle } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
@@ -80,19 +81,23 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
 
 export default function NotificationBell() {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
+  const numericHotelId = hotelId ? Number(hotelId) : undefined;
+  const listQueryArgs = numericHotelId ? { hotelId: numericHotelId, page: 0, size: 8 } : { page: 0, size: 8 };
+  const summaryQueryArgs = numericHotelId ? { hotelId: numericHotelId } : undefined;
   const [isOpen, setIsOpen] = useState(false);
   const {
     data: pageResponse,
     isLoading,
     isError: isNotificationsError,
     refetch: refetchNotifications,
-  } = useGetNotificationsQuery({ page: 0, size: 8 });
+  } = useGetNotificationsQuery(listQueryArgs);
   const {
     data: summaryResponse,
     isError: isSummaryError,
     refetch: refetchSummary,
-  } = useGetNotificationSummaryQuery();
+  } = useGetNotificationSummaryQuery(summaryQueryArgs);
   const [markRead, markReadState] = useMarkNotificationReadMutation();
   const [markAllRead, markAllState] = useMarkAllNotificationsReadMutation();
   const notifications = pageResponse?.result.content ?? [];
@@ -116,7 +121,7 @@ export default function NotificationBell() {
         if (incoming) {
           dispatch(notificationApi.util.updateQueryData(
             "getNotifications",
-            { page: 0, size: 8 },
+            listQueryArgs,
             (draft) => {
               const page = draft.result;
               if (page.content.some((notification) => notification.id === incoming.id)) return;
@@ -128,7 +133,7 @@ export default function NotificationBell() {
           ));
           dispatch(notificationApi.util.updateQueryData(
             "getNotificationSummary",
-            undefined,
+            summaryQueryArgs,
             (draft) => {
               const summary = draft.result;
               summary.totalCount += 1;
@@ -167,6 +172,16 @@ export default function NotificationBell() {
             || notification.type === "BOOKING_CANCELLED"
             || notification.type === "BOOKING_REFUND_REQUESTED"
             || notification.type === "BOOKING_REFUND_COMPLETED"
+          ) {
+            dispatch(baseApi.util.invalidateTags(["Booking", "Room", "RefundCancellation", "CheckoutRefund"]));
+          }
+          if (
+            notification.type === "BOOKING_CREATED"
+            || notification.type === "BOOKING_UPDATED"
+            || notification.type === "PAYMENT_RECEIVED"
+            || notification.type === "BOOKING_CANCELLED"
+            || notification.type === "BOOKING_REFUND_REQUESTED"
+            || notification.type === "BOOKING_REFUND_COMPLETED"
             || notification.type === "PROMOTION_CREATED"
             || notification.type === "PROMOTION_UPDATED"
             || notification.type === "SERVICE_CREATED"
@@ -180,7 +195,7 @@ export default function NotificationBell() {
         }
       },
       onNewBookingNotification: () => {
-        dispatch(baseApi.util.invalidateTags(["Notification"]));
+        dispatch(baseApi.util.invalidateTags(["Notification", "Booking", "Room"]));
       },
       onRoomUpdated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["Room", "Notification"]));
@@ -288,7 +303,7 @@ export default function NotificationBell() {
             </button>
           </header>
           <div className="max-h-[min(28rem,70vh)] overflow-y-auto">
-            {isSummaryError || isNotificationsError ? (
+            {(isSummaryError || isNotificationsError) && notifications.length === 0 ? (
               <p role="alert" className="px-4 py-8 text-center text-sm text-rose-600">
                 Không thể tải thông báo. Vui lòng thử lại sau.
               </p>
@@ -307,6 +322,30 @@ export default function NotificationBell() {
                     void markRead(notification.id).unwrap().catch(() => {
                       toast({ variant: "destructive", title: "Không thể cập nhật thông báo", description: "Vui lòng thử lại." });
                     });
+                  }
+                  setIsOpen(false);
+                  if (
+                    notification.type === "BOOKING_REFUND_REQUESTED"
+                    || notification.type === "BOOKING_REFUND_COMPLETED"
+                  ) {
+                    navigate("/refund-approvals");
+                  } else if (
+                    notification.type === "BOOKING_CREATED"
+                    || notification.type === "BOOKING_UPDATED"
+                    || notification.type === "PAYMENT_RECEIVED"
+                    || notification.type === "BOOKING_CANCELLED"
+                  ) {
+                    navigate("/booking-list");
+                  } else if (
+                    notification.type === "PROMOTION_CREATED"
+                    || notification.type === "PROMOTION_UPDATED"
+                  ) {
+                    navigate("/promotions");
+                  } else if (
+                    notification.type === "SERVICE_CREATED"
+                    || notification.type === "SERVICE_UPDATED"
+                  ) {
+                    navigate("/services");
                   }
                 }}
                 className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-slate-50 ${

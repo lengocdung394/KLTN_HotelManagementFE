@@ -12,6 +12,16 @@ export default defineConfig(({ mode }) => ({
       allow: ["./client", "./shared", "index.html"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
     },
+    proxy: {
+      "/ai": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/api/admin-ai": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+    },
     allowedHosts: true
   },
   

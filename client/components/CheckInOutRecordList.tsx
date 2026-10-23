@@ -76,6 +76,13 @@ export default function CheckInOutRecordList({
     const serviceTotal = services.reduce((total, service) => total + service.amount, 0) + (record.lateFee || 0);
     const totalAmount = Number(record.roomAmount ?? 0) + serviceTotal + Number(record.earlyCheckInFee ?? 0);
     const matrixConflict = isCheckIn && record.status === "Chờ check-in" ? checkMatrixCheckInConflict(record) : null;
+    const statusLabel = record.status === "Chờ check-in"
+      ? t("frontDesk.waitingCheckIn")
+      : record.status === "Đang ở"
+        ? localizedText("Đang lưu trú", "In stay")
+        : record.status === "Đã check-in"
+          ? localizedText("Đã check-in", "Checked in")
+          : localizedText("Đã check-out", "Checked out");
 
     return (
       <article

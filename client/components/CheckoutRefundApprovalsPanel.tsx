@@ -1,3 +1,4 @@
+import { useAppSelector } from "../store/hooks";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Banknote, Check, LoaderCircle, RefreshCw, Save } from "lucide-react";
@@ -130,6 +131,8 @@ export default function CheckoutRefundApprovalsPanel() {
 }
 
 function CheckoutRefundRow({ refund }: { refund: CheckoutRefund }) {
+  const roles = useAppSelector((state) => state.auth.roles);
+  const canApproveRefund = roles.includes("ROLE_RECEPTIONIST") || roles.includes("ROLE_STAFF") || roles.includes("ROLE_EMPLOYEE") || roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
   useTranslation();
   const [updateBankDetails, { isLoading: isSaving }] = useUpdateCheckoutRefundBankDetailsMutation();
   const [approveRefund, { isLoading: isApproving }] = useApproveCheckoutRefundMutation();

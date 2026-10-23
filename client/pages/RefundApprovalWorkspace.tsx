@@ -1,3 +1,4 @@
+import { useAppSelector } from "../store/hooks";
 import {
   AlertCircle,
   Banknote,
@@ -91,6 +92,8 @@ const actionDescription: Record<CancellationAction, [string, string]> = {
 
 export default function RefundApprovalWorkspace() {
   useTranslation();
+  const roles = useAppSelector((state) => state.auth.roles);
+  const canApproveRefund = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
   const { data: cancellations = [], isLoading, isFetching, isError, error, refetch } =
     useGetBookingCancellationsQuery();
   const { data: surplusRefunds = [] } = useGetCheckoutRefundsQuery();
@@ -1012,10 +1015,12 @@ export default function RefundApprovalWorkspace() {
 
 function CopyValueButton({
   label,
+  value,
   copied,
   onCopy,
 }: {
   label: string;
+  value?: string;
   copied: boolean;
   onCopy: () => void;
 }) {
