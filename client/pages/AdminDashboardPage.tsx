@@ -32,6 +32,7 @@ import { baseApi } from "../services/baseApi";
 import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
 import {
   formatEntityUpdateNotification,
+  isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
 import { uploadProvinceBackgroundToCloudinary } from "../services/cloudinaryUploadApi";
@@ -506,10 +507,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       },
       onRoomUpdated: (payload) => {
         const event = getSocketPayload(payload);
-        const data = getSocketPayload(event.data);
         const description = formatRoomUpdateNotification(event);
-        addNotification("Phòng được cập nhật", description, { category: "room", hotelId: getHotelId(event) });
-        toast({ title: "Danh sách phòng đã cập nhật", description });
+        const title = isHousekeepingCompletionUpdate(event) ? "Phòng đã dọn xong" : "Phòng được cập nhật";
+        addNotification(title, description, { category: "room", hotelId: getHotelId(event) });
+        if (!isHousekeepingCompletionUpdate(event)) {
+          toast({ title, description });
+        }
         dispatch(baseApi.util.invalidateTags(["Room", "Booking", "SuperAdminBranch"]));
       },
       onRoomPolicyUpdated: (payload) => {

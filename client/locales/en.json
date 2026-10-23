@@ -162,6 +162,8 @@
     "permissions": { "eyebrow": "System administration", "title": "Permissions", "description": "Set roles and access permissions for each staff group.", "stats": ["Roles", "Staff", "Access permissions", "Last updated"] },
     "reports": { "eyebrow": "Business analytics", "title": "Revenue reports", "description": "Track occupancy, ADR, RevPAR, and business performance over time.", "stats": ["Monthly revenue", "Room occupancy", "ADR", "RevPAR"] },
     "settings": { "eyebrow": "System setup", "title": "Settings", "description": "Configure your branch, room types, notifications, and account access.", "stats": ["Branch", "Time zone", "Language", "Role"] }
+    ,"serviceUsage": { "eyebrow": "Hotel operations", "title": "Customer service operations", "description": "Track booked services and confirm them after guests use them.", "stats": [] }
+    ,"serviceCatalog": { "eyebrow": "Service catalog", "title": "Service catalog management", "description": "Add, edit, and manage the status of hotel services.", "stats": [] }
   },
   "booking": {
     "adults": "Adults",
@@ -235,6 +237,70 @@
     ,"rooms": "rooms"
     ,"estimatedTotal": "Estimated total"
     ,"selectDateToAddRoom": "Select dates on the calendar to add another room."
+    ,"guestSearchLoading": "Searching..."
+    ,"emailConfirmation": "Booking confirmation email"
+    ,"emailConfirmationHelp": "This email will be saved to the guest profile and used to send the booking confirmation."
+    ,"createCustomer": "Create customer"
+    ,"creatingCustomer": "Creating customer..."
+    ,"customerCreated": "Customer profile created"
+    ,"guestStayingInRoom": "Guest staying in room {{room}}"
+    ,"roomGuestPolicy": "Guest policy and surcharges"
+    ,"standardCapacity": "Standard capacity:"
+    ,"maxAdditionalGuests": "Maximum additional guests:"
+    ,"adultAgeRange": "Adults (12 and older)"
+    ,"childAgeRange": "Children (2 to under 12)"
+    ,"infantAgeRange": "Infants (under 2)"
+    ,"infantFree": "free"
+    ,"privateRoomNote": "Private note for room {{room}}"
+    ,"roomGuestCount": "{{count}} guests · {{nights}} nights"
+    ,"adultSurcharge": "Adult surcharge"
+    ,"childSurcharge": "Child surcharge"
+    ,"noServiceSelected": "None selected"
+    ,"roomSubtotal": "Room subtotal"
+    ,"removeSelectedRoom": "Remove room"
+    ,"roomCancelledOnSave": "This room will be cancelled when the booking is saved."
+    ,"cannotRemoveRoom": "Cannot remove a room after check-in or when its booking detail is no longer pending."
+    ,"guestInfo": "Guest information"
+    ,"roomInfo": "Room information"
+    ,"multipleSchedules": "Multiple schedules"
+    ,"selected": "Selected"
+    ,"enterGuestDetailsForSummary": "Enter the guest's full name, phone number, and citizen ID to show their details."
+    ,"promoSelected": "Promotion applied: {{code}}"
+    ,"people": "people"
+    ,"currencyPerPerson": "₫/person"
+    ,"specialGuestRequests": "Special guest requests..."
+    ,"continueToServices": "Continue to select services"
+    ,"guestDetailsRequired": "Enter the guest's full name, phone number, and citizen ID."
+    ,"creatingGuestProfile": "Creating guest profile. Please wait..."
+    ,"employeeIdMissing": "Employee ID not found in the signed-in session."
+    ,"updatingBooking": "Updating booking..."
+    ,"creatingBooking": "Creating booking..."
+    ,"updateBooking": "Update booking"
+    ,"cancelRoomChange": "Cancel room change"
+    ,"onlyChangePendingRoom": "Rooms can only be changed while the booking detail is pending and before check-in."
+    ,"selectForAllRooms": "Select for all rooms"
+    ,"selectPerRoom": "Select individually by room"
+    ,"serviceNavigation": "Service page navigation"
+    ,"selectServices": "Select services"
+    ,"costSummary": "Cost summary"
+    ,"searchServices": "Search services..."
+    ,"loadingServices": "Loading services..."
+    ,"servicesLoadError": "Could not load services."
+    ,"noServicesAvailable": "No services available."
+    ,"servicesByRoom": "Services by room"
+    ,"roomCount": "{{count}} rooms"
+    ,"noRoomsSelected": "No rooms selected."
+    ,"roomWithNumber": "Room {{room}}"
+    ,"guestCountAndSelectServices": "{{count}} guests · Select services and quantities"
+    ,"searchServicesForRoom": "Search services for room {{room}}..."
+    ,"guestCount": "{{count}} guests"
+    ,"checkInLabel": "Check-in"
+    ,"checkOutLabel": "Check-out"
+    ,"applyToWholeRoom": "Apply to the whole room"
+    ,"peopleUsingService": "People using {{service}} in room {{room}}"
+    ,"roomDetails": "Room details"
+    ,"service": "service"
+    ,"name": "Name"
   },
   "room": {
     "ready": "Ready",
@@ -354,6 +420,10 @@
     "housekeeping": "Housekeeping",
     "dailySchedule": "Daily schedule",
     "todayShifts": "Today's shifts",
+    "employeeList": "Employee directory",
+    "assignShifts": "Assign shifts",
+    "assignTasks": "Assign tasks",
+    "housekeepingAssignment": "Housekeeping assignments",
     "staffShiftsTab": "Staff shifts",
     "assignmentTab": "Shift assignments",
     "weeklyOverview": "Weekly shift overview",
@@ -449,7 +519,164 @@
       "staff": "Manage staff"
     }
   },
+  "serviceWorkspace": {
+    "bookedToday": "Services booked today",
+    "bookedTodayHelp": "Service items in bookings created today",
+    "usedToday": "Services used today",
+    "usedTodayHelp": "Items confirmed as used by staff",
+    "estimatedRevenueToday": "Estimated service revenue today",
+    "revenueHelp": "Based on services confirmed as used",
+    "pendingConfirmation": "Services awaiting confirmation",
+    "pendingHelp": "Service items waiting for staff action",
+    "uploadFromFile": "Import from file",
+    "addService": "Add service",
+    "usageSection": "Customer service operations",
+    "usageTabs": "Service activity list",
+    "pendingBookings": "Bookings with pending services",
+    "processed": "Processed",
+    "bookedFrom": "Booked from",
+    "usedFrom": "Used from",
+    "bookedTo": "Booked through",
+    "usedTo": "Used through",
+    "clearFilter": "Clear filters",
+    "loadingBookings": "Loading services in bookings...",
+    "pendingLoadError": "Could not load services awaiting confirmation. Please reload the page.",
+    "noPendingServices": "There are no services awaiting confirmation.",
+    "noPendingInRange": "No bookings with pending services were found in the selected date range.",
+    "pendingCount": "{{count}} pending services",
+    "collapse": "Collapse",
+    "actions": "Actions",
+    "bookedAt": "Booked:",
+    "room": "Room {{room}}",
+    "checkIn": "Check-in:",
+    "confirmUsed": "Confirm as used",
+    "loadingHistory": "Loading service activity history...",
+    "historyLoadError": "Could not load service activity history. Please reload the page.",
+    "noUsedInRange": "No services were confirmed as used in the selected date range.",
+    "confirmedBy": "Confirmed by {{name}}",
+    "branch": "Branch",
+    "filterByBranch": "Filter services by branch",
+    "allBranches": "All branches",
+    "searchPlaceholder": "Search by service name, description, or category...",
+    "searchServices": "Search services",
+    "filterByStatus": "Filter services by status",
+    "allStatuses": "All statuses",
+    "active": "Active",
+    "inactive": "Inactive",
+    "loadingServices": "Loading services...",
+    "servicesLoadError": "Could not load services.",
+    "branchUnknown": "The current branch could not be identified.",
+    "noServices": "No services yet.",
+    "noMatchingServices": "No services match the selected search or status.",
+    "viewDetails": "View details",
+    "edit": "Edit",
+    "showing": "Showing {{from}}-{{to}} of {{total}} services",
+    "rows": "Rows",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "unitPrice": "Unit price",
+    "serviceId": "Service ID",
+    "serviceDescription": "Service description",
+    "noDescription": "No description for this service.",
+    "close": "Close",
+    "serviceType": "Hotel service",
+    "editService": "Edit service",
+    "serviceScope": "Service scope",
+    "entireSystem": "Entire system",
+    "branchOnly": "This service applies only to the selected branch.",
+    "allBranchesApply": "This service applies to all branches.",
+    "serviceName": "Service name",
+    "enterServiceName": "Enter a service name",
+    "price": "Price",
+    "unit": "Unit",
+    "category": "Category",
+    "other": "Other",
+    "roomService": "Room service",
+    "sports": "Sports",
+    "restaurant": "Restaurant",
+    "electronics": "Electronics",
+    "image": "Image",
+    "uploadImage": "Upload image",
+    "servicePreview": "Service preview",
+    "description": "Description",
+    "enterDescription": "Enter a service description",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "saveChanges": "Save changes",
+    "saveError": "Could not save the service. Check the information and try again.",
+    "importServices": "Import services",
+    "importProgress": "Service import progress",
+    "importFailed": "Service import failed",
+    "importSucceeded": "Services imported successfully",
+    "bulkImportFinished": "The import completed. {{passed}} rows passed validation and {{failed}} rows need review in the bottom-right notification.",
+    "servicesAdded": "Successfully added {{count}} services.",
+    "dateLocale": "en-US"
+    ,"bulkImportDescription": "Upload the service images from the selected branch folder to Cloudinary. The server stores the image URLs and service details."
+    ,"downloadTemplate": "Download Excel template"
+    ,"zipFileLabel": "Service data ZIP file (.zip)"
+    ,"unitOnce": "time"
+    ,"unitHour": "hour"
+    ,"unitDay": "day"
+    ,"spa": "Spa"
+  },
   "promotion": {
+    "bookingTitle": "Promotion",
+    "enterCode": "Enter promotion code",
+    "apply": "Apply",
+    "bestDiscount": "Choose best available discount",
+    "searchBookingPromotions": "Search promotions",
+    "branchOffers": "Branch promotions",
+    "customerOffers": "Customer promotions",
+    "availableCodesEmpty": "No available codes.",
+    "selectCustomerToViewCodes": "Select a customer to view saved codes.",
+    "customerHasNoCodes": "This customer has no saved codes.",
+    "loading": "Loading...",
+    "loadError": "Could not load.",
+    "nameLabel": "Promotion name:",
+    "codeLabel": "Promotion code:",
+    "details": "Details",
+    "chooseCode": "Choose code",
+    "close": "Close",
+    "noAdditionalDiscount": "No eligible promotion can provide an additional discount for this booking.",
+    "codeNotFound": "Promotion code {{code}} was not found.",
+    "codeIneligible": "Code {{code}} could not be applied: {{reason}}",
+    "codeRemoved": "Code {{code}} was removed: {{reason}}",
+    "appliedCustomer": "Customer promotion applied",
+    "appliedBranch": "Branch promotion applied",
+    "removeSelection": "Remove",
+    "branchPromotionDescription": "Branch promotion",
+    "customerPromotionDescription": "Customer promotion",
+    "discountSection": "1. Discount",
+    "maxDiscount": "Maximum discount: {{amount}}",
+    "estimatedDiscount": "Estimated discount for this booking:",
+    "conditionsSection": "2. Scope and conditions",
+    "appliesTo": "Applies to",
+    "bookingMinimum": "Minimum booking value",
+    "roomMinimum": "Minimum room amount",
+    "serviceMinimum": "Minimum service amount",
+    "validitySection": "3. Validity and status",
+    "startDate": "Starts",
+    "endDate": "Ends",
+    "notUpdated": "Not provided",
+    "status": "Status",
+    "activeStatus": "Active",
+    "inactiveStatus": "Inactive",
+    "usageStatus": "Usage status",
+    "used": "Used",
+    "unused": "Unused",
+    "chooseThisPromotion": "Choose this promotion",
+    "scopeRoom": "Room charges",
+    "scopeService": "Service charges",
+    "scopeTotal": "Total bill",
+    "minimumBookingAmount": "Booking total must be at least {{amount}}",
+    "minimumRoomAmount": "Room charges must be at least {{amount}}",
+    "minimumServiceAmount": "Service charges must be at least {{amount}}",
+    "notEffective": "Promotion code is no longer valid",
+    "alreadyUsed": "This promotion code has already been used",
+    "thisCode": "this code",
+    "discountAmount": "discount {{amount}}",
+    "previousPromotions": "Previous promotions for {{title}}",
+    "nextPromotions": "Next promotions for {{title}}",
     "createTitle": "Create promotion",
     "createDescription": "Set up a new offer for guests.",
     "editTitle": "Edit promotion",

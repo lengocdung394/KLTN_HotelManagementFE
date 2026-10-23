@@ -17,18 +17,23 @@ import {
 import { useGetHotelReportQuery } from "../services/reportApi";
 import { useGetSuperAdminBranchesQuery } from "../services/superAdminApi";
 import { useAppSelector } from "../store/hooks";
+import { localizedText } from "../i18n";
 
 const localDateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 const formatMoney = (amount: number) =>
-  `${Number(amount ?? 0).toLocaleString("vi-VN")}đ`;
+  localizedText(
+    `${Number(amount ?? 0).toLocaleString("vi-VN")}đ`,
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Number(amount ?? 0)),
+  );
 
-const roomStatusLabels: Record<string, string> = {
-  READY: "Sẵn sàng",
-  IN_USE: "Đang sử dụng",
-  CLEANING: "Đang dọn",
-  MAINTENANCE: "Bảo trì",
+const roomStatusLabel = (status: string) => {
+  if (status === "READY") return localizedText("Sẵn sàng", "Ready");
+  if (status === "IN_USE") return localizedText("Đang sử dụng", "In use");
+  if (status === "CLEANING") return localizedText("Đang dọn", "Cleaning");
+  if (status === "MAINTENANCE") return localizedText("Bảo trì", "Maintenance");
+  return status;
 };
 
 const roomStatusColors: Record<string, string> = {
@@ -38,11 +43,12 @@ const roomStatusColors: Record<string, string> = {
   MAINTENANCE: "#f17b83",
 };
 
-const roomTypeLabels: Record<string, string> = {
-  STANDARD: "Phòng Tiêu chuẩn",
-  DELUXE: "Phòng Cao cấp",
-  SUITE: "Phòng Thượng hạng",
-  FAMILY: "Phòng Gia đình",
+const roomTypeLabel = (type: string) => {
+  if (type === "STANDARD") return localizedText("Phòng Tiêu chuẩn", "Standard room");
+  if (type === "DELUXE") return localizedText("Phòng Cao cấp", "Deluxe room");
+  if (type === "SUITE") return localizedText("Phòng Thượng hạng", "Suite");
+  if (type === "FAMILY") return localizedText("Phòng Gia đình", "Family room");
+  return type;
 };
 
 export default function ReportWorkspace() {
@@ -78,17 +84,17 @@ export default function ReportWorkspace() {
   const dailyRevenue = (report?.dailyServiceRevenue ?? []).map((item) => ({
     day: item.date.slice(8, 10),
     revenue: item.revenue,
-    fullDate: new Date(`${item.date}T00:00:00`).toLocaleDateString("vi-VN"),
+    fullDate: new Date(`${item.date}T00:00:00`).toLocaleDateString(localizedText("vi-VN", "en-US")),
   }));
   const roomStatuses = (report?.roomStatuses ?? []).map((item) => ({
     ...item,
-    name: roomStatusLabels[item.status] ?? item.status,
+    name: roomStatusLabel(item.status),
     color: roomStatusColors[item.status] ?? "#94a3b8",
   }));
   const roomTypeBookings = (report?.roomTypeBookings ?? [])
     .map((item) => ({
       ...item,
-      name: roomTypeLabels[item.roomType] ?? item.roomType,
+      name: roomTypeLabel(item.roomType),
     }))
     .sort((left, right) => right.bookingCount - left.bookingCount);
   const mostBookedRoomType = roomTypeBookings[0];
@@ -113,25 +119,25 @@ export default function ReportWorkspace() {
             <CalendarDays size={18} />
           </div>
           <div>
-            <p className="text-sm font-bold text-slate-800">Báo cáo hoạt động</p>
+            <p className="text-sm font-bold text-slate-800">{localizedText("Báo cáo hoạt động", "Activity report")}</p>
             <p className="mt-1 text-xs text-slate-400">
               {report
-                ? `${new Date(`${report.startDate}T00:00:00`).toLocaleDateString("vi-VN")} – ${new Date(`${report.endDate}T00:00:00`).toLocaleDateString("vi-VN")}`
-                : "Chọn khoảng ngày để xem báo cáo"}
+                ? `${new Date(`${report.startDate}T00:00:00`).toLocaleDateString(localizedText("vi-VN", "en-US"))} – ${new Date(`${report.endDate}T00:00:00`).toLocaleDateString(localizedText("vi-VN", "en-US"))}`
+                : localizedText("Chọn khoảng ngày để xem báo cáo", "Select a date range to view the report")}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           {isSystemAdmin && (
             <label className="block text-xs font-semibold text-slate-500">
-              Chi nhánh
+              {localizedText("Chi nhánh", "Branch")}
               <select
                 value={selectedBranchId}
                 onChange={(event) => setSelectedBranchId(event.target.value)}
-                aria-label="Chọn chi nhánh xem báo cáo"
+                aria-label={localizedText("Chọn chi nhánh xem báo cáo", "Select a branch for the report")}
                 className="mt-1 h-9 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
               >
-                <option value="">{isLoadingBranches ? "Đang tải chi nhánh..." : "Chọn chi nhánh"}</option>
+                <option value="">{isLoadingBranches ? localizedText("Đang tải chi nhánh...", "Loading branches...") : localizedText("Chọn chi nhánh", "Select a branch")}</option>
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
@@ -139,7 +145,7 @@ export default function ReportWorkspace() {
             </label>
           )}
           <label className="block text-xs font-semibold text-slate-500">
-            Từ ngày
+            {localizedText("Từ ngày", "From")}
             <input
               type="date"
               value={startDate}
@@ -149,7 +155,7 @@ export default function ReportWorkspace() {
             />
           </label>
           <label className="block text-xs font-semibold text-slate-500">
-            Đến ngày
+            {localizedText("Đến ngày", "To")}
             <input
               type="date"
               value={endDate}
@@ -160,38 +166,38 @@ export default function ReportWorkspace() {
             />
           </label>
           {startDate > endDate && (
-            <p role="alert" className="w-full text-xs text-rose-600">Ngày bắt đầu không được sau ngày kết thúc.</p>
+            <p role="alert" className="w-full text-xs text-rose-600">{localizedText("Ngày bắt đầu không được sau ngày kết thúc.", "The start date must be on or before the end date.")}</p>
           )}
         </div>
       </section>
 
       {isBranchesError && isSystemAdmin && (
         <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          Không thể tải danh sách chi nhánh.
+          {localizedText("Không thể tải danh sách chi nhánh.", "Could not load the branch list.")}
         </p>
       )}
       {!isSystemAdmin && !hotelId && (
         <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Chưa xác định được chi nhánh cho tài khoản này.
+          {localizedText("Chưa xác định được chi nhánh cho tài khoản này.", "No branch is associated with this account.")}
         </p>
       )}
       {isSystemAdmin && !selectedBranchId && !isBranchesError && (
         <p className="rounded-xl border border-slate-200 bg-white p-4 text-center text-sm text-slate-500">
-          Chọn chi nhánh để xem báo cáo.
+          {localizedText("Chọn chi nhánh để xem báo cáo.", "Select a branch to view the report.")}
         </p>
       )}
       {isLoading && (
         <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-          Đang tải báo cáo...
+          {localizedText("Đang tải báo cáo...", "Loading report...")}
         </p>
       )}
       {isError && (
         <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          Không thể tải báo cáo. Vui lòng thử lại.
+          {localizedText("Không thể tải báo cáo. Vui lòng thử lại.", "Could not load the report. Please try again.")}
         </p>
       )}
       {isFetching && !isLoading && (
-        <p className="text-right text-xs text-slate-400">Đang cập nhật số liệu...</p>
+        <p className="text-right text-xs text-slate-400">{localizedText("Đang cập nhật số liệu...", "Updating report data...")}</p>
       )}
 
       {report && !isError && (
@@ -200,42 +206,42 @@ export default function ReportWorkspace() {
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-blue-600">
                 <BarChart3 size={16} />
-                <p className="text-xs font-semibold">Tổng lượt đặt phòng</p>
+                <p className="text-xs font-semibold">{localizedText("Tổng lượt đặt phòng", "Total bookings")}</p>
               </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{totalBookingCount.toLocaleString("vi-VN")}</p>
-              <p className="mt-1 text-xs text-slate-500">Số booking được tạo trong kỳ, gồm cả booking hủy</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{totalBookingCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Số booking được tạo trong kỳ, gồm cả booking hủy", "Bookings created during this period, including cancellations")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-emerald-600">
                 <TrendingUp size={16} />
-                <p className="text-xs font-semibold">Tổng tiền thu vào</p>
+                <p className="text-xs font-semibold">{localizedText("Tổng tiền thu vào", "Total cash received")}</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(cashReceived)}</p>
-              <p className="mt-1 text-xs text-slate-500">Các giao dịch thu tiền thành công trong kỳ</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Các giao dịch thu tiền thành công trong kỳ", "Successful payment transactions during this period")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-rose-600">
                 <XCircle size={16} />
-                <p className="text-xs font-semibold">Tổng tiền hoàn lại</p>
+                <p className="text-xs font-semibold">{localizedText("Tổng tiền hoàn lại", "Total refunds")}</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(cashRefunded)}</p>
-              <p className="mt-1 text-xs text-slate-500">Các giao dịch hoàn tiền thực tế trong kỳ</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Các giao dịch hoàn tiền thực tế trong kỳ", "Refund transactions processed during this period")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-amber-600">
                 <TrendingUp size={16} />
-                <p className="text-xs font-semibold">Tiền thừa trả khách</p>
+                <p className="text-xs font-semibold">{localizedText("Tiền thừa trả khách", "Change returned to guests")}</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(cashChangeReturned)}</p>
-              <p className="mt-1 text-xs text-slate-500">Tiền thừa từ giao dịch tiền mặt</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Tiền thừa từ giao dịch tiền mặt", "Change returned from cash transactions")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-violet-600">
                 <TrendingUp size={16} />
-                <p className="text-xs font-semibold">Tiền thu ròng</p>
+                <p className="text-xs font-semibold">{localizedText("Tiền thu ròng", "Net cash received")}</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(netCashReceived)}</p>
-              <p className="mt-1 text-xs text-slate-500">Thu vào − hoàn tiền − tiền thừa trả khách</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Thu vào − hoàn tiền − tiền thừa trả khách", "Received − refunded − change returned")}</p>
             </article>
           </div>
 
@@ -243,42 +249,42 @@ export default function ReportWorkspace() {
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-blue-600">
                 <TrendingUp size={16} />
-                <p className="text-xs font-semibold">Doanh thu dịch vụ</p>
+                <p className="text-xs font-semibold">{localizedText("Doanh thu dịch vụ", "Service revenue")}</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.serviceRevenue)}</p>
-              <p className="mt-1 text-xs text-slate-500">Từ {report.serviceUsageCount} dịch vụ đã sử dụng</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText(`Từ ${report.serviceUsageCount} dịch vụ đã sử dụng`, `From ${report.serviceUsageCount} services used`)}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-emerald-600">
                 <Tag size={16} />
-                <p className="text-xs font-semibold">Lượt sử dụng khuyến mãi</p>
+                <p className="text-xs font-semibold">{localizedText("Lượt sử dụng khuyến mãi", "Promotion uses")}</p>
               </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{report.promotionUsageCount.toLocaleString("vi-VN")}</p>
-              <p className="mt-1 text-xs text-slate-500">Trong khoảng ngày đã chọn</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{report.promotionUsageCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Trong khoảng ngày đã chọn", "During the selected date range")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-amber-600">
                 <Tag size={16} />
-                <p className="text-xs font-semibold">Giá trị khuyến mãi</p>
+                <p className="text-xs font-semibold">{localizedText("Giá trị khuyến mãi", "Promotion savings")}</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.promotionSavings)}</p>
-              <p className="mt-1 text-xs text-slate-500">Tổng tiền giảm trên booking</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Tổng tiền giảm trên booking", "Total discounts applied to bookings")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-violet-600">
                 <BarChart3 size={16} />
-                <p className="text-xs font-semibold">Tổng số phòng</p>
+                <p className="text-xs font-semibold">{localizedText("Tổng số phòng", "Total rooms")}</p>
               </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{report.totalRoomCount.toLocaleString("vi-VN")}</p>
-              <p className="mt-1 text-xs text-slate-500">Theo trạng thái hiện tại</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{report.totalRoomCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Theo trạng thái hiện tại", "By current status")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-rose-600">
                 <XCircle size={16} />
-                <p className="text-xs font-semibold">Booking đã hủy</p>
+                <p className="text-xs font-semibold">{localizedText("Booking đã hủy", "Cancelled bookings")}</p>
               </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{cancelledBookingCount.toLocaleString("vi-VN")}</p>
-              <p className="mt-1 text-xs text-slate-500">Trong khoảng ngày đã chọn</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{cancelledBookingCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Trong khoảng ngày đã chọn", "During the selected date range")}</p>
             </article>
           </div>
 
@@ -286,20 +292,20 @@ export default function ReportWorkspace() {
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-5 flex items-start justify-between">
                 <div>
-                  <h3 className="font-bold text-slate-900">Doanh thu dịch vụ theo ngày</h3>
-                  <p className="mt-1 text-xs text-slate-400">Tính theo ngày xác nhận sử dụng hoặc checkout · VNĐ</p>
+                  <h3 className="font-bold text-slate-900">{localizedText("Doanh thu dịch vụ theo ngày", "Daily service revenue")}</h3>
+                  <p className="mt-1 text-xs text-slate-400">{localizedText("Tính theo ngày xác nhận sử dụng hoặc checkout · VNĐ", "Based on service confirmation or checkout date · VND")}</p>
                 </div>
                 <TrendingUp size={18} className="text-emerald-500" />
               </div>
               {dailyRevenue.length === 0 ? (
-                <p className="py-12 text-center text-sm text-slate-400">Không có dữ liệu doanh thu trong khoảng ngày này.</p>
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có dữ liệu doanh thu trong khoảng ngày này.", "No revenue data for this date range.")}</p>
               ) : (
                 <ResponsiveContainer width="100%" height={250}>
                   <BarChart data={dailyRevenue}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => `${Math.round(Number(value) / 1000000)}tr`} />
-                    <Tooltip labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""} formatter={(value) => [formatMoney(Number(value)), "Doanh thu dịch vụ"]} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => localizedText(`${Math.round(Number(value) / 1000000)}tr`, `${Math.round(Number(value) / 1000000)}M`)} />
+                    <Tooltip labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""} formatter={(value) => [formatMoney(Number(value)), localizedText("Doanh thu dịch vụ", "Service revenue")]} />
                     <Bar dataKey="revenue" fill="#2563eb" radius={[5, 5, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -308,18 +314,18 @@ export default function ReportWorkspace() {
 
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
-                <h3 className="font-bold text-slate-900">Hiệu quả khuyến mãi</h3>
-                <p className="mt-1 text-xs text-slate-400">Lượt áp dụng và số tiền giảm theo chương trình</p>
+                <h3 className="font-bold text-slate-900">{localizedText("Hiệu quả khuyến mãi", "Promotion performance")}</h3>
+                <p className="mt-1 text-xs text-slate-400">{localizedText("Lượt áp dụng và số tiền giảm theo chương trình", "Uses and discount amounts by promotion")}</p>
               </div>
               {report.promotions.length === 0 ? (
-                <p className="py-12 text-center text-sm text-slate-400">Không có khuyến mãi được áp dụng trong khoảng ngày này.</p>
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có khuyến mãi được áp dụng trong khoảng ngày này.", "No promotions were used during this date range.")}</p>
               ) : (
                 <div className="max-h-[290px] space-y-2 overflow-y-auto">
                   {report.promotions.map((promotion) => (
                     <article key={promotion.promotionId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-800">{promotion.promotionName}</p>
-                        <p className="mt-1 text-xs text-slate-500">{promotion.promotionCode} · {promotion.usageCount} lượt dùng</p>
+                        <p className="mt-1 text-xs text-slate-500">{promotion.promotionCode} · {localizedText(`${promotion.usageCount} lượt dùng`, `${promotion.usageCount} uses`)}</p>
                       </div>
                       <p className="shrink-0 text-sm font-bold text-emerald-700">{formatMoney(promotion.savings)}</p>
                     </article>
@@ -332,19 +338,19 @@ export default function ReportWorkspace() {
           <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-900">Lượt đặt theo loại phòng</h3>
+                <h3 className="font-bold text-slate-900">{localizedText("Lượt đặt theo loại phòng", "Bookings by room type")}</h3>
                 <p className="mt-1 text-xs text-slate-400">
-                  Số phòng được đặt trong booking tạo ở khoảng ngày đã chọn · không tính phòng hoặc booking đã hủy
+                  {localizedText("Số phòng được đặt trong booking tạo ở khoảng ngày đã chọn · không tính phòng hoặc booking đã hủy", "Rooms included in bookings created during the selected date range · excludes cancelled rooms and bookings")}
                 </p>
               </div>
               {mostBookedRoomType && mostBookedRoomType.bookingCount > 0 && (
                 <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
-                  Được đặt nhiều nhất: {mostBookedRoomType.name} ({mostBookedRoomType.bookingCount} lượt)
+                  {localizedText("Được đặt nhiều nhất:", "Most booked:")} {mostBookedRoomType.name} ({localizedText(`${mostBookedRoomType.bookingCount} lượt`, `${mostBookedRoomType.bookingCount} bookings`)})
                 </span>
               )}
             </div>
             {roomTypeBookings.length === 0 ? (
-              <p className="py-10 text-center text-sm text-slate-400">Không có dữ liệu đặt phòng trong khoảng ngày này.</p>
+              <p className="py-10 text-center text-sm text-slate-400">{localizedText("Không có dữ liệu đặt phòng trong khoảng ngày này.", "No booking data for this date range.")}</p>
             ) : (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart
@@ -368,8 +374,8 @@ export default function ReportWorkspace() {
                     tickLine={false}
                     tick={{ fontSize: 11, fill: "#64748b" }}
                   />
-                  <Tooltip formatter={(value) => [`${Number(value).toLocaleString("vi-VN")} lượt`, "Lượt đặt"]} />
-                  <Bar dataKey="bookingCount" name="Lượt đặt" fill="#2563eb" radius={[0, 5, 5, 0]} />
+                  <Tooltip formatter={(value) => [`${Number(value).toLocaleString(localizedText("vi-VN", "en-US"))} ${localizedText("lượt", "bookings")}`, localizedText("Lượt đặt", "Bookings")]} />
+                  <Bar dataKey="bookingCount" name={localizedText("Lượt đặt", "Bookings")} fill="#2563eb" radius={[0, 5, 5, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -378,7 +384,7 @@ export default function ReportWorkspace() {
           <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
             <div className="mb-3">
               <h3 className="font-bold text-slate-900">{t("report.roomStatusMix")}</h3>
-              <p className="mt-1 text-xs text-slate-400">Trạng thái phòng tại thời điểm hiện tại</p>
+              <p className="mt-1 text-xs text-slate-400">{localizedText("Trạng thái phòng tại thời điểm hiện tại", "Current room status")}</p>
             </div>
             <div className="grid items-center gap-4 md:grid-cols-[260px_1fr]">
               <ResponsiveContainer width="100%" height={210}>
@@ -408,29 +414,29 @@ export default function ReportWorkspace() {
           <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-900">Booking đã hủy</h3>
-                <p className="mt-1 text-xs text-slate-400">Phân loại theo kênh đặt booking và lý do hủy trong khoảng ngày đã chọn</p>
+                <h3 className="font-bold text-slate-900">{localizedText("Booking đã hủy", "Cancelled bookings")}</h3>
+                <p className="mt-1 text-xs text-slate-400">{localizedText("Phân loại theo kênh đặt booking và lý do hủy trong khoảng ngày đã chọn", "Grouped by booking channel and cancellation reason within the selected date range")}</p>
               </div>
               <div className="flex gap-2 text-xs font-semibold">
                 <span className="rounded-full bg-blue-50 px-3 py-1.5 text-blue-700">
-                  Online: {onlineCancelledBookingCount}
+                  {localizedText("Trực tuyến", "Online")}: {onlineCancelledBookingCount}
                 </span>
                 <span className="rounded-full bg-violet-50 px-3 py-1.5 text-violet-700">
-                  Offline: {offlineCancelledBookingCount}
+                  {localizedText("Tại quầy", "Offline")}: {offlineCancelledBookingCount}
                 </span>
               </div>
             </div>
             {cancelledBookings.length === 0 ? (
-              <p className="py-10 text-center text-sm text-slate-400">Không có booking bị hủy trong khoảng ngày này.</p>
+              <p className="py-10 text-center text-sm text-slate-400">{localizedText("Không có booking bị hủy trong khoảng ngày này.", "No bookings were cancelled during this date range.")}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[620px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs text-slate-500">
-                      <th className="px-3 py-2 font-semibold">Mã booking</th>
-                      <th className="px-3 py-2 font-semibold">Kênh đặt</th>
-                      <th className="px-3 py-2 font-semibold">Lý do hủy</th>
-                      <th className="px-3 py-2 font-semibold">Thời điểm hủy</th>
+                      <th className="px-3 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
+                      <th className="px-3 py-2 font-semibold">{localizedText("Kênh đặt", "Booking channel")}</th>
+                      <th className="px-3 py-2 font-semibold">{localizedText("Lý do hủy", "Cancellation reason")}</th>
+                      <th className="px-3 py-2 font-semibold">{localizedText("Thời điểm hủy", "Cancelled at")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -449,14 +455,14 @@ export default function ReportWorkspace() {
                               ? "Online"
                               : booking.bookingChannel === "OFFLINE"
                                 ? "Offline"
-                                : "Không xác định"}
+                                : localizedText("Không xác định", "Unknown")}
                           </span>
                         </td>
                         <td className="px-3 py-3 text-slate-600">{booking.reason}</td>
                         <td className="whitespace-nowrap px-3 py-3 text-slate-500">
                           {booking.cancelledAt
-                            ? new Date(booking.cancelledAt).toLocaleString("vi-VN")
-                            : "Không lưu thời điểm hủy"}
+                            ? new Date(booking.cancelledAt).toLocaleString(localizedText("vi-VN", "en-US"))
+                            : localizedText("Không lưu thời điểm hủy", "Cancellation time not recorded")}
                         </td>
                       </tr>
                     ))}

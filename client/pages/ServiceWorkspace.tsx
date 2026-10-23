@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { Banknote, CalendarDays, CheckCircle2, Clock3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
@@ -99,10 +100,10 @@ const getServiceUsageRows = (bookings: BookingListItem[]): ServiceUsageRow[] => 
   });
 };
 
-const formatUsageDateTime = (value: string | null | undefined) => {
+const formatUsageDateTime = (value: string | null | undefined, locale: string) => {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN");
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
 };
 
 const toLocalDateInputValue = (date: Date) => {
@@ -166,6 +167,7 @@ const getTodayServiceStats = (bookings: BookingListItem[]) => {
 };
 
 export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { branches?: SuperAdminBranch[]; mode?: "usage" | "catalog" }) {
+  const { t, i18n } = useTranslation();
   const dispatch = useAppDispatch();
   const [detailService, setDetailService] = useState<HotelService | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -551,24 +553,24 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       {mode === "usage" && (
         <div className="mt-2 mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-slate-500"><CalendarDays size={16} /><p className="text-xs font-semibold">Dịch vụ đặt hôm nay</p></div>
+            <div className="flex items-center gap-2 text-slate-500"><CalendarDays size={16} /><p className="text-xs font-semibold">{t("serviceWorkspace.bookedToday")}</p></div>
             <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : todayServiceStats.bookedToday}</p>
-            <p className="mt-1 text-xs text-slate-500">Lượt dịch vụ trong booking tạo hôm nay</p>
+            <p className="mt-1 text-xs text-slate-500">{t("serviceWorkspace.bookedTodayHelp")}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-emerald-600"><CheckCircle2 size={16} /><p className="text-xs font-semibold">Dịch vụ đã dùng hôm nay</p></div>
+            <div className="flex items-center gap-2 text-emerald-600"><CheckCircle2 size={16} /><p className="text-xs font-semibold">{t("serviceWorkspace.usedToday")}</p></div>
             <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : todayServiceStats.usedToday}</p>
-            <p className="mt-1 text-xs text-slate-500">Lượt đã được nhân viên xác nhận</p>
+            <p className="mt-1 text-xs text-slate-500">{t("serviceWorkspace.usedTodayHelp")}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-blue-600"><Banknote size={16} /><p className="text-xs font-semibold">Tiền dịch vụ ước tính hôm nay</p></div>
+            <div className="flex items-center gap-2 text-blue-600"><Banknote size={16} /><p className="text-xs font-semibold">{t("serviceWorkspace.estimatedRevenueToday")}</p></div>
             <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : `${todayServiceStats.estimatedRevenue.toLocaleString("vi-VN")}đ`}</p>
-            <p className="mt-1 text-xs text-slate-500">Tính theo dịch vụ đã xác nhận sử dụng</p>
+            <p className="mt-1 text-xs text-slate-500">{t("serviceWorkspace.revenueHelp")}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-amber-600"><ConciergeBell size={16} /><p className="text-xs font-semibold">Dịch vụ chờ xác nhận</p></div>
+            <div className="flex items-center gap-2 text-amber-600"><ConciergeBell size={16} /><p className="text-xs font-semibold">{t("serviceWorkspace.pendingConfirmation")}</p></div>
             <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : pendingUsageRows.reduce((total, row) => total + row.quantity, 0)}</p>
-            <p className="mt-1 text-xs text-slate-500">Lượt dịch vụ đang chờ nhân viên xử lý</p>
+            <p className="mt-1 text-xs text-slate-500">{t("serviceWorkspace.pendingHelp")}</p>
           </article>
         </div>
       )}
@@ -580,15 +582,15 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             onClick={() => setIsBulkImportOpen(true)}
             className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
           >
-            <Upload size={16} />Tải dữ liệu bằng file
+            <Upload size={16} />{t("serviceWorkspace.uploadFromFile")}
           </button>}
-          {canManageServices && <button type="button" onClick={openCreateForm} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />Thêm dịch vụ</button>}
+          {canManageServices && <button type="button" onClick={openCreateForm} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />{t("serviceWorkspace.addService")}</button>}
         </div>
       </div>}
       {mode === "usage" && canConfirmServiceUsage && (
-        <section aria-label="Thao tác dịch vụ khách hàng" className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+        <section aria-label={t("serviceWorkspace.usageSection")} className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div role="tablist" aria-label="Danh sách thao tác dịch vụ" className="flex w-fit flex-wrap gap-5 border-b border-slate-200 lg:shrink-0">
+            <div role="tablist" aria-label={t("serviceWorkspace.usageTabs")} className="flex w-fit flex-wrap gap-5 border-b border-slate-200 lg:shrink-0">
               <button
                 type="button"
                 role="tab"
@@ -599,7 +601,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 className={`flex items-center gap-2 border-b-2 px-2 py-3 text-sm font-semibold transition ${activeUsageTab === "pending" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
               >
                 <ConciergeBell size={15} />
-                Booking có dịch vụ chờ
+                {t("serviceWorkspace.pendingBookings")}
                 <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{pendingUsageGroups.length}</span>
               </button>
               <button
@@ -612,13 +614,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 className={`flex items-center gap-2 border-b-2 px-2 py-3 text-sm font-semibold transition ${activeUsageTab === "used-today" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
               >
                 <CheckCircle2 size={15} />
-                Đã thao tác
+                {t("serviceWorkspace.processed")}
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">{filteredUsedServiceRows.length}</span>
               </button>
             </div>
             <div className="flex flex-wrap items-end gap-3 lg:justify-end">
                 <label className="block text-xs font-semibold text-slate-500">
-                  {activeUsageTab === "pending" ? "Đặt từ ngày" : "Đã dùng từ ngày"}
+                  {activeUsageTab === "pending" ? t("serviceWorkspace.bookedFrom") : t("serviceWorkspace.usedFrom")}
                   <input
                     type="date"
                     value={activeUsageTab === "pending" ? usageDateFrom : usedDateFrom}
@@ -628,7 +630,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   />
                 </label>
                 <label className="block text-xs font-semibold text-slate-500">
-                  {activeUsageTab === "pending" ? "Đặt đến ngày" : "Đã dùng đến ngày"}
+                  {activeUsageTab === "pending" ? t("serviceWorkspace.bookedTo") : t("serviceWorkspace.usedTo")}
                   <input
                     type="date"
                     value={activeUsageTab === "pending" ? usageDateTo : usedDateTo}
@@ -651,7 +653,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                     }}
                     className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-600"
                   >
-                    Xóa lọc
+                    {t("serviceWorkspace.clearFilter")}
                   </button>
                 )}
               </div>
@@ -659,13 +661,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           {activeUsageTab === "pending" && (
             <div id="service-usage-pending-panel" role="tabpanel" aria-labelledby="service-usage-pending-tab">
               <div className="p-4">
-              {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Đang tải dịch vụ trong các booking...</p>}
-              {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">Không thể tải danh sách dịch vụ cần xác nhận. Vui lòng tải lại trang.</p>}
+              {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingBookings")}</p>}
+              {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">{t("serviceWorkspace.pendingLoadError")}</p>}
               {!isLoadingUsage && !isUsageError && pendingUsageRows.length === 0 && (
-                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Hiện không có dịch vụ nào đang chờ xác nhận.</p>
+                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noPendingServices")}</p>
               )}
               {!isLoadingUsage && !isUsageError && pendingUsageRows.length > 0 && filteredPendingUsageGroups.length === 0 && (
-                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Không có booking nào có dịch vụ chờ trong khoảng ngày đã chọn.</p>
+                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noPendingInRange")}</p>
               )}
               {!isLoadingUsage && !isUsageError && filteredPendingUsageGroups.length > 0 && (
                 <div className="grid gap-3 lg:grid-cols-2">
@@ -677,7 +679,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                             <p className="font-semibold text-slate-900">Booking {group.bookingId}</p>
                             <p className="mt-0.5 text-xs text-slate-600">{group.customerName}</p>
                           </div>
-                          <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-blue-700">{group.services.length} dịch vụ chờ</span>
+                          <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-blue-700">{t("serviceWorkspace.pendingCount", { count: group.services.length })}</span>
                         </div>
                         <button
                           type="button"
@@ -690,18 +692,18 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                           aria-expanded={expandedUsageBookingIds.has(group.bookingId)}
                           className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
                         >
-                          {expandedUsageBookingIds.has(group.bookingId) ? "Thu gọn" : "Thao tác"}
+                          {expandedUsageBookingIds.has(group.bookingId) ? t("serviceWorkspace.collapse") : t("serviceWorkspace.actions")}
                         </button>
                       </header>
                       {expandedUsageBookingIds.has(group.bookingId) && <div className="px-3">
-                        <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />Đặt: {formatUsageDateTime(group.bookingCreatedAt)}</p>
+                        <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />{t("serviceWorkspace.bookedAt")} {formatUsageDateTime(group.bookingCreatedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</p>
                         <div className="divide-y divide-slate-100">
                           {group.services.map((row) => (
                             <div key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="flex flex-wrap items-center justify-between gap-3 py-3">
                               <div className="min-w-0">
                                 <p className="font-semibold text-slate-900">{row.serviceName} <span className="font-normal text-slate-500">× {row.quantity}</span></p>
-                                <p className="mt-1 text-xs text-slate-600">Phòng {row.roomNumber}</p>
-                                {row.checkInTime && <p className="mt-1 text-[11px] text-slate-500">Nhận phòng: {formatUsageDateTime(row.checkInTime)}</p>}
+                                <p className="mt-1 text-xs text-slate-600">{t("serviceWorkspace.room", { room: row.roomNumber })}</p>
+                                {row.checkInTime && <p className="mt-1 text-[11px] text-slate-500">{t("serviceWorkspace.checkIn")} {formatUsageDateTime(row.checkInTime, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</p>}
                               </div>
                               <button
                                 type="button"
@@ -709,7 +711,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                                 disabled={isConfirmingService}
                                 className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                               >
-                                <CheckCircle2 size={14} />Xác nhận đã dùng
+                                <CheckCircle2 size={14} />{t("serviceWorkspace.confirmUsed")}
                               </button>
                             </div>
                           ))}
@@ -724,17 +726,17 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           )}
           {activeUsageTab === "used-today" && (
             <div id="service-usage-used-panel" role="tabpanel" aria-labelledby="service-usage-used-tab" className="p-4">
-              {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Đang tải lịch sử thao tác dịch vụ...</p>}
-              {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">Không thể tải lịch sử thao tác dịch vụ. Vui lòng tải lại trang.</p>}
+              {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingHistory")}</p>}
+              {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">{t("serviceWorkspace.historyLoadError")}</p>}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length === 0 && (
-                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">Không có dịch vụ nào được xác nhận sử dụng trong khoảng ngày đã chọn.</p>
+                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noUsedInRange")}</p>
               )}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length > 0 && (
                 <div className="grid gap-2 lg:grid-cols-2">
                   {filteredUsedServiceRows.map((row) => (
                     <p key={`${row.bookingId}-${row.serviceDetailId}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600 shadow-sm">
-                      <span className="font-semibold text-slate-800">{row.serviceName} × {row.quantity}</span> · {row.customerName} · Phòng {row.roomNumber}
-                      <span className="block mt-1 text-[11px] text-slate-500">{formatUsageDateTime(row.usedAt)}{row.usedBy ? ` · Xác nhận bởi ${row.usedBy}` : ""}</span>
+                      <span className="font-semibold text-slate-800">{row.serviceName} × {row.quantity}</span> · {row.customerName} · {t("serviceWorkspace.room", { room: row.roomNumber })}
+                      <span className="block mt-1 text-[11px] text-slate-500">{formatUsageDateTime(row.usedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{row.usedBy ? ` · ${t("serviceWorkspace.confirmedBy", { name: row.usedBy })}` : ""}</span>
                     </p>
                   ))}
                 </div>
@@ -765,14 +767,14 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
         {isSystemAdmin && (
           <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
-            <span>Chi nhánh</span>
+            <span>{t("serviceWorkspace.branch")}</span>
             <select
               value={selectedBranchId}
               onChange={(event) => setSelectedBranchId(event.target.value)}
-              aria-label="Lọc dịch vụ theo chi nhánh"
+              aria-label={t("serviceWorkspace.filterByBranch")}
               className="h-10 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             >
-              <option value="">Tất cả chi nhánh</option>
+              <option value="">{t("serviceWorkspace.allBranches")}</option>
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>{branch.name}</option>
               ))}
@@ -785,8 +787,8 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             type="search"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Tìm theo tên, mô tả hoặc danh mục dịch vụ..."
-            aria-label="Tìm kiếm dịch vụ"
+            placeholder={t("serviceWorkspace.searchPlaceholder")}
+            aria-label={t("serviceWorkspace.searchServices")}
             className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </label>
@@ -794,20 +796,20 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-            aria-label="Lọc dịch vụ theo trạng thái"
+            aria-label={t("serviceWorkspace.filterByStatus")}
             className="h-10 min-w-44 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="active">Đang hoạt động</option>
-            <option value="inactive">Tạm ngưng</option>
+            <option value="all">{t("serviceWorkspace.allStatuses")}</option>
+            <option value="active">{t("serviceWorkspace.active")}</option>
+            <option value="inactive">{t("serviceWorkspace.inactive")}</option>
           </select>
         </label>
       </div>
-      {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách dịch vụ...</p>}
-      {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách dịch vụ.</p>}
-      {!isLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Chưa xác định được chi nhánh hiện tại.</p>}
-      {!isLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chưa có dịch vụ nào.</p>}
-      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy dịch vụ phù hợp với từ khóa hoặc trạng thái đã chọn.</p>}
+      {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingServices")}</p>}
+      {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{t("serviceWorkspace.servicesLoadError")}</p>}
+      {!isLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.branchUnknown")}</p>}
+      {!isLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noServices")}</p>}
+      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noMatchingServices")}</p>}
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {paginatedServices.map((service) => {
           const isActive = service.active;
@@ -815,18 +817,18 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             <div className="flex items-start justify-between gap-3"><span className="text-sm font-bold text-slate-900">{service.name}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">{service.category}</span></div>
             <p className="mt-2 min-h-10 text-xs leading-5 text-slate-500">{service.detail}</p>
             <div className="mt-4"><span className="text-sm font-bold text-blue-700">{service.price.toLocaleString("vi-VN")}đ <span className="font-normal text-slate-400">/ {service.unit}</span></span></div>
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><div className="flex items-center gap-3"><button type="button" onClick={() => setDetailService(service)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><Eye size={14} />Xem chi tiết</button>{canManageServices && <button type="button" onClick={() => openEditForm(service)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800"><Pencil size={14} />Chỉnh sửa</button>}</div>{canManageServices ? <button type="button" onClick={() => void toggleServiceStatus(service.id)} disabled={isUpdating} className={`flex items-center gap-1.5 text-xs font-semibold disabled:cursor-wait disabled:opacity-60 ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</button> : <span className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? "Đang hoạt động" : "Tạm ngưng"}</span>}</div>
+            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><div className="flex items-center gap-3"><button type="button" onClick={() => setDetailService(service)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><Eye size={14} />{t("serviceWorkspace.viewDetails")}</button>{canManageServices && <button type="button" onClick={() => openEditForm(service)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800"><Pencil size={14} />{t("serviceWorkspace.edit")}</button>}</div>{canManageServices ? <button type="button" onClick={() => void toggleServiceStatus(service.id)} disabled={isUpdating} className={`flex items-center gap-1.5 text-xs font-semibold disabled:cursor-wait disabled:opacity-60 ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}</button> : <span className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}</span>}</div>
           </article>;
         })}
       </div>
       {filteredServices.length > 0 && (
         <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span>
-            Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filteredServices.length)} trên {filteredServices.length} dịch vụ
+            {t("serviceWorkspace.showing", { from: (safePage - 1) * pageSize + 1, to: Math.min(safePage * pageSize, filteredServices.length), total: filteredServices.length })}
           </span>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2">
-              Số dòng
+              {t("serviceWorkspace.rows")}
               <select
                 value={pageSize}
                 onChange={(event) => setPageSize(Number(event.target.value))}
@@ -843,7 +845,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               disabled={safePage === 1}
               className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Trang trước"
+              aria-label={t("serviceWorkspace.previousPage")}
             >
               <ChevronLeft size={16} />
             </button>
@@ -855,7 +857,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
               disabled={safePage === totalPages}
               className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Trang sau"
+              aria-label={t("serviceWorkspace.nextPage")}
             >
               <ChevronRight size={16} />
             </button>
@@ -890,7 +892,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               <button
                 type="button"
                 onClick={() => setDetailService(null)}
-                aria-label="Đóng chi tiết dịch vụ"
+                aria-label={t("serviceWorkspace.close")}
                 className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-slate-600 shadow-sm backdrop-blur transition hover:bg-white hover:text-slate-900"
               >
                 <X size={18} />
@@ -908,7 +910,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             <div className="p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-blue-50 px-4 py-3">
                 <div>
-                  <p className="text-xs font-medium text-slate-500">Đơn giá</p>
+                  <p className="text-xs font-medium text-slate-500">{t("serviceWorkspace.unitPrice")}</p>
                   <p className="mt-1 text-xl font-bold text-blue-700">
                     {detailService.price.toLocaleString("vi-VN")}đ
                     <span className="ml-1 text-sm font-medium text-slate-500">/ {detailService.unit}</span>
@@ -916,19 +918,19 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 </div>
                 <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${detailService.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
                   <span className={`h-2 w-2 rounded-full ${detailService.active ? "bg-emerald-500" : "bg-slate-400"}`} />
-                  {detailService.active ? "Đang hoạt động" : "Tạm ngưng"}
+                  {detailService.active ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}
                 </span>
               </div>
 
               <dl className="mt-5 space-y-4">
                 <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 text-sm">
-                  <dt className="text-slate-500">Mã dịch vụ</dt>
+                  <dt className="text-slate-500">{t("serviceWorkspace.serviceId")}</dt>
                   <dd className="font-semibold text-slate-800">{detailService.id}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mô tả dịch vụ</dt>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("serviceWorkspace.serviceDescription")}</dt>
                   <dd className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                    {detailService.detail || "Chưa có mô tả cho dịch vụ này."}
+                    {detailService.detail || t("serviceWorkspace.noDescription")}
                   </dd>
                 </div>
               </dl>
@@ -939,7 +941,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   onClick={() => setDetailService(null)}
                   className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
                 >
-                  Đóng
+                  {t("serviceWorkspace.close")}
                 </button>
               </div>
             </div>
@@ -949,13 +951,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       <BulkImportDialog
         open={isBulkImportOpen}
         onOpenChange={setIsBulkImportOpen}
-        eyebrow="Nhập hàng loạt"
-        title="Tải dữ liệu dịch vụ"
-        description="Ảnh được tải trực tiếp từ FE lên Cloudinary theo thư mục chi nhánh; BE chỉ nhận URL ảnh và lưu thông tin dịch vụ."
-        templateLabel="Tải file Excel mẫu"
+        eyebrow={t("serviceWorkspace.importServices")}
+        title={t("serviceWorkspace.importServices")}
+        description={t("serviceWorkspace.bulkImportDescription")}
+        templateLabel={t("serviceWorkspace.downloadTemplate")}
         onDownloadTemplate={downloadServiceTemplate}
         acceptedFileTypes=".zip,application/zip"
-        fileLabel="File ZIP bộ dữ liệu (.zip)"
+        fileLabel={t("serviceWorkspace.zipFileLabel")}
         validateFile={(file) =>
           file.name.toLocaleLowerCase() === "dichvu.zip"
             ? null
@@ -974,7 +976,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             <p className="mt-2">Trong Excel, cột “Tên file ảnh” phải khớp với tên ảnh trong thư mục <strong>images</strong>, gồm cả phần đuôi, ví dụ <strong>massage.jpg</strong>. Không đổi tên các cột: Tên dịch vụ, Mô tả, Giá, Đơn vị, Danh mục, Tên file ảnh.</p>
           </>
         }
-        uploadLabel="Nhập dịch vụ"
+        uploadLabel={t("serviceWorkspace.importServices")}
         progress={serviceImportUploadProgress || undefined}
         onUpload={importServicesFromFile}
       />
@@ -990,13 +992,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-600">Dịch vụ lưu trú</p>
-                <h4 className="mt-2 text-[28px] font-bold leading-tight text-slate-900">{editingService ? "Chỉnh sửa dịch vụ" : "Thêm dịch vụ"}</h4>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-600">{t("serviceWorkspace.serviceType")}</p>
+                <h4 className="mt-2 text-[28px] font-bold leading-tight text-slate-900">{editingService ? t("serviceWorkspace.editService") : t("serviceWorkspace.addService")}</h4>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreate(false)}
-                aria-label="Đóng"
+                aria-label={t("serviceWorkspace.close")}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               >
                 <X size={20} />
@@ -1006,35 +1008,35 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               {isSystemAdmin && !editingService && (
                 <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                  Phạm vi dịch vụ
+                  {t("serviceWorkspace.serviceScope")}
                   <select
                     value={targetHotelId}
                     onChange={(event) => setTargetHotelId(event.target.value)}
                     className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800"
                   >
-                    <option value="">Toàn hệ thống</option>
+                    <option value="">{t("serviceWorkspace.entireSystem")}</option>
                     {branches.map((branch) => (
                       <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
                     ))}
                   </select>
                   <span className="mt-1 block text-xs font-normal text-slate-500">
-                    {targetHotelId ? "Dịch vụ chỉ áp dụng cho chi nhánh đã chọn." : "Dịch vụ sẽ áp dụng cho toàn bộ chi nhánh."}
+                    {targetHotelId ? t("serviceWorkspace.branchOnly") : t("serviceWorkspace.allBranchesApply")}
                   </span>
                 </label>
               )}
               <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                Tên dịch vụ <span className="text-rose-500">*</span>
+                {t("serviceWorkspace.serviceName")} <span className="text-rose-500">*</span>
                 <input
                   required
                   value={newService.name}
                   onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))}
                   className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
-                  placeholder="Nhập tên dịch vụ"
+                  placeholder={t("serviceWorkspace.enterServiceName")}
                 />
               </label>
 
               <label className="text-sm font-semibold text-slate-700">
-                Giá <span className="text-rose-500">*</span>
+                {t("serviceWorkspace.price")} <span className="text-rose-500">*</span>
                 <input
                   required
                   type="number"
@@ -1047,44 +1049,44 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               </label>
 
               <label className="text-sm font-semibold text-slate-700">
-                Đơn vị <span className="text-rose-500">*</span>
+                {t("serviceWorkspace.unit")} <span className="text-rose-500">*</span>
                 <select
                   required
                   value={newService.unit}
                   onChange={(event) => setNewService((current) => ({ ...current, unit: event.target.value }))}
                   className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                 >
-                  <option value="lần">lần</option>
-                  <option value="người">người</option>
-                  <option value="giờ">giờ</option>
-                  <option value="ngày">ngày</option>
+                  <option value="lần">{t("serviceWorkspace.unitOnce")}</option>
+                  <option value="người">{t("booking.people")}</option>
+                  <option value="giờ">{t("serviceWorkspace.unitHour")}</option>
+                  <option value="ngày">{t("serviceWorkspace.unitDay")}</option>
                 </select>
               </label>
 
               <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                Danh mục <span className="text-rose-500">*</span>
+                {t("serviceWorkspace.category")} <span className="text-rose-500">*</span>
                 <select
                   required
                   value={newService.category}
                   onChange={(event) => setNewService((current) => ({ ...current, category: event.target.value }))}
                   className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                 >
-                  <option value="Khác">Khác</option>
-                  <option value="Dịch vụ phòng">Dịch vụ phòng</option>
-                  <option value="Thể thao">Thể thao</option>
-                  <option value="Spa">Spa</option>
-                  <option value="Nhà hàng">Nhà hàng</option>
-                  <option value="Điện tử">Điện tử</option>
+                  <option value="Khác">{t("serviceWorkspace.other")}</option>
+                  <option value="Dịch vụ phòng">{t("serviceWorkspace.roomService")}</option>
+                  <option value="Thể thao">{t("serviceWorkspace.sports")}</option>
+                  <option value="Spa">{t("serviceWorkspace.spa")}</option>
+                  <option value="Nhà hàng">{t("serviceWorkspace.restaurant")}</option>
+                  <option value="Điện tử">{t("serviceWorkspace.electronics")}</option>
                 </select>
               </label>
 
               <div className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                Hình ảnh {!editingService && <span className="text-rose-500">*</span>}
+                {t("serviceWorkspace.image")} {!editingService && <span className="text-rose-500">*</span>}
 
                 <div className="mt-2 flex flex-col gap-3">
                   <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100">
                     <ImagePlus size={16} />
-                    Tải ảnh lên
+                    {t("serviceWorkspace.uploadImage")}
                     <input
                       type="file"
                       accept="image/*"
@@ -1103,27 +1105,27 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
 
                   {newService.imageUrl && (
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
-                      <img src={newService.imageUrl} alt="Preview dịch vụ" className="h-28 w-full rounded-lg object-cover" />
+                      <img src={newService.imageUrl} alt={t("serviceWorkspace.servicePreview")} className="h-28 w-full rounded-lg object-cover" />
                     </div>
                   )}
                 </div>
               </div>
 
               <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                Mô tả
+                {t("serviceWorkspace.description")}
                 <textarea
                   required
                   value={newService.detail}
                   onChange={(event) => setNewService((current) => ({ ...current, detail: event.target.value }))}
                   rows={3}
-                  placeholder="Nhập mô tả dịch vụ"
+                  placeholder={t("serviceWorkspace.enterDescription")}
                   className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />
               </label>
 
               <div className="sm:col-span-2">
                 <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300">
-                  Đang hoạt động
+                  {t("serviceWorkspace.active")}
                   <input
                     type="checkbox"
                     checked={newService.active}
@@ -1147,7 +1149,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 disabled={isSaving}
                 className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
               >
-                Hủy
+                {t("serviceWorkspace.cancel")}
               </button>
               <button
                 type="submit"
@@ -1155,7 +1157,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {editingService ? <Pencil size={16} /> : <Plus size={16} />}
-                {isSaving ? "Đang lưu..." : editingService ? "Lưu thay đổi" : "Thêm dịch vụ"}
+                {isSaving ? t("serviceWorkspace.saving") : editingService ? t("serviceWorkspace.saveChanges") : t("serviceWorkspace.addService")}
               </button>
             </div>
           </form>

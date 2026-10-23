@@ -46,5 +46,11 @@ export const formatRoomUpdateNotification = (value: unknown) => {
   const event = asRecord(value);
   const data = asRecord(event?.data) ?? event;
   const roomNumber = data?.roomNumber == null ? "" : `Phòng ${String(data.roomNumber)}`;
+  if (String(event?.action ?? "").toUpperCase() === "HOUSEKEEPING_COMPLETED") {
+    return `${roomNumber || "Phòng"} đã dọn xong; trạng thái được cập nhật thành sẵn sàng.`;
+  }
   return formatEntityUpdateNotification(value, roomNumber || "Phòng");
 };
+
+export const isHousekeepingCompletionUpdate = (value: unknown) =>
+  String(asRecord(value)?.action ?? "").toUpperCase() === "HOUSEKEEPING_COMPLETED";

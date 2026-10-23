@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardList, Clock3, LoaderCircle, UserRound } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { localizedText } from "../i18n";
 import {
   useAssignHousekeepingTaskMutation,
   useCompleteHousekeepingTaskByManagerMutation,
@@ -8,12 +10,12 @@ import {
   type HousekeepingTask,
 } from "../services/shiftApi";
 
-const formatDateTime = (value: string) => new Date(value).toLocaleString("vi-VN");
+const formatDateTime = (value: string) => new Date(value).toLocaleString(localizedText("vi-VN", "en-US"));
 
 const statusLabel = (status: string) => {
-  if (status === "NEEDS_ASSIGNMENT") return "Chờ phân công";
-  if (status === "REASSIGNED") return "Đã phân công lại";
-  return "Đã giao việc";
+  if (status === "NEEDS_ASSIGNMENT") return localizedText("Chờ phân công", "Awaiting assignment");
+  if (status === "REASSIGNED") return localizedText("Đã phân công lại", "Reassigned");
+  return localizedText("Đã giao việc", "Assigned");
 };
 
 const formatDate = (date: Date) =>
@@ -32,14 +34,14 @@ const getShiftWorkDate = (value: string) => {
   return formatDate(date);
 };
 
-export default function HousekeepingTaskManagement() {
+export default function HousekeepingTaskManagement({ employeeMode = false }: { employeeMode?: boolean }) {
   const {
     data: tasks = [],
     isLoading: isTasksLoading,
     isError: isTasksError,
   } = useGetHotelHousekeepingTasksQuery(undefined, { pollingInterval: 30000 });
   const [assignTask, { isLoading: isAssigning }] = useAssignHousekeepingTaskMutation();
-  const [completeTask, { isLoading: isCompleting }] = useCompleteHousekeepingTaskByManagerMutation();
+  const [completeTaskByBranch, { isLoading: isCompleting }] = useCompleteHousekeepingTaskByManagerMutation();
   const [selectedEmployees, setSelectedEmployees] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const pendingTasks = tasks.filter((task) => task.status === "NEEDS_ASSIGNMENT");
@@ -48,7 +50,7 @@ export default function HousekeepingTaskManagement() {
   const assign = async (task: HousekeepingTask) => {
     const employeeId = selectedEmployees[task.id] ?? "";
     if (!employeeId) {
-      setError(`Vui lòng chọn nhân viên trong ca làm phù hợp cho phòng ${task.roomNumber}.`);
+      setError(localizedText(`Vui lòng chọn nhân viên trong ca làm phù hợp cho phòng ${task.roomNumber}.`, `Select an eligible employee on shift for room ${task.roomNumber}.`));
       return;
     }
 
@@ -62,17 +64,21 @@ export default function HousekeepingTaskManagement() {
       });
     } catch (assignError) {
       const response = assignError as { data?: { message?: string }; error?: string };
-      setError(response.data?.message ?? response.error ?? "Không thể phân công việc dọn phòng. Vui lòng thử lại.");
+      setError(response.data?.message ?? response.error ?? localizedText("Không thể phân công việc dọn phòng. Vui lòng thử lại.", "Could not assign the housekeeping task. Please try again."));
     }
   };
 
   const complete = async (task: HousekeepingTask) => {
     setError("");
     try {
-      await completeTask(task.id).unwrap();
+      await completeTaskByBranch(task.id).unwrap();
+      toast({
+        title: localizedText("Phòng đã dọn xong", "Room cleaning complete"),
+        description: localizedText(`Phòng ${task.roomNumber} đã được cập nhật trạng thái thành sẵn sàng.`, `Room ${task.roomNumber} status was updated to ready.`),
+      });
     } catch (completeError) {
       const response = completeError as { data?: { message?: string }; error?: string };
-      setError(response.data?.message ?? response.error ?? "Không thể xác nhận dọn phòng. Vui lòng thử lại.");
+      setError(response.data?.message ?? response.error ?? localizedText("Không thể xác nhận dọn phòng. Vui lòng thử lại.", "Could not confirm room cleaning. Please try again."));
     }
   };
 
@@ -83,22 +89,28 @@ export default function HousekeepingTaskManagement() {
           <ClipboardList size={20} />
         </span>
         <div>
-          <h2 className="font-bold text-slate-900">Phân công công việc dọn phòng</h2>
-          <p className="mt-1 text-sm text-slate-500">Chỉ chọn nhân viên buồng phòng được xếp trong ca tại thời điểm checkout.</p>
+          <h2 className="font-bold text-slate-900">{localizedText("Phân công công việc dọn phòng", "Housekeeping task assignments")}</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {localizedText("Sau khi khách checkout, phòng chuyển sang trạng thái cần dọn dẹp. Phân công nhân viên đang trong ca; xác nhận dọn xong để cập nhật phòng thành sẵn sàng.", "After checkout, a room needs cleaning. Assign an employee who is on shift, then confirm completion to mark the room as ready.")}
+          </p>
         </div>
       </header>
 
       {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-      {isTasksError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">Không tải được công việc dọn phòng của chi nhánh.</p>}
+      {isTasksError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{localizedText("Không tải được công việc dọn phòng của chi nhánh.", "Could not load the branch housekeeping tasks.")}</p>}
       {isTasksLoading ? (
-        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Đang tải công việc...</p>
+        <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">{localizedText("Đang tải công việc...", "Loading tasks...")}</p>
       ) : !isTasksError && (
         <>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-2">
               <div>
-                <h3 className="font-bold text-slate-900">Cần phân công</h3>
-                <p className="mt-1 text-xs text-slate-500">Các phòng checkout đang chờ quản lý chọn nhân viên.</p>
+                <h3 className="font-bold text-slate-900">{localizedText("Cần phân công", "Awaiting assignment")}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {employeeMode
+                    ? localizedText("Chọn nhân viên buồng phòng đang trong ca tại thời điểm checkout.", "Select a housekeeping employee who was on shift at checkout.")
+                    : localizedText("Các phòng checkout đang chờ quản lý chọn nhân viên.", "Checked-out rooms waiting for a manager to assign an employee.")}
+                </p>
               </div>
               <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">{pendingTasks.length}</span>
             </div>
@@ -117,17 +129,19 @@ export default function HousekeepingTaskManagement() {
                   onComplete={() => void complete(task)}
                   isAssigning={isAssigning}
                   isCompleting={isCompleting}
+                  employeeMode={employeeMode}
+                  canComplete={Boolean(task.assignedEmployeeId)}
                 />
               ))}
-              {pendingTasks.length === 0 && <p className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">Không có phòng nào đang chờ phân công.</p>}
+              {pendingTasks.length === 0 && <p className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">{localizedText("Không có phòng nào đang chờ phân công.", "No rooms are waiting for assignment.")}</p>}
             </div>
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center justify-between gap-2">
               <div>
-                <h3 className="font-bold text-slate-900">Đã giao việc, đang chờ dọn</h3>
-                <p className="mt-1 text-xs text-slate-500">Nhân viên sẽ xác nhận hoàn tất trong lịch làm việc của họ.</p>
+                <h3 className="font-bold text-slate-900">{localizedText("Đã giao việc, đang chờ dọn", "Assigned, awaiting cleaning")}</h3>
+                <p className="mt-1 text-xs text-slate-500">{localizedText("Nhân viên sẽ xác nhận hoàn tất trong lịch làm việc của họ.", "Employees confirm completion from their work schedule.")}</p>
               </div>
               <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">{assignedTasks.length}</span>
             </div>
@@ -145,9 +159,11 @@ export default function HousekeepingTaskManagement() {
                   onComplete={() => void complete(task)}
                   isAssigning={isAssigning}
                   isCompleting={isCompleting}
+                  employeeMode={employeeMode}
+                  canComplete={Boolean(task.assignedEmployeeId)}
                 />
               ))}
-              {assignedTasks.length === 0 && <p className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">Chưa có công việc được giao.</p>}
+              {assignedTasks.length === 0 && <p className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">{localizedText("Chưa có công việc được giao.", "No tasks have been assigned.")}</p>}
             </div>
           </section>
         </>
@@ -165,6 +181,8 @@ function HousekeepingTaskCard({
   onComplete,
   isAssigning,
   isCompleting,
+  employeeMode = false,
+  canComplete = false,
 }: {
   task: HousekeepingTask;
   isPending?: boolean;
@@ -174,6 +192,8 @@ function HousekeepingTaskCard({
   onComplete: () => void;
   isAssigning: boolean;
   isCompleting: boolean;
+  employeeMode?: boolean;
+  canComplete?: boolean;
 }) {
   const workDate = getShiftWorkDate(task.createdAt);
   const weekStartDate = workDate ? formatDate(mondayOf(new Date(`${workDate}T00:00:00`))) : "";
@@ -203,35 +223,35 @@ function HousekeepingTaskCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h4 className="font-semibold text-slate-900">Phòng {task.roomNumber}</h4>
+            <h4 className="font-semibold text-slate-900">{localizedText("Phòng", "Room")} {task.roomNumber}</h4>
             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${isPending ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}>
               {statusLabel(task.status)}
             </span>
           </div>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-            <Clock3 size={13} />Checkout lúc {formatDateTime(task.createdAt)}
+            <Clock3 size={13} />{localizedText("Checkout lúc", "Checked out at")} {formatDateTime(task.createdAt)}
           </p>
           {task.assignedEmployeeName && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
-              <UserRound size={13} />Đang giao cho {task.assignedEmployeeName}
+              <UserRound size={13} />{localizedText("Đang giao cho", "Assigned to")} {task.assignedEmployeeName}
             </p>
           )}
         </div>
-        {isPending && <AlertTriangle size={18} className="text-amber-600" aria-label="Đang chờ phân công" />}
+        {isPending && <AlertTriangle size={18} className="text-amber-600" aria-label={localizedText("Đang chờ phân công", "Awaiting assignment")} />}
       </div>
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <div className="min-w-0 flex-1">
           <select
-            aria-label={`Chọn nhân viên dọn phòng ${task.roomNumber}`}
+            aria-label={localizedText(`Chọn nhân viên dọn phòng ${task.roomNumber}`, `Select housekeeping employee for room ${task.roomNumber}`)}
             value={selectedEmployeeId}
             onChange={(event) => onSelectEmployee(event.target.value)}
             disabled={isLoading || isError || isAssigning || isCompleting || shiftAssignments.length === 0}
             className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
           >
-            <option value="">{isLoading ? "Đang tải nhân viên trong ca..." : "Chọn nhân viên trong ca"}</option>
+            <option value="">{isLoading ? localizedText("Đang tải nhân viên trong ca...", "Loading on-shift employees...") : localizedText("Chọn nhân viên trong ca", "Select an on-shift employee")}</option>
             {task.assignedEmployeeId && !currentEmployeeListed && (
-              <option value={task.assignedEmployeeId} disabled>{task.assignedEmployeeName} · đã phân công</option>
+              <option value={task.assignedEmployeeId} disabled>{task.assignedEmployeeName} · {localizedText("đã phân công", "assigned")}</option>
             )}
             {shiftAssignments.map((assignment) => (
               <option key={assignment.employeeId} value={assignment.employeeId}>
@@ -240,9 +260,9 @@ function HousekeepingTaskCard({
             ))}
           </select>
           {!isLoading && !isError && shiftAssignments.length === 0 && (
-            <p className="mt-1 text-xs text-amber-700">Chưa có nhân viên buồng phòng được phân ca vào thời điểm checkout này.</p>
+            <p className="mt-1 text-xs text-amber-700">{localizedText("Chưa có nhân viên buồng phòng được phân ca vào thời điểm checkout này.", "No housekeeping employees were scheduled at this checkout time.")}</p>
           )}
-          {isError && <p role="alert" className="mt-1 text-xs text-rose-700">Không tải được lịch phân ca cho thời điểm checkout này.</p>}
+          {isError && <p role="alert" className="mt-1 text-xs text-rose-700">{localizedText("Không tải được lịch phân ca cho thời điểm checkout này.", "Could not load the shift schedule for this checkout time.")}</p>}
         </div>
         {(isPending || changedAssignee) && (
           <button
@@ -252,10 +272,10 @@ function HousekeepingTaskCard({
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isAssigning ? <LoaderCircle size={15} className="animate-spin" /> : <UserRound size={15} />}
-            {isPending ? "Phân công" : "Chuyển nhân viên"}
+            {isPending ? localizedText("Phân công", "Assign") : localizedText("Chuyển nhân viên", "Reassign")}
           </button>
         )}
-        {!isPending && (
+        {!isPending && (!employeeMode || canComplete) && (
           <button
             type="button"
             onClick={onComplete}
@@ -263,7 +283,7 @@ function HousekeepingTaskCard({
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCompleting ? <LoaderCircle size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-            Xác nhận đã dọn xong
+            {localizedText("Xác nhận đã dọn xong", "Confirm cleaning complete")}
           </button>
         )}
       </div>

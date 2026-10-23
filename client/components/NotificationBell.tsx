@@ -15,6 +15,7 @@ import {
 import { bindHotelSocketEvents, joinHotelRoom } from "../lib/socket";
 import {
   formatEntityUpdateNotification,
+  isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
 
@@ -176,8 +177,7 @@ export default function NotificationBell() {
             dispatch(baseApi.util.invalidateTags(["Booking", "Room", "RefundCancellation", "CheckoutRefund"]));
           }
           if (
-            notification.type === "BOOKING_CREATED"
-            || notification.type === "BOOKING_UPDATED"
+            notification.type === "BOOKING_UPDATED"
             || notification.type === "PAYMENT_RECEIVED"
             || notification.type === "BOOKING_CANCELLED"
             || notification.type === "BOOKING_REFUND_REQUESTED"
@@ -201,10 +201,12 @@ export default function NotificationBell() {
         dispatch(baseApi.util.invalidateTags(["Room", "Notification"]));
         void refetchNotifications();
         void refetchSummary();
-        toast({
-          title: "Phòng được cập nhật",
-          description: formatRoomUpdateNotification(payload),
-        });
+        if (!isHousekeepingCompletionUpdate(payload)) {
+          toast({
+            title: "Phòng được cập nhật",
+            description: formatRoomUpdateNotification(payload),
+          });
+        }
       },
       onRoomPolicyUpdated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["BranchRoomPolicy", "Notification"]));

@@ -3,6 +3,7 @@ import { baseApi } from "./baseApi";
 export type ShiftAssignment = {
   id?: string;
   employeeId: string;
+  workDate: string;
   employeeName: string;
   position: string;
   shiftType: string;
@@ -58,6 +59,11 @@ type ApiResponse<T> = {
 
 export const shiftApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getTodayShiftAssignments: builder.query<ShiftAssignment[], void>({
+      query: () => ({ url: "/staff-shifts/today", method: "GET" }),
+      transformResponse: (response: ApiResponse<ShiftAssignment[]>) => response.result,
+      providesTags: ["Staff"],
+    }),
     getWeeklyShiftSchedule: builder.query<WeeklyShiftSchedule, string>({
       query: (weekStartDate) => ({
         url: "/staff-shifts/weekly",
@@ -137,6 +143,7 @@ export const shiftApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetTodayShiftAssignmentsQuery,
   useGetWeeklyShiftScheduleQuery,
   useSaveWeeklyShiftScheduleMutation,
   useClearWeeklyShiftScheduleMutation,

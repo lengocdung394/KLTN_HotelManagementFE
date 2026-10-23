@@ -21,6 +21,7 @@ import { useGetHotelHousekeepingTasksQuery, useGetMyHousekeepingTasksQuery } fro
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import { useGetHotelReportQuery } from "../services/reportApi";
+import { isEmployeePortalUser } from "../lib/employeeRoles";
 
 const getLocalDateParam = () => {
   const today = new Date();
@@ -32,7 +33,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
   const dispatch = useAppDispatch();
   const { fullName, email, position, hotelId, roles } = useAppSelector((state) => state.auth);
-  const isEmployee = roles.includes("ROLE_EMPLOYEE") && !roles.includes("ROLE_MANAGER");
+  const isEmployee = isEmployeePortalUser(roles);
   const { data: rooms = [], isLoading: roomsLoading, isError: roomsError } = useGetRoomsByCurrentHotelQuery(undefined, {
     skip: !hotelId,
     pollingInterval: 30000,

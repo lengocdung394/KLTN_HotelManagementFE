@@ -251,20 +251,20 @@ function PasswordGate() {
 
   const verifyPassword = async () => {
     if (!email) {
-      setError("Không tìm thấy email tài khoản. Vui lòng đăng nhập lại.");
+      setError(localizedText("Không tìm thấy email tài khoản. Vui lòng đăng nhập lại.", "Account email not found. Please sign in again."));
       return;
     }
     try {
       await login({ email, password }).unwrap();
       window.dispatchEvent(new CustomEvent("profile-password-result", { detail: password }));
     } catch (err: any) {
-      setError(err?.data?.message ?? "Mật khẩu không chính xác.");
+      setError(err?.data?.message ?? localizedText("Mật khẩu không chính xác.", "Incorrect password."));
     }
   };
   const closeGate = () => window.dispatchEvent(new CustomEvent("profile-password-result", { detail: false }));
 
   if (!visible) return null;
-  return <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm"><button type="button" onClick={closeGate} className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700" aria-label="Đóng"><X size={17} /></button><h3 className="font-bold text-slate-900">Xác thực mật khẩu</h3><p className="mt-1 text-sm text-slate-600">Nhập mật khẩu hiện tại để mở form chỉnh sửa thông tin.</p><div className="mt-4 flex max-w-xl flex-col gap-3 sm:flex-row"><div className="relative min-w-0 flex-1"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} placeholder="Nhập mật khẩu hiện tại" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><button type="button" onClick={() => void verifyPassword()} disabled={!password || isLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isLoading ? "Đang xác thực..." : "Xác nhận"}</button></div>{error && <p className="mt-2 text-xs font-medium text-red-600">{error}</p>}</section>;
+  return <section className="password-gate mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm"><button type="button" onClick={closeGate} className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700" aria-label={localizedText("Đóng", "Close")}><X size={17} /></button><h3 className="font-bold text-slate-900">{localizedText("Xác thực mật khẩu", "Verify password")}</h3><p className="mt-1 text-sm text-slate-600">{localizedText("Nhập mật khẩu hiện tại để mở form chỉnh sửa thông tin.", "Enter your current password to edit your profile.")}</p><div className="mt-4 flex max-w-xl flex-col gap-3 sm:flex-row"><div className="relative min-w-0 flex-1"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} placeholder={localizedText("Nhập mật khẩu hiện tại", "Enter current password")} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showPassword ? localizedText("Ẩn mật khẩu", "Hide password") : localizedText("Hiện mật khẩu", "Show password")}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div><button type="button" onClick={() => void verifyPassword()} disabled={!password || isLoading} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isLoading ? localizedText("Đang xác thực...", "Verifying...") : localizedText("Xác nhận", "Confirm")}</button></div>{error && <p className="mt-2 text-xs font-medium text-red-600">{error}</p>}</section>;
 }
 
 function PersonalInfoSettings({ fullName, email, position, hotelName, onLogout }: { fullName: string | null; email: string | null; position: string | null; hotelName: string | null; onLogout: () => void }) {
@@ -312,7 +312,7 @@ function PersonalInfoSettings({ fullName, email, position, hotelName, onLogout }
     }
     return () => window.removeEventListener("profile-password-result", handlePasswordResult);
   }, [editing, passwordVerified]);
-  const displayName = form.fullName.trim() || form.email.trim() || "Người dùng";
+  const displayName = form.fullName.trim() || form.email.trim() || localizedText("Người dùng", "User");
   const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
   const cancel = () => {
@@ -327,19 +327,19 @@ function PersonalInfoSettings({ fullName, email, position, hotelName, onLogout }
   const save = async () => {
     setSaveError("");
     if (!form.fullName.trim() || !form.email.trim()) {
-      setSaveError("Vui lòng nhập họ tên và email.");
+      setSaveError(localizedText("Vui lòng nhập họ tên và email.", "Please enter your name and email."));
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      setSaveError("Vui lòng nhập email hợp lệ.");
+      setSaveError(localizedText("Vui lòng nhập email hợp lệ.", "Please enter a valid email address."));
       return;
     }
     if (newPassword && newPassword.length < 8) {
-      setSaveError("Mật khẩu mới cần có ít nhất 8 ký tự.");
+      setSaveError(localizedText("Mật khẩu mới cần có ít nhất 8 ký tự.", "The new password must be at least 8 characters."));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setSaveError("Mật khẩu xác nhận không khớp.");
+      setSaveError(localizedText("Mật khẩu xác nhận không khớp.", "The password confirmation does not match."));
       return;
     }
     try {
@@ -379,11 +379,11 @@ function PersonalInfoSettings({ fullName, email, position, hotelName, onLogout }
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2500);
     } catch (err: any) {
-      setSaveError(err?.data?.message ?? "Không thể cập nhật thông tin. Vui lòng thử lại.");
+      setSaveError(err?.data?.message ?? localizedText("Không thể cập nhật thông tin. Vui lòng thử lại.", "Could not update your information. Please try again."));
     }
   };
-  const displayFields = [[UserRound, "Họ và tên", form.fullName], [Mail, "Email", form.email], [BriefcaseBusiness, "Chức vụ", form.position], [Building2, "Khách sạn", hotelName]] as const;
-  const editFields = [["fullName", "Họ và tên", form.fullName], ["position", "Chức vụ", form.position], ["email", "Email", form.email], ["identityNumber", "CCCD", form.identityNumber], ["phone", "Số điện thoại", form.phone]] as const;
+  const displayFields = [[UserRound, localizedText("Họ và tên", "Full name"), form.fullName], [Mail, "Email", form.email], [BriefcaseBusiness, localizedText("Chức vụ", "Position"), form.position], [Building2, localizedText("Khách sạn", "Hotel"), hotelName]] as const;
+  const editFields = [["fullName", localizedText("Họ và tên", "Full name"), form.fullName], ["position", localizedText("Chức vụ", "Position"), form.position], ["email", "Email", form.email], ["identityNumber", localizedText("CCCD", "ID number"), form.identityNumber], ["phone", localizedText("Số điện thoại", "Phone number"), form.phone]] as const;
 
   return (
     <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
@@ -391,21 +391,21 @@ function PersonalInfoSettings({ fullName, email, position, hotelName, onLogout }
         <div className="flex min-w-0 items-center gap-3">
           <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">{initials}</div>
           <div className="min-w-0">
-            <h3 className="font-bold text-slate-900">Thông tin cá nhân</h3>
+            <h3 className="font-bold text-slate-900">{localizedText("Thông tin cá nhân", "Personal information")}</h3>
             <p className="mt-1 truncate text-sm text-slate-500" title={displayName}>{displayName}</p>
           </div>
         </div>
         {editing ? (
-          <button type="button" onClick={cancel} className="flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"><X size={15} />Hủy</button>
+          <button type="button" onClick={cancel} className="flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"><X size={15} />{localizedText("Hủy", "Cancel")}</button>
         ) : (
-          <button type="button" onClick={() => setEditing(true)} className="flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"><Pencil size={15} />Chỉnh sửa</button>
+          <button type="button" onClick={() => setEditing(true)} className="flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600"><Pencil size={15} />{localizedText("Chỉnh sửa", "Edit")}</button>
         )}
       </div>
       {editing ? (
         <>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="sm:col-span-2 block">
-              <span className="text-xs font-medium text-slate-500">Ảnh nhân viên</span>
+              <span className="text-xs font-medium text-slate-500">{localizedText("Ảnh nhân viên", "Employee photo")}</span>
               <input type="file" accept="image/*" onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;
@@ -427,41 +427,41 @@ function PersonalInfoSettings({ fullName, email, position, hotelName, onLogout }
               </label>
             ))}
             <label className="sm:col-span-2 block">
-              <span className="text-xs font-medium text-slate-500">Địa chỉ</span>
+              <span className="text-xs font-medium text-slate-500">{localizedText("Địa chỉ", "Address")}</span>
               <textarea value={form.address} onChange={(event) => update("address", event.target.value)} className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
             </label>
             <div className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
               <Building2 size={17} className="shrink-0 text-slate-400" />
-              <div><p className="text-xs font-medium text-slate-500">Khách sạn</p><p className="mt-1 text-sm font-semibold text-slate-700">{hotelName || "Chưa cập nhật"}</p></div>
+              <div><p className="text-xs font-medium text-slate-500">{localizedText("Khách sạn", "Hotel")}</p><p className="mt-1 text-sm font-semibold text-slate-700">{hotelName || localizedText("Chưa cập nhật", "Not provided")}</p></div>
             </div>
           </div>
           <div className="mt-7 border-t border-slate-100 pt-5">
-            <h4 className="text-sm font-bold text-slate-900">Thông tin tài khoản</h4>
-            <p className="mt-1 text-xs text-slate-500">Email đăng nhập luôn đồng bộ với email cá nhân bên trên.</p>
+            <h4 className="text-sm font-bold text-slate-900">{localizedText("Thông tin tài khoản", "Account information")}</h4>
+            <p className="mt-1 text-xs text-slate-500">{localizedText("Email đăng nhập luôn đồng bộ với email cá nhân bên trên.", "The sign-in email is always synchronized with the personal email above.")}</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <span className="text-xs font-medium text-slate-500">Email đăng nhập</span>
+                <span className="text-xs font-medium text-slate-500">{localizedText("Email đăng nhập", "Sign-in email")}</span>
                 <input type="email" required value={form.email} onChange={(event) => update("email", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
               </label>
               <div className="hidden sm:block" />
               <label className="block">
-                <span className="text-xs font-medium text-slate-500">Mật khẩu mới</span>
+                <span className="text-xs font-medium text-slate-500">{localizedText("Mật khẩu mới", "New password")}</span>
                 <span className="relative mt-1 block">
-                  <input type={showNewPassword ? "text" : "password"} autoComplete="new-password" minLength={8} value={newPassword} onChange={(event) => { setNewPassword(event.target.value); setSaveError(""); }} placeholder="Để trống nếu không đổi mật khẩu" className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-                  <button type="button" onClick={() => setShowNewPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showNewPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}>{showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
+                  <input type={showNewPassword ? "text" : "password"} autoComplete="new-password" minLength={8} value={newPassword} onChange={(event) => { setNewPassword(event.target.value); setSaveError(""); }} placeholder={localizedText("Để trống nếu không đổi mật khẩu", "Leave blank to keep the current password")} className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                  <button type="button" onClick={() => setShowNewPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showNewPassword ? localizedText("Ẩn mật khẩu", "Hide password") : localizedText("Hiện mật khẩu", "Show password")}>{showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
                 </span>
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-slate-500">Nhập lại mật khẩu</span>
+                <span className="text-xs font-medium text-slate-500">{localizedText("Nhập lại mật khẩu", "Confirm password")}</span>
                 <span className="relative mt-1 block">
                   <input type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setSaveError(""); }} className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-blue-100 ${confirmPassword && confirmPassword !== newPassword ? "border-red-300 focus:border-red-400" : "border-slate-200 focus:border-blue-400"}`} />
-                  <button type="button" onClick={() => setShowConfirmPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}>{showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
+                  <button type="button" onClick={() => setShowConfirmPassword((current) => !current)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400" aria-label={showConfirmPassword ? localizedText("Ẩn mật khẩu", "Hide password") : localizedText("Hiện mật khẩu", "Show password")}>{showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
                 </span>
               </label>
             </div>
             {saveError && <p role="alert" className="mt-4 text-xs font-medium text-red-600">{saveError}</p>}
             <div className="mt-5 flex justify-end">
-              <button type="button" onClick={() => void save()} disabled={isSaving || !form.fullName.trim() || !form.email.trim()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><Check size={15} />{isSaving ? "Đang lưu..." : "Lưu tất cả thay đổi"}</button>
+              <button type="button" onClick={() => void save()} disabled={isSaving || !form.fullName.trim() || !form.email.trim()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><Check size={15} />{isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu tất cả thay đổi", "Save all changes")}</button>
             </div>
           </div>
         </>
@@ -470,12 +470,12 @@ function PersonalInfoSettings({ fullName, email, position, hotelName, onLogout }
           {displayFields.map(([Icon, label, value]) => (
             <div key={label} className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
               <Icon size={17} className="mt-0.5 shrink-0 text-blue-600" />
-              <div className="min-w-0"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 truncate text-sm font-semibold text-slate-800" title={value || "Chưa cập nhật"}>{value?.trim() || "Chưa cập nhật"}</p></div>
+              <div className="min-w-0"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-1 truncate text-sm font-semibold text-slate-800" title={value || localizedText("Chưa cập nhật", "Not provided")}>{value?.trim() || localizedText("Chưa cập nhật", "Not provided")}</p></div>
             </div>
           ))}
         </div>
       )}
-      {saved && <p role="status" className="mt-4 text-xs font-medium text-emerald-600">Đã cập nhật thông tin cá nhân và tài khoản.</p>}
+      {saved && <p role="status" className="mt-4 text-xs font-medium text-emerald-600">{localizedText("Đã cập nhật thông tin cá nhân và tài khoản.", "Personal and account information updated.")}</p>}
     </section>
   );
 }
@@ -485,7 +485,7 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
   const location = useLocation();
   const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
   const { hotelName, fullName, email, position } = useAppSelector((state) => state.auth);
-  const branchLabel = hotelName || "Tất cả chi nhánh";
+  const branchLabel = hotelName || localizedText("Tất cả chi nhánh", "All branches");
   const editBooking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
   const [bookingOpen, setBookingOpen] = useState(Boolean(editBooking));
   const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
@@ -516,8 +516,8 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     "/rooms": "rooms",
     "/invoices": "invoices",
     "/promotions": "promotions",
-    "/services/usage": "services",
-    "/services/catalog": "services",
+    "/services/usage": "serviceUsage",
+    "/services/catalog": "serviceCatalog",
     "/staff": "staff",
     "/permissions": "permissions",
     "/reports": "reports",
@@ -528,7 +528,18 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     eyebrow: t(`pages.${pageKey}.eyebrow`, basePage.eyebrow),
     title: t(`pages.${pageKey}.title`, basePage.title),
     description: t(`pages.${pageKey}.description`, basePage.description),
-    stats: basePage.stats.map(([label, value], index) => [t(`pages.${pageKey}.stats.${index}`, label), routePath === "/settings" && index === 0 ? branchLabel : value] as [string, string]),
+    stats: basePage.stats.map(([label, value], index) => [
+      t(`pages.${pageKey}.stats.${index}`, label),
+      routePath === "/settings" && index === 0
+        ? branchLabel
+        : routePath === "/settings" && index === 2
+          ? localizedText("Tiếng Việt", "English")
+          : routePath === "/settings" && index === 3
+            ? position === "Quản lý" || position === "Manager"
+              ? localizedText("Quản lý", "Manager")
+              : position ?? value
+            : value,
+    ] as [string, string]),
   };
   return <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
     <EmployeeShiftSessionGuard onLogout={onLogout} />
@@ -545,7 +556,7 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     <main className={`min-w-0 transition-[padding] duration-300 ease-in-out ${collapsed ? "lg:pl-0" : "lg:pl-72"}`}>
       <AppHeader onMenuClick={toggleSidebar} collapsed={collapsed} />
         <div className={`mx-auto min-w-0 px-4 py-6 sm:px-6 lg:px-8 transition-[max-width] duration-300 ease-in-out ${collapsed ? "max-w-[1650px]" : "max-w-7xl"}`}><p className="mb-1 text-sm font-semibold text-blue-600">{page.eyebrow}</p><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-[28px] font-bold tracking-[-.03em] text-slate-900">{page.title}</h2>{path !== "/nhan-vien" && <p className="mt-2 max-w-xl text-sm text-slate-500">{page.description}</p>}</div>{path !== "/dat-phong" && path !== "/nhan-vien" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && !routePath.startsWith("/services/") && routePath !== "/invoices" && routePath !== "/promotions" && <button onClick={() => path === "/dat-phong" && setBookingOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><Sparkles size={16} />{t("common.newAction")}</button>}</div>
-        {path !== "/dat-phong" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && routePath !== "/check-in-out" && routePath !== "/invoices" && routePath !== "/promotions" && !routePath.startsWith("/services/") && <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{page.stats.map(([label, value], i) => <div key={label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${i === 0 ? "bg-[#28233f] text-white" : "bg-white"}`}><p className={`text-xs font-medium ${i === 0 ? "text-blue-200" : "text-slate-500"}`}>{label}</p><p className="mt-2 text-xl font-bold tracking-tight">{value}</p><p className={`mt-1 text-[11px] ${i === 0 ? "text-blue-200" : "text-slate-400"}`}>Cập nhật hôm nay</p></div>)}</section>}
+        {path !== "/dat-phong" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && routePath !== "/check-in-out" && routePath !== "/invoices" && routePath !== "/promotions" && !routePath.startsWith("/services/") && <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{page.stats.map(([label, value], i) => <div key={label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${i === 0 ? "bg-[#28233f] text-white" : "bg-white"}`}><p className={`text-xs font-medium ${i === 0 ? "text-blue-200" : "text-slate-500"}`}>{label}</p><p className="mt-2 text-xl font-bold tracking-tight">{value}</p><p className={`mt-1 text-[11px] ${i === 0 ? "text-blue-200" : "text-slate-400"}`}>{localizedText("Cập nhật hôm nay", "Updated today")}</p></div>)}</section>}
         {path === "/hotel-rules" ? <HotelRulesWorkspace /> : path === "/settings" ? <LanguageSettings onLogout={onLogout} /> : path === "/phe-duyet-hoan-tien" ? <RefundApprovalWorkspace /> : path === "/check-in-out" ? <CheckInOutWorkspace /> : routePath.startsWith("/services/") ? <ServiceWorkspace mode={routePath === "/services/usage" ? "usage" : "catalog"} /> : path === "/khuyen-mai" ? <PromotionWorkspace /> : path === "/phong" ? <RoomWorkspace /> : path === "/hoa-don" ? <InvoiceWorkspace /> : path === "/bao-cao" ? <ReportWorkspace /> : path === "/nhan-vien" ? <StaffTabsWorkspace /> : path === "/phan-quyen" ? <PermissionsWorkspace /> : path === "/danh-sach-booking" ? <BookingListWorkspace /> : path === "/dat-phong" ? (bookingOpen ? <BookingWorkspaceNew /> : <BookingOverview onNewBooking={() => setBookingOpen(true)} />) : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Không gian {page.title.toLowerCase()}</h3><p className="mt-1 text-sm text-slate-500">Các công cụ chi tiết cho {page.title.toLowerCase()} sẽ được hiển thị tại đây.</p></div></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Danh sách & bộ lọc</p><p className="mt-1 text-xs text-slate-400">Tra cứu nhanh dữ liệu theo chi nhánh.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Theo dõi trạng thái</p><p className="mt-1 text-xs text-slate-500">Theo dõi tiến độ theo thời gian thực.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Báo cáo & hành động mới.</p></div></div></section>}
         <ScrollControls />
       </div></main>

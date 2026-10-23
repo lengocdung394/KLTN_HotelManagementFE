@@ -4,6 +4,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useGetWeeklyShiftScheduleQuery } from "../services/shiftApi";
 import { logout } from "../store/authSlice";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { isEmployeePortalUser } from "../lib/employeeRoles";
 
 const getWeekStart = (date: Date) => {
   const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -27,7 +28,7 @@ export default function EmployeeShiftSessionGuard({ onLogout }: { onLogout: () =
   const navigate = useNavigate();
   const employeeId = useAppSelector((state) => state.auth.employeeId);
   const roles = useAppSelector((state) => state.auth.roles);
-  const isEmployee = roles.includes("ROLE_EMPLOYEE") && !roles.includes("ROLE_MANAGER");
+  const isEmployee = isEmployeePortalUser(roles);
   const weekStart = useMemo(() => getWeekStart(new Date()), []);
   const previousWeekStart = useMemo(() => {
     const monday = new Date(`${weekStart}T00:00:00`);

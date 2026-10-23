@@ -1,12 +1,11 @@
 import { CalendarClock, Check, Clock3 } from "lucide-react";
-import { useCompleteHousekeepingTaskMutation, useGetMyHousekeepingTasksQuery, useGetWeeklyShiftScheduleQuery } from "../services/shiftApi";
+import { useCompleteHousekeepingTaskMutation, useGetMyHousekeepingTasksQuery, useGetTodayShiftAssignmentsQuery } from "../services/shiftApi";
 import { useAppSelector } from "../store/hooks";
 import { useState } from "react";
+import { localizedText } from "../i18n";
 
-const getMonday = () => {
+const localDate = () => {
   const date = new Date();
-  const day = date.getDay();
-  date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const dayOfMonth = String(date.getDate()).padStart(2, "0");
@@ -14,14 +13,19 @@ const getMonday = () => {
 };
 
 export default function EmployeeShiftSchedule() {
-  const { data, isLoading, isError } = useGetWeeklyShiftScheduleQuery(getMonday());
-  const roles = useAppSelector((state) => state.auth.roles);
-  const { data: housekeepingTasks = [], isError: isTasksError } = useGetMyHousekeepingTasksQuery(undefined, {
-    skip: !roles.includes("ROLE_EMPLOYEE"),
+  const { data: shifts = [], isLoading, isError } = useGetTodayShiftAssignmentsQuery();
+  const {
+    data: housekeepingTasks = [],
+    isLoading: isTasksLoading,
+    isError: isTasksError,
+  } = useGetMyHousekeepingTasksQuery(undefined, {
     pollingInterval: 30000,
   });
+  const employeeId = useAppSelector((state) => state.auth.employeeId);
   const [completeTask, { isLoading: isCompletingTask }] = useCompleteHousekeepingTaskMutation();
   const [taskActionError, setTaskActionError] = useState("");
+  const today = localDate();
+  const myShifts = shifts.filter((shift) => shift.employeeId === employeeId && shift.workDate === today);
 
   return (
     <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -30,65 +34,55 @@ export default function EmployeeShiftSchedule() {
           <CalendarClock size={20} />
         </div>
         <div>
-          <h2 className="font-bold text-slate-900">Lịch làm việc tuần</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {data ? `${data.weekStartDate} – ${data.weekEndDate}` : "Lịch phân ca của chi nhánh"}
-          </p>
+          <h2 className="font-bold text-slate-900">{localizedText("Ca làm hôm nay và công việc được giao", "Today's shifts and assigned tasks")}</h2>
+          <p className="mt-1 text-sm text-slate-500">{localizedText("Lịch ca cá nhân và các việc cần hoàn thành trong ca.", "Your shift schedule and tasks to complete during the shift.")}</p>
         </div>
       </div>
       {isLoading ? (
-        <p className="p-6 text-sm text-slate-500">Đang tải lịch làm việc...</p>
+        <p className="p-6 text-sm text-slate-500">{localizedText("Đang tải ca làm hôm nay...", "Loading today's shifts...")}</p>
       ) : isError ? (
-        <p className="p-6 text-sm text-rose-600">Không thể tải lịch làm việc. Vui lòng thử lại sau.</p>
-      ) : !data || data.days.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">Chưa có lịch làm việc cho tuần này.</p>
+        <p role="alert" className="p-6 text-sm text-rose-600">{localizedText("Không thể tải ca làm hôm nay. Vui lòng thử lại sau.", "Could not load today's shifts. Please try again later.")}</p>
+      ) : myShifts.length === 0 ? (
+        <p className="p-6 text-sm text-slate-500">{localizedText("Hôm nay bạn chưa được phân ca.", "You have not been assigned a shift today.")}</p>
       ) : (
-        <>
-          <div className="grid gap-3 overflow-x-auto p-4 md:grid-cols-7">
-            {data.days.map((day) => (
-              <article key={day.date} className="min-w-45 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-900">{day.dayLabel}</h3>
-                    <p className="mt-1 text-[11px] text-slate-500">{day.dateDisplay}</p>
-                  </div>
-                  <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold text-blue-700">
-                    {day.totalAssigned} ca
-                  </span>
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          {myShifts.map((shift) => (
+            <article key={shift.id ?? `${shift.workDate}-${shift.shiftType}`} className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">{shift.shiftType === "Ca sáng" ? localizedText("Ca sáng", "Morning shift") : shift.shiftType === "Ca chiều" ? localizedText("Ca chiều", "Afternoon shift") : shift.shiftType === "Ca đêm" ? localizedText("Ca đêm", "Night shift") : shift.shiftType}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{shift.role === "Lễ tân" ? localizedText("Lễ tân", "Front desk") : shift.role === "Buồng phòng" ? localizedText("Buồng phòng", "Housekeeping") : shift.role === "Bảo vệ" ? localizedText("Bảo vệ", "Security") : shift.role || shift.position}</p>
                 </div>
-                <div className="mt-3 space-y-2">
-                  {day.assignments.map((assignment, index) => (
-                    <div key={`${day.date}-${assignment.employeeId}-${assignment.shiftType}-${index}`} className="rounded-lg border border-blue-100 bg-blue-50 p-2.5">
-                      <p className="text-[9px] font-semibold text-slate-500">{assignment.role} · {assignment.shiftType}</p>
-                      <p className="mt-1 truncate text-[10px] font-bold text-slate-800">{assignment.employeeName}</p>
-                      <p className="mt-0.5 truncate text-[9px] text-slate-500">{assignment.task || assignment.position}</p>
-                      <p className="mt-1 flex items-center gap-1 text-[9px] text-slate-500">
-                        <Clock3 size={10} />{assignment.shiftTime}
-                      </p>
-                    </div>
-                  ))}
-                  {day.assignments.length === 0 && <p className="rounded-lg bg-white p-3 text-center text-[10px] text-slate-400">Chưa phân ca</p>}
-                </div>
-              </article>
-            ))}
-          </div>
-          <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
-            Tổng cộng {data.totalAssignments} ca đã phân công trong tuần.
-          </p>
-        </>
+                <span className="flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
+                  <Clock3 size={12} />{shift.shiftTime}
+                </span>
+              </div>
+              {shift.task && (
+                <p className="mt-3 rounded-lg bg-white/80 p-3 text-sm text-slate-700">
+                  <span className="font-semibold">{localizedText("Công việc:", "Task:")}</span> {shift.task === "Trực quầy lễ tân" ? localizedText(shift.task, "Front desk duty") : shift.task === "Dọn phòng" ? localizedText(shift.task, "Room cleaning") : shift.task === "Trực an ninh" ? localizedText(shift.task, "Security duty") : shift.task}
+                </p>
+              )}
+            </article>
+          ))}
+        </div>
       )}
-      {isTasksError && <p role="alert" className="mx-5 mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">Không thể tải yêu cầu dọn phòng.</p>}
-      {housekeepingTasks.length > 0 && (
-        <section className="border-t border-slate-100 p-5">
-          <h3 className="text-sm font-bold text-slate-900">Phòng cần dọn sau checkout</h3>
-          <p className="mt-1 text-xs text-slate-500">Bạn cần xác nhận hoàn tất sau khi dọn để chuyển phòng sang trạng thái sẵn sàng.</p>
+      <section className="border-t border-slate-100 p-5">
+        <h3 className="text-sm font-bold text-slate-900">{localizedText("Phân công dọn phòng", "Housekeeping assignments")}</h3>
+        <p className="mt-1 text-xs text-slate-500">{localizedText("Các phòng được giao cho bạn dọn sau khi khách checkout.", "Rooms assigned to you for cleaning after guest checkout.")}</p>
+        {isTasksLoading ? (
+          <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">{localizedText("Đang tải phân công dọn phòng...", "Loading housekeeping assignments...")}</p>
+        ) : isTasksError ? (
+          <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{localizedText("Không thể tải phân công dọn phòng.", "Could not load housekeeping assignments.")}</p>
+        ) : housekeepingTasks.length === 0 ? (
+          <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">{localizedText("Hiện chưa có phòng nào được giao cho bạn dọn.", "No rooms have been assigned to you for cleaning yet.")}</p>
+        ) : (
           <div className="mt-3 space-y-2">
             {housekeepingTasks.map((task) => (
               <article key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">Phòng {task.roomNumber}</p>
+                  <p className="text-sm font-semibold text-slate-800">{localizedText("Phòng", "Room")} {task.roomNumber}</p>
                   <p className="mt-1 text-xs text-slate-600">
-                    {task.status === "REASSIGNED" ? "Đã chuyển giao sau 1 giờ chưa xác nhận" : "Được giao sau khi khách checkout"}
+                    {task.status === "REASSIGNED" ? localizedText("Đã chuyển giao sau 1 giờ chưa xác nhận", "Reassigned after no confirmation for 1 hour") : localizedText("Được giao sau khi khách checkout", "Assigned after guest checkout")}
                   </p>
                 </div>
                 <button
@@ -97,19 +91,19 @@ export default function EmployeeShiftSchedule() {
                   onClick={() => {
                     setTaskActionError("");
                     void completeTask(task.id).unwrap().catch((error: { data?: { message?: string } }) => {
-                      setTaskActionError(error.data?.message ?? "Không xác nhận được việc dọn phòng. Vui lòng thử lại.");
+                      setTaskActionError(error.data?.message ?? localizedText("Không xác nhận được việc dọn phòng. Vui lòng thử lại.", "Could not confirm room cleaning. Please try again."));
                     });
                   }}
                   className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 >
-                  <Check size={14} />Xác nhận đã dọn xong
+                  <Check size={14} />{localizedText("Xác nhận đã dọn xong", "Confirm cleaning complete")}
                 </button>
               </article>
             ))}
           </div>
-          {taskActionError && <p role="alert" className="mt-3 text-sm text-rose-700">{taskActionError}</p>}
-        </section>
-      )}
+        )}
+        {taskActionError && <p role="alert" className="mt-3 text-sm text-rose-700">{taskActionError}</p>}
+      </section>
     </section>
   );
 }
