@@ -332,10 +332,6 @@ form.max-w-lg label > textarea {
     border-top: 1px solid rgb(241 245 249);
   }
 
-  .staff-tabs-workspace > div.mt-5 > section:first-of-type {
-    display: none;
-  }
-
   .staff-tabs-workspace > div.mt-5 > form:not(.translated-shift-form) {
     display: none;
   }

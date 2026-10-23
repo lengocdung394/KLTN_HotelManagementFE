@@ -41,6 +41,13 @@ export type PromotionScope = "ROOM" | "SERVICE" | "TOTAL";
 export type PromotionDiscountType = "PERCENTAGE" | "FIXED_AMOUNT";
 export type PromotionStatus = "DRAFT" | "ACTIVE" | "INACTIVE" | "EXPIRED";
 
+export type PromotionSummary = {
+  activePromotions: number;
+  monthlyUsageCount: number;
+  monthlySavingsAmount: number;
+  expiringSoonPromotions: number;
+};
+
 export type CreatePromotionRequest = {
   name: string;
   description?: string;
@@ -149,6 +156,15 @@ const extractList = (response: unknown): PromotionApiResponse[] => {
 
 export const promotionApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getPromotionSummary: builder.query<PromotionSummary, { hotelId?: number; month: string }>({
+      query: (params) => ({
+        url: "/promotions/summary",
+        method: "GET",
+        params,
+      }),
+      transformResponse: (response: ApiResponse<PromotionSummary>) => response.result,
+      providesTags: ["Promotion"],
+    }),
     getPromotions: builder.query<Promotion[], { hotelId?: number; activeOnly?: boolean; status?: string; page?: number; size?: number } | void>({
       query: (params) => ({
         url: "/promotions",
@@ -185,6 +201,7 @@ export const promotionApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetPromotionSummaryQuery,
   useGetPromotionsQuery,
   useCreatePromotionMutation,
   useUpdatePromotionMutation,

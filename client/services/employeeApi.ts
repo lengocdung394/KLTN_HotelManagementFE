@@ -1,6 +1,12 @@
 import { baseApi } from "./baseApi";
 
-export interface EmployeeResponse {
+type ApiResponse<T> = {
+  code: number;
+  message?: string;
+  result: T;
+};
+
+export type EmployeeRecord = {
   id: string;
   email: string;
   fullName: string;
@@ -8,88 +14,89 @@ export interface EmployeeResponse {
   cccd: string;
   address: string;
   position: string;
-  avatarUrl: string;
-  dateOfBirth?: string;
-  hotelId?: number;
-  hotelName?: string;
-  roles?: string[];
-}
+  avatarUrl: string | null;
+  hotelId: number;
+  hotelName: string;
+  roles: string[];
+  roleCodes?: string[];
+};
 
-export interface EmployeeRegisterRequest {
-  fullName: string;
+type EmployeeCreateResult = Pick<
+  EmployeeRecord,
+  "id" | "email" | "fullName" | "phone" | "cccd" | "address" | "position" | "roles"
+> & { hotelName: string };
+
+export type UpdateMyProfileRequest = {
+  currentPassword: string;
   email: string;
+  fullName: string;
   phone: string;
   cccd: string;
   address: string;
   position: string;
-  hotelId?: number;
+  newPassword?: string;
+  confirmPassword?: string;
+};
+
+export type CreateEmployeeRequest = {
+  email: string;
+  phone: string;
+  fullName: string;
+  address: string;
+  cccd: string;
+  position: string;
+  hotelId: number;
+  avatarUrl: string;
+};
+
+export type UpdateEmployeeRequest = Pick<
+  EmployeeRecord,
+  "email" | "phone" | "fullName" | "address" | "cccd" | "position"
+> & {
   password?: string;
-}
+};
 
 export const employeeApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getEmployeesByHotel: builder.query<EmployeeResponse[], number | string>({
-      query: (hotelId) => ({
-        url: `/employee/hotel/${hotelId}`,
-        method: "GET",
-      }),
-      transformResponse: (response: any) => {
-        return (response?.result !== undefined ? response.result : response) || [];
-      },
-      providesTags: (result) =>
-        result
-          ? [
-              ...result.map(({ id }) => ({ type: "Staff" as const, id })),
-              { type: "Staff", id: "LIST" },
-            ]
-          : [{ type: "Staff", id: "LIST" }],
+    getMyHotelEmployees: builder.query<EmployeeRecord[], void>({
+      query: () => ({ url: "/employee/my-hotel", method: "GET" }),
+      transformResponse: (response: ApiResponse<EmployeeRecord[]>) => response.result,
+      providesTags: ["Staff"],
     }),
-
-    getEmployeeById: builder.query<EmployeeResponse, string>({
-      query: (id) => ({
-        url: `/employee/${id}`,
-        method: "GET",
-      }),
-      transformResponse: (response: any) => {
-        return (response?.result !== undefined ? response.result : response) || null;
-      },
-      providesTags: (result, error, id) => [{ type: "Staff", id }],
+    getEmployeesByHotel: builder.query<EmployeeRecord[], number>({
+      query: (hotelId) => ({ url: `/employee/hotel/${hotelId}`, method: "GET" }),
+      transformResponse: (response: ApiResponse<EmployeeRecord[]>) => response.result,
+      providesTags: ["Staff"],
     }),
-
-    createStaff: builder.mutation<EmployeeResponse, FormData>({
-      query: (formData) => ({
-        url: "/employee/create",
-        method: "POST",
-        data: formData,
-        headers: { "Content-Type": "multipart/form-data" },
-      }),
-      transformResponse: (response: any) => {
-        return response?.result !== undefined ? response.result : response;
+    createEmployee: builder.mutation<EmployeeCreateResult, CreateEmployeeRequest>({
+      query: (staffInfo) => {
+        const data = new FormData();
+        data.append("staffInfo", new Blob([JSON.stringify(staffInfo)], { type: "application/json" }));
+        return { url: "/employee/create", method: "POST", data };
       },
-      invalidatesTags: [{ type: "Staff", id: "LIST" }],
+      transformResponse: (response: ApiResponse<EmployeeCreateResult>) => response.result,
+      invalidatesTags: ["Staff"],
     }),
-
-    updateStaff: builder.mutation<EmployeeResponse, { id: string; formData: FormData }>({
-      query: ({ id, formData }) => ({
-        url: `/employee/update/${id}`,
-        method: "PUT",
-        data: formData,
-        headers: { "Content-Type": "multipart/form-data" },
-      }),
-      transformResponse: (response: any) => {
-        return response?.result !== undefined ? response.result : response;
+    updateEmployee: builder.mutation<EmployeeRecord, { id: string; staffInfo: UpdateEmployeeRequest }>({
+      query: ({ id, staffInfo }) => {
+        const data = new FormData();
+        data.append("staffInfo", new Blob([JSON.stringify(staffInfo)], { type: "application/json" }));
+        return { url: `/employee/update/${encodeURIComponent(id)}`, method: "PUT", data };
       },
-      invalidatesTags: (result, error, { id }) => [
-        { type: "Staff", id },
-        { type: "Staff", id: "LIST" },
-      ],
+      transformResponse: (response: ApiResponse<EmployeeRecord>) => response.result,
+      invalidatesTags: ["Staff"],
+    }),
+    updateMyProfile: builder.mutation<EmployeeRecord, UpdateMyProfileRequest>({
+      query: (data) => ({ url: "/employee/me/profile", method: "PUT", data }),
+      transformResponse: (response: ApiResponse<EmployeeRecord>) => response.result,
     }),
   }),
 });
 
 export const {
+  useGetMyHotelEmployeesQuery,
   useGetEmployeesByHotelQuery,
-  useGetEmployeeByIdQuery,
-  useCreateStaffMutation,
-  useUpdateStaffMutation,
+  useCreateEmployeeMutation,
+  useUpdateEmployeeMutation,
+  useUpdateMyProfileMutation,
 } = employeeApi;

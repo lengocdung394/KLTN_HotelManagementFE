@@ -1343,6 +1343,7 @@ export default function BookingWorkspace() {
   const filteredRooms = useMemo(
     () =>
       rooms
+        .filter((room) => room.status !== "Bảo trì" && room.status !== "Đang dọn")
         .filter((room) => `${room.id} ${room.type}`.toLowerCase().includes(query.trim().toLowerCase()))
         .filter((room) => roomType === allRoomTypesLabel || room.type === roomType)
         .filter((room) => building === allBuildingsLabel || room.buildingName === building || room.buildingId === selectedBuilding?.id || room.id.startsWith(`${building}-`))
@@ -1709,7 +1710,6 @@ export default function BookingWorkspace() {
               quantity: selection.quantity,
               name: selection.name ?? service?.name,
               price: selection.price ?? service?.price,
-              usedAt: selection.usedAt ?? new Date().toISOString().slice(0, 19),
             };
           }),
       };
@@ -1812,7 +1812,6 @@ export default function BookingWorkspace() {
             quantity: selection.quantity,
             name: selection.name ?? services.find((service) => String(service.id) === selection.serviceId)?.name,
             price: selection.price ?? services.find((service) => String(service.id) === selection.serviceId)?.price,
-            usedAt: selection.usedAt ?? new Date().toISOString().slice(0, 19),
           })),
         });
       });
@@ -1900,7 +1899,7 @@ export default function BookingWorkspace() {
         });
         const origSelections = Array.from(origServicesMap.values());
 
-        const additionsForRoom: { serviceId: string; quantity: number; name?: string; price?: number; usedAt?: string }[] = [];
+        const additionsForRoom: { serviceId: string; quantity: number; name?: string; price?: number }[] = [];
         const quantityUpdatesForRoom: { serviceId: string; quantity: number }[] = [];
         const serviceIds = new Set([
           ...origSelections.map((service) => service.serviceId),
@@ -1922,7 +1921,6 @@ export default function BookingWorkspace() {
               quantity: currentQuantity - originalQuantity,
               name: current?.name ?? serviceObj?.name,
               price: current?.price ?? serviceObj?.price,
-              usedAt: current?.usedAt ?? new Date().toISOString().slice(0, 19),
             });
             return;
           }
@@ -2083,7 +2081,7 @@ export default function BookingWorkspace() {
           <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "rooms" ? "bg-violet-600 text-white" : "bg-emerald-500 text-white"}`}>{step === "rooms" ? "1" : <Check size={14} />}</span>
           <span className="text-xs font-semibold text-slate-500">{t("booking.dateAndRooms")}</span>
           <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "guest" ? "bg-violet-600 text-white" : step === "services" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "services" ? <Check size={14} /> : "2"}</span>
+          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "guest" ? "bg-violet-600 text-white" : step === "services" || step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "services" || step === "promotion" ? <Check size={14} /> : "2"}</span>
           <span className="text-xs font-semibold text-slate-500">{t("booking.guestInformation")}</span>
           <span className="h-px w-8 bg-slate-200" />
           <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "services" ? "bg-violet-600 text-white" : step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "promotion" ? <Check size={14} /> : "3"}</span>

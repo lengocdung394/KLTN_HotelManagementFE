@@ -13,7 +13,7 @@ import BulkImportDialog from "../components/BulkImportDialog";
 import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
 import { Label } from "@radix-ui/react-label";
-import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation } from "../services/roomApi";
+import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation, useUpdateRoomStatusMutation } from "../services/roomApi";
 import { getAmenityImportStatus, isAmenityImportFinished, useGetAllAmenitiesQuery, useImportAmenitiesFromFileMutation, type AmenityResponse } from "../services/amenityApi.ts";
 import { useCreateBuildingMutation, useGetBuildingsByCurrentHotelQuery, useUpdateBuildingMutation } from "../services/buildingApi";
 import { useCreateFloorMutation, useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery, useUpdateFloorMutation } from "../services/floorApi";
@@ -323,6 +323,7 @@ export default function RoomWorkspace() {
   const dispatch = useAppDispatch();
   const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
   const canManageRooms = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
+  const canUpdateRoomStatus = canManageRooms || roles.includes("ROLE_EMPLOYEE");
   const canViewRoomStructure = canManageRooms || roles.includes("ROLE_EMPLOYEE");
   const { data: apiRoomTypes, isLoading: isRoomTypesLoading, isError: isRoomTypesError } = useGetRoomTypesQuery();
   const { data: apiBedTypes, isLoading: isBedTypesLoading, isError: isBedTypesError } = useGetAllBedTypesQuery();
@@ -330,6 +331,7 @@ export default function RoomWorkspace() {
   const { data: apiAmenities, isLoading: isAmenitiesLoading, isError: isAmenitiesError } = useGetAllAmenitiesQuery();
   const [createRoom, { isLoading: isCreatingRoom }] = useCreateRoomMutation();
   const [updateRoomApi, { isLoading: isUpdatingRoom }] = useUpdateRoomMutation(); // Added updateRoomApi
+  const [updateRoomStatusApi] = useUpdateRoomStatusMutation();
   const [createBuildingApi, { isLoading: isCreatingBuilding }] = useCreateBuildingMutation();
   const [updateBuildingApi, { isLoading: isUpdatingBuilding }] = useUpdateBuildingMutation();
   const [createFloorApi, { isLoading: isCreatingFloor }] = useCreateFloorMutation();
@@ -715,7 +717,7 @@ export default function RoomWorkspace() {
     setRooms((current) => {
       const refreshedRooms = nextRooms.map((room) => {
         const previous = current.find((item) => item.id === room.id);
-        return previous ? { ...room, status: previous.status, cleaner: previous.cleaner } : room;
+        return previous ? { ...room, cleaner: previous.cleaner } : room;
       });
       return refreshedRooms;
     });
@@ -959,15 +961,33 @@ export default function RoomWorkspace() {
     const matchingBuildings = buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
     return normalizedQuery ? matchingBuildings : matchingBuildings.slice(0, 4);
   }, [buildings, buildingQuery]);
-  const updateRoom = (id: string, changes: Partial<Room>) => setRooms((current) => current.map((room) => room.id === id ? { ...room, ...changes } : room));
-  const completeCleaning = (room: Room) => {
-    updateRoom(room.id, { status: "Sẵn sàng", cleaner: "" });
-    if (typeof window !== "undefined") {
-      const stored = window.localStorage.getItem("staywise-cleaning-rooms");
-      const assignments = stored ? JSON.parse(stored) : {};
-      delete assignments[room.id];
-      window.localStorage.setItem("staywise-cleaning-rooms", JSON.stringify(assignments));
+  const updateRoom = async (id: string, changes: Partial<Room>): Promise<void> => {
+    const room = rooms.find((item) => item.id === id);
+    const status = changes.status;
+    if (!room || !status) return;
+    if (!room.databaseId) {
+      toast({ variant: "destructive", title: "Không thể cập nhật trạng thái", description: "Không tìm thấy mã phòng trên máy chủ." });
+      return;
     }
+    try {
+      await updateRoomStatusApi({ roomId: room.databaseId, roomStatus: statusValues[status] ?? status }).unwrap();
+      setRooms((current) => current.map((item) => item.id === id
+        ? { ...item, status, cleaner: status === "Sẵn sàng" ? "" : item.cleaner }
+        : item));
+      dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
+    } catch (error) {
+      const errorRecord = error && typeof error === "object" ? error as { data?: unknown; message?: unknown } : {};
+      const responseData = errorRecord.data && typeof errorRecord.data === "object" ? errorRecord.data as { message?: unknown } : undefined;
+      const message = typeof responseData?.message === "string"
+        ? responseData.message
+        : typeof errorRecord.message === "string"
+          ? errorRecord.message
+          : "Vui lòng thử lại.";
+      toast({ variant: "destructive", title: "Không thể cập nhật trạng thái phòng", description: message });
+    }
+  };
+  const completeCleaning = async (room: Room) => {
+    await updateRoom(room.id, { status: "Sẵn sàng" });
   };
   const closeCreateRoomModal = () => {
     setShowCreateRoom(false);
@@ -1371,7 +1391,9 @@ export default function RoomWorkspace() {
         room: {
           roomNumber: roomCode,
           floorId: createRoomForm.floor,
-          roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status,
+          roomStatus: statusValues[rooms.find((item) => item.id === editingRoomId)?.status ?? createRoomForm.status]
+            ?? rooms.find((item) => item.id === editingRoomId)?.status
+            ?? createRoomForm.status,
           roomType: roomTypeValues[roomType] ?? roomType,
           defaultImageIndex: Math.max(updateDefaultImageIndex, 0),
           amenityIds: updateAmenityIds,
@@ -1416,7 +1438,9 @@ export default function RoomWorkspace() {
       extraChildFee,
       guestPolicy: `Tiêu chuẩn: ${standardCapacity} người · Ghép thêm tối đa: ${maxExtraGuests} người`,
       price,
-      status: createRoomForm.status || "Sẵn sàng",
+      status: isEditingRoom
+        ? rooms.find((item) => item.id === editingRoomId)?.status ?? createRoomForm.status
+        : createRoomForm.status || "Sẵn sàng",
       cleaner: isEditingRoom ? rooms.find((item) => item.id === editingRoomId)?.cleaner ?? "" : "",
       description,
       services: createRoomForm.amenities.length > 0 ? createRoomForm.amenities : ["Wifi tốc độ cao", ...(description ? [description] : [])],
@@ -1818,6 +1842,7 @@ export default function RoomWorkspace() {
     )}
     {activeTab === "rooms" && <RoomListTab
        canManageRooms={canManageRooms}
+       canUpdateRoomStatus={canUpdateRoomStatus}
       filtered={filtered}
       paginatedRooms={paginatedRooms}
       buildings={buildings}
@@ -2594,7 +2619,7 @@ export default function RoomWorkspace() {
             roomType: roomTypeLabel(draft.roomType),
             building: floorOption?.buildingId ?? current.building,
             floor: draft.floorId,
-            status: statusLabel(draft.roomStatus),
+            status: statusLabel(rooms.find((item) => item.id === editingRoomId)?.status ?? draft.roomStatus),
             area: draft.area,
             standardCapacity: draft.standardCapacity,
             maxExtraGuests: draft.maxExtraGuests,

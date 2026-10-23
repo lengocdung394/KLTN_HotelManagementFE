@@ -1,6 +1,7 @@
 import { baseApi } from "./baseApi";
 
 export type ShiftAssignment = {
+  id?: string;
   employeeId: string;
   employeeName: string;
   position: string;
@@ -30,41 +31,119 @@ export type WeeklyShiftSchedule = {
   days: DailyShiftSummary[];
 };
 
+export type ShiftAssignmentRequest = {
+  workDate: string;
+  shiftType: string;
+  shiftTime: string;
+  role: string;
+  employeeId: string;
+  task: string;
+};
+
+export type HousekeepingTask = {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  bookingDetailId: string;
+  status: "ASSIGNED" | "REASSIGNED" | string;
+  createdAt: string;
+  assignedAt: string | null;
+  assignedEmployeeId: string | null;
+  assignedEmployeeName: string | null;
+};
+
 type ApiResponse<T> = {
   result: T;
 };
 
 export const shiftApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getWeeklyShiftSchedule: builder.query<WeeklyShiftSchedule, string | void>({
+    getWeeklyShiftSchedule: builder.query<WeeklyShiftSchedule, string>({
       query: (weekStartDate) => ({
         url: "/staff-shifts/weekly",
         method: "GET",
-        params: weekStartDate ? { weekStartDate } : {},
+        params: { weekStartDate },
       }),
       transformResponse: (response: ApiResponse<WeeklyShiftSchedule>) => response.result,
+      providesTags: ["Staff"],
     }),
-    getWeeklySchedule: builder.query<WeeklyShiftSchedule, { hotelId?: number; weekStartDate?: string } | void>({
-      query: (params) => ({
+    saveWeeklyShiftSchedule: builder.mutation<
+      WeeklyShiftSchedule,
+      { weekStartDate: string; assignments: ShiftAssignmentRequest[] }
+    >({
+      query: ({ weekStartDate, assignments }) => ({
         url: "/staff-shifts/weekly",
-        method: "GET",
-        params: params || {},
+        method: "PUT",
+        params: { weekStartDate },
+        data: { assignments },
       }),
       transformResponse: (response: ApiResponse<WeeklyShiftSchedule>) => response.result,
+      invalidatesTags: ["Staff"],
     }),
-    assignBatchShifts: builder.mutation<any, { hotelId?: number; shifts?: any[]; assignments?: any[] }>({
-      query: (body) => ({
-        url: "/staff-shifts/assign-batch",
-        method: "POST",
-        data: body,
+    clearWeeklyShiftSchedule: builder.mutation<WeeklyShiftSchedule, string>({
+      query: (weekStartDate) => ({
+        url: "/staff-shifts/weekly",
+        method: "DELETE",
+        params: { weekStartDate },
       }),
-      transformResponse: (response: ApiResponse<any>) => response.result,
+      transformResponse: (response: ApiResponse<WeeklyShiftSchedule>) => response.result,
+      invalidatesTags: ["Staff"],
+    }),
+    copyWeeklyShiftSchedule: builder.mutation<
+      WeeklyShiftSchedule,
+      { sourceWeekStartDate: string; targetWeekStartDate: string }
+    >({
+      query: ({ sourceWeekStartDate, targetWeekStartDate }) => ({
+        url: "/staff-shifts/weekly/copy",
+        method: "POST",
+        params: { sourceWeekStartDate, targetWeekStartDate },
+      }),
+      transformResponse: (response: ApiResponse<WeeklyShiftSchedule>) => response.result,
+      invalidatesTags: ["Staff"],
+    }),
+    getMyHousekeepingTasks: builder.query<HousekeepingTask[], void>({
+      query: () => ({ url: "/housekeeping-tasks/my", method: "GET" }),
+      transformResponse: (response: ApiResponse<HousekeepingTask[]>) => response.result,
+      providesTags: ["Room"],
+    }),
+    getHotelHousekeepingTasks: builder.query<HousekeepingTask[], void>({
+      query: () => ({ url: "/housekeeping-tasks/management", method: "GET" }),
+      transformResponse: (response: ApiResponse<HousekeepingTask[]>) => response.result,
+      providesTags: ["Room"],
+    }),
+    assignHousekeepingTask: builder.mutation<HousekeepingTask, { taskId: string; employeeId: string }>({
+      query: ({ taskId, employeeId }) => ({
+        url: `/housekeeping-tasks/${encodeURIComponent(taskId)}/assign`,
+        method: "PUT",
+        params: { employeeId },
+      }),
+      transformResponse: (response: ApiResponse<HousekeepingTask>) => response.result,
+      invalidatesTags: ["Room", "Notification"],
+    }),
+    completeHousekeepingTaskByManager: builder.mutation<HousekeepingTask, string>({
+      query: (taskId) => ({
+        url: `/housekeeping-tasks/${encodeURIComponent(taskId)}/management-complete`,
+        method: "POST",
+      }),
+      transformResponse: (response: ApiResponse<HousekeepingTask>) => response.result,
+      invalidatesTags: ["Room", "Notification"],
+    }),
+    completeHousekeepingTask: builder.mutation<HousekeepingTask, string>({
+      query: (taskId) => ({ url: `/housekeeping-tasks/${encodeURIComponent(taskId)}/complete`, method: "POST" }),
+      transformResponse: (response: ApiResponse<HousekeepingTask>) => response.result,
+      invalidatesTags: ["Room", "Notification"],
     }),
   }),
 });
 
 export const {
   useGetWeeklyShiftScheduleQuery,
-  useGetWeeklyScheduleQuery,
-  useAssignBatchShiftsMutation,
+  useSaveWeeklyShiftScheduleMutation,
+  useClearWeeklyShiftScheduleMutation,
+  useCopyWeeklyShiftScheduleMutation,
+  useGetMyHousekeepingTasksQuery,
+  useGetHotelHousekeepingTasksQuery,
+  useAssignHousekeepingTaskMutation,
+  useCompleteHousekeepingTaskByManagerMutation,
+  useCompleteHousekeepingTaskMutation,
 } = shiftApi;

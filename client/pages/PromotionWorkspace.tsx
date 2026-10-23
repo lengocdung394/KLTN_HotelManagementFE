@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
-import { useCreatePromotionMutation, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
@@ -140,6 +140,20 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  const summaryMonth = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, "0")}`;
+  const {
+    data: promotionSummary,
+    isLoading: isPromotionSummaryLoading,
+    isError: isPromotionSummaryError,
+    refetch: refetchPromotionSummary,
+  } = useGetPromotionSummaryQuery({
+    month: summaryMonth,
+    ...(isSystemAdmin && selectedBranchId
+      ? { hotelId: Number(selectedBranchId) }
+      : !isSystemAdmin && hasHotelId
+        ? { hotelId: Number(hotelId) }
+        : {}),
+  }, { skip: !hasHotelId && !isSystemAdmin });
 
   const displayedPromotions = promotions.length > 0 ? promotions : apiPromotions;
   const locale = i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN";
@@ -189,6 +203,29 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const safePage = Math.min(page, totalPages);
   const paginatedPromotions = visiblePromotions.slice((safePage - 1) * pageSize, safePage * pageSize);
   const monthLabel = calendarMonth.toLocaleDateString(locale, { month: "long", year: "numeric" });
+  const summaryCards = [
+    {
+      label: "Đang hoạt động",
+      value: promotionSummary?.activePromotions,
+      format: (value: number) => value.toLocaleString(locale),
+      accent: true,
+    },
+    {
+      label: `Lượt sử dụng tháng ${calendarMonth.getMonth() + 1}`,
+      value: promotionSummary?.monthlyUsageCount,
+      format: (value: number) => value.toLocaleString(locale),
+    },
+    {
+      label: "Tiết kiệm cho khách",
+      value: promotionSummary?.monthlySavingsAmount,
+      format: (value: number) => `${value.toLocaleString(locale)}đ`,
+    },
+    {
+      label: "Sắp hết hạn (7 ngày tới)",
+      value: promotionSummary?.expiringSoonPromotions,
+      format: (value: number) => value.toLocaleString(locale),
+    },
+  ];
 
   useEffect(() => {
     setPage(1);
@@ -363,6 +400,29 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   };
   return (
     <div className="mt-2 space-y-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê khuyến mãi">
+        {summaryCards.map((card) => (
+          <div key={card.label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${card.accent ? "bg-[#28233f] text-white" : "bg-white"}`}>
+            <p className={`text-xs font-medium ${card.accent ? "text-blue-200" : "text-slate-500"}`}>{card.label}</p>
+            <p className="mt-2 text-xl font-bold tracking-tight">
+              {isPromotionSummaryLoading ? "Đang tải…" : isPromotionSummaryError || card.value === undefined ? "—" : card.format(card.value)}
+            </p>
+            <p className={`mt-1 text-[11px] ${card.accent ? "text-blue-200" : "text-slate-400"}`}>
+              {card.label === "Tiết kiệm cho khách" || card.label.startsWith("Lượt sử dụng")
+                ? monthLabel
+                : "Dữ liệu cập nhật từ hệ thống"}
+            </p>
+          </div>
+        ))}
+      </section>
+      {isPromotionSummaryError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <span>Không tải được thống kê khuyến mãi.</span>
+          <button type="button" onClick={() => void refetchPromotionSummary()} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-rose-100">
+            Thử tải lại
+          </button>
+        </div>
+      )}
       {modalOpen && createPortal((
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4">
           <form

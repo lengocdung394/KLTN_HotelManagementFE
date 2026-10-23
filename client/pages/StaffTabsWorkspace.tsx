@@ -1,226 +1,173 @@
-import { FormEvent, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useAppSelector } from "../store/hooks";
-import EmployeeShiftSchedule from "./EmployeeShiftSchedule";
-import { CalendarClock, CheckCircle2, Clock3, Plus, UserRound, Users } from "lucide-react";
-import PermissionsWorkspace from "./PermissionsWorkspace";
-import ShiftScheduleWorkspace from "./ShiftScheduleWorkspace";
-import StaffWorkspace from "./StaffWorkspace";
+import { useSearchParams } from "react-router-dom";
+import { Clock3 } from "lucide-react";
 import EmployeeDirectory from "../components/EmployeeDirectory";
-import { useGetWeeklyScheduleQuery, useAssignBatchShiftsMutation } from "../services/shiftApi";
-import { toast } from "@/components/ui/use-toast";
+import EmployeeShiftSchedule from "./EmployeeShiftSchedule";
+import HousekeepingTaskManagement from "./HousekeepingTaskManagement";
+import ManagerShiftPlanner from "./ManagerShiftPlanner";
+import { useGetWeeklyShiftScheduleQuery, type ShiftAssignment } from "../services/shiftApi";
+import { useAppSelector } from "../store/hooks";
 
-const staff = [
-  { name: "Lê Thị Thu Thảo", initials: "TT", role: "Lễ tân", color: "bg-blue-100 text-blue-700" },
-  { name: "Nguyễn Quốc Bảo", initials: "QB", role: "Lễ tân", color: "bg-sky-100 text-sky-700" },
-  { name: "Phạm Ngọc Anh", initials: "AA", role: "Lễ tân", color: "bg-indigo-100 text-indigo-700" },
-  { name: "Trần Minh Tú", initials: "MT", role: "Lễ tân", color: "bg-cyan-100 text-cyan-700" },
-  { name: "Đặng Thị Cẩm Tú", initials: "CT", role: "Housekeeping", color: "bg-rose-100 text-rose-700" },
-  { name: "Nguyễn Thị Mai", initials: "MM", role: "Housekeeping", color: "bg-amber-100 text-amber-700" },
-  { name: "Lê Thị Hương", initials: "HH", role: "Housekeeping", color: "bg-emerald-100 text-emerald-700" },
-];
+type StaffTab = "today" | "employees" | "shifts" | "tasks";
 
-const baseWeek = [
-  { key: "mon", label: "Thứ 2", date: "14/10" },
-  { key: "tue", label: "Thứ 3", date: "15/10" },
-  { key: "wed", label: "Thứ 4", date: "16/10" },
-  { key: "thu", label: "Thứ 5", date: "17/10" },
-  { key: "fri", label: "Thứ 6", date: "18/10" },
-  { key: "sat", label: "Thứ 7", date: "19/10" },
-  { key: "sun", label: "Chủ nhật", date: "20/10" },
-];
-
-type Role = "Lễ tân" | "Housekeeping";
-type Shift = "Ca sáng" | "Ca tối";
-type Assignment = { staff: string; task: string };
-type DaySchedule = Record<Role, Record<Shift, Assignment>>;
-
-const makeSchedule = (dayIndex: number): DaySchedule => ({
-  "Lễ tân": {
-    "Ca sáng": { staff: dayIndex % 2 === 0 ? "Lê Thị Thu Thảo" : "Nguyễn Quốc Bảo", task: "Trực quầy lễ tân" },
-    "Ca tối": { staff: dayIndex % 2 === 0 ? "Nguyễn Quốc Bảo" : "Lê Thị Thu Thảo", task: "Trực quầy lễ tân" },
+const roleStyles = {
+  reception: {
+    label: "Lễ tân",
+    matches: ["lễ tân", "le tan", "reception", "front desk", "front office"],
+    card: "border-blue-200 bg-blue-50/60",
+    avatar: "bg-blue-100 text-blue-700",
+    badge: "bg-blue-100 text-blue-700",
+    dot: "bg-blue-500",
   },
-  Housekeeping: {
-    "Ca sáng": { staff: "Đặng Thị Cẩm Tú", task: "Dọn phòng theo tầng" },
-    "Ca tối": { staff: "Đặng Thị Cẩm Tú", task: "Kiểm tra phòng cuối ngày" },
+  housekeeping: {
+    label: "Buồng phòng",
+    matches: ["buồng phòng", "buong phong", "housekeeping", "housekeeper", "room attendant"],
+    card: "border-emerald-200 bg-emerald-50/60",
+    avatar: "bg-emerald-100 text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-700",
+    dot: "bg-emerald-500",
   },
-});
+  security: {
+    label: "Bảo vệ",
+    matches: ["bảo vệ", "bao ve", "security", "guard"],
+    card: "border-amber-200 bg-amber-50/70",
+    avatar: "bg-amber-100 text-amber-800",
+    badge: "bg-amber-100 text-amber-800",
+    dot: "bg-amber-500",
+  },
+} as const;
 
-const initialSchedule = Object.fromEntries(baseWeek.map((day, index) => [day.key, makeSchedule(index)])) as Record<string, DaySchedule>;
-const shiftTimes: Record<Shift, string> = { "Ca sáng": "06:00 – 14:00", "Ca tối": "14:00 – 22:00" };
+const roleOrder = ["reception", "housekeeping", "security"] as const;
 
-function WeeklySchedule({ schedule, onEdit }: { schedule: Record<string, DaySchedule>; onEdit: (dayKey: string) => void }) {
-  return <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm"><div className="border-b border-slate-100 p-5"><h3 className="font-bold text-slate-900">Thời khóa biểu cả tuần</h3><p className="mt-1 text-sm text-slate-500">Theo dõi đầy đủ người trực và công việc của từng ngày.</p></div><div className="grid gap-3 overflow-x-auto p-4 md:grid-cols-7">{baseWeek.map((day) => <div key={day.key} className="min-w-45 rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold text-slate-900">{day.label}</p><p className="mt-1 text-[11px] text-slate-500">{day.date}</p></div><button type="button" onClick={() => onEdit(day.key)} className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-100">Chỉnh sửa</button></div><div className="mt-3 space-y-2">{Object.entries(schedule[day.key]).flatMap(([role, shifts]) => Object.entries(shifts).map(([shift, assignment]) => <div key={`${day.key}-${role}-${shift}`} className={`rounded-lg border p-2.5 ${shift === "Ca sáng" ? "border-amber-100 bg-amber-50" : "border-blue-100 bg-blue-50"}`}><p className="text-[9px] font-semibold text-slate-500">{role} · {shift === "Ca sáng" ? "Sáng" : "Tối"}</p><p className="mt-1 truncate text-[10px] font-bold text-slate-800">{assignment.staff}</p><p className="mt-0.5 truncate text-[9px] text-slate-500">{assignment.task}</p><p className="mt-0.5 text-[9px] text-slate-500">{shiftTimes[shift as Shift]}</p></div>))}</div></div>)}</div></section>;
+const assignmentRoleKey = (role: string) => {
+  const normalized = role.trim().toLocaleLowerCase("vi").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (normalized.includes("le tan") || normalized.includes("reception") || normalized.includes("front desk") || normalized.includes("front office")) return "reception";
+  if (normalized.includes("buong") || normalized.includes("housekeeping") || normalized.includes("housekeeper") || normalized.includes("room attendant")) return "housekeeping";
+  if (normalized.includes("bao ve") || normalized.includes("security") || normalized.includes("guard")) return "security";
+  return null;
+};
+
+const getWeekStart = () => {
+  const date = new Date();
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const localDate = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+function ManagerTodayShifts() {
+  const weekStart = getWeekStart();
+  const { data, isLoading, isError } = useGetWeeklyShiftScheduleQuery(weekStart);
+  const today = data?.days.find((day) => day.date === localDate());
+
+  if (isLoading) return <p className="mt-5 rounded-xl bg-white p-5 text-sm text-slate-500">Đang tải ca làm hôm nay...</p>;
+  if (isError) return <p role="alert" className="mt-5 rounded-xl bg-rose-50 p-5 text-sm text-rose-700">Không thể tải ca làm hôm nay.</p>;
+
+  return (
+    <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="font-bold text-slate-900">Ca làm hôm nay</h2>
+      <p className="mt-1 text-sm text-slate-500">Danh sách nhân viên theo lịch phân ca đã lưu.</p>
+      {!today || today.assignments.length === 0 ? (
+        <p className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">Chưa có lịch phân ca cho hôm nay. Mở tab “Phân ca tuần” để lập lịch.</p>
+      ) : (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {["Ca sáng", "Ca chiều", "Ca đêm"].map((shiftType) => {
+            const assignments = today.assignments.filter((assignment) => assignment.shiftType === shiftType);
+            const shiftTime = assignments[0]?.shiftTime ?? "";
+            const assignmentsByRole = roleOrder.map((roleKey) => ({
+              roleKey,
+              role: roleStyles[roleKey],
+              employees: assignments.filter((assignment) => assignmentRoleKey(assignment.role) === roleKey),
+            }));
+            const uncategorized = assignments.filter((assignment) => assignmentRoleKey(assignment.role) === null);
+            return (
+              <article key={shiftType} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <h3 className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800">
+                  <span>{shiftType}</span>
+                  <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500"><Clock3 size={12} />{shiftTime || "Chưa có lịch"}</span>
+                </h3>
+                <div className="space-y-3 p-3">
+                  {assignmentsByRole.map(({ roleKey, role, employees }) => (
+                    <section key={roleKey} className={`rounded-lg border p-3 ${role.card}`}>
+                      <h4 className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-700">
+                        <span className={`h-2 w-2 rounded-full ${role.dot}`} />
+                        {role.label}
+                        <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${role.badge}`}>{employees.length}</span>
+                      </h4>
+                      {employees.length ? (
+                        <div className="space-y-2">
+                          {employees.map((assignment, index) => (
+                            <EmployeeShiftRow key={`${assignment.employeeId}-${index}`} assignment={assignment} avatarClass={role.avatar} badgeClass={role.badge} />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-md bg-white/70 px-3 py-2 text-xs text-slate-500">Chưa có nhân viên</p>
+                      )}
+                    </section>
+                  ))}
+                  {uncategorized.map((assignment, index) => (
+                    <EmployeeShiftRow key={`${assignment.employeeId}-other-${index}`} assignment={assignment} avatarClass="bg-slate-100 text-slate-600" badgeClass="bg-slate-100 text-slate-600" />
+                  ))}
+                  {!assignments.length && <p className="rounded-lg bg-amber-50 p-3 text-center text-xs text-amber-800">Chưa có nhân viên được phân ca này.</p>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
-function TranslatedShiftForm({ schedule, formDay, onAssignmentChange, onClose, onSave, showHeader = true }: { schedule: Record<string, DaySchedule>; week: { key: string; label: string; date: string }[]; formDay: string; onDayChange: (dayKey: string) => void; onAssignmentChange: (role: Role, shift: Shift, field: "staff" | "task", value: string) => void; onClose: () => void; onSave: (event: FormEvent<HTMLFormElement>) => void; showHeader?: boolean }) {
-  const { t } = useTranslation();
-  return <form onSubmit={onSave} className="translated-shift-form overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm">{showHeader && <div className="flex items-start justify-between border-b border-slate-100 p-5"><div><h3 className="font-bold text-slate-900">{t("staff.assignForWeek")}</h3><p className="mt-1 text-sm text-slate-500">{t("staff.adjustWeekSchedule")}</p></div><button type="button" onClick={onClose} className="text-2xl leading-none text-slate-400">×</button></div>}<div className="grid gap-3 p-5 md:grid-cols-2">{(["Lễ tân", "Housekeeping"] as Role[]).flatMap((role) => (["Ca sáng", "Ca tối"] as Shift[]).map((shift) => { const assignment = schedule[formDay]?.[role]?.[shift] || { staff: role === "Lễ tân" ? (shift === "Ca sáng" ? "Lê Thị Thu Thảo" : "Nguyễn Quốc Bảo") : "Đặng Thị Cẩm Tú", task: role === "Lễ tân" ? "Trực quầy lễ tân" : "Dọn phòng" }; const candidates = Array.from(new Set([...(role === "Lễ tân" ? ["Lê Thị Thu Thảo", "Nguyễn Quốc Bảo", "Phạm Ngọc Anh", "Trần Minh Tú"] : ["Đặng Thị Cẩm Tú", "Nguyễn Thị Mai", "Lê Thị Hương"]), assignment.staff].filter(Boolean))); return <div key={`${role}-${shift}`} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-slate-900">{role === "Lễ tân" ? t("staff.frontDesk") : t("staff.housekeeping")}</p><p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><Clock3 size={12} />{shift === "Ca sáng" ? t("staff.morning") : t("staff.evening")} · {shift === "Ca sáng" ? "06:00 – 14:00" : "14:00 – 22:00"}</p></div><span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-bold text-blue-700">{t("staff.frontDesk") === (role === "Lễ tân" ? t("staff.frontDesk") : t("staff.housekeeping")) ? t("staff.frontDesk") : t("staff.housekeeping")}</span></div><label className="mt-4 block text-xs font-semibold text-slate-600">{t("staff.employee", "Employee")}<select value={assignment.staff} onChange={(event) => onAssignmentChange(role, shift, "staff", event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal">{candidates.map((person) => <option key={person} value={person}>{person}</option>)}</select></label><label className="mt-3 block text-xs font-semibold text-slate-600">{t("staff.task", "Task")}<input value={assignment.task} onChange={(event) => onAssignmentChange(role, shift, "task", event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal" /></label></div>; }))}</div><div className="flex justify-end gap-2 border-t border-slate-100 p-5"><button type="button" onClick={onClose} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("common.cancel")}</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">{t("staff.saveAssignments", "Save assignments")}</button></div></form>;
-}
+function EmployeeShiftRow({
+  assignment,
+  avatarClass,
+  badgeClass,
+}: {
+  assignment: ShiftAssignment;
+  avatarClass: string;
+  badgeClass: string;
+}) {
+  const initials = assignment.employeeName
+    .trim()
+    .split(/\s+/)
+    .slice(-2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toLocaleUpperCase("vi");
 
-function ShiftDayPicker({ week, selectedDay, onSelect }: { week: { key: string; label: string; date: string }[]; selectedDay: string; onSelect: (dayKey: string) => void }) {
-  const { t } = useTranslation();
-  return <div className="translated-shift-day-picker fixed left-1/2 top-4 z-[51] w-[min(1100px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl"><div className="mb-3 flex items-center justify-between"><div><h3 className="font-bold text-slate-900">{t("staff.weeklySchedule")}</h3><p className="mt-1 text-xs text-slate-500">{t("staff.selectedDayDescription")}</p></div></div><div className="grid grid-cols-4 gap-2 sm:grid-cols-7">{week.map((day) => <button type="button" key={day.key} onClick={() => onSelect(day.key)} className={`rounded-xl border p-2 text-left transition ${selectedDay === day.key ? "border-blue-500 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-slate-50 hover:border-blue-300"}`}><p className="text-xs font-bold text-slate-900">{day.label}</p><p className="mt-1 text-[11px] text-slate-500">{day.date}</p><p className="mt-2 text-[10px] font-semibold text-blue-600">{t("staff.edit")}</p></button>)}</div></div>;
-}
-
-function FullTimetablePicker({ schedule, week, selectedDay, onSelect }: { schedule: Record<string, DaySchedule>; week: { key: string; label: string; date: string }[]; selectedDay: string; onSelect: (dayKey: string) => void }) {
-  const { t } = useTranslation();
-  return <div className="translated-shift-day-picker !static !w-full !max-w-none !translate-x-0 rounded-none border-0 border-b border-slate-100 bg-white p-4 shadow-none"><div className="mb-3"><h3 className="font-bold text-slate-900">{t("staff.weeklySchedule")}</h3><p className="mt-1 text-xs text-slate-500">{t("staff.selectedDayDescription")}</p></div><div className="grid grid-cols-1 gap-2 overflow-x-auto sm:grid-cols-7">{week.map((day) => <button type="button" key={day.key} onClick={() => onSelect(day.key)} className={`min-w-0 rounded-xl border p-2 text-left transition ${selectedDay === day.key ? "border-blue-500 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-slate-50 hover:border-blue-300"}`}><p className="text-xs font-bold text-slate-900">{day.label}</p><p className="mt-1 text-[11px] text-slate-500">{day.date}</p><div className="mt-2 space-y-1">{(["Lễ tân", "Housekeeping"] as Role[]).flatMap((role) => (["Ca sáng", "Ca tối"] as Shift[]).map((shift) => <div key={`${role}-${shift}`} className="rounded bg-white p-1"><p className="text-[8px] font-semibold text-slate-500">{role === "Lễ tân" ? t("staff.frontDesk") : t("staff.housekeeping")} · {shift === "Ca sáng" ? t("staff.morningShort") : t("staff.eveningShort")}</p><p className="truncate text-[9px] font-bold text-slate-800">{schedule[day.key][role][shift].staff}</p></div>))}</div></button>)}</div></div>;
-}
-
-function TimetablePicker({ schedule, week, selectedDay, onSelect }: { schedule: Record<string, DaySchedule>; week: { key: string; label: string; date: string }[]; selectedDay: string; onSelect: (dayKey: string) => void }) {
-  const { t } = useTranslation();
-  return <div className="translated-shift-day-picker fixed left-1/2 top-4 z-[51] w-[min(1100px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl"><div className="mb-3"><h3 className="font-bold text-slate-900">{t("staff.weeklySchedule")}</h3><p className="mt-1 text-xs text-slate-500">{t("staff.selectedDayDescription")}</p></div><div className="grid grid-cols-1 gap-2 overflow-x-auto sm:grid-cols-7">{week.map((day) => <button type="button" key={day.key} onClick={() => onSelect(day.key)} className={`min-w-0 rounded-xl border p-2 text-left transition ${selectedDay === day.key ? "border-blue-500 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-slate-50 hover:border-blue-300"}`}><p className="text-xs font-bold text-slate-900">{day.label}</p><p className="mt-1 text-[11px] text-slate-500">{day.date}</p>{(["Ca sáng", "Ca tối"] as Shift[]).map((shift) => <div key={shift} className="mt-2 rounded-lg bg-white p-1.5"><p className="text-[9px] font-semibold text-slate-500">{shift === "Ca sáng" ? t("staff.morningShort") : t("staff.eveningShort")}</p><p className="truncate text-[9px] font-bold text-slate-800">{schedule[day.key][shift === "Ca sáng" ? "Lễ tân" : "Housekeeping"][shift].staff}</p></div>)}</button>)}</div></div>;
-}
-
-export default function StaffTabsWorkspace({ initialTab = "staff", initialShiftFormOpen = false }: { initialTab?: "staff" | "employees" | "permissions" | "shifts"; initialShiftFormOpen?: boolean }) {
-  const roles = useAppSelector((state) => state.auth.roles);
-  if (roles.includes("ROLE_EMPLOYEE")) return <EmployeeShiftSchedule />;
-  return <ManagerStaffTabsWorkspace initialTab={initialTab} initialShiftFormOpen={initialShiftFormOpen} />;
-}
-
-function ManagerStaffTabsWorkspace({ initialTab = "staff", initialShiftFormOpen = false }: { initialTab?: "staff" | "employees" | "permissions" | "shifts"; initialShiftFormOpen?: boolean }) {
-  const { t } = useTranslation();
-  const [tab, setTab] = useState<"staff" | "employees" | "permissions" | "shifts">(initialTab);
-  const week = baseWeek.map(({ key, label, date }) => ({ key, label: t(`staff.days.${key}`, label), date }));
-  const [selectedDay, setSelectedDay] = useState("mon");
-  const [expandedDays, setExpandedDays] = useState(week.map((day) => day.key));
-  const [schedule, setSchedule] = useState(initialSchedule);
-  const [shiftFormOpen, setShiftFormOpen] = useState(initialShiftFormOpen);
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [formDay, setFormDay] = useState("mon");
-  const [formRole, setFormRole] = useState<Role>("Lễ tân");
-  const [formShift, setFormShift] = useState<Shift>("Ca sáng");
-  const [formStaff, setFormStaff] = useState("Lê Thị Thu Thảo");
-  const [formTask, setFormTask] = useState("Trực quầy lễ tân");
-
-  const { data: weeklyData } = useGetWeeklyScheduleQuery({ hotelId: 1 });
-  const [assignBatchShifts] = useAssignBatchShiftsMutation();
-
-  useEffect(() => {
-    if (weeklyData?.days && weeklyData.days.length > 0) {
-      setSchedule((prev) => {
-        const next = { ...prev };
-        weeklyData.days.forEach((day) => {
-          if (next[day.dayKey] && day.assignments && day.assignments.length > 0) {
-            day.assignments.forEach((asgn) => {
-              const r = asgn.role as Role;
-              const s = asgn.shiftType as Shift;
-              if (next[day.dayKey][r] && next[day.dayKey][r][s]) {
-                next[day.dayKey][r][s] = {
-                  staff: asgn.employeeName || next[day.dayKey][r][s].staff,
-                  task: asgn.task || next[day.dayKey][r][s].task,
-                };
-              }
-            });
-          }
-        });
-        return next;
-      });
-    }
-  }, [weeklyData]);
-
-  const current = schedule[selectedDay] || initialSchedule[selectedDay] || makeSchedule(0);
-  const roleStaff = staff.filter((person) => person.role === formRole);
-
-  const openShiftForm = () => {
-    setFormDay(selectedDay);
-    setFormRole("Lễ tân");
-    setFormShift("Ca sáng");
-    const currentStaff = schedule[selectedDay]?.["Lễ tân"]?.["Ca sáng"]?.staff || "Lê Thị Thu Thảo";
-    const currentTask = schedule[selectedDay]?.["Lễ tân"]?.["Ca sáng"]?.task || "Trực quầy lễ tân";
-    setFormStaff(currentStaff);
-    setFormTask(currentTask);
-    setShiftFormOpen(true);
-  };
-
-  const editDay = (dayKey: string) => {
-    setSelectedDay(dayKey);
-    setFormDay(dayKey);
-    setFormRole("Lễ tân");
-    setFormShift("Ca sáng");
-    const currentStaff = schedule[dayKey]?.["Lễ tân"]?.["Ca sáng"]?.staff || "Lê Thị Thu Thảo";
-    const currentTask = schedule[dayKey]?.["Lễ tân"]?.["Ca sáng"]?.task || "Trực quầy lễ tân";
-    setFormStaff(currentStaff);
-    setFormTask(currentTask);
-    setShiftFormOpen(true);
-  };
-
-  const updateAssignment = (role: Role, shift: Shift, field: "staff" | "task", value: string) => {
-    setSchedule((currentSchedule) => ({ ...currentSchedule, [formDay]: { ...currentSchedule[formDay], [role]: { ...currentSchedule[formDay][role], [shift]: { ...currentSchedule[formDay][role][shift], [field]: value } } } }));
-  };
-
-  const saveShift = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const updatedSchedule = {
-      ...schedule,
-      [formDay]: {
-        ...schedule[formDay],
-        [formRole]: {
-          ...schedule[formDay][formRole],
-          [formShift]: { staff: formStaff, task: formTask || "Chưa phân công" },
-        },
-      },
-    };
-    setSchedule(updatedSchedule);
-    setSelectedDay(formDay);
-    setShiftFormOpen(false);
-
-    const dayObj = week.find((w) => w.key === formDay);
-    const dayName = dayObj ? `${dayObj.label} (${dayObj.date})` : formDay;
-
-    toast({
-      title: "Lưu phân ca thành công",
-      description: `Đã cập nhật lịch phân ca cho ${dayName}.`,
-    });
-
-    try {
-      const dayAssignments = updatedSchedule[formDay];
-      const shiftsPayload: any[] = [];
-      (["Lễ tân", "Housekeeping"] as Role[]).forEach((role) => {
-        (["Ca sáng", "Ca tối"] as Shift[]).forEach((shift) => {
-          const item = dayAssignments[role][shift];
-          shiftsPayload.push({
-            hotelId: 1,
-            employeeName: item.staff,
-            role,
-            shiftType: shift,
-            task: item.task,
-            workDate: "2026-10-14",
-          });
-        });
-      });
-      await assignBatchShifts({ hotelId: 1, shifts: shiftsPayload }).unwrap();
-    } catch (e: any) {
-      console.error("Lỗi khi lưu ca trực vào BE:", e);
-      toast({
-        variant: "destructive",
-        title: "Đã lưu cục bộ (Chưa đồng bộ BE)",
-        description: e?.data?.message || "Lịch ca đã cập nhật trên giao diện, nhưng kết nối Backend báo lỗi.",
-      });
-    }
-  };
-
-  return <div className="staff-tabs-workspace mt-6">
-    <div className="flex w-fit gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-      <button onClick={() => { setTab("staff"); setShiftFormOpen(false); }} className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${tab === "staff" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"}`}><Users size={16} />{t("staff.staffShiftsTab")}</button><button onClick={() => { setTab("employees"); setShiftFormOpen(false); }} className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${tab === "employees" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"}`}><UserRound size={16} />Danh sách nhân viên</button><button onClick={() => { setTab("shifts"); setShiftFormOpen(false); }} className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${tab === "shifts" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-blue-50 hover:text-blue-700"}`}><CalendarClock size={16} />{t("staff.assignmentTab")}</button>
+  return (
+    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-white/80 bg-white p-2.5 shadow-sm">
+      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-bold ${avatarClass}`}>{initials}</span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold text-slate-800">{assignment.employeeName}</p>
+        {assignment.task && <p className="mt-0.5 truncate text-[10px] text-slate-500">{assignment.task}</p>}
+      </div>
+      <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold ${badgeClass}`}>Đã phân ca</span>
     </div>
+  );
+}
 
-    {tab === "shifts" && !shiftFormOpen && <div className="mt-5 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3"><div><p className="text-sm font-semibold text-blue-900">{t("staff.weeklyOverview")}</p><p className="mt-0.5 text-xs text-blue-700">{t("staff.weeklyOverviewDescription")}</p></div><button type="button" onClick={openShiftForm} className="flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700"><CalendarClock size={15} />{t("staff.assignShift")}</button></div>}
+export default function StaffTabsWorkspace({ initialTab = "today" }: { initialTab?: StaffTab }) {
+  const roles = useAppSelector((state) => state.auth.roles);
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const tab: StaffTab = requestedTab === "employees" || requestedTab === "shifts" || requestedTab === "tasks"
+    ? requestedTab
+    : initialTab;
 
-    {shiftFormOpen && <div className="translated-shift-modal"><div className="flex shrink-0 items-start justify-between border-b border-slate-100 bg-white p-5"><div><h3 className="font-bold text-slate-900">{t("staff.assignForWeek")}</h3><p className="mt-1 text-sm text-slate-500">{t("staff.adjustWeekSchedule")}</p></div><button type="button" onClick={() => setShiftFormOpen(false)} aria-label="Close" className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><FullTimetablePicker schedule={schedule} week={week} selectedDay={formDay} onSelect={setFormDay} /><TranslatedShiftForm schedule={schedule} week={week} formDay={formDay} onDayChange={setFormDay} onAssignmentChange={updateAssignment} onClose={() => setShiftFormOpen(false)} onSave={saveShift} showHeader={false} /></div>}
+  if (roles.includes("ROLE_EMPLOYEE") && !roles.includes("ROLE_MANAGER") && !roles.includes("ROLE_ADMIN")) {
+    return <EmployeeShiftSchedule />;
+  }
 
-    {tab === "staff" && !shiftFormOpen && <StaffWorkspace schedule={schedule} onEdit={editDay} />}
-    {tab === "employees" && !shiftFormOpen && <EmployeeDirectory />}
-    {tab === "shifts" && !shiftFormOpen && <ShiftScheduleWorkspace schedule={schedule} onEdit={editDay} />}
-
-    {tab === "permissions" ? <PermissionsWorkspace /> : <div className="mt-5 space-y-5">
-      {summaryOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4"><div className="w-full max-w-3xl rounded-2xl border border-blue-100 bg-white p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between"><div><h3 className="text-lg font-bold text-slate-900">Lịch phân ca đã lưu</h3><p className="mt-1 text-sm text-slate-500">Tổng số nhân viên làm việc theo từng ngày trong tuần.</p></div><button onClick={() => setSummaryOpen(false)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">{week.map((day) => { const count = Object.values(schedule[day.key]).flatMap((role) => Object.values(role)).length; return <div key={day.key} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center"><p className="text-xs font-bold text-slate-800">{day.label}</p><p className="mt-1 text-[11px] text-slate-500">{day.date}</p><p className="mt-3 text-2xl font-bold text-blue-600">{count}</p><p className="text-[10px] font-semibold text-slate-500">nhân viên</p><div className="mt-3 space-y-2 text-left">{Object.entries(schedule[day.key]).flatMap(([role, shifts]) => Object.entries(shifts).map(([shift, assignment]) => <div key={`${day.key}-${role}-${shift}`} className="rounded-lg border border-slate-200 bg-white p-2"><p className="truncate text-[10px] font-bold text-slate-800">{assignment.staff}</p><p className="mt-0.5 truncate text-[9px] text-slate-500">{role} · {shift}</p><p className="mt-0.5 text-[9px] font-semibold text-blue-600">{shiftTimes[shift as Shift]}</p></div>))}</div></div>; })}</div><button onClick={() => setSummaryOpen(false)} className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Đóng</button></div></div>}
-      {shiftFormOpen && <form onSubmit={saveShift} className="overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-sm"><div className="flex items-start justify-between border-b border-slate-100 bg-gradient-to-r from-blue-50/70 via-white to-amber-50/40 p-5 sm:p-6"><div><h3 className="font-bold text-slate-900">Phân ca cho cả tuần</h3><p className="mt-1 text-sm text-slate-500">Điều chỉnh một vị trí trong lịch tuần.</p></div><button type="button" onClick={() => setShiftFormOpen(false)} className="text-2xl leading-none text-slate-400">×</button></div><div className="mb-5 grid grid-cols-7 gap-2 bg-slate-50/70 p-3 sm:gap-3 sm:p-4">{week.map((day) => { return <button type="button" key={day.key} onClick={() => setFormDay(day.key)} className={`min-h-[190px] rounded-2xl border p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${formDay === day.key ? "border-blue-500 bg-blue-50/80 ring-2 ring-blue-100" : "border-slate-200 bg-white hover:border-blue-300"}`}><div className="flex items-center justify-between"><div><p className="text-xs font-bold text-slate-900">{day.label}</p><p className="mt-0.5 text-[11px] text-slate-500">{day.date}</p></div><span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">Đủ ca</span></div><div className="mt-3 space-y-1.5 text-left">{Object.entries(schedule[day.key]).flatMap(([role, shifts]) => Object.entries(shifts).map(([shift, assignment]) => <div key={`${day.key}-${role}-${shift}`} className={`rounded-lg border px-2.5 py-2 shadow-sm ${shift === "Ca sáng" ? "border-amber-100 bg-amber-50" : "border-blue-100 bg-blue-50"}`}><p className="truncate text-[9px] font-semibold text-slate-500">{role} · {shift === "Ca sáng" ? "Sáng" : "Tối"}</p><p className="truncate text-[10px] font-bold text-slate-800">{assignment.staff}</p><p className="truncate text-[9px] text-slate-500">{shiftTimes[shift as Shift]}</p></div>))}</div></button>; })}</div><div className="grid gap-3 md:grid-cols-2">{(["Lễ tân", "Housekeeping"] as Role[]).flatMap((role) => (["Ca sáng", "Ca tối"] as Shift[]).map((shift) => { const assignment = schedule[formDay]?.[role]?.[shift] || { staff: role === "Lễ tân" ? (shift === "Ca sáng" ? "Lê Thị Thu Thảo" : "Nguyễn Quốc Bảo") : "Đặng Thị Cẩm Tú", task: role === "Lễ tân" ? "Trực quầy lễ tân" : "Dọn phòng" }; const candidates = Array.from(new Set([...staff.filter((person) => person.role === role).map((p) => p.name), assignment.staff].filter(Boolean))); return <div key={`${role}-${shift}`} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-slate-900">{role}</p><p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500"><Clock3 size={12} />{shift} · {shiftTimes[shift]}</p></div><span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-bold text-blue-700">Vị trí {role}</span></div><label className="mt-3 block text-xs font-semibold text-slate-600">Nhân viên<select value={assignment.staff} onChange={(event) => updateAssignment(role, shift, "staff", event.target.value)} className="mt-1.5 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal">{candidates.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><label className="mt-3 block text-xs font-semibold text-slate-600">Công việc<input value={assignment.task} onChange={(event) => updateAssignment(role, shift, "task", event.target.value)} className="mt-1.5 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-normal" /></label></div>; }))}</div><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setShiftFormOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Lưu phân ca</button></div><div className="hidden"><label className="text-sm font-semibold text-slate-700">Ngày<select value={formDay} onChange={(event) => setFormDay(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal">{week.map((day) => <option key={day.key} value={day.key}>{day.label} · {day.date}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Vị trí<select value={formRole} onChange={(event) => { const role = event.target.value as Role; setFormRole(role); setFormStaff(role === "Lễ tân" ? "Lê Thị Thu Thảo" : "Đặng Thị Cẩm Tú"); setFormTask(role === "Lễ tân" ? "Trực quầy lễ tân" : "Dọn phòng theo tầng"); }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"><option>Lễ tân</option><option>Housekeeping</option></select></label><label className="text-sm font-semibold text-slate-700">Ca<select value={formShift} onChange={(event) => setFormShift(event.target.value as Shift)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"><option>Ca sáng</option><option>Ca tối</option></select></label><label className="text-sm font-semibold text-slate-700">Nhân viên<select value={formStaff} onChange={(event) => setFormStaff(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal">{roleStaff.map((person) => <option key={person.name}>{person.name}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Công việc<input value={formTask} onChange={(event) => setFormTask(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal" /></label></div><div className="hidden"><button type="button" onClick={() => setShiftFormOpen(false)} className="rounded-lg px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-white">Hủy</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">Lưu phân ca</button></div></form>}
-
-      <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600"><CalendarClock size={20} /></div><div><h3 className="font-bold text-slate-900">Lịch phân ca theo tuần</h3><p className="mt-1 text-sm text-slate-500">4 vị trí mỗi ngày · 1 người sáng và 1 người tối cho từng bộ phận</p></div></div></div><div className="grid grid-cols-7 gap-2 border-b border-slate-100 p-4">{week.map((day) => <button key={day.key} onClick={() => { setSelectedDay(day.key); setExpandedDays((days) => days.includes(day.key) ? days : [...days, day.key]); }} className={`rounded-xl px-2 py-3 text-center transition ${selectedDay === day.key ? "bg-blue-600 text-white shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-blue-50"}`}><p className="text-xs font-semibold">{day.label}</p><p className={`mt-1 text-sm font-bold ${selectedDay === day.key ? "text-white" : "text-slate-900"}`}>{day.date}</p></button>)}</div><div className="hidden"><div className="flex items-center gap-2"><Clock3 size={17} className="text-blue-600" /><div><h3 className="text-sm font-bold text-slate-900">Chi tiết ca ngày đang chọn</h3><p className="mt-0.5 text-xs text-slate-500">Các vị trí và công việc trong ngày được chọn ở lịch phía trên</p></div></div></div><div className="hidden"><div className="grid gap-3">{[selectedDay].map((dayKey) => { const day = week.find((item) => item.key === dayKey)!; const daySchedule = schedule[dayKey] || initialSchedule[dayKey] || makeSchedule(0); return <div key={dayKey} className={`min-w-0 overflow-hidden rounded-xl border p-3 transition ${selectedDay === dayKey ? "border-blue-400 bg-blue-50/30 ring-2 ring-blue-100" : "border-slate-200 bg-white"}`}><div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-bold text-slate-900">{day.label} · {day.date}</p><p className="text-xs text-slate-500">4 vị trí đã được phân ca</p></div><button onClick={() => { setSelectedDay(dayKey); setFormDay(dayKey); setShiftFormOpen(true); }} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50">Chỉnh sửa</button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{(["Lễ tân", "Housekeeping"] as Role[]).flatMap((role) => (["Ca sáng", "Ca tối"] as Shift[]).map((shift) => { const assignment = daySchedule?.[role]?.[shift] || { staff: "Chưa phân công", task: "Trực ca" }; return <div key={`${role}-${shift}`} className={`rounded-lg p-3 ${shift === "Ca sáng" ? "bg-amber-50" : "bg-blue-50"}`}><p className="text-[11px] font-semibold text-slate-500">{role} · {shift}</p><p className="mt-1 truncate text-xs font-bold text-slate-800">{assignment.staff}</p><p className="mt-1 truncate text-[10px] text-slate-500">{assignment.task}</p></div>; }))}</div></div>; })}</div></div><div className="grid gap-4 p-5 lg:grid-cols-2">{(["Lễ tân", "Housekeeping"] as Role[]).map((role) => <article key={role} className="rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between"><div><h4 className="font-bold text-slate-900">{role}</h4><p className="mt-1 text-xs text-slate-500">2 nhân viên · đủ ca sáng và ca tối</p></div><CheckCircle2 size={18} className="text-emerald-500" /></div><div className="mt-4 space-y-2">{(["Ca sáng", "Ca tối"] as Shift[]).map((shift) => { const assignment = current?.[role]?.[shift] || { staff: "Chưa phân công", task: "Trực ca" }; const person = staff.find((item) => item.name === assignment.staff); const initials = person?.initials || (assignment.staff ? assignment.staff.split(" ").filter(Boolean).slice(-2).map((w: string) => w[0]).join("").toUpperCase() : "NV"); const color = person?.color || (shift === "Ca sáng" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"); return <div key={shift} className={`flex items-center gap-3 rounded-lg p-3 ${shift === "Ca sáng" ? "bg-amber-50" : "bg-blue-50"}`}><div className={`grid h-9 w-9 place-items-center rounded-full text-[10px] font-bold ${color}`}>{initials}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-xs font-bold text-slate-800">{assignment.staff}</p><span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500"><Clock3 size={12} />{shiftTimes[shift]}</span></div><p className="mt-1 truncate text-[11px] text-slate-500">{assignment.task}</p></div></div>; })}</div></article>)}</div></section>
-
-      <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm"><div className="border-b border-slate-100 p-5"><h3 className="font-bold text-slate-900">{t("staff.weeklyOverview")}</h3><p className="mt-1 text-sm text-slate-500">{t("staff.weeklyStaffSummary")}</p></div><div className="grid gap-3 p-5 sm:grid-cols-3"><div className="rounded-xl bg-emerald-50 p-4"><p className="text-xs font-semibold text-emerald-700">{t("staff.daysFullyStaffed")}</p><p className="mt-2 text-2xl font-bold text-emerald-900">7/7</p></div><div className="rounded-xl bg-blue-50 p-4"><p className="text-xs font-semibold text-blue-700">{t("staff.totalAssignments")}</p><p className="mt-2 text-2xl font-bold text-blue-900">28</p></div><div className="rounded-xl bg-amber-50 p-4"><p className="text-xs font-semibold text-amber-700">{t("staff.rotatingStaff")}</p><p className="mt-2 text-2xl font-bold text-amber-900">4</p></div></div></section>
-    </div>}
-  </div>;
+  return (
+    <div className="staff-tabs-workspace">
+      {tab === "today" && <ManagerTodayShifts />}
+      {tab === "employees" && <div className="mt-5"><EmployeeDirectory /></div>}
+      {tab === "shifts" && roles.includes("ROLE_MANAGER") && <ManagerShiftPlanner />}
+      {tab === "tasks" && (roles.includes("ROLE_MANAGER") || roles.includes("ROLE_ADMIN")) && <HousekeepingTaskManagement />}
+    </div>
+  );
 }

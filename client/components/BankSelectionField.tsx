@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { localizedText } from "../i18n";
 import { vietnameseBanks } from "../lib/vietnameseBanks";
 
 type BankSelectionFieldProps = {
@@ -12,6 +14,7 @@ export default function BankSelectionField({
   bankCode,
   onChange,
 }: BankSelectionFieldProps) {
+  useTranslation();
   const [otherSelected, setOtherSelected] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -39,7 +42,7 @@ export default function BankSelectionField({
         }}
       >
         <label className="block text-sm font-semibold text-slate-700" htmlFor="refund-bank-search">
-          Ngân hàng *
+          {localizedText("Ngân hàng *", "Bank *")}
         </label>
         <input
           id="refund-bank-search"
@@ -47,7 +50,7 @@ export default function BankSelectionField({
           aria-autocomplete="list"
           aria-expanded={menuOpen}
           aria-controls="refund-bank-options"
-          value={menuOpen ? search : selectedBank?.shortName ?? (isOtherSelected ? "Ngân hàng khác" : "")}
+          value={menuOpen ? search : selectedBank?.shortName ?? (isOtherSelected ? localizedText("Ngân hàng khác", "Other bank") : "")}
           onFocus={() => {
             setSearch("");
             setMenuOpen(true);
@@ -67,7 +70,7 @@ export default function BankSelectionField({
               setMenuOpen(false);
             }
           }}
-          placeholder="Tìm ngân hàng theo tên hoặc mã BIN"
+          placeholder={localizedText("Tìm ngân hàng theo tên hoặc mã BIN", "Search banks by name or BIN")}
           autoComplete="off"
           className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
         />
@@ -97,7 +100,7 @@ export default function BankSelectionField({
               </button>
             ))}
             {filteredBanks.length === 0 && (
-              <p className="px-3 py-2 text-sm text-slate-500">Không tìm thấy ngân hàng.</p>
+              <p className="px-3 py-2 text-sm text-slate-500">{localizedText("Không tìm thấy ngân hàng.", "No banks found.")}</p>
             )}
             <button
               type="button"
@@ -112,7 +115,7 @@ export default function BankSelectionField({
               }}
               className="mt-1 w-full rounded-md border-t border-slate-100 px-3 py-2 text-left text-sm font-medium text-blue-700 hover:bg-blue-50"
             >
-              Ngân hàng khác
+              {localizedText("Ngân hàng khác", "Other bank")}
             </button>
           </div>
         )}
@@ -120,24 +123,24 @@ export default function BankSelectionField({
       {isOtherSelected ? (
         <div className="grid grid-cols-2 gap-2">
           <input
-            aria-label="Tên ngân hàng khác"
+            aria-label={localizedText("Tên ngân hàng khác", "Other bank name")}
             value={bankName}
             onChange={(event) => onChange(event.target.value, bankCode)}
             maxLength={120}
-            placeholder="Tên ngân hàng"
+            placeholder={localizedText("Tên ngân hàng", "Bank name")}
             className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
           />
           <input
-            aria-label="Mã ngân hàng khác"
+            aria-label={localizedText("Mã ngân hàng khác", "Other bank code")}
             value={bankCode}
             onChange={(event) => onChange(bankName, event.target.value)}
             maxLength={30}
-            placeholder="Mã ngân hàng (nếu biết)"
+            placeholder={localizedText("Mã ngân hàng (nếu biết)", "Bank code (if known)")}
             className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
           />
         </div>
       ) : selectedBank ? (
-        <p className="text-xs font-normal text-slate-500">Mã BIN: {selectedBank.bin}</p>
+        <p className="text-xs font-normal text-slate-500">{localizedText("Mã BIN:", "BIN:")} {selectedBank.bin}</p>
       ) : null}
     </div>
   );

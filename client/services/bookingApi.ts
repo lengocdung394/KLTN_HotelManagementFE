@@ -5,7 +5,6 @@ export type BookingServiceRequest = {
   quantity: number;
   name?: string;
   price?: number;
-  usedAt?: string;
 };
 
 export type BookingDetailCreateRequest = {
@@ -34,12 +33,24 @@ export type BookingCreateRequest = {
 
 export type BookingResponse = Record<string, unknown>;
 
+export type BookingServiceUsage = {
+  bookingServiceDetailId: string;
+  name?: string;
+  quantity?: number;
+  used?: boolean | null;
+  usedAt?: string | null;
+  usedBy?: string | null;
+  cancelled?: boolean | null;
+  cancelledAt?: string | null;
+};
+
 export type BookingListItem = {
   id?: string;
   orderId?: string;
   bookingId?: string;
   customerId?: string;
   employeeId?: string;
+  cccd?: string;
   promotionId?: string | null;
   customerPromotionId?: string | null;
   customerName?: string;
@@ -56,6 +67,7 @@ export type BookingListItem = {
   remainingAmount?: number;
   customerDueAmount?: number;
   finalAmount?: number;
+  surchargeTotalAmount?: number;
   bookingDetails?: Record<string, unknown>[];
   [key: string]: unknown;
 };
@@ -128,6 +140,14 @@ export const bookingApi = baseApi.injectEndpoints({
       transformResponse: extractBookingList,
       providesTags: ["Booking"],
     }),
+    confirmServiceUsed: builder.mutation<BookingServiceUsage, { bookingId: string; serviceDetailId: string }>({
+      query: ({ bookingId, serviceDetailId }) => ({
+        url: `/management-bookings/${encodeURIComponent(bookingId)}/service-details/${encodeURIComponent(serviceDetailId)}/confirm-use`,
+        method: "PATCH",
+      }),
+      transformResponse: (response: { result: BookingServiceUsage }) => response.result,
+      invalidatesTags: ["Booking"],
+    }),
     createCounterBooking: builder.mutation<BookingResponse, { employeeId: string; request: BookingCreateRequest }>({
       query: ({ employeeId, request }) => ({
         url: `/bookings/counter`,
@@ -150,6 +170,7 @@ export const bookingApi = baseApi.injectEndpoints({
 export const {
   useGetRoomMatrixQuery,
   useGetBookingsByHotelQuery,
+  useConfirmServiceUsedMutation,
   useCreateCounterBookingMutation,
   useUpdateBookingMutation,
 } = bookingApi;

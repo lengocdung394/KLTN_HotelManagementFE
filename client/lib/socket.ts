@@ -39,6 +39,7 @@ type HotelSocketHandlers = {
   onBuildingChanged?: (data: unknown) => void;
   onFloorChanged?: (data: unknown) => void;
   onNewBookingNotification?: (data: unknown) => void;
+  onBookingStateUpdated?: (data: unknown) => void;
   onNotificationCreated?: (data: unknown) => void;
   onServiceChanged?: (data: unknown) => void;
   onEmployeeChanged?: (data: unknown) => void;
@@ -166,6 +167,7 @@ export const bindHotelSocketEvents = ({
   onBuildingChanged,
   onFloorChanged,
   onNewBookingNotification,
+  onBookingStateUpdated,
   onNotificationCreated,
   onServiceChanged,
   onEmployeeChanged,
@@ -192,6 +194,7 @@ export const bindHotelSocketEvents = ({
     ...(onBuildingChanged ? { onBuildingChanged } : {}),
     ...(onFloorChanged ? { onFloorChanged } : {}),
     ...(onNewBookingNotification ? { onNewBookingNotification } : {}),
+    ...(onBookingStateUpdated ? { onBookingStateUpdated } : {}),
     ...(onNotificationCreated ? { onNotificationCreated } : {}),
     ...(onServiceChanged ? { onServiceChanged } : {}),
     ...(onEmployeeChanged ? { onEmployeeChanged } : {}),
@@ -208,6 +211,7 @@ export const bindHotelSocketEvents = ({
   const boundServiceHandler = onServiceChanged;
   const boundEmployeeHandler = onEmployeeChanged;
   const boundNewBookingHandler = onNewBookingNotification;
+  const boundBookingStateHandler = onBookingStateUpdated;
   const boundRoomPolicyHandler = onRoomPolicyUpdated === dispatchRoomPolicyUpdated
     ? undefined
     : onRoomPolicyUpdated;
@@ -221,6 +225,9 @@ export const bindHotelSocketEvents = ({
     }
     if (boundNewBookingHandler && socket) {
       socket.off("new_booking_notification", boundNewBookingHandler);
+    }
+    if (boundBookingStateHandler && socket) {
+      socket.off("booking_state_updated", boundBookingStateHandler);
     }
     if (boundEmployeeHandler && socket) {
       socket.off("employee_created", boundEmployeeHandler);
@@ -253,6 +260,9 @@ export const bindHotelSocketEvents = ({
     if (hotelSocketHandlers.onNewBookingNotification === boundNewBookingHandler) {
       hotelSocketHandlers = { ...hotelSocketHandlers, onNewBookingNotification: undefined };
     }
+    if (hotelSocketHandlers.onBookingStateUpdated === boundBookingStateHandler) {
+      hotelSocketHandlers = { ...hotelSocketHandlers, onBookingStateUpdated: undefined };
+    }
   };
   if (!socket) return unbindNotificationHandler;
 
@@ -266,6 +276,7 @@ export const bindHotelSocketEvents = ({
     ["building_changed", hotelSocketHandlers.onBuildingChanged],
     ["floor_changed", hotelSocketHandlers.onFloorChanged],
     ["new_booking_notification", hotelSocketHandlers.onNewBookingNotification],
+    ["booking_state_updated", hotelSocketHandlers.onBookingStateUpdated],
     ["notification_created", hotelSocketHandlers.onNotificationCreated],
     ["new_service_notification", hotelSocketHandlers.onServiceChanged],
     ["update_service_notification", hotelSocketHandlers.onServiceChanged],
@@ -317,6 +328,10 @@ export const bindHotelSocketEvents = ({
 
   if (hotelSocketHandlers.onNewBookingNotification) {
     socket.on("new_booking_notification", hotelSocketHandlers.onNewBookingNotification);
+  }
+
+  if (hotelSocketHandlers.onBookingStateUpdated) {
+    socket.on("booking_state_updated", hotelSocketHandlers.onBookingStateUpdated);
   }
 
   if (hotelSocketHandlers.onNotificationCreated) {

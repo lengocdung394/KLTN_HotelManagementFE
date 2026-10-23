@@ -11,7 +11,6 @@ export type ManagementBookingServiceAddition = {
   quantity: number;
   name?: string;
   price?: number;
-  usedAt?: string;
 };
 
 export type ManagementBookingRoomServiceAddition = {
@@ -31,12 +30,12 @@ export type ManagementBookingRoomToAdd = {
     quantity: number;
     name?: string;
     price?: number;
-    usedAt?: string;
   }[];
 };
 
 export type ManagementBookingServiceQuantityItem = {
   serviceId: string;
+  bookingServiceDetailId?: string;
   quantity: number;
 };
 
@@ -78,6 +77,8 @@ export type ManagementBookingModificationRequest = {
 
 export type ManagementBookingCancellationRequest = {
   reason?: string;
+  refundMethod?: "CASH" | "BANK";
+  cashRefundConfirmed?: boolean;
   bankName?: string;
   bankCode?: string;
   bankAccountName?: string;
@@ -99,6 +100,7 @@ export type CheckoutRefundStatus = "PENDING" | "APPROVED" | "REFUNDED";
 export type CheckoutRefund = {
   id: string;
   bookingId: string;
+  bookingChannel?: BookingChannel | null;
   customerName?: string | null;
   customerPhone?: string | null;
   paidAmount: number;
@@ -123,6 +125,7 @@ export type BookingCancellation = {
   customerName?: string | null;
   customerPhone?: string | null;
   status: BookingCancellationStatus;
+  refundMethod?: "CASH" | "BANK" | null;
   reason?: string | null;
   paidAmount?: number;
   refundAmount: number;
@@ -183,7 +186,6 @@ export const managementBookingApi = baseApi.injectEndpoints({
       }),
       transformResponse: unwrapCancellationList,
       providesTags: ["RefundCancellation"],
-      refetchOnMountOrArgChange: true,
     }),
     cancelBookingByStaff: builder.mutation<
       BookingCancellationApiResponse,
@@ -252,7 +254,6 @@ export const managementBookingApi = baseApi.injectEndpoints({
       }),
       transformResponse: unwrapCheckoutRefundList,
       providesTags: ["CheckoutRefund"],
-      refetchOnMountOrArgChange: true,
     }),
     updateCheckoutRefundBankDetails: builder.mutation<
       { result?: CheckoutRefund },

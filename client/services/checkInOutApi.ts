@@ -36,16 +36,22 @@ export type CheckInOutBookingDetail = {
   roomTotal?: number;
   earlyCheckInFee?: number | string;
   estimatedEarlyCheckInFee?: number | string;
+  lateCheckOutFee?: number | string;
+  lateCheckoutFee?: number | string;
+  lateFee?: number | string;
+  otherSurcharges?: number | string;
   serviceSubTotal?: number;
   totalPrice?: number;
   paidAmount?: number | string;
   amountPaid?: number | string;
   totalPaidAmount?: number | string;
   remainingAmount?: number | string;
+  surplusAmount?: number | string | null;
   remainAmount?: number | string;
   remain?: number | string;
   nameCustomer?: string;
   cccd?: string;
+  customerCccd?: string;
   customerName?: string;
   phone?: string;
   bookingDetailStatus?: string;
@@ -69,6 +75,12 @@ export type CheckInOutQuery = {
 export type BulkCheckInOutRequest = string[];
 export type CheckoutSurplusRefundMethod = "CASH" | "BANK";
 export type BulkCheckInOutResponse = Record<string, unknown>;
+export type CheckInOutSummary = {
+  waitingCheckIn: number;
+  inHouse: number;
+  waitingCheckOut: number;
+  completed: number;
+};
 
 const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => {
   const values = Array.isArray(response)
@@ -88,45 +100,39 @@ const extractCheckInOutList = (response: unknown): CheckInOutBookingDetail[] => 
       bookingId: detail.bookingId ?? booking.bookingId,
       nameCustomer: detail.nameCustomer ?? booking.nameCustomer,
       customerName: detail.customerName ?? booking.customerName,
-      cccd: detail.cccd ?? booking.cccd,
-      identityNumber: detail.identityNumber ?? booking.identityNumber,
+      cccd: [detail.cccd, detail.customerCccd, detail.identityNumber, booking.cccd, booking.customerCccd, booking.identityNumber]
+        .find((value) => typeof value === "string" && value.trim() !== ""),
+      identityNumber: [detail.identityNumber, detail.cccd, detail.customerCccd, booking.identityNumber, booking.cccd, booking.customerCccd]
+        .find((value) => typeof value === "string" && value.trim() !== ""),
     }));
   });
 };
 
 export const checkInOutApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery | void>({
-      query: (arg?: CheckInOutQuery | void) => {
-        const params: Record<string, unknown> = {};
-        if (arg && typeof arg === "object") {
-          if (arg.date) params.date = arg.date;
-          if (arg.status) params.status = arg.status;
-          if (arg.bookingStatus) params.bookingStatus = arg.bookingStatus;
-        }
-        return {
-          url: "/hotels/today-checkins",
-          method: "GET",
-          params: Object.keys(params).length > 0 ? params : undefined,
-        };
-      },
+    getCheckInOutSummary: builder.query<CheckInOutSummary, { date?: string }>({
+      query: ({ date }) => ({
+        url: "/hotels/check-in-out-summary",
+        method: "GET",
+        params: { date },
+      }),
+      providesTags: ["Booking"],
+    }),
+    getTodayCheckIns: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
+      query: ({ date, status, bookingStatus }) => ({
+        url: "/hotels/today-checkins",
+        method: "GET",
+        params: { date, status, bookingStatus },
+      }),
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),
-    getTodayCheckOuts: builder.query<CheckInOutBookingDetail[], CheckInOutQuery | void>({
-      query: (arg?: CheckInOutQuery | void) => {
-        const params: Record<string, unknown> = {};
-        if (arg && typeof arg === "object") {
-          if (arg.date) params.date = arg.date;
-          if (arg.status) params.status = arg.status;
-          if (arg.bookingStatus) params.bookingStatus = arg.bookingStatus;
-        }
-        return {
-          url: "/hotels/today-checkouts",
-          method: "GET",
-          params: Object.keys(params).length > 0 ? params : undefined,
-        };
-      },
+    getTodayCheckOuts: builder.query<CheckInOutBookingDetail[], CheckInOutQuery>({
+      query: ({ date, status, bookingStatus }) => ({
+        url: "/hotels/today-checkouts",
+        method: "GET",
+        params: { date, status, bookingStatus },
+      }),
       transformResponse: extractCheckInOutList,
       providesTags: ["Booking"],
     }),
@@ -154,6 +160,21 @@ export const checkInOutApi = baseApi.injectEndpoints({
       },
       invalidatesTags: ["Booking"],
     }),
+    prepareBulkCheckOut: builder.mutation<BulkCheckInOutResponse, { bookingId: string; bookingDetailIds: BulkCheckInOutRequest }>({
+      query: ({ bookingId, bookingDetailIds }) => ({
+        url: `/checkInOuts/${bookingId}/check-out/prepare`,
+        method: "POST",
+        data: bookingDetailIds,
+      }),
+      transformResponse: (response: unknown) => {
+        if (!response || typeof response !== "object") return {} as BulkCheckInOutResponse;
+        if ("result" in response && response.result && typeof response.result === "object") {
+          return response.result as BulkCheckInOutResponse;
+        }
+        return response as BulkCheckInOutResponse;
+      },
+      invalidatesTags: ["Booking", "CheckoutRefund"],
+    }),
     bulkCheckOut: builder.mutation<BulkCheckInOutResponse, {
       bookingId: string;
       bookingDetailIds: BulkCheckInOutRequest;
@@ -177,9 +198,11 @@ export const checkInOutApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetCheckInOutSummaryQuery,
   useGetTodayCheckInsQuery,
   useGetTodayCheckOutsQuery,
   useGetEarlyCheckInsQuery,
   useBulkCheckInMutation,
+  usePrepareBulkCheckOutMutation,
   useBulkCheckOutMutation,
 } = checkInOutApi;
