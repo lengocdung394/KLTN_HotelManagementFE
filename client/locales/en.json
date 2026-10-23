@@ -46,7 +46,12 @@
     "pendingTask": "Pending",
     "upcoming": "Upcoming",
     "closeAria": "Close",
-    "dateLabel": "Monday, October 14, 2024"
+    "dateLabel": "Monday, October 14, 2024",
+    "rowsPerPage": "Rows per page",
+    "showingRange": "Showing {{from}}-{{to}} of {{total}}",
+    "prevPage": "Previous page",
+    "nextPage": "Next page",
+    "realtimeSync": "Real-time sync"
   },
   "navigation": {
     "overview": "Overview",
@@ -79,8 +84,8 @@
     "contactAdmin": "Contact administrator",
     "requiredFields": "Please enter both your email and password.",
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
-    ,"logout": "Log out"
+    "hidePassword": "Hide password",
+    "logout": "Log out"
   },
   "dashboard": {
     "branchOverview": "Branch overview",
@@ -142,19 +147,123 @@
     "notUpdated": "Not updated",
     "noStay": "No stays yet",
     "noNote": "No notes.",
-    "tiers": { "loyal": "Loyal", "potential": "Potential", "new": "New" }
+    "tiers": {
+      "loyal": "Loyal",
+      "potential": "Potential",
+      "new": "New"
+    }
   },
   "pages": {
-    "bookings": { "eyebrow": "Hotel operations", "title": "Bookings", "description": "Manage reservations, staying guests, and check-in / check-out schedules.", "stats": ["Today's bookings", "Pending confirmation", "Today's check-ins", "Expected revenue"] },
-    "customers": { "eyebrow": "Customer relations", "title": "Customer management", "description": "Manage profiles, stay history, and returning guest care.", "stats": ["Total customers", "Loyal customers", "Returning this month", "Average spending"] },
-    "checkInOut": { "eyebrow": "Front desk operations", "title": "Check-in / Check-out", "description": "Manage arrivals, departures, and guest stay status for today.", "stats": ["Waiting for check-in", "Currently staying", "Waiting for check-out", "Completed"] },
-    "promotions": { "eyebrow": "Sales & guest care", "title": "Promotions", "description": "Create offers and manage discount codes for guests at Sen Viet.", "stats": ["Currently active", "Uses this month", "Guest savings", "Expiring soon"] },
-    "rooms": { "eyebrow": "Asset management", "title": "Room management", "description": "Track room status, room types, and housekeeping assignments.", "stats": ["Total rooms", "Ready", "In use", "Maintenance"] },
-    "invoices": { "eyebrow": "Branch finance", "title": "Invoices", "description": "Review invoices, payments, and guest transaction reconciliation.", "stats": ["This month's revenue", "Paid", "Pending payment", "Refunded"] },
-    "staff": { "eyebrow": "People management", "title": "Staff & shifts", "description": "Manage employees, roles, schedules, and branch assignments.", "stats": ["Total staff", "Currently working", "Today's shifts", "On leave"] },
-    "permissions": { "eyebrow": "System administration", "title": "Permissions", "description": "Set roles and access permissions for each staff group.", "stats": ["Roles", "Staff", "Access permissions", "Last updated"] },
-    "reports": { "eyebrow": "Business analytics", "title": "Revenue reports", "description": "Track occupancy, ADR, RevPAR, and business performance over time.", "stats": ["Monthly revenue", "Room occupancy", "ADR", "RevPAR"] },
-    "settings": { "eyebrow": "System setup", "title": "Settings", "description": "Configure your branch, room types, notifications, and account access.", "stats": ["Branch", "Time zone", "Language", "Role"] }
+    "bookings": {
+      "eyebrow": "Hotel operations",
+      "title": "Bookings",
+      "description": "Manage reservations, staying guests, and check-in / check-out schedules.",
+      "stats": [
+        "Today's bookings",
+        "Pending confirmation",
+        "Today's check-ins",
+        "Expected revenue"
+      ]
+    },
+    "customers": {
+      "eyebrow": "Customer relations",
+      "title": "Customer management",
+      "description": "Manage profiles, stay history, and returning guest care.",
+      "stats": [
+        "Total customers",
+        "Loyal customers",
+        "Returning this month",
+        "Average spending"
+      ]
+    },
+    "checkInOut": {
+      "eyebrow": "Front desk operations",
+      "title": "Check-in / Check-out",
+      "description": "Manage arrivals, departures, and guest stay status for today.",
+      "stats": [
+        "Waiting for check-in",
+        "Currently staying",
+        "Waiting for check-out",
+        "Completed"
+      ]
+    },
+    "promotions": {
+      "eyebrow": "Sales & guest care",
+      "title": "Promotions",
+      "description": "Create offers and manage discount codes for guests at Sen Viet.",
+      "stats": [
+        "Currently active",
+        "Uses this month",
+        "Guest savings",
+        "Expiring soon"
+      ]
+    },
+    "rooms": {
+      "eyebrow": "Asset management",
+      "title": "Room management",
+      "description": "Track room status, room types, and housekeeping assignments.",
+      "stats": [
+        "Total rooms",
+        "Ready",
+        "In use",
+        "Maintenance"
+      ]
+    },
+    "invoices": {
+      "eyebrow": "Branch finance",
+      "title": "Invoices",
+      "description": "Review invoices, payments, and guest transaction reconciliation.",
+      "stats": [
+        "This month's revenue",
+        "Paid",
+        "Pending payment",
+        "Refunded"
+      ]
+    },
+    "staff": {
+      "eyebrow": "People management",
+      "title": "Staff & shifts",
+      "description": "Manage employees, roles, schedules, and branch assignments.",
+      "stats": [
+        "Total staff",
+        "Currently working",
+        "Today's shifts",
+        "On leave"
+      ]
+    },
+    "permissions": {
+      "eyebrow": "System administration",
+      "title": "Permissions",
+      "description": "Set roles and access permissions for each staff group.",
+      "stats": [
+        "Roles",
+        "Staff",
+        "Access permissions",
+        "Last updated"
+      ]
+    },
+    "reports": {
+      "eyebrow": "Business analytics",
+      "title": "Revenue reports",
+      "description": "Track occupancy, ADR, RevPAR, and business performance over time.",
+      "stats": [
+        "Monthly revenue",
+        "Room occupancy",
+        "ADR",
+        "RevPAR"
+      ]
+    },
+    "settings": {
+      "eyebrow": "System setup",
+      "title": "Settings",
+      "description": "Configure your branch, room types, notifications, and account access.",
+      "stats": [
+        "Branch",
+        "Time zone",
+        "Language",
+        "Role"
+      ]
+    }
   },
   "booking": {
     "adults": "Adults",
@@ -208,26 +317,26 @@
     "createAnother": "Create another booking",
     "available": "Available",
     "occupied": "Occupied",
-    "pendingConfirmation": "Pending confirmation"
-    ,"dateAndRooms": "Dates & rooms"
-    ,"payment": "Payment"
-    ,"selectDateAndRoom": "Select dates and rooms"
-    ,"bookingInformation": "Booking information"
-    ,"changeRoom": "Change room"
-    ,"addAnotherRoom": "Add another room"
-    ,"nights": "nights"
-    ,"noDateSelected": "No dates selected"
-    ,"searchRooms": "Search room number or type"
-    ,"searchCustomer": "Find saved customer"
-    ,"searchCustomerPlaceholder": "Search by name or phone number"
-    ,"unavailable": "Booked / unavailable"
-    ,"dragToSelectRooms": "Drag vertically to select rooms"
-    ,"showFullRooms": "Show fully booked rooms"
-    ,"selectedRooms": "Selected"
-    ,"showAllRooms": "Show all rooms"
-    ,"rooms": "rooms"
-    ,"estimatedTotal": "Estimated total"
-    ,"selectDateToAddRoom": "Select dates on the calendar to add another room."
+    "pendingConfirmation": "Pending confirmation",
+    "dateAndRooms": "Dates & rooms",
+    "payment": "Payment",
+    "selectDateAndRoom": "Select dates and rooms",
+    "bookingInformation": "Booking information",
+    "changeRoom": "Change room",
+    "addAnotherRoom": "Add another room",
+    "nights": "nights",
+    "noDateSelected": "No dates selected",
+    "searchRooms": "Search room number or type",
+    "searchCustomer": "Find saved customer",
+    "searchCustomerPlaceholder": "Search by name or phone number",
+    "unavailable": "Booked / unavailable",
+    "dragToSelectRooms": "Drag vertically to select rooms",
+    "showFullRooms": "Show fully booked rooms",
+    "selectedRooms": "Selected",
+    "showAllRooms": "Show all rooms",
+    "rooms": "rooms",
+    "estimatedTotal": "Estimated total",
+    "selectDateToAddRoom": "Select dates on the calendar to add another room."
   },
   "room": {
     "ready": "Ready",
@@ -267,53 +376,53 @@
     "details": "Details",
     "assign": "Assign",
     "noRooms": "No rooms found",
-    "changeFilters": "Try changing the keyword or status filter."
-    ,"singleBed": "single bed"
-    ,"doubleSingleBeds": "2 single beds"
-    ,"kingBed": "King-size bed"
-    ,"housekeepingReady": "Ready to work"
-    ,"floorLabel": "Floor: {{floor}}"
-    ,"photoCount": "{{count}} photos"
-    ,"maxGuestsLabel": "Up to {{count}} guests"
-    ,"airConditioning": "Air conditioning"
-    ,"privateBathroom": "Private bathroom"
-    ,"wifi": "WiFi"
-    ,"generatedCode": "Generated room code"
-    ,"pricePerNight": "Price / night"
-    ,"guestCapacity": "Guest capacity"
-    ,"area": "Area"
-    ,"buildingLabel": "Building"
-    ,"searchAmenities": "Search and select amenities..."
-    ,"noMatchingAmenities": "No matching amenities"
-    ,"description": "Room description"
-    ,"descriptionPlaceholder": "Enter a short room description"
-    ,"images": "Room images"
-    ,"uploadImages": "Click to upload images"
-    ,"imageLimit": "Multiple images supported, up to 8 images"
-    ,"defaultImages": "If no images are added, the system will use default images."
-    ,"saveChanges": "Save changes"
-    ,"createRoom": "Create room"
-    ,"editRoomBadge": "EDIT ROOM"
-    ,"editRoomTitle": "Edit room {{room}}"
-    ,"editRoomDescription": "Update room information and save changes to the list."
-    ,"createRoomBadge": "NEW ROOM SETUP"
-    ,"createRoomTitle": "Create new room"
-    ,"createRoomDescription": "Quickly add the key details, amenities, and images for this room."
-    ,"importRooms": "Import rooms from Excel/CSV"
-    ,"readingFile": "Reading file..."
-    ,"floorOption": "Floor {{floor}}"
-    ,"roomLabel": "Room"
-    ,"roomInformation": "Room information"
-    ,"currentStatus": "Current status"
-    ,"housekeepingStaff": "Housekeeping staff:"
-    ,"roomSpecifications": "Room specifications"
-    ,"maximumGuests": "Maximum guests:"
-    ,"bedLabel": "Bed:"
-    ,"areaLabel": "Area:"
-    ,"locationLabel": "Location:"
-    ,"amenitiesLabel": "Amenities"
-    ,"gallery": "Photo gallery"
-    ,"viewAllPhotos": "View all photos"
+    "changeFilters": "Try changing the keyword or status filter.",
+    "singleBed": "single bed",
+    "doubleSingleBeds": "2 single beds",
+    "kingBed": "King-size bed",
+    "housekeepingReady": "Ready to work",
+    "floorLabel": "Floor: {{floor}}",
+    "photoCount": "{{count}} photos",
+    "maxGuestsLabel": "Up to {{count}} guests",
+    "airConditioning": "Air conditioning",
+    "privateBathroom": "Private bathroom",
+    "wifi": "WiFi",
+    "generatedCode": "Generated room code",
+    "pricePerNight": "Price / night",
+    "guestCapacity": "Guest capacity",
+    "area": "Area",
+    "buildingLabel": "Building",
+    "searchAmenities": "Search and select amenities...",
+    "noMatchingAmenities": "No matching amenities",
+    "description": "Room description",
+    "descriptionPlaceholder": "Enter a short room description",
+    "images": "Room images",
+    "uploadImages": "Click to upload images",
+    "imageLimit": "Multiple images supported, up to 8 images",
+    "defaultImages": "If no images are added, the system will use default images.",
+    "saveChanges": "Save changes",
+    "createRoom": "Create room",
+    "editRoomBadge": "EDIT ROOM",
+    "editRoomTitle": "Edit room {{room}}",
+    "editRoomDescription": "Update room information and save changes to the list.",
+    "createRoomBadge": "NEW ROOM SETUP",
+    "createRoomTitle": "Create new room",
+    "createRoomDescription": "Quickly add the key details, amenities, and images for this room.",
+    "importRooms": "Import rooms from Excel/CSV",
+    "readingFile": "Reading file...",
+    "floorOption": "Floor {{floor}}",
+    "roomLabel": "Room",
+    "roomInformation": "Room information",
+    "currentStatus": "Current status",
+    "housekeepingStaff": "Housekeeping staff:",
+    "roomSpecifications": "Room specifications",
+    "maximumGuests": "Maximum guests:",
+    "bedLabel": "Bed:",
+    "areaLabel": "Area:",
+    "locationLabel": "Location:",
+    "amenitiesLabel": "Amenities",
+    "gallery": "Photo gallery",
+    "viewAllPhotos": "View all photos"
   },
   "modules": {
     "bookingEyebrow": "Hotel operations",
@@ -428,10 +537,22 @@
     "role": "Role",
     "notice": "Only the branch manager can change access permissions. Changes apply immediately to staff accounts.",
     "roles": {
-      "branchManager": { "name": "Branch manager", "description": "Full access to the branch" },
-      "receptionist": { "name": "Receptionist", "description": "Bookings and guest reception" },
-      "housekeeping": { "name": "Housekeeping", "description": "Clean rooms and update status" },
-      "accountant": { "name": "Accountant", "description": "Invoices and revenue reports" }
+      "branchManager": {
+        "name": "Branch manager",
+        "description": "Full access to the branch"
+      },
+      "receptionist": {
+        "name": "Receptionist",
+        "description": "Bookings and guest reception"
+      },
+      "housekeeping": {
+        "name": "Housekeeping",
+        "description": "Clean rooms and update status"
+      },
+      "accountant": {
+        "name": "Accountant",
+        "description": "Invoices and revenue reports"
+      }
     },
     "permissions": {
       "overview": "View overview",
@@ -602,27 +723,27 @@
     "selectDaysDescription": "Drag across empty cells to select multiple days · Gray cells are occupied",
     "selectedRoom": "Room {{room}} selected · {{days}} days",
     "continueBooking": "Continue booking",
-    "chooseDate": "Choose date"
-    ,"sunShort": "Sun"
-    ,"monShort": "Mon"
-    ,"tueShort": "Tue"
-    ,"wedShort": "Wed"
-    ,"thuShort": "Thu"
-    ,"friShort": "Fri"
-    ,"satShort": "Sat"
-    ,"legend": "Legend"
-    ,"waitingCheckIn": "Booked · awaiting check-in"
-    ,"inHouse": "Currently staying"
-    ,"checkOut": "Check-out day"
-    ,"noBookingsThisWeek": "No rooms are booked this week."
-    ,"previousWeek": "Previous week"
-    ,"nextWeek": "Next week"
-    ,"branchUnavailable": "Branch could not be identified."
-    ,"loadError": "Could not load the booking calendar. Please try again."
-    ,"bookingCount": "bookings"
-    ,"guestNotProvided": "Guest name unavailable"
-    ,"sameBookingMarker": "Same marker = same booking"
-    ,"bookingMarker": "Booking"
+    "chooseDate": "Choose date",
+    "sunShort": "Sun",
+    "monShort": "Mon",
+    "tueShort": "Tue",
+    "wedShort": "Wed",
+    "thuShort": "Thu",
+    "friShort": "Fri",
+    "satShort": "Sat",
+    "legend": "Legend",
+    "waitingCheckIn": "Booked · awaiting check-in",
+    "inHouse": "Currently staying",
+    "checkOut": "Check-out day",
+    "noBookingsThisWeek": "No rooms are booked this week.",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week",
+    "branchUnavailable": "Branch could not be identified.",
+    "loadError": "Could not load the booking calendar. Please try again.",
+    "bookingCount": "bookings",
+    "guestNotProvided": "Guest name unavailable",
+    "sameBookingMarker": "Same marker = same booking",
+    "bookingMarker": "Booking"
   },
   "status": {
     "active": "Active",
@@ -631,5 +752,65 @@
     "cancelled": "Cancelled",
     "paid": "Paid",
     "refunded": "Refunded"
+  },
+  "refund": {
+    "title": "Refund Approval Management",
+    "description": "Review and approve refund requests from booking cancellations and checkout surpluses in accordance with policy.",
+    "filters": {
+      "ALL": "All",
+      "REFUND_REVIEW_PENDING": "Pending review",
+      "REFUND_BANK_DETAILS_REQUIRED": "Bank details required",
+      "REFUND_APPROVED": "Approved",
+      "REFUNDED": "Refunded",
+      "REFUND_REJECTED": "Rejected",
+      "NO_REFUND_REQUIRED": "No refund"
+    },
+    "tabs": {
+      "cancellations": "Cancellations ({{count}})",
+      "checkoutRefunds": "Checkout surplus refunds"
+    },
+    "statuses": {
+      "REFUND_BANK_DETAILS_REQUIRED": "Bank details required",
+      "REFUND_REVIEW_PENDING": "Pending review",
+      "REFUND_APPROVED": "Approved - awaiting transfer",
+      "REFUND_REJECTED": "Refund rejected",
+      "REFUNDED": "Refunded",
+      "NO_REFUND_REQUIRED": "No refund required"
+    },
+    "columns": {
+      "bookingAndGuest": "Booking & Guest",
+      "requestDate": "Request date",
+      "policyAndReason": "Policy & Reason",
+      "refundAmount": "Refund amount",
+      "receivingAccount": "Receiving account",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "actions": {
+      "approve": "Approve",
+      "reject": "Reject",
+      "confirm": "Confirm transfer",
+      "enterBankDetails": "Enter bank details",
+      "approveBankRefund": "Approve bank refund",
+      "keepBooking": "Keep booking",
+      "confirmTransfer": "Confirm transferred",
+      "saveBankDetails": "Save bank details"
+    },
+    "rbac": {
+      "managerOnly": "Manager approval required",
+      "awaitingManagerTransfer": "Awaiting Manager confirmation",
+      "noPermission": "Only Managers or Admins have permission to approve refunds.",
+      "managerRequiredHint": "Receptionist accounts are view-only. Please contact a Branch Manager or Admin to approve refunds."
+    },
+    "modal": {
+      "approveTitle": "Approve Refund",
+      "rejectTitle": "Reject Refund",
+      "confirmTitle": "Confirm Bank Transfer Completed",
+      "bankDetailsTitle": "Enter Refund Bank Details",
+      "approveDesc": "Cross-check policy and refund amount, verify recipient account with guest before approving.",
+      "rejectDesc": "The refund request will be rejected. Please provide a clear reason.",
+      "confirmDesc": "Only confirm after the refund transfer has been completed outside the system.",
+      "bankDetailsDesc": "Enter bank details provided by guest. Guests do not need a website account."
+    }
   }
 }

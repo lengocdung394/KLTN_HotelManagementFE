@@ -514,7 +514,7 @@ export const initSocket = (token: string | null) => {
   socket.on("room_matrix_updated", (data) => {
     console.log("📅 [Socket] room_matrix_updated:", data);
     try {
-      store.dispatch(baseApi.util.invalidateTags(["Booking", "Room"]));
+      store.dispatch(baseApi.util.invalidateTags(["Booking", "Room", "RefundCancellation"]));
     } catch (e) {
       console.error(e);
     }
@@ -527,7 +527,7 @@ export const initSocket = (token: string | null) => {
   socket.on("new_booking_notification", (data) => {
     console.log("🔔 [Socket] new_booking_notification:", data);
     try {
-      store.dispatch(baseApi.util.invalidateTags(["Booking", "Room", "Customer"]));
+      store.dispatch(baseApi.util.invalidateTags(["Booking", "Room", "Customer", "RefundCancellation"]));
     } catch (e) {
       console.error(e);
     }

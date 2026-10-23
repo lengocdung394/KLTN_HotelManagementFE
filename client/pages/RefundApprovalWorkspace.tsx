@@ -9,6 +9,8 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useAppSelector } from "../store/hooks";
 import BankSelectionField from "../components/BankSelectionField";
 import CheckoutRefundApprovalsPanel from "../components/CheckoutRefundApprovalsPanel";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -84,6 +86,9 @@ const actionDescription: Record<CancellationAction, string> = {
 };
 
 export default function RefundApprovalWorkspace() {
+  const { t } = useTranslation();
+  const roles = useAppSelector((state) => state.auth.roles);
+  const canApproveRefund = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
   const { data: cancellations = [], isLoading, isFetching, isError, error, refetch } =
     useGetBookingCancellationsQuery();
   const [approveRefund, { isLoading: isApproving }] = useApproveBookingRefundMutation();
@@ -528,7 +533,7 @@ export default function RefundApprovalWorkspace() {
                     </td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
-                        {statusLabels[cancellation.status]}
+                        {t(`refund.statuses.${cancellation.status}`, statusLabels[cancellation.status])}
                       </span>
                       {cancellation.reviewNote && (
                         <p className="mt-2 max-w-xs text-xs text-slate-500">Ghi chú: {cancellation.reviewNote}</p>
@@ -537,31 +542,43 @@ export default function RefundApprovalWorkspace() {
                     <td className="whitespace-nowrap px-4 py-4">
                       <div className="flex min-w-max justify-end gap-2">
                         {cancellation.status === "REFUND_REVIEW_PENDING" && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openAction(cancellation, "approve")}
-                              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                            >
-                              <Check size={14} /> Duyệt
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openAction(cancellation, "reject")}
-                              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                            >
-                              <X size={14} /> Từ chối
-                            </button>
-                          </>
+                          canApproveRefund ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openAction(cancellation, "approve")}
+                                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                              >
+                                <Check size={14} /> {t("refund.actions.approve", "Duyệt")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openAction(cancellation, "reject")}
+                                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                              >
+                                <X size={14} /> {t("refund.actions.reject", "Từ chối")}
+                              </button>
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 italic" title={t("refund.rbac.managerRequiredHint", "Tài khoản Lễ tân chỉ có quyền xem. Vui lòng nhờ Quản lý (Manager) hoặc Admin phê duyệt hoàn tiền.")}>
+                              <AlertCircle size={13} className="text-amber-500" /> {t("refund.rbac.managerOnly", "Chỉ Quản lý phê duyệt")}
+                            </span>
+                          )
                         )}
                         {cancellation.status === "REFUND_APPROVED" && (
-                          <button
-                            type="button"
-                            onClick={() => openAction(cancellation, "confirm")}
-                            className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                          >
-                            <Banknote size={14} /> Xác nhận đã chuyển
-                          </button>
+                          canApproveRefund ? (
+                            <button
+                              type="button"
+                              onClick={() => openAction(cancellation, "confirm")}
+                              className="inline-flex shrink-0 whitespace-nowrap items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              <Banknote size={14} /> {t("refund.actions.confirm", "Xác nhận đã chuyển")}
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-500 italic">
+                              {t("refund.rbac.awaitingManagerTransfer", "Chờ Quản lý xác nhận chuyển")}
+                            </span>
+                          )
                         )}
                         {cancellation.status === "REFUND_BANK_DETAILS_REQUIRED" && (
                           <button

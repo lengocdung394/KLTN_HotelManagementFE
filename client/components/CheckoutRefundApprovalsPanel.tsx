@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAppSelector } from "../store/hooks";
 import { AlertCircle, Banknote, Check, Clock3, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import BankSelectionField from "./BankSelectionField";
 import {
@@ -78,6 +79,8 @@ export default function CheckoutRefundApprovalsPanel() {
 }
 
 function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
+  const roles = useAppSelector((state) => state.auth.roles);
+  const canApproveRefund = roles.includes("ROLE_RECEPTIONIST") || roles.includes("ROLE_STAFF") || roles.includes("ROLE_EMPLOYEE") || roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
   const [updateBankDetails, { isLoading: isSaving }] = useUpdateCheckoutRefundBankDetailsMutation();
   const [approveRefund, { isLoading: isApproving }] = useApproveCheckoutRefundMutation();
   const [confirmRefund, { isLoading: isConfirming }] = useConfirmCheckoutRefundMutation();
@@ -274,24 +277,36 @@ function CheckoutRefundCard({ refund }: { refund: CheckoutRefund }) {
             </label>
           )}
           {refund.status === "PENDING" && (
-            <button
-              type="button"
-              onClick={() => void approve()}
-              disabled={!hasBankAccount || !amountConfirmed || !customerConfirmed || isWorking}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isApproving ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} Duyệt hoàn ngân hàng
-            </button>
+            canApproveRefund ? (
+              <button
+                type="button"
+                onClick={() => void approve()}
+                disabled={!hasBankAccount || !amountConfirmed || !customerConfirmed || isWorking}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isApproving ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} Duyệt hoàn ngân hàng
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-500 italic">
+                <AlertCircle size={13} className="text-amber-500" /> Chỉ Quản lý / Admin duyệt hoàn tiền
+              </span>
+            )
           )}
           {refund.status === "APPROVED" && (
-            <button
-              type="button"
-              onClick={() => void completeRefund()}
-              disabled={!note.trim() || isWorking}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isConfirming ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} Xác nhận đã chuyển
-            </button>
+            canApproveRefund ? (
+              <button
+                type="button"
+                onClick={() => void completeRefund()}
+                disabled={!note.trim() || isWorking}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isConfirming ? <LoaderCircle size={15} className="animate-spin" /> : <Check size={15} />} Xác nhận đã chuyển
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-500 italic">
+                Chờ Quản lý / Admin xác nhận chuyển tiền
+              </span>
+            )
           )}
         </div>
       </div>

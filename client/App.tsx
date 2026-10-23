@@ -31,7 +31,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const isBranchAdmin = roles.includes("ROLE_ADMIN");
   const isManager = roles.includes("ROLE_MANAGER");
-  const isEmployee = roles.includes("ROLE_EMPLOYEE");
+  const isEmployee = roles.includes("ROLE_EMPLOYEE") || roles.includes("ROLE_RECEPTIONIST") || roles.includes("ROLE_STAFF");
 
   if (!authenticated) {
     return (
@@ -47,6 +47,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
       <Routes>
         <Route path="/" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<AdminDashboardPage onLogout={onLogout} />} />
+        <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     );
