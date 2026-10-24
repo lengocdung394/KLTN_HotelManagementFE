@@ -377,7 +377,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
 
     try {
       pendingLocalPromotionName.current = promotionInfo.name;
-      await createPromotion({
+      const createdPromotion = await createPromotion({
         promotionInfo,
         image: imageFile ?? undefined,
         ...(isSystemAdmin && targetHotelId ? { hotelId: Number(targetHotelId) } : {}),
@@ -390,7 +390,24 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       setImageFile(null);
       setEditingPromotion(null);
       setModalOpen(false);
-      toast({ variant: "promotion", title: label("createdSuccessfully") });
+      toast({
+        variant: "promotion",
+        title: label("createdSuccessfully"),
+        description: (
+          <div className="grid gap-1.5">
+            <p>
+              <span className="font-medium">{label("nameLabel")}</span>{" "}
+              <span className="font-semibold">{createdPromotion.name || promotionInfo.name}</span>
+            </p>
+            <p>
+              <span className="font-medium">{label("codeLabel")}</span>{" "}
+              <span className="inline-flex rounded-md bg-white/70 px-1.5 py-0.5 font-mono font-semibold tracking-wide">
+                {createdPromotion.code || "—"}
+              </span>
+            </p>
+          </div>
+        ),
+      });
     } catch (error) {
       pendingLocalPromotionName.current = "";
       const message = promotionErrorMessage(error);
@@ -645,6 +662,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : `${detailPromotion.minRoomValue.toLocaleString("vi-VN")}đ`],
                     ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : `${detailPromotion.minServiceValue.toLocaleString("vi-VN")}đ`],
                     ["usageLimit", detailPromotion.usageLimit == null ? "-" : detailPromotion.usageLimit.toLocaleString("vi-VN")],
+                    ["claimedCount", (detailPromotion.claimedCount ?? 0).toLocaleString(locale)],
+                    ["usedCount", (detailPromotion.usedCount ?? 0).toLocaleString(locale)],
                     ["hotelName", detailPromotion.hotelName ?? (detailPromotion.hotelId == null ? "-" : String(detailPromotion.hotelId))],
                     ["exclusive", detailPromotion.isExclusive ? label("yes") : label("no")],
                   ].map(([key, value]) => (
@@ -844,6 +863,11 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                         <CalendarDays size={13} />
                         {formatDate(promotion.startDate)} –{" "}
                         {formatDate(promotion.endDate)}
+                      </p>
+                      <p className="mt-2 text-xs font-medium text-slate-500">
+                        {label("claimedCount")}: {(promotion.claimedCount ?? 0).toLocaleString(locale)}
+                        <span className="mx-2 text-slate-300">·</span>
+                        {label("usedCount")}: {(promotion.usedCount ?? 0).toLocaleString(locale)}
                       </p>
                     </div>
                   </div>

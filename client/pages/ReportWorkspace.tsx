@@ -315,7 +315,7 @@ export default function ReportWorkspace() {
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
                 <h3 className="font-bold text-slate-900">{localizedText("Hiệu quả khuyến mãi", "Promotion performance")}</h3>
-                <p className="mt-1 text-xs text-slate-400">{localizedText("Lượt áp dụng và số tiền giảm theo chương trình", "Uses and discount amounts by promotion")}</p>
+                <p className="mt-1 text-xs text-slate-400">{localizedText("Số khách hàng, lượt áp dụng và số tiền giảm theo chương trình", "Customers, uses, and discount amounts by promotion")}</p>
               </div>
               {report.promotions.length === 0 ? (
                 <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có khuyến mãi được áp dụng trong khoảng ngày này.", "No promotions were used during this date range.")}</p>
@@ -325,7 +325,10 @@ export default function ReportWorkspace() {
                     <article key={promotion.promotionId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-800">{promotion.promotionName}</p>
-                        <p className="mt-1 text-xs text-slate-500">{promotion.promotionCode} · {localizedText(`${promotion.usageCount} lượt dùng`, `${promotion.usageCount} uses`)}</p>
+                        <p className="mt-1 text-xs text-slate-500">{promotion.promotionCode}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-600">
+                          {localizedText(`${promotion.userCount} khách · ${promotion.usageCount} lượt dùng`, `${promotion.userCount} guests · ${promotion.usageCount} uses`)}
+                        </p>
                       </div>
                       <p className="shrink-0 text-sm font-bold text-emerald-700">{formatMoney(promotion.savings)}</p>
                     </article>

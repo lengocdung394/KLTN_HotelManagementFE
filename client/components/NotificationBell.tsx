@@ -15,6 +15,7 @@ import {
 import { bindHotelSocketEvents, joinHotelRoom } from "../lib/socket";
 import {
   formatEntityUpdateNotification,
+  isCheckoutCompletionUpdate,
   isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
@@ -203,7 +204,9 @@ export default function NotificationBell() {
         void refetchSummary();
         if (!isHousekeepingCompletionUpdate(payload)) {
           toast({
-            title: "Phòng được cập nhật",
+            title: isCheckoutCompletionUpdate(payload)
+              ? localizedText("Phòng vừa check-out", "Room checked out")
+              : "Phòng được cập nhật",
             description: formatRoomUpdateNotification(payload),
           });
         }

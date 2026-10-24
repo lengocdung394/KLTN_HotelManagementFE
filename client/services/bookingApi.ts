@@ -64,6 +64,8 @@ export type BookingListItem = {
   discountServiceAmount?: number;
   discountAmountTotal?: number;
   paidAmount?: number;
+  collectedAmount?: number;
+  refundedAmount?: number;
   remainingAmount?: number;
   customerDueAmount?: number;
   finalAmount?: number;
@@ -154,7 +156,7 @@ export const bookingApi = baseApi.injectEndpoints({
         method: "POST",
         data: request,
       }),
-      invalidatesTags: ["Booking", "Room"],
+      invalidatesTags: ["Booking", "Room", "Promotion"],
     }),
     updateBooking: builder.mutation<BookingResponse, { id: string; request: BookingUpdateRequest }>({
       query: ({ id, request }) => ({
@@ -162,7 +164,7 @@ export const bookingApi = baseApi.injectEndpoints({
         method: "PUT",
         data: request,
       }),
-      invalidatesTags: ["Booking"],
+      invalidatesTags: ["Booking", "Promotion"],
     }),
   }),
 });

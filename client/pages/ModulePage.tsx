@@ -27,7 +27,7 @@ import type { BookingListItem } from "../services/bookingApi";
 import { useUpdateMyProfileMutation } from "../services/employeeApi";
 import { useLoginMutation } from "../services/authApi";
 import { useGetBookingsByHotelQuery } from "../services/bookingApi";
-import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
+import { useGetRoomsByCurrentHotelQuery, type RoomResponse } from "../services/roomApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import { localizedText } from "../i18n";
@@ -79,6 +79,34 @@ const isCancelledDetail = (detail: Record<string, unknown>) =>
 const isCheckedInDetail = (detail: Record<string, unknown>) =>
   ["CHECKED_IN", "CHECKED-IN", "CHECKEDIN", "CHECKED_OUT", "CHECKED-OUT", "CHECKEDOUT", "ĐÃ CHECK-IN", "ĐÃ TRẢ PHÒNG"]
     .includes(normalizedStatus(detail.bookingStatusType ?? detail.bookingDetailStatusType ?? detail.bookingDetailStatus ?? detail.status));
+const summarizeBookings = (bookings: BookingListItem[]) => {
+  const counts = { total: bookings.length, pending: 0, inHouse: 0, completed: 0 };
+  bookings.forEach((booking) => {
+    const status = normalizedStatus(booking.bookingStatus ?? booking.status);
+    const activeDetails = (booking.bookingDetails ?? []).filter((detail) => !isCancelledDetail(detail));
+    const hasCheckedInRoom = activeDetails.some((detail) =>
+      normalizedStatus(detail.bookingStatusType ?? detail.bookingDetailStatusType ?? detail.bookingDetailStatus ?? detail.status) === "CHECKED_IN",
+    );
+    const allActiveDetailsCheckedOut = activeDetails.length > 0 && activeDetails.every((detail) =>
+      normalizedStatus(detail.bookingStatusType ?? detail.bookingDetailStatusType ?? detail.bookingDetailStatus ?? detail.status) === "CHECKED_OUT",
+    );
+    const isCancelled = ["CANCELLED", "CANCELED"].includes(status);
+    if (!isCancelled && status === "PENDING") counts.pending += 1;
+    if (!isCancelled && (status === "IN_HOUSE" || hasCheckedInRoom)) counts.inHouse += 1;
+    if (!isCancelled && (status === "COMPLETED" || allActiveDetailsCheckedOut)) counts.completed += 1;
+  });
+  return counts;
+};
+const summarizeRooms = (rooms: RoomResponse[]) => {
+  const counts = { total: rooms.length, ready: 0, inUse: 0, maintenance: 0 };
+  rooms.forEach((room) => {
+    const status = normalizedStatus(room.roomStatus ?? room.status);
+    if (["READY", "AVAILABLE", "SẴN SÀNG"].includes(status)) counts.ready += 1;
+    if (["IN_USE", "OCCUPIED", "ĐANG Ở"].includes(status)) counts.inUse += 1;
+    if (["MAINTENANCE", "BẢO TRÌ"].includes(status)) counts.maintenance += 1;
+  });
+  return counts;
+};
 
 function BookingOverview({ onNewBooking }: { onNewBooking: () => void }) {
   const dispatch = useAppDispatch();
@@ -484,7 +512,21 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
   const { t } = useTranslation();
   const location = useLocation();
   const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
-  const { hotelName, fullName, email, position } = useAppSelector((state) => state.auth);
+  const { hotelName, fullName, email, position, hotelId } = useAppSelector((state) => state.auth);
+  const {
+    data: bookingList = [],
+    isLoading: bookingListLoading,
+    isError: bookingListError,
+  } = useGetBookingsByHotelQuery(Number(hotelId), {
+    skip: routePath !== "/booking-list" || !hotelId || Number.isNaN(Number(hotelId)),
+  });
+  const {
+    data: roomList = [],
+    isLoading: roomListLoading,
+    isError: roomListError,
+  } = useGetRoomsByCurrentHotelQuery(undefined, {
+    skip: routePath !== "/rooms" || !hotelId || Number.isNaN(Number(hotelId)),
+  });
   const branchLabel = hotelName || localizedText("Tất cả chi nhánh", "All branches");
   const editBooking = (location.state as { editBooking?: BookingListItem } | null)?.editBooking;
   const [bookingOpen, setBookingOpen] = useState(Boolean(editBooking));
@@ -505,6 +547,10 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     "/settings": "/settings",
   } as Record<string, string>)[routePath] || routePath;
   const basePage = content[routePath] || content["/bookings"];
+  const bookingCounts = summarizeBookings(bookingList);
+  const roomCounts = summarizeRooms(roomList);
+  const bookingStatsUnavailable = bookingListError || !hotelId || Number.isNaN(Number(hotelId));
+  const roomStatsUnavailable = roomListError || !hotelId || Number.isNaN(Number(hotelId));
   const pageKey = ({
     "/overview": "bookings",
     "/check-in-out": "checkInOut",
@@ -530,15 +576,37 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     description: t(`pages.${pageKey}.description`, basePage.description),
     stats: basePage.stats.map(([label, value], index) => [
       t(`pages.${pageKey}.stats.${index}`, label),
-      routePath === "/settings" && index === 0
-        ? branchLabel
-        : routePath === "/settings" && index === 2
-          ? localizedText("Tiếng Việt", "English")
-          : routePath === "/settings" && index === 3
-            ? position === "Quản lý" || position === "Manager"
-              ? localizedText("Quản lý", "Manager")
-              : position ?? value
-            : value,
+      routePath === "/booking-list"
+        ? bookingListLoading
+          ? "…"
+          : bookingStatsUnavailable
+            ? "—"
+            : String([
+                bookingCounts.total,
+                bookingCounts.pending,
+                bookingCounts.inHouse,
+                bookingCounts.completed,
+              ][index] ?? 0).padStart(2, "0")
+        : routePath === "/rooms"
+          ? roomListLoading
+            ? "…"
+            : roomStatsUnavailable
+              ? "—"
+              : String([
+                  roomCounts.total,
+                  roomCounts.ready,
+                  roomCounts.inUse,
+                  roomCounts.maintenance,
+                ][index] ?? 0).padStart(2, "0")
+        : routePath === "/settings" && index === 0
+          ? branchLabel
+          : routePath === "/settings" && index === 2
+            ? localizedText("Tiếng Việt", "English")
+            : routePath === "/settings" && index === 3
+              ? position === "Quản lý" || position === "Manager"
+                ? localizedText("Quản lý", "Manager")
+                : position ?? value
+              : value,
     ] as [string, string]),
   };
   return <div className="min-h-screen min-w-0 bg-[#f7f8fc] text-slate-800">
@@ -556,7 +624,19 @@ export default function ModulePage({ path: routePath, onLogout }: { path: string
     <main className={`min-w-0 transition-[padding] duration-300 ease-in-out ${collapsed ? "lg:pl-0" : "lg:pl-72"}`}>
       <AppHeader onMenuClick={toggleSidebar} collapsed={collapsed} />
         <div className={`mx-auto min-w-0 px-4 py-6 sm:px-6 lg:px-8 transition-[max-width] duration-300 ease-in-out ${collapsed ? "max-w-[1650px]" : "max-w-7xl"}`}><p className="mb-1 text-sm font-semibold text-blue-600">{page.eyebrow}</p><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-[28px] font-bold tracking-[-.03em] text-slate-900">{page.title}</h2>{path !== "/nhan-vien" && <p className="mt-2 max-w-xl text-sm text-slate-500">{page.description}</p>}</div>{path !== "/dat-phong" && path !== "/nhan-vien" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && !routePath.startsWith("/services/") && routePath !== "/invoices" && routePath !== "/promotions" && <button onClick={() => path === "/dat-phong" && setBookingOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 hover:bg-blue-700"><Sparkles size={16} />{t("common.newAction")}</button>}</div>
-        {path !== "/dat-phong" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && routePath !== "/check-in-out" && routePath !== "/invoices" && routePath !== "/promotions" && !routePath.startsWith("/services/") && <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{page.stats.map(([label, value], i) => <div key={label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${i === 0 ? "bg-[#28233f] text-white" : "bg-white"}`}><p className={`text-xs font-medium ${i === 0 ? "text-blue-200" : "text-slate-500"}`}>{label}</p><p className="mt-2 text-xl font-bold tracking-tight">{value}</p><p className={`mt-1 text-[11px] ${i === 0 ? "text-blue-200" : "text-slate-400"}`}>{localizedText("Cập nhật hôm nay", "Updated today")}</p></div>)}</section>}
+        {path !== "/dat-phong" && path !== "/phe-duyet-hoan-tien" && path !== "/hotel-rules" && routePath !== "/check-in-out" && routePath !== "/invoices" && routePath !== "/promotions" && !routePath.startsWith("/services/") && <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{page.stats.map(([label, value], i) => <div key={label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${i === 0 ? "bg-[#28233f] text-white" : "bg-white"}`}><p className={`text-xs font-medium ${i === 0 ? "text-blue-200" : "text-slate-500"}`}>{label}</p><p className="mt-2 text-xl font-bold tracking-tight">{value}</p><p className={`mt-1 text-[11px] ${i === 0 ? "text-blue-200" : "text-slate-400"}`}>{routePath === "/booking-list"
+          ? bookingListLoading
+            ? localizedText("Đang tải booking…", "Loading bookings…")
+            : bookingStatsUnavailable
+              ? localizedText("Không tải được số liệu", "Statistics unavailable")
+              : localizedText("Theo dữ liệu booking hiện tại", "Based on current bookings")
+          : routePath === "/rooms"
+            ? roomListLoading
+              ? localizedText("Đang tải phòng…", "Loading rooms…")
+              : roomStatsUnavailable
+                ? localizedText("Không tải được số liệu", "Statistics unavailable")
+                : localizedText("Theo dữ liệu phòng hiện tại", "Based on current rooms")
+            : localizedText("Cập nhật hôm nay", "Updated today")}</p></div>)}</section>}
         {path === "/hotel-rules" ? <HotelRulesWorkspace /> : path === "/settings" ? <LanguageSettings onLogout={onLogout} /> : path === "/phe-duyet-hoan-tien" ? <RefundApprovalWorkspace /> : path === "/check-in-out" ? <CheckInOutWorkspace /> : routePath.startsWith("/services/") ? <ServiceWorkspace mode={routePath === "/services/usage" ? "usage" : "catalog"} /> : path === "/khuyen-mai" ? <PromotionWorkspace /> : path === "/phong" ? <RoomWorkspace /> : path === "/hoa-don" ? <InvoiceWorkspace /> : path === "/bao-cao" ? <ReportWorkspace /> : path === "/nhan-vien" ? <StaffTabsWorkspace /> : path === "/phan-quyen" ? <PermissionsWorkspace /> : path === "/danh-sach-booking" ? <BookingListWorkspace /> : path === "/dat-phong" ? (bookingOpen ? <BookingWorkspaceNew /> : <BookingOverview onNewBooking={() => setBookingOpen(true)} />) : <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-blue-600"><CalendarDays size={20} /></div><div><h3 className="font-bold text-slate-900">Không gian {page.title.toLowerCase()}</h3><p className="mt-1 text-sm text-slate-500">Các công cụ chi tiết cho {page.title.toLowerCase()} sẽ được hiển thị tại đây.</p></div></div><div className="mt-6 grid gap-3 md:grid-cols-3"><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Danh sách & bộ lọc</p><p className="mt-1 text-xs text-slate-400">Tra cứu nhanh dữ liệu theo chi nhánh.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Theo dõi trạng thái</p><p className="mt-1 text-xs text-slate-500">Theo dõi tiến độ theo thời gian thực.</p></div><div className="rounded-xl border border-dashed border-slate-200 p-4"><p className="text-xs font-bold text-slate-800">Báo cáo & hành động mới.</p></div></div></section>}
         <ScrollControls />
       </div></main>

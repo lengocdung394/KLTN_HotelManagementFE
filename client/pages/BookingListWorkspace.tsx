@@ -27,7 +27,7 @@ import {
 } from "../services/bookingApi";
 import { useCreatePaymentQrMutation, usePayWithCashMutation } from "../services/paymentApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
-import { useCancelBookingByStaffMutation } from "../services/managementBookingApi";
+import { useCancelBookingByStaffMutation, useGetBookingCancellationPreviewQuery } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
@@ -260,6 +260,20 @@ export default function BookingListWorkspace() {
   const [payWithCash, { isLoading: isPayingCash }] = usePayWithCashMutation();
   const [updateBookingApi, { isLoading: isUpdatingBooking }] = useUpdateBookingMutation();
   const [cancelBookingByStaff, { isLoading: isCancellingBooking }] = useCancelBookingByStaffMutation();
+  const {
+    currentData: cancellationPreviewResponse,
+    isLoading: isLoadingCancellationPreview,
+    isFetching: isFetchingCancellationPreview,
+    isError: isCancellationPreviewError,
+    refetch: refetchCancellationPreview,
+  } = useGetBookingCancellationPreviewQuery(
+    selectedBooking ? bookingId(selectedBooking) : "",
+    { skip: !showCancelConfirmation || !selectedBooking, refetchOnMountOrArgChange: true },
+  );
+  const cancellationPreview = cancellationPreviewResponse?.result;
+  useEffect(() => {
+    setCashRefundConfirmed(false);
+  }, [cancellationPreview?.refundAmount]);
   const paymentRequestInFlight = useRef(false);
   const bookingUpdateInFlight = useRef(false);
   const paymentSectionRef = useRef<HTMLDivElement>(null);
@@ -292,9 +306,10 @@ export default function BookingListWorkspace() {
       },
       onBookingStateUpdated: () => {
         dispatch(baseApi.util.invalidateTags(["Booking"]));
+        void refetch();
       },
     });
-  }, [dispatch, hotelId]);
+  }, [dispatch, hotelId, refetch]);
 
   // Merge API bookings with local overrides
   const bookings = useMemo(
@@ -632,14 +647,18 @@ export default function BookingListWorkspace() {
       setCancelError("Không tìm thấy mã booking để hủy.");
       return;
     }
+    if (!cancellationPreview || cancellationPreview.bookingId !== id) {
+      setCancelError(localizedText("Chưa tải được số tiền hoàn chính xác. Vui lòng tải lại thông tin trước khi tiếp tục.", "The exact refund amount is not available. Reload the preview before continuing."));
+      return;
+    }
     if (cancelRefundEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cancelRefundEmail.trim())) {
       setCancelError("Vui lòng nhập email khách hàng hợp lệ.");
       return;
     }
     if (cancelRefundMethod === "CASH"
-      && bookingAmount(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) > 0
+      && cancellationPreview.refundAmount > 0
       && !cashRefundConfirmed) {
-      setCancelError("Vui lòng xác nhận đã giao tiền mặt hoàn cho khách.");
+      setCancelError(localizedText("Vui lòng xác nhận đã giao đúng số tiền hoàn hiển thị cho khách.", "Confirm that the exact displayed refund amount was handed to the guest."));
       return;
     }
     const hasAnyBankDetail = Object.values(cancelBankDetails).some((value) => value.trim());
@@ -658,6 +677,11 @@ export default function BookingListWorkspace() {
           ...(cancelReason.trim() ? { reason: cancelReason.trim() } : {}),
           refundMethod: cancelRefundMethod,
           ...(cancelRefundMethod === "CASH" ? { cashRefundConfirmed } : {}),
+          confirmedRefundAmount: cancellationPreview.refundAmount,
+          confirmedRoomRefundAmount: cancellationPreview.roomRefundAmount,
+          confirmedServiceRefundAmount: cancellationPreview.serviceRefundAmount,
+          confirmedRoomPenaltyAmount: cancellationPreview.roomPenaltyAmount,
+          confirmedRefundPolicy: cancellationPreview.refundPolicy,
           ...(cancelRefundEmail.trim() ? { refundEmail: cancelRefundEmail.trim() } : {}),
           ...(cancelRefundMethod === "BANK" && hasAnyBankDetail ? {
             bankName: cancelBankDetails.bankName.trim(),
@@ -669,16 +693,41 @@ export default function BookingListWorkspace() {
       }).unwrap();
       const cancellationStatus = response?.result?.status;
       const actualRefundMethod = response?.result?.refundMethod ?? cancelRefundMethod;
+      const refundAmount = Number(response?.result?.refundAmount ?? cancellationPreview.refundAmount);
+      const priorRefundedAmount = Number(valueOf(selectedBooking, ["refundedAmount"]) ?? 0);
+      const priorPaidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+      const collectedAmount = Number(valueOf(selectedBooking, ["collectedAmount"]) ?? priorPaidAmount + priorRefundedAmount);
+      const wasRefundedImmediately = cancellationStatus === "REFUNDED" && actualRefundMethod === "CASH";
+      setLocalOverrides((current) => ({
+        ...current,
+        [id]: {
+          ...current[id],
+          bookingStatus: "CANCELLED",
+          remainingAmount: 0,
+          collectedAmount,
+          refundedAmount: priorRefundedAmount + (wasRefundedImmediately ? refundAmount : 0),
+        },
+      }));
+      void refetch();
       const refundMessage = cancellationStatus === "REFUND_BANK_DETAILS_REQUIRED"
-        ? " Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn tiền."
+        ? localizedText(
+          `Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn tiền. Số tiền hoàn dự kiến: ${money(refundAmount)}.`,
+          `Booking cancelled; add bank details before refund approval. Expected refund: ${money(refundAmount)}.`,
+        )
         : cancellationStatus === "REFUND_REVIEW_PENDING"
-        ? " Booking đã hủy; yêu cầu hoàn tiền đang chờ quản lý duyệt."
+        ? localizedText(
+          `Booking đã hủy; yêu cầu hoàn ${money(refundAmount)} đang chờ quản lý duyệt.`,
+          `Booking cancelled; the ${money(refundAmount)} refund is pending manager approval.`,
+        )
         : cancellationStatus === "REFUNDED" && actualRefundMethod === "CASH"
-        ? " Booking đã hủy và đã ghi nhận hoàn tiền mặt cho khách."
+        ? localizedText(
+          `Booking đã hủy và đã ghi nhận hoàn tiền mặt ${money(refundAmount)} cho khách.`,
+          `Booking cancelled and cash refund of ${money(refundAmount)} recorded.`,
+        )
         : cancellationStatus === "NO_REFUND_REQUIRED"
-        ? " Booking đã hủy; không phát sinh tiền hoàn."
-        : " Booking đã hủy thành công.";
-      setCancelFeedback(refundMessage.trim());
+        ? localizedText("Booking đã hủy; không phát sinh tiền hoàn.", "Booking cancelled; no refund is due.")
+        : localizedText("Booking đã hủy thành công.", "Booking cancelled successfully.");
+      setCancelFeedback(refundMessage);
       setSelectedBooking(null);
       setShowCancelConfirmation(false);
       setCancelReason("");
@@ -692,7 +741,16 @@ export default function BookingListWorkspace() {
       const message = typeof errorData === "string"
         ? errorData
         : errorData?.message ?? errorData?.result?.message ?? apiError.message ?? "Không thể hủy booking.";
-      setCancelError(message);
+      if (message.includes("đã thay đổi kể từ lúc xem trước")) {
+        setCashRefundConfirmed(false);
+        void refetchCancellationPreview();
+        setCancelError(localizedText(
+          "Số tiền hoàn đã thay đổi so với lúc xem trước. Booking chưa bị hủy; hãy kiểm tra lại số tiền mới.",
+          "The refund amount changed since the preview. The booking was not cancelled; review the updated amount.",
+        ));
+      } else {
+        setCancelError(message);
+      }
     }
   };
 
@@ -771,6 +829,7 @@ export default function BookingListWorkspace() {
                   <th className="px-5 py-3 text-right">{localizedText("Tiền dịch vụ", "Services")}</th>
                   <th className="px-5 py-3 text-right">{localizedText("Giảm giá", "Discount")}</th>
                   <th className="px-5 py-3 text-right">{localizedText("Đã thu", "Collected")}</th>
+                  <th className="px-5 py-3 text-right">{localizedText("Đã hoàn", "Refunded")}</th>
                   <th className="px-5 py-3 text-right">{localizedText("Còn thiếu", "Balance")}</th>
                   <th className="px-5 py-3 text-right">{localizedText("Tổng bill", "Total")}</th>
                   <th className="px-5 py-3">{localizedText("Trạng thái", "Status")}</th>
@@ -787,7 +846,9 @@ export default function BookingListWorkspace() {
                   const bookingPaid = valueOf(booking, ["paidAmount", "amountPaid", "totalPaidAmount"]);
                   const finalAmountNumber = bookingTotalIncludingSurcharges(booking);
                   const paidAmountNumber = Number(bookingPaid ?? 0);
-                  const guestDue = finalAmountNumber - paidAmountNumber;
+                  const refundedAmount = Number(valueOf(booking, ["refundedAmount"]) ?? 0);
+                  const collectedAmount = Number(valueOf(booking, ["collectedAmount"]) ?? (paidAmountNumber + refundedAmount));
+                  const guestDue = isCancelled ? 0 : finalAmountNumber - paidAmountNumber;
                   const isFullyPaid = guestDue === 0;
                   const isHotelOwesCustomer = guestDue < 0;
                   const displayRemaining = Math.abs(guestDue);
@@ -799,7 +860,8 @@ export default function BookingListWorkspace() {
                       <td className="px-5 py-4 text-right text-slate-700">{money(booking.roomTotal)}</td>
                       <td className="px-5 py-4 text-right text-slate-700">{money(booking.serviceTotal)}</td>
                       <td className="px-5 py-4 text-right text-rose-600">{money(bookingDiscount)}</td>
-                      <td className="px-5 py-4 text-right text-emerald-700">{money(bookingPaid ?? booking.paidAmount ?? booking.finalAmount)}</td>
+                      <td className="px-5 py-4 text-right text-emerald-700">{money(collectedAmount)}</td>
+                      <td className="px-5 py-4 text-right text-purple-700">{money(refundedAmount)}</td>
                       <td className={`px-5 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
                         {isFullyPaid ? "0 đ" : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
                       </td>
@@ -1000,9 +1062,29 @@ export default function BookingListWorkspace() {
                     </div>
                     <div className="flex justify-between text-emerald-700">
                       <span>{localizedText("Tổng đã thanh toán:", "Total paid:")}</span>
-                      <span className="font-semibold">{money(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]))}</span>
+                      <span className="font-semibold">{money(valueOf(selectedBooking, ["collectedAmount", "paidAmount", "amountPaid", "totalPaidAmount"]))}</span>
                     </div>
+                    {Number(valueOf(selectedBooking, ["refundedAmount"]) ?? 0) > 0 && (
+                      <div className="flex justify-between text-purple-700">
+                        <span>{localizedText("Đã hoàn cho khách:", "Refunded to guest:")}</span>
+                        <span className="font-semibold">{money(valueOf(selectedBooking, ["refundedAmount"]))}</span>
+                      </div>
+                    )}
                     {(() => {
+                      if (isCancelledBooking(selectedBooking)) {
+                        return (
+                          <div className="flex justify-between rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-slate-700">
+                            <span className="font-semibold">{localizedText("Trạng thái thanh toán:", "Payment status:")}</span>
+                            <span className="text-right font-bold">
+                              {localizedText(
+                                "Booking đã hủy — không còn khoản phải thu từ khách.",
+                                "Booking cancelled — no further payment is due from the guest.",
+                              )}
+                            </span>
+                          </div>
+                        );
+                      }
+
                       const finalAmount = selectedBookingTotal;
                       const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
                       const diff = finalAmount - paidAmount;
@@ -1366,6 +1448,89 @@ export default function BookingListWorkspace() {
               </div>
             </div>
 
+            <div aria-live="polite" className="mt-4">
+              {(isLoadingCancellationPreview || isFetchingCancellationPreview) && !cancellationPreview && (
+                <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                  {localizedText("Đang tính chính xác khoản hoàn theo chính sách hủy...", "Calculating the exact refund under the cancellation policy...")}
+                </p>
+              )}
+              {isCancellationPreviewError && (
+                <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                  <span>{localizedText("Không thể xác minh số tiền hoàn. Chưa thể xác nhận hủy booking.", "Could not verify the refund amount. Cancellation cannot be confirmed yet.")}</span>
+                  <button
+                    type="button"
+                    onClick={() => void refetchCancellationPreview()}
+                    disabled={isFetchingCancellationPreview}
+                    className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {localizedText("Thử lại", "Retry")}
+                  </button>
+                </div>
+              )}
+              {!isLoadingCancellationPreview && !isFetchingCancellationPreview && !isCancellationPreviewError && !cancellationPreview && (
+                <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                  <span>{localizedText("Không nhận được bảng tính tiền hoàn từ máy chủ. Chưa thể xác nhận hủy booking.", "The server did not return a refund breakdown. Cancellation cannot be confirmed yet.")}</span>
+                  <button
+                    type="button"
+                    onClick={() => void refetchCancellationPreview()}
+                    className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold"
+                  >
+                    {localizedText("Thử lại", "Retry")}
+                  </button>
+                </div>
+              )}
+              {cancellationPreview && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
+                  <h4 className="font-semibold text-slate-900">
+                    {localizedText("Đối chiếu khoản hoàn trước khi hủy", "Review refund before cancellation")}
+                  </h4>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">{localizedText("Tổng tiền khách đã thanh toán", "Total paid by guest")}</dt>
+                      <dd className="font-medium text-slate-900">{money(cancellationPreview.paidAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">{localizedText("Tiền phòng trước phạt", "Room amount before penalty")}</dt>
+                      <dd className="font-medium text-slate-900">
+                        {money(Number(cancellationPreview.roomRefundAmount ?? 0) + Number(cancellationPreview.roomPenaltyAmount ?? 0))}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">{localizedText("Phạt hủy phòng", "Room cancellation penalty")}</dt>
+                      <dd className="font-medium text-rose-700">−{money(cancellationPreview.roomPenaltyAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">{localizedText("Tiền phòng được hoàn", "Room refund")}</dt>
+                      <dd className="font-medium text-slate-900">{money(cancellationPreview.roomRefundAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-600">{localizedText("Tiền dịch vụ được hoàn khi hủy", "Service refund on cancellation")}</dt>
+                      <dd className="font-medium text-slate-900">{money(cancellationPreview.serviceRefundAmount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3 border-t border-blue-200 pt-2">
+                      <dt className="font-semibold text-slate-800">{localizedText("TỔNG SỐ TIỀN HOÀN", "TOTAL REFUND")}</dt>
+                      <dd className="text-lg font-bold text-blue-700">{money(cancellationPreview.refundAmount)}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-3 text-xs leading-5 text-slate-600">
+                    {cancellationPreview.refundPolicy === "CANCEL_AT_LEAST_72_HOURS_BEFORE_CHECK_IN"
+                      ? localizedText("Mốc áp dụng: hủy trước giờ nhận phòng từ 72 giờ trở lên — không phạt tiền phòng.", "Policy tier: cancellation at least 72 hours before check-in — no room penalty.")
+                      : cancellationPreview.refundPolicy === "CANCEL_24_TO_72_HOURS_BEFORE_CHECK_IN"
+                        ? localizedText("Mốc áp dụng: hủy trước giờ nhận phòng từ 24 đến dưới 72 giờ — phạt 50% tiền phòng được phân bổ.", "Policy tier: cancellation 24 to under 72 hours before check-in — 50% penalty on the allocated room payment.")
+                        : localizedText("Mốc áp dụng: hủy dưới 24 giờ hoặc khách không đến — phạt 100% tiền phòng được phân bổ.", "Policy tier: cancellation under 24 hours before check-in or no-show — 100% penalty on the allocated room payment.")}{" "}
+                    {localizedText("Tiền dịch vụ được hoàn theo phần thanh toán phân bổ; khoản phạt chỉ trừ vào tiền phòng.", "Service charges allocated from the payment are refunded; the penalty is deducted from the room portion only.")}{" "}
+                    {localizedText("Thời gian còn lại đến giờ nhận phòng:", "Time until check-in:")}{" "}
+                    <strong>{cancellationPreview.hoursBeforeCheckIn} {localizedText("giờ", "hours")}</strong>.
+                  </p>
+                  {cancellationPreview.refundAmount <= 0 && (
+                    <p className="mt-2 rounded-lg bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900">
+                      {localizedText("Không phát sinh khoản hoàn. Không giao tiền mặt cho khách.", "No refund is due. Do not hand cash to the guest.")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <fieldset className="mt-5">
               <legend className="text-sm font-semibold text-slate-700">{localizedText("Phương thức hoàn tiền", "Refund method")}</legend>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -1472,7 +1637,7 @@ export default function BookingListWorkspace() {
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
                 />
               </label>
-              {cancelRefundMethod === "CASH" && (
+              {cancelRefundMethod === "CASH" && (cancellationPreview?.refundAmount ?? 0) > 0 && (
                 <label className="mt-3 flex items-start gap-2 text-xs font-medium text-slate-700">
                   <input
                     type="checkbox"
@@ -1480,7 +1645,10 @@ export default function BookingListWorkspace() {
                     onChange={(event) => setCashRefundConfirmed(event.target.checked)}
                     className="mt-0.5 accent-emerald-600"
                   />
-                  {localizedText("Nếu có khoản hoàn, tôi xác nhận đã giao trực tiếp khoản tiền đó cho khách.", "If a refund is due, I confirm that I handed it directly to the guest.")}
+                  {localizedText(
+                    `Tôi đã giao đúng ${money(cancellationPreview?.refundAmount)} tiền mặt cho khách và xác nhận số tiền này.`,
+                    `I handed exactly ${money(cancellationPreview?.refundAmount)} in cash to the guest and confirm this amount.`,
+                  )}
                 </label>
               )}
             </div>
@@ -1503,9 +1671,17 @@ export default function BookingListWorkspace() {
               </button>
               <button
                 type="button"
-                disabled={isCancellingBooking}
+                disabled={
+                  isCancellingBooking
+                  || !cancellationPreview
+                  || cancellationPreview.bookingId !== bookingId(selectedBooking)
+                  || isLoadingCancellationPreview
+                  || isFetchingCancellationPreview
+                  || isCancellationPreviewError
+                  || (cancelRefundMethod === "CASH" && cancellationPreview.refundAmount > 0 && !cashRefundConfirmed)
+                }
                 onClick={() => void handleCancelSelectedBooking()}
-                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-60"
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isCancellingBooking ? localizedText("Đang hủy...", "Cancelling...") : localizedText("Xác nhận hủy", "Confirm cancellation")}
               </button>

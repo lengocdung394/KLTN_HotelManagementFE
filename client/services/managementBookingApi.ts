@@ -79,11 +79,33 @@ export type ManagementBookingCancellationRequest = {
   reason?: string;
   refundMethod?: "CASH" | "BANK";
   cashRefundConfirmed?: boolean;
+  confirmedRefundAmount?: number;
+  confirmedRoomRefundAmount?: number;
+  confirmedServiceRefundAmount?: number;
+  confirmedRoomPenaltyAmount?: number;
+  confirmedRefundPolicy?: string;
   bankName?: string;
   bankCode?: string;
   bankAccountName?: string;
   bankAccountNumber?: string;
   refundEmail?: string;
+};
+
+export type BookingCancellationPreview = {
+  bookingId: string;
+  paidAmount: number;
+  refundAmount: number;
+  roomRefundAmount: number;
+  serviceRefundAmount: number;
+  roomPenaltyAmount: number;
+  hoursBeforeCheckIn: number;
+  refundPolicy: string;
+};
+
+type BookingCancellationPreviewApiResponse = {
+  code?: number;
+  message?: string;
+  result?: BookingCancellationPreview;
 };
 
 export type BookingCancellationStatus =
@@ -168,6 +190,12 @@ const unwrapCheckoutRefundList = (response: unknown): CheckoutRefund[] => {
 
 export const managementBookingApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
+    getBookingCancellationPreview: builder.query<BookingCancellationPreviewApiResponse, string>({
+      query: (bookingId) => ({
+        url: `/management-bookings/${bookingId}/cancellation-preview`,
+        method: "GET",
+      }),
+    }),
     modifyBooking: builder.mutation<
       BookingResponse,
       { bookingId: string; request: ManagementBookingModificationRequest }
@@ -177,7 +205,7 @@ export const managementBookingApi = baseApi.injectEndpoints({
         method: "PUT",
         data: request,
       }),
-      invalidatesTags: ["Booking", "Room"],
+      invalidatesTags: ["Booking", "Room", "Promotion"],
     }),
     getBookingCancellations: builder.query<BookingCancellation[], void>({
       query: () => ({
@@ -196,7 +224,7 @@ export const managementBookingApi = baseApi.injectEndpoints({
         method: "POST",
         data: request ?? {},
       }),
-      invalidatesTags: ["Booking", "Room", "RefundCancellation"],
+      invalidatesTags: ["Booking", "Room", "RefundCancellation", "Promotion"],
     }),
     approveBookingRefund: builder.mutation<
       BookingCancellationApiResponse,
@@ -293,6 +321,7 @@ export const managementBookingApi = baseApi.injectEndpoints({
 
 export const {
   useModifyBookingMutation,
+  useGetBookingCancellationPreviewQuery,
   useCancelBookingByStaffMutation,
   useGetBookingCancellationsQuery,
   useApproveBookingRefundMutation,

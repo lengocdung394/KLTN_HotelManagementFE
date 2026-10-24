@@ -27,11 +27,13 @@ import {
   X,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { localizedText } from "../i18n";
 import { toast } from "@/components/ui/use-toast";
 import { baseApi } from "../services/baseApi";
 import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
 import {
   formatEntityUpdateNotification,
+  isCheckoutCompletionUpdate,
   isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
@@ -508,7 +510,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       onRoomUpdated: (payload) => {
         const event = getSocketPayload(payload);
         const description = formatRoomUpdateNotification(event);
-        const title = isHousekeepingCompletionUpdate(event) ? "Phòng đã dọn xong" : "Phòng được cập nhật";
+        const title = isHousekeepingCompletionUpdate(event)
+          ? "Phòng đã dọn xong"
+          : isCheckoutCompletionUpdate(event)
+            ? localizedText("Phòng vừa check-out", "Room checked out")
+            : "Phòng được cập nhật";
         addNotification(title, description, { category: "room", hotelId: getHotelId(event) });
         if (!isHousekeepingCompletionUpdate(event)) {
           toast({ title, description });

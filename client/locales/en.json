@@ -17,6 +17,8 @@
     "edit": "Edit",
     "delete": "Delete",
     "back": "Back",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
     "newBookingEyebrow": "New booking",
     "createBooking": "Create booking",
     "openFrontDesk": "Open front desk",
@@ -314,6 +316,12 @@
     "perNight": "/ night",
     "roomList": "Room list",
     "roomsAtBranch": "rooms at Sen Viet branch",
+    "buildingList": "Building list",
+    "amenityList": "Amenity list",
+    "buildingCount": "{{count}} buildings",
+    "floorCount": "{{count}} floors",
+    "amenityCount": "{{count}} amenities",
+    "addAmenity": "Add amenity",
     "realTimeUpdate": "Real-time update",
     "addBuilding": "Add building",
     "addRoom": "Add room",
@@ -331,6 +339,7 @@
     "allBuildings": "All buildings",
     "allFloors": "All floors",
     "allStatuses": "All statuses",
+    "allRoomTypes": "All room types",
     "searchRooms": "Search by room number or room type...",
     "roomStatus": "Room status",
     "maxGuests": "Up to {{count}} guests",
@@ -341,6 +350,19 @@
     "assign": "Assign",
     "noRooms": "No rooms found",
     "changeFilters": "Try changing the keyword or status filter."
+    ,"buildingPrefix": "Building"
+    ,"buildingNotUpdated": "Building not updated"
+    ,"standardCapacitySummary": "Standard: {{count}} guests"
+    ,"adultSurcharge": "Adult surcharge"
+    ,"childSurcharge": "Child surcharge"
+    ,"capacityUnit": "guests"
+    ,"areaNotUpdated": "Not updated"
+    ,"bedNotUpdated": "Bed type not updated"
+    ,"noAmenitiesUpdated": "Amenities have not been updated."
+    ,"perPersonSuffix": "/person"
+    ,"infantFreeNotice": "Infants under 2 stay free."
+    ,"paginationSummary": "Showing {{from}}-{{to}} of {{total}} rooms"
+    ,"rowsPerPage": "Rows"
     ,"singleBed": "single bed"
     ,"doubleSingleBeds": "2 single beds"
     ,"kingBed": "King-size bed"
@@ -351,6 +373,10 @@
     ,"airConditioning": "Air conditioning"
     ,"privateBathroom": "Private bathroom"
     ,"wifi": "WiFi"
+    ,"minibar": "Minibar"
+    ,"workDesk": "Work desk"
+    ,"television": "Television"
+    ,"hotWater": "Hot water"
     ,"generatedCode": "Generated room code"
     ,"pricePerNight": "Price / night"
     ,"guestCapacity": "Guest capacity"
@@ -387,6 +413,265 @@
     ,"amenitiesLabel": "Amenities"
     ,"gallery": "Photo gallery"
     ,"viewAllPhotos": "View all photos"
+    ,"createForm": {
+      "basicInformation": "Basic information",
+      "roomDetails": "Room details",
+      "floor": "Floor",
+      "notSelected": "Not selected",
+      "saving": "Saving...",
+      "roomNumber": "Room number",
+      "roomNumberPlaceholder": "Example: 101",
+      "loadingRoomTypes": "Loading room types...",
+      "roomTypesError": "Could not load room types from the API.",
+      "loadingRoomTypeDetails": "Loading room type details...",
+      "roomTypeDetailsError": "Could not load room type details.",
+      "loadingFloors": "Loading floors...",
+      "noFloors": "No floors available",
+      "floorExample": "Example: 1 or -1",
+      "standardPrice": "Standard price",
+      "officialPricePerNight": "Official price / night: {{price}} (amenities charged separately)",
+      "standardCapacity": "Standard capacity",
+      "includedGuests": "Guests included in the room price",
+      "maxExtraGuests": "Maximum extra guests",
+      "extraGuestsDescription": "Additional guests beyond the standard capacity",
+      "extraAdultFee": "Extra charge per adult",
+      "extraChildFee": "Extra charge per child",
+      "loadingPolicy": "Loading capacity and surcharges from the room type policy...",
+      "policyError": "Could not load the capacity and surcharge policy. Please try again.",
+      "loadingSurcharge": "Loading surcharges for this room type...",
+      "missingPolicy": "No surcharge policy found for this room type. Please check the room pricing configuration.",
+      "bedType": "Bed type",
+      "loading": "Loading...",
+      "bedTypesError": "Could not load the bed types.",
+      "extraBed": "Extra bed",
+      "quantity": "Qty",
+      "quantityFor": "Quantity for {{bedType}}",
+      "noBedTypes": "No bed types available. Add a bed type before creating a room.",
+      "roomStatus": "Room status",
+      "loadingRoomStatuses": "Loading room statuses...",
+      "roomStatusesError": "Could not load room statuses from the API.",
+      "amenitiesAndServices": "Amenities & services",
+      "descriptionAndImages": "Description & images",
+      "deselectAll": "Deselect all",
+      "useDefault": "Use default",
+      "add": "Add",
+      "newAmenityName": "New amenity name",
+      "amenityPrice": "Amenity price",
+      "detailedDescriptionPlaceholder": "Describe the room, style, location, and guest experience...",
+      "uploadImage": "Upload images",
+      "imageAlt": "Room",
+      "setDefaultImage": "Set as default image",
+      "noImages": "No images uploaded yet.",
+      "preview": "Preview",
+      "noPreviewImage": "No preview image",
+      "officialPrice": "Official price",
+      "highlights": "Highlights",
+      "noAmenitiesSelected": "No amenities selected",
+      "familyRoom": "Family Room"
+    },
+    "editForm": {
+      "title": "Edit room",
+      "save": "Save changes",
+      "basicInformation": "Basic information",
+      "building": "Building",
+      "capacityAndSurcharges": "Capacity and policy surcharges",
+      "area": "Area (m²)",
+      "basePrice": "Base price / night",
+      "standardCapacity": "Standard capacity",
+      "maxExtraGuests": "Maximum extra guests",
+      "extraAdultFee": "Extra charge per adult",
+      "extraChildFee": "Extra charge per child",
+      "noBedTypes": "No bed types available.",
+      "roomImages": "Room images",
+      "imageRange": "4–8 images",
+      "addImages": "Add images",
+      "roomImageAlt": "Room image {{count}}",
+      "defaultImage": "Default image",
+      "setDefaultImage": "Set as default",
+      "amenities": "Amenities",
+      "noAmenities": "Could not load the amenities list."
+    },
+    "pricingConfig": {
+      "title": "Listed price configuration",
+      "description": "Set base rates and surcharges by room type or special event schedule.",
+      "loading": "Loading branch pricing configuration...",
+      "loadError": "Could not load branch pricing configuration. Please check the backend connection.",
+      "retry": "Try again",
+      "byRoomType": "Pricing by room type",
+      "byEvent": "Pricing by event",
+      "editRoomType": "Update room type pricing",
+      "standardCapacity": "Standard guest capacity",
+      "extraGuestCapacity": "Maximum extra guests",
+      "pricePerNight": "Room price / night",
+      "extraAdultFee": "Extra charge per adult",
+      "extraChildFee": "Extra charge per child",
+      "guestSummary": "{{standard}} standard · {{extra}} extra · {{price}} / {{adultFee}} / {{childFee}}",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "currency": "VND",
+      "roomCount": "{{count}} rooms",
+      "edit": "Edit",
+      "standard": "Standard",
+      "extraGuestsAllowed": "Extra guests allowed",
+      "adultFeePerPerson": "+{{price}} / adult",
+      "childFeePerPerson": "+{{price}} / child",
+      "updateSuccess": "Pricing updated successfully",
+      "updateSuccessDescription": "Pricing for {{roomType}} was updated and synced to the branch.",
+      "updateError": "Could not update pricing configuration. Please try again.",
+      "people": "Capacity: {{count}}"
+    },
+    "eventPricing": {
+      "listTitle": "Event pricing rules",
+      "badge": "EVENT PRICING",
+      "description": "Manage flexible percentage-based price increases or discounts for room types over a date range.",
+      "create": "Create pricing event",
+      "searchPlaceholder": "Search pricing events...",
+      "chooseDate": "Select date",
+      "allStatuses": "All statuses",
+      "active": "Active",
+      "upcoming": "Upcoming",
+      "expired": "Expired",
+      "allRoomTypes": "All room types",
+      "loading": "Loading pricing events...",
+      "emptyTitle": "No pricing events yet",
+      "emptyDescription": "Try changing the filters or create a new pricing event.",
+      "createNew": "Create event",
+      "adjustmentRange": "Adjust {{min}} to {{max}} by room group",
+      "increase": "Increase room price by +{{percent}}%",
+      "discount": "Discount {{percent}}% off",
+      "edit": "Edit",
+      "delete": "Delete event",
+      "dateRange": "Applicable date range",
+      "applicableRoomTypes": "Applicable room types",
+      "allFourRoomTypes": "All 4 room types",
+      "applies": "Applies",
+      "noPrice": "No price set",
+      "page": "Page {{current}} / {{total}}",
+      "previous": "Previous",
+      "next": "Next",
+      "editTitle": "Edit pricing event",
+      "createTitle": "Create pricing event",
+      "formDescription": "Set the date range and flexible price adjustments by room group.",
+      "closeError": "Close error message",
+      "eventName": "Event name / Pricing rule",
+      "eventNamePlaceholder": "Example: April holiday surcharge, summer promotion...",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "groupPricingTitle": "Room pricing by group",
+      "groupPricingDescription": "Set a specific price (VND) for each room type group in this event.",
+      "roomGroup": "Room group #{{number}}",
+      "removeGroup": "Remove group",
+      "roomTypesInGroup": "Room types covered by this group:",
+      "allRoomTypesButton": "All room types",
+      "assignedElsewhere": "(Assigned to another group)",
+      "applicablePrice": "Applicable room price (VND)",
+      "pricePlaceholder": "Example: 750000 or 1200000",
+      "fixedPrice": "Fixed price applied: {{price}}",
+      "enterFixedPrice": "Enter a specific price for this room group",
+      "addRemainingTypes": "Add a separate price for remaining room types ({{roomTypes}})",
+      "allTypesAssigned": "All room types have been assigned to pricing groups.",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "update": "Update event",
+      "savePricing": "Save pricing configuration",
+      "updatedToastTitle": "Seasonal pricing updated",
+      "updatedToastDescription": "{{eventName}} was updated and the changes were synced to customers.",
+      "savedToastTitle": "Pricing updated successfully",
+      "savedToastDescription": "Event pricing was saved for the selected room types.",
+      "saveError": "Could not save the pricing configuration.",
+      "updateErrorTitle": "Could not update pricing configuration",
+      "createErrorTitle": "Could not save pricing configuration",
+      "eventUpdatedToastTitle": "Seasonal pricing updated",
+      "eventUpdatedToastDescription": "{{eventName}} was updated. The latest pricing rules have been synced.",
+      "seasonalPricing": "seasonal pricing",
+      "roomTypeStandard": "Standard Room",
+      "roomTypeDeluxe": "Deluxe Room",
+      "roomTypeSuite": "Suite Room",
+      "roomTypeFamily": "Family Room"
+    },
+    "importDialog": {
+      "eyebrow": "BULK IMPORT",
+      "roomsTitle": "Import room data",
+      "roomsDescription": "Put the template Excel file and images in a folder named dulieuphong, then zip it as dulieuphong.zip. Images are uploaded directly to Cloudinary before room data is sent to the server.",
+      "downloadRoomTemplate": "Download room Excel template",
+      "roomZipLabel": "Room data ZIP file (.zip)",
+      "roomZipValidation": "Please select the dulieuphong.zip file.",
+      "zipStructure": "ZIP file structure",
+      "roomInstructionsTypes": "In Excel, select room type, building, and status from the dropdown lists. Enter the integer floorNumber in the Floor column; the system uses the floor number and building to find the correct floor. Enter amenity IDs in one cell, separated by semicolons (;); find IDs and names in the Catalog sheet. Only IDs in the catalog are accepted. Room numbers must be positive integers.",
+      "roomInstructionsBeds": "In the Room Beds sheet, select the room number and bed type from the dropdown lists, then enter a quantity of at least 1. A room can have multiple bed types by adding multiple rows for the same room number; each room needs at least one bed configuration row.",
+      "roomInstructionsImages": "Each room needs 4 to 8 images, up to 5 MB per image. Enter image filenames in the Image 1–Image 8 columns; names must match files in the images folder, including extensions (for example, 101-1.jpg). Each row represents one room. Do not rename the columns.",
+      "roomInstructionsArchive": "Place phong.xlsx and the images folder side by side inside dulieuphong, then zip the dulieuphong folder as dulieuphong.zip. The frontend uploads images directly to Cloudinary using an unsigned upload preset; the server receives image URLs and saves the rooms.",
+      "importRooms": "Import rooms",
+      "roomImportButton": "Import data from file",
+      "readingFile": "Reading file...",
+      "preparingRoomImport": "Reading ZIP file and validating room data...",
+      "uploadingImages": "Uploading {{count}} images to Cloudinary...",
+      "uploadingImageProgress": "Uploading images to Cloudinary: {{uploaded}}/{{total}}...",
+      "sendingRoomData": "Images uploaded. Sending room data to the server...",
+      "amenitiesTitle": "Import amenities",
+      "amenitiesDescription": "Download the Excel template here, fill in the amenity list, and keep the original filename when uploading.",
+      "downloadAmenityTemplate": "Download amenity Excel template",
+      "amenityFileLabel": "Amenity Excel file (mau-nhap-tien-ich.xlsx)",
+      "amenityFileValidation": "Please select the file \"mau-nhap-tien-ich.xlsx\". Do not rename the template.",
+      "amenityInstructionsColumns": "The file must have two columns: Amenity name and Price. Enter a non-negative number without a currency symbol.",
+      "amenityInstructionsDuplicates": "Amenities with duplicate names (case- and accent-insensitive) will be skipped; new amenities will be saved to the database.",
+      "importAmenities": "Import amenities",
+      "uploading": "Uploading...",
+      "uploadFailed": "Could not upload the data.",
+      "progressLabel": "Import progress"
+      ,"loadingBedTypesTitle": "Loading bed types"
+      ,"loadingBedTypesDescription": "Wait for the bed list to finish loading before generating the template."
+      ,"bedTypesErrorTitle": "Could not load bed types"
+      ,"serverRetry": "Check the server connection and try again."
+      ,"loadingBuildingsFloorsTitle": "Loading buildings and floors"
+      ,"loadingTemplateWait": "Please wait a moment, then download the Excel template."
+      ,"buildingsFloorsErrorTitle": "Could not load buildings and floors"
+      ,"templateErrorTitle": "Could not create the Excel template"
+      ,"unknownError": "An unknown error occurred."
+      ,"importFailedTitle": "Room import failed"
+      ,"importCompletedTitle": "Room import completed"
+      ,"importFailedDescription": "The server reported that the room import failed."
+      ,"importUpdatedDescription": "The room list has been updated from the server."
+      ,"retryingStatus": "Retrying status request from the server: {{message}}"
+      ,"readingAmenityFile": "Reading amenity file..."
+      ,"emptyFile": "The file contains no data rows."
+      ,"amenityRowInvalid": "Row {{row}} must have a valid amenity name and a non-negative price."
+      ,"noValidAmenities": "The file contains no valid amenities to import."
+      ,"missingTaskId": "The server did not return an amenity import task ID."
+      ,"processingAmenities": "The server is processing amenity data..."
+      ,"amenityRowsChecked": "Validated {{count}} rows. Sending data to the server..."
+      ,"amenitiesSaved": "Completed: saved {{saved}} amenities{{skipped}}."
+      ,"amenitiesNoneSaved": "Completed: no new amenities; skipped {{count}} duplicate rows."
+      ,"skippedDuplicateRows": ", skipped {{count}} duplicate rows"
+      ,"amenityImportSuccess": "Amenities imported successfully"
+      ,"noNewAmenities": "No new amenities"
+      ,"amenitiesSavedDescription": "Saved {{count}} amenities to the database.{{skipped}}"
+      ,"amenitiesSkippedDescription": "All {{count}} amenities already exist, so no new data was saved."
+      ,"skippedDuplicateNames": " Skipped {{count}} duplicate rows."
+      ,"importDataError": "Could not import data"
+      ,"couldNotReadFile": "Could not read the file."
+    },
+    "importProgress": {
+      "importing": "Importing rooms",
+      "completedWithErrors": "Room import completed · some rows have errors",
+      "completed": "Room import completed",
+      "checking": "Checking room data",
+      "fileChecked": "Room file checked",
+      "checkingArchive": "Reading ZIP file and checking each row...",
+      "passedCount": "{{count}} rows passed",
+      "failedCount": "{{count}} rows with errors",
+      "totalCount": "{{count}} rows total",
+      "hideDetails": "Hide details",
+      "showDetails": "View row details",
+      "showFailedDetails": "View row details ({{count}} errors)",
+      "rowLabel": "Row {{row}}",
+      "roomLabel": "Room {{room}}",
+      "rowPassed": "Passed according to the import status.",
+      "statusLabel": "Processing status: {{status}}",
+      "rowMissingStatus": "The server did not mark this row as successful.",
+      "waitingForProgress": "Waiting for room import progress..."
+    }
   },
   "modules": {
     "bookingEyebrow": "Hotel operations",
@@ -751,6 +1036,8 @@
     "minRoomValue": "Minimum room value",
     "minServiceValue": "Minimum service value",
     "usageLimit": "Maximum uses",
+    "claimedCount": "Guests who saved",
+    "usedCount": "Uses",
     "hotelName": "Applicable hotel",
     "status": "Status",
     "allPromotionStatuses": "All statuses",
@@ -847,6 +1134,7 @@
     ,"legend": "Legend"
     ,"waitingCheckIn": "Booked · awaiting check-in"
     ,"inHouse": "Currently staying"
+    ,"checkedIn": "Checked in · currently staying"
     ,"checkOut": "Check-out day"
     ,"noBookingsThisWeek": "No rooms are booked this week."
     ,"previousWeek": "Previous week"

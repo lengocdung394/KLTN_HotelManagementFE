@@ -191,8 +191,8 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [expandedUsageBookingIds, setExpandedUsageBookingIds] = useState<Set<string>>(() => new Set());
   const [activeUsageTab, setActiveUsageTab] = useState<"pending" | "used-today">("pending");
-  const [usageDateFrom, setUsageDateFrom] = useState("");
-  const [usageDateTo, setUsageDateTo] = useState("");
+  const [usageDateFrom, setUsageDateFrom] = useState(() => toLocalDateInputValue(new Date()));
+  const [usageDateTo, setUsageDateTo] = useState(() => toLocalDateInputValue(new Date()));
   const [usedDateFrom, setUsedDateFrom] = useState(() => toLocalDateInputValue(new Date()));
   const [usedDateTo, setUsedDateTo] = useState(() => toLocalDateInputValue(new Date()));
 
@@ -602,7 +602,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               >
                 <ConciergeBell size={15} />
                 {t("serviceWorkspace.pendingBookings")}
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{pendingUsageGroups.length}</span>
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{filteredPendingUsageGroups.length}</span>
               </button>
               <button
                 type="button"

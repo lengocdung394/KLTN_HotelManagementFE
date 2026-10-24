@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, LoaderCircle, X } from "lucide-react";
 import type { RoomImportRowResult } from "../lib/roomBulkImport";
 
@@ -21,6 +22,7 @@ export default function RoomImportProgressCard({
   liveProgress,
   onDismiss,
 }: RoomImportProgressCardProps) {
+  const { t } = useTranslation();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const passedCount = rows.filter((row) => row.passed).length;
   const failedRows = rows.filter((row) => !row.passed);
@@ -53,23 +55,23 @@ export default function RoomImportProgressCard({
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
                     {liveProgress
-                      ? isProcessing ? "Đang nhập phòng" : failedRows.length > 0 ? "Nhập phòng hoàn tất · có dòng lỗi" : "Tiến trình nhập phòng hoàn tất"
-                      : isProcessing ? "Đang kiểm tra dữ liệu phòng" : finishedWithErrors ? "Đã kiểm tra file phòng" : "Nhập phòng hoàn tất"}
+                      ? isProcessing ? t("room.importProgress.importing") : failedRows.length > 0 ? t("room.importProgress.completedWithErrors") : t("room.importProgress.completed")
+                      : isProcessing ? t("room.importProgress.checking") : finishedWithErrors ? t("room.importProgress.fileChecked") : t("room.importProgress.completed")}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-600">
                     {liveProgress
-                      ? `${liveProgress.message}${rows.length ? ` · ${passedCount} dòng đạt · ${failedRows.length} dòng lỗi · ${rows.length} dòng tổng` : ""}`
+                      ? `${liveProgress.message}${rows.length ? ` · ${t("room.importProgress.passedCount", { count: passedCount })} · ${t("room.importProgress.failedCount", { count: failedRows.length })} · ${t("room.importProgress.totalCount", { count: rows.length })}` : ""}`
                       : processing
-                        ? "Đang đọc file ZIP và kiểm tra từng dòng..."
+                        ? t("room.importProgress.checkingArchive")
                       : archiveError
                         ? archiveError
-                        : `${passedCount} dòng đạt · ${failedRows.length} dòng chưa đạt · ${rows.length} dòng tổng cộng`}
+                        : `${t("room.importProgress.passedCount", { count: passedCount })} · ${t("room.importProgress.failedCount", { count: failedRows.length })} · ${t("room.importProgress.totalCount", { count: rows.length })}`}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={onDismiss}
-                  aria-label="Đóng thông báo nhập phòng"
+                  aria-label={t("common.close")}
                   className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 >
                   <X size={16} />
@@ -95,7 +97,9 @@ export default function RoomImportProgressCard({
                   className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
                 >
                   {detailsOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                  {detailsOpen ? "Ẩn chi tiết" : `Xem chi tiết từng dòng${failedRows.length ? ` (${failedRows.length} lỗi)` : ""}`}
+                  {detailsOpen ? t("room.importProgress.hideDetails") : failedRows.length
+                    ? t("room.importProgress.showFailedDetails", { count: failedRows.length })
+                    : t("room.importProgress.showDetails")}
                 </button>
               )}
 
@@ -107,8 +111,8 @@ export default function RoomImportProgressCard({
                         ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" size={15} />
                         : <AlertCircle className="mt-0.5 shrink-0 text-rose-600" size={15} />}
                       <span className={row.passed ? "text-slate-600" : "text-rose-700"}>
-                        <strong>Dòng {row.rowNumber}{row.roomNumber ? ` · Phòng ${row.roomNumber}` : ""}:</strong>{" "}
-                        {row.passed ? "Đạt theo trạng thái tiến trình." : row.message}
+                        <strong>{t("room.importProgress.rowLabel", { row: row.rowNumber })}{row.roomNumber ? ` · ${t("room.importProgress.roomLabel", { room: row.roomNumber })}` : ""}:</strong>{" "}
+                        {row.passed ? t("room.importProgress.rowPassed") : row.message}
                       </span>
                     </li>
                   ))}

@@ -239,9 +239,12 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                     {t("common.tasksUpdated")}
                   </p>
                 </div>
-                <span className="text-xs font-semibold text-slate-400">
+                <Link
+                  to="/staff?tab=tasks"
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                >
                   {t("dashboard.viewAll")}
-                </span>
+                </Link>
               </div>
               <div className="space-y-3">
                 {tasksLoading ? (

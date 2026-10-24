@@ -17,6 +17,7 @@ export type PromotionUsageReport = {
   promotionName: string;
   promotionCode: string;
   usageCount: number;
+  userCount: number;
   savings: number;
 };
 
