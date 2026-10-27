@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 export type RoomListItem = {
   id: string;
   buildingName?: string;
+  buildingId?: string;
   name: string;
   images: string[];
   floor: string;

@@ -18,6 +18,7 @@ import {
   Pencil,
   FileSpreadsheet,
   ShieldCheck,
+  Sparkles,
   Tag,
   Upload,
   Users,
@@ -84,6 +85,7 @@ import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } f
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
 import SuperAdminResourceStatsPanel from "../components/SuperAdminResourceStatsPanel";
+import SuperAdminAmenitiesPanel from "../components/SuperAdminAmenitiesPanel";
 import PromotionWorkspace from "./PromotionWorkspace";
 import ServiceWorkspace from "./ServiceWorkspace";
 
@@ -93,6 +95,7 @@ type AdminSection =
   | "branches"
   | "provinces"
   | "amenities"
+  | "bed-types"
   | "permissions"
   | "resource-stats"
   | "promotions"
@@ -758,7 +761,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "notifications", label: "Thông báo", icon: Bell },
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
-    { id: "amenities", label: "Quản lý tiện nghi", icon: BedDouble },
+    { id: "amenities", label: "Quản lý tiện ích", icon: Sparkles },
+    { id: "bed-types", label: "Quản lý loại giường", icon: BedDouble },
     { id: "permissions", label: "Quản lý Role và quyền", icon: ShieldCheck },
     { id: "promotions", label: "Quản lý khuyến mãi", icon: Tag },
     { id: "services", label: "Quản lý dịch vụ", icon: ConciergeBell },
@@ -1425,6 +1429,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           )}
 
           {section !== "amenities" &&
+            section !== "bed-types" &&
             section !== "provinces" &&
             section !== "permissions" &&
             section !== "resource-stats" &&
@@ -1595,7 +1600,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             </section>
           )}
 
-          {section === "amenities" && (
+          {section === "amenities" && <SuperAdminAmenitiesPanel />}
+
+          {section === "bed-types" && (
             <section className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">

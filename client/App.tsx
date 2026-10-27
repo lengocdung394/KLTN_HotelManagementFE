@@ -89,6 +89,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/reports" element={<ModulePage path="/reports" onLogout={onLogout} />} />
         <Route path="/staff" element={<ModulePage path="/staff" onLogout={onLogout} />} />
         <Route path="/settings" element={<ModulePage path="/settings" onLogout={onLogout} />} />
+        <Route path="/permissions" element={<Navigate to="/overview" replace />} />
         <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>
     );

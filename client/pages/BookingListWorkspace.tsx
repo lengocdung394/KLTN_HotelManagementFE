@@ -771,13 +771,13 @@ export default function BookingListWorkspace() {
       void refetch();
       const refundMessage = cancellationStatus === "REFUND_BANK_DETAILS_REQUIRED"
         ? localizedText(
-          `Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn tiền. Số tiền hoàn dự kiến: ${money(refundAmount)}.`,
-          `Booking cancelled; add bank details before refund approval. Expected refund: ${money(refundAmount)}.`,
+          `Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn ${money(refundAmount)}. Sau khi duyệt và chuyển khoản, tiền thường về trong 1–3 ngày làm việc.`,
+          `Booking cancelled; add bank details before approving the ${money(refundAmount)} refund. After approval and transfer, funds usually arrive within 1–3 business days.`,
         )
         : cancellationStatus === "REFUND_REVIEW_PENDING"
         ? localizedText(
-          `Booking đã hủy; yêu cầu hoàn ${money(refundAmount)} đang chờ quản lý duyệt.`,
-          `Booking cancelled; the ${money(refundAmount)} refund is pending manager approval.`,
+          `Booking đã hủy; khoản hoàn ${money(refundAmount)} đang chờ quản lý duyệt. Sau khi duyệt và chuyển khoản, tiền thường về trong 1–3 ngày làm việc.`,
+          `Booking cancelled; the ${money(refundAmount)} refund is pending manager approval. After approval and transfer, funds usually arrive within 1–3 business days.`,
         )
         : cancellationStatus === "REFUNDED" && actualRefundMethod === "CASH"
         ? localizedText(
@@ -1724,7 +1724,7 @@ export default function BookingListWorkspace() {
                   />
                   <span>
                     <span className="block text-sm font-semibold text-slate-800">{localizedText("Chuyển khoản vào tài khoản", "Refund to bank account")}</span>
-                    <span className="mt-0.5 block text-xs text-slate-500">{localizedText("Quản lý duyệt rồi nhân viên chuyển khoản.", "Manager approves, then staff complete the transfer.")}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">{localizedText("Quản lý duyệt rồi nhân viên chuyển khoản; tiền thường về trong 1–3 ngày làm việc kể từ khi chuyển.", "After manager approval, staff send the transfer; funds usually arrive within 1–3 business days after it is sent.")}</span>
                   </span>
                 </label>
               </div>

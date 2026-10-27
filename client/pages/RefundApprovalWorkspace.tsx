@@ -326,7 +326,7 @@ export default function RefundApprovalWorkspace() {
           refundAmountVerified,
           refundAccountConfirmed,
         }).unwrap();
-        setFeedback(localizedText(`Đã duyệt yêu cầu hoàn ${money(activeCancellation.refundAmount)} cho booking ${activeCancellation.bookingId}. Sau khi kiểm tra, nhân viên có thể gửi payout qua PayOS.`, `Refund of ${money(activeCancellation.refundAmount)} approved for booking ${activeCancellation.bookingId}. Staff can send the PayOS payout after verification.`));
+        setFeedback(localizedText(`Đã duyệt yêu cầu hoàn ${money(activeCancellation.refundAmount)} cho booking ${activeCancellation.bookingId}. Quản lý phụ trách gửi và theo dõi payout qua PayOS.`, `Refund of ${money(activeCancellation.refundAmount)} approved for booking ${activeCancellation.bookingId}. The manager handles and tracks the PayOS payout.`));
       } else if (activeAction === "reject") {
         await rejectRefund({
           cancellationId: activeCancellation.id,
@@ -691,7 +691,7 @@ export default function RefundApprovalWorkspace() {
                         </p>
                       )}
                       <div className="mt-3 flex flex-col items-start gap-2">
-                        {cancellation.status === "REFUND_REVIEW_PENDING" && (
+                        {canApproveRefund && cancellation.status === "REFUND_REVIEW_PENDING" && (
                           <>
                             <button
                               type="button"
@@ -709,7 +709,7 @@ export default function RefundApprovalWorkspace() {
                             </button>
                           </>
                         )}
-                        {(cancellation.status === "REFUND_APPROVED"
+                        {canApproveRefund && (cancellation.status === "REFUND_APPROVED"
                           || cancellation.status === "PAYOUT_PROCESSING") && (
                           <button
                             type="button"
@@ -733,6 +733,15 @@ export default function RefundApprovalWorkspace() {
                               ? localizedText("Cập nhật tài khoản để thử lại", "Update account to retry")
                               : localizedText("Nhập thông tin ngân hàng", "Enter bank details")}
                           </button>
+                        )}
+                        {!canApproveRefund && Number(cancellation.refundAmount) > 0 && (
+                          <p className="text-xs text-slate-500">
+                            {cancellation.status === "REFUND_REVIEW_PENDING"
+                              ? localizedText("Chờ quản lý quyết định duyệt hoặc từ chối hoàn tiền.", "Awaiting the manager's refund approval or rejection.")
+                              : cancellation.status === "REFUND_APPROVED" || cancellation.status === "PAYOUT_PROCESSING"
+                                ? localizedText("Quản lý phụ trách gửi và theo dõi lệnh chuyển khoản.", "The manager handles and tracks the bank transfer.")
+                                : null}
+                          </p>
                         )}
                       </div>
                     </td>

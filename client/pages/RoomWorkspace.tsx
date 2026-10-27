@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
+import { localizedText } from "../i18n";
 import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import EventPricingCalendar from "../components/EventPricingCalendar";
-import RoomAmenitiesTab from "../components/RoomAmenitiesTab";
 import RoomListTab from "../components/RoomListTab";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
 import BulkImportDialog from "../components/BulkImportDialog";
@@ -14,7 +14,7 @@ import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation, useUpdateRoomStatusMutation } from "../services/roomApi";
-import { getAmenityImportStatus, isAmenityImportFinished, useGetAllAmenitiesQuery, useImportAmenitiesFromFileMutation, type AmenityResponse } from "../services/amenityApi.ts";
+import { useGetAllAmenitiesQuery } from "../services/amenityApi.ts";
 import { useCreateBuildingMutation, useGetBuildingsByCurrentHotelQuery, useUpdateBuildingMutation } from "../services/buildingApi";
 import { useCreateFloorMutation, useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery, useUpdateFloorMutation } from "../services/floorApi";
 import { useGetBranchRoomPoliciesQuery, useUpdateBranchRoomPolicyMutation } from "../services/branchRoomPolicyApi";
@@ -23,12 +23,11 @@ import { baseApi } from "../services/baseApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
 import { getRoomAmenityTranslationKey } from "../lib/roomLocalization";
-import { downloadAmenityTemplate } from "../lib/amenityBulkImport";
 import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
 import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
 
 type ImportedRoomRow = Record<string, string>;
-type ImportTarget = "rooms" | "buildings" | "floors" | "amenities";
+type ImportTarget = "rooms" | "buildings" | "floors";
 type RoomSocketImportProgress = {
   taskId: string;
   percent: number | null;
@@ -339,23 +338,14 @@ export default function RoomWorkspace() {
   const [updateBuildingApi, { isLoading: isUpdatingBuilding }] = useUpdateBuildingMutation();
   const [createFloorApi, { isLoading: isCreatingFloor }] = useCreateFloorMutation();
   const [updateFloorApi, { isLoading: isUpdatingFloor }] = useUpdateFloorMutation();
-  const [importAmenitiesFromFile] = useImportAmenitiesFromFileMutation();
-  const [amenityOverrides, setAmenityOverrides] = useState<Record<number, AmenityResponse>>({});
-  const [localAmenities, setLocalAmenities] = useState<AmenityResponse[]>([]);
-  const amenityCatalog = useMemo(() => {
-    const catalog = [...(apiAmenities ?? [])];
-    localAmenities.forEach((amenity) => {
-      if (!catalog.some((item) => normalizeText(item.name) === normalizeText(amenity.name))) catalog.push(amenity);
-    });
-    return catalog.map((amenity) => amenityOverrides[amenity.id] ?? amenity);
-  }, [apiAmenities, amenityOverrides, localAmenities]);
+  const amenityCatalog = apiAmenities ?? [];
   const availableRoomTypes = useMemo(() => (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value))), [apiRoomTypes]);
   const availableRoomStatuses = useMemo(() => (apiRoomStatuses ?? []).map((value) => statusLabel(String(value))), [apiRoomStatuses]);
   const amenityOptions = useMemo(() => amenityCatalog.map((amenity) => amenity.name).filter(Boolean), [amenityCatalog]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const requestedTab = new URLSearchParams(location.search).get("tab");
-  const defaultRoomTab: "rooms" | "pricing" | "amenities" = canManageRooms && (requestedTab === "pricing" || requestedTab === "amenities") ? requestedTab : "rooms";
-  const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing" | "amenities">(defaultRoomTab);
+  const defaultRoomTab: "rooms" | "pricing" = canManageRooms && requestedTab === "pricing" ? "pricing" : "rooms";
+  const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing">(defaultRoomTab);
   const [pricingMode, setPricingMode] = useState<"branch" | "event">("branch");
   const [editingPricingType, setEditingPricingType] = useState<string | null>(null);
   const { data: branchRoomPolicies = [], isLoading: isBranchPoliciesLoading, isError: isBranchPoliciesError, refetch: refetchBranchPolicies } = useGetBranchRoomPoliciesQuery(hotelId ? Number(hotelId) : undefined);
@@ -459,9 +449,6 @@ export default function RoomWorkspace() {
   const [importingRooms, setImportingRooms] = useState(false);
   const [roomImportUploadProgress, setRoomImportUploadProgress] = useState("");
   const [isRoomImportDialogOpen, setIsRoomImportDialogOpen] = useState(false);
-  const [isAmenityImportDialogOpen, setIsAmenityImportDialogOpen] = useState(false);
-  const [amenityImportProgress, setAmenityImportProgress] = useState("");
-  const [amenityImportProgressPercent, setAmenityImportProgressPercent] = useState<number>();
   const [roomImportReport, setRoomImportReport] = useState<{
     processing: boolean;
     rows: RoomImportRowResult[];
@@ -540,7 +527,6 @@ export default function RoomWorkspace() {
   const [amenitySearch, setAmenitySearch] = useState("");
   const [newAmenityName, setNewAmenityName] = useState("");
   const [amenityPrice, setAmenityPrice] = useState("");
-  const [isCreatingAmenity, setIsCreatingAmenity] = useState(false);
   const [customAmenityPrices, setCustomAmenityPrices] = useState<Record<string, number>>({});
   const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
@@ -696,8 +682,21 @@ export default function RoomWorkspace() {
       const databaseId = databaseIdValue == null ? undefined : String(databaseIdValue);
       const floorId = getApiValue(item, ["floorId", "floorID"]);
       const floorNumber = getApiValue(item, ["floorNumber", "floorLevel"]);
-      const buildingId = hotelFloorOptions.find((floorOption) => floorOption.id === String(floorId ?? ""))?.buildingId; // Added buildingId
-      const buildingName = String(getApiValue(item, ["nameBuilding", "buildingName"]) ?? "").trim();
+      const roomBuildingValue = getApiValue(item, ["building", "buildingInfo", "buildingResponse", "tower", "towerInfo"]);
+      const roomBuildingRecord = roomBuildingValue && typeof roomBuildingValue === "object"
+        ? roomBuildingValue as Record<string, unknown>
+        : {};
+      const roomBuildingId = getApiValue(item, ["buildingId", "buildingID", "towerId", "towerID"])
+        ?? getApiValue(roomBuildingRecord, ["id", "buildingId", "buildingID", "towerId", "towerID"]);
+      const buildingName = String(
+        getApiValue(item, ["nameBuilding", "buildingName", "towerName"])
+        ?? getApiValue(roomBuildingRecord, ["name", "buildingName", "towerName"])
+        ?? "",
+      ).trim();
+      const buildingId = roomBuildingId != null
+        ? String(roomBuildingId)
+        : hotelFloorOptions.find((floorOption) => floorOption.id === String(floorId ?? ""))?.buildingId
+          ?? buildings.find((building) => buildingName && normalizeText(building.name) === normalizeText(buildingName))?.id;
       const avatarValue = getApiValue(item, ["avatarUrl", "imageUrls", "images"]);
       const avatarUrls = Array.isArray(avatarValue)
         ? avatarValue.map((image, imageIndex) => {
@@ -883,7 +882,7 @@ export default function RoomWorkspace() {
   }, [isAnyModalOpen]);
   const filtered = useMemo(() => rooms
     .filter((room) => `${room.id} ${room.name}`.toLowerCase().includes(query.toLowerCase()))
-    .filter((room) => building === "Tất cả các tòa" || room.id.startsWith(`${building}-`) || room.buildingName?.includes(building))
+    .filter((room) => building === "Tất cả các tòa" || room.buildingId === building)
     .filter((room) => floor === "Tất cả các tầng" || room.floor === floor)
     .filter((room) => roomType === "Tất cả loại phòng" || room.name === roomType)
     .filter((room) => status === "Tất cả trạng thái" || room.status === status), [rooms, query, building, floor, roomType, status]);
@@ -994,17 +993,6 @@ export default function RoomWorkspace() {
 
     return (apiAmenities ?? []).filter((amenity) => !normalizedQuery || normalizeText(amenity.name).includes(normalizedQuery));
   }, [apiAmenities, amenitySearch]);
-  const saveAmenityEdit = (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => {
-    setAmenityOverrides((current) => ({ ...current, [amenity.id]: { ...amenity, ...changes } }));
-  };
-  const addLocalAmenity = (amenity: Pick<AmenityResponse, "name" | "price">) => {
-    if (amenityCatalog.some((item) => normalizeText(item.name) === normalizeText(amenity.name))) {
-      toast({ variant: "destructive", title: "Tiện nghi đã tồn tại", description: `“${amenity.name}” đã có trong danh sách.` });
-      return;
-    }
-    setLocalAmenities((current) => [...current, { ...amenity, id: -(Date.now() + current.length) }]);
-    toast({ variant: "success", title: "Thêm tiện nghi thành công", description: `Đã thêm “${amenity.name}” vào giao diện.` });
-  };
   const filteredBuildings = useMemo(() => {
     const normalizedQuery = normalizeText(buildingQuery);
     const matchingBuildings = buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
@@ -1604,10 +1592,6 @@ export default function RoomWorkspace() {
     }
 
     try {
-      if (target === "amenities") {
-        setAmenityImportProgress(t("room.importDialog.readingAmenityFile"));
-        setAmenityImportProgressPercent(10);
-      }
       const rows = await readImportRows(file);
       if (rows.length === 0) throw new Error(t("room.importDialog.emptyFile"));
 
@@ -1652,69 +1636,7 @@ export default function RoomWorkspace() {
         return true;
       }
 
-      const importedAmenities = rows.map((row, index) => {
-        const name = getImportedValue(row, ["tên tiện ích", "ten tien ich", "tên tiện nghi", "ten tien nghi", "tiện ích", "tien ich", "amenity", "name"]);
-        const priceText = getImportedValue(row, ["giá tiền", "gia tien", "giá", "gia", "price"]);
-        const price = Number(priceText.replace(/\./g, "").replace(/,/g, "."));
-        if (!name || !priceText || !Number.isFinite(price) || price < 0) {
-          throw new Error(t("room.importDialog.amenityRowInvalid", { row: index + 2 }));
-        }
-        return { row: index + 2, name, price };
-      });
-      if (importedAmenities.length === 0) throw new Error(t("room.importDialog.noValidAmenities"));
-      setAmenityImportProgress(t("room.importDialog.amenityRowsChecked", { count: importedAmenities.length }));
-      setAmenityImportProgressPercent(5);
-      const { taskId } = await importAmenitiesFromFile({ amenities: importedAmenities }).unwrap();
-      if (!taskId) throw new Error(t("room.importDialog.missingTaskId"));
-
-      let importStatus = await getAmenityImportStatus(taskId);
-      while (!isAmenityImportFinished(importStatus)) {
-        if (typeof importStatus.percent === "number") {
-          setAmenityImportProgressPercent(importStatus.percent);
-        }
-        setAmenityImportProgress(importStatus.message || t("room.importDialog.processingAmenities"));
-        await new Promise((resolve) => window.setTimeout(resolve, 500));
-        importStatus = await getAmenityImportStatus(taskId);
-      }
-
-      if (importStatus.status.trim().toUpperCase() !== "SUCCESS") {
-        throw new Error(importStatus.message || "Máy chủ không thể lưu tiện nghi.");
-      }
-      const savedAmenities = Array.isArray(importStatus.details) ? importStatus.details : [];
-      dispatch(baseApi.util.invalidateTags(["Amenity", "Room"]));
-      const skippedCount = importedAmenities.length - savedAmenities.length;
-      setAmenityImportProgress(
-        savedAmenities.length > 0
-          ? t("room.importDialog.amenitiesSaved", {
-            saved: savedAmenities.length,
-            skipped: skippedCount > 0 ? t("room.importDialog.skippedDuplicateRows", { count: skippedCount }) : "",
-          })
-          : t("room.importDialog.amenitiesNoneSaved", { count: skippedCount }),
-      );
-      setAmenityImportProgressPercent(100);
-      toast({
-        variant: savedAmenities.length > 0 ? "success" : "default",
-        title: savedAmenities.length > 0 ? t("room.importDialog.amenityImportSuccess") : t("room.importDialog.noNewAmenities"),
-        description: savedAmenities.length > 0
-          ? t("room.importDialog.amenitiesSavedDescription", {
-            count: savedAmenities.length,
-            skipped: skippedCount > 0 ? t("room.importDialog.skippedDuplicateNames", { count: skippedCount }) : "",
-          })
-          : t("room.importDialog.amenitiesSkippedDescription", { count: skippedCount }),
-      });
-      return true;
     } catch (error) {
-      if (target === "amenities") {
-        setAmenityImportProgress("");
-        setAmenityImportProgressPercent(undefined);
-        if (typeof error === "object" && error !== null && "data" in error) {
-          const response = error.data;
-          if (typeof response === "object" && response !== null && "message" in response && typeof response.message === "string") {
-            throw new Error(response.message);
-          }
-        }
-        throw error;
-      }
       toast({
         variant: "destructive",
         title: t("room.importDialog.importDataError"),
@@ -1740,18 +1662,17 @@ export default function RoomWorkspace() {
       <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="font-bold text-slate-900">
-            {activeTab === "rooms" ? t("room.roomList") : activeTab === "buildings" ? t("room.buildingList") : activeTab === "floors" ? t("room.floorManagement") : t("room.amenityList")}
+            {activeTab === "rooms" ? t("room.roomList") : activeTab === "buildings" ? t("room.buildingList") : t("room.floorManagement")}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            {activeTab === "rooms" ? `${filtered.length} ${t("room.roomsAtBranch")} · ${t("room.realTimeUpdate")}` : activeTab === "buildings" ? t("room.buildingCount", { count: filteredBuildings.length }) : activeTab === "floors" ? `${t("room.floorCount", { count: floors.length })} · ${buildings.find((item) => item.id === selectedBuildingId)?.name ?? ""}` : t("room.amenityCount", { count: amenityCatalog.length })}
+            {activeTab === "rooms" ? `${filtered.length} ${t("room.roomsAtBranch")} · ${t("room.realTimeUpdate")}` : activeTab === "buildings" ? t("room.buildingCount", { count: filteredBuildings.length }) : `${t("room.floorCount", { count: floors.length })} · ${buildings.find((item) => item.id === selectedBuildingId)?.name ?? ""}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canManageRooms && (activeTab === "rooms" || activeTab === "amenities") && <button
+          {canManageRooms && (activeTab === "rooms" || activeTab === "buildings" || activeTab === "floors") && <button
             type="button"
             onClick={() => {
               if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
-              else if (activeTab === "amenities") setIsAmenityImportDialogOpen(true);
               else openImportPicker(activeTab);
             }}
             disabled={importingRooms}
@@ -1759,7 +1680,7 @@ export default function RoomWorkspace() {
           >
             <Upload size={16} />{importingRooms && activeTab === "rooms" ? t("room.importDialog.readingFile") : t("room.importDialog.roomImportButton")}
           </button>}
-          {canManageRooms && activeTab !== "amenities" && (
+          {canManageRooms && (
             <button
               type="button"
               onClick={() => activeTab === "rooms" ? openCreateRoomModal() : activeTab === "buildings" ? openCreateBuildingModal() : openCreateFloorModal()}
@@ -1768,22 +1689,12 @@ export default function RoomWorkspace() {
               <span className="text-lg leading-none">+</span>{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
             </button>
           )}
-          {canManageRooms && activeTab === "amenities" && (
-            <button
-              type="button"
-              onClick={() => setIsCreatingAmenity(true)}
-              className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700"
-            >
-              <span className="text-lg leading-none">+</span>{t("room.addAmenity")}
-            </button>
-          )}
         </div>
       </div>
       <div className="flex flex-wrap border-b border-slate-100 bg-slate-50/60 p-2">
         <button type="button" onClick={() => setActiveTab("rooms")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button>
         {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("buildings")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button>}
         {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("floors")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button>}
-        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("amenities")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "amenities" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>Danh sách tiện nghi</button>}
       </div>
     </>}
     {canViewRoomStructure && activeTab === "buildings" && <>
@@ -1798,7 +1709,6 @@ export default function RoomWorkspace() {
       {(isFloorsLoading || isFloorsFetching) && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tầng...</p>}
       <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} canManage={canManageRooms} />
     </>}
-    {canViewRoomStructure && activeTab === "amenities" && <RoomAmenitiesTab amenities={amenityCatalog} isLoading={isAmenitiesLoading} isError={isAmenitiesError} canManage={canManageRooms} isCreating={isCreatingAmenity} onCreateOpenChange={setIsCreatingAmenity} onSave={saveAmenityEdit} onAdd={addLocalAmenity} />}
     <BulkImportDialog
       open={isRoomImportDialogOpen}
       onOpenChange={setIsRoomImportDialogOpen}
@@ -1856,36 +1766,6 @@ export default function RoomWorkspace() {
       uploadLabel={t("room.importDialog.importRooms")}
       progress={roomImportUploadProgress || undefined}
       onUpload={importRoomsFromFile}
-    />
-    <BulkImportDialog
-      open={isAmenityImportDialogOpen}
-      onOpenChange={(open) => {
-        setIsAmenityImportDialogOpen(open);
-        if (open) {
-          setAmenityImportProgress("");
-          setAmenityImportProgressPercent(undefined);
-        }
-      }}
-      eyebrow={t("room.importDialog.eyebrow")}
-      title={t("room.importDialog.amenitiesTitle")}
-      description={t("room.importDialog.amenitiesDescription")}
-      templateLabel={t("room.importDialog.downloadAmenityTemplate")}
-      onDownloadTemplate={downloadAmenityTemplate}
-      acceptedFileTypes=".xlsx"
-      fileLabel={t("room.importDialog.amenityFileLabel")}
-      validateFile={(file) => file.name.toLocaleLowerCase() === "mau-nhap-tien-ich.xlsx"
-        ? null
-        : t("room.importDialog.amenityFileValidation")}
-      instructions={
-        <>
-          <p>{t("room.importDialog.amenityInstructionsColumns")}</p>
-          <p className="mt-2">{t("room.importDialog.amenityInstructionsDuplicates")}</p>
-        </>
-      }
-      uploadLabel={t("room.importDialog.importAmenities")}
-      progress={amenityImportProgress || undefined}
-      progressPercent={amenityImportProgress ? amenityImportProgressPercent : undefined}
-      onUpload={(file) => importLocalDataFromFile(file, "amenities")}
     />
     {(roomImportReport || roomSocketImportProgress) && (
       <RoomImportProgressCard
