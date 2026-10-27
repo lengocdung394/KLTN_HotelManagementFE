@@ -164,7 +164,7 @@ const extractMatrixBusyRanges = (matrix: unknown[]): MatrixBusyItem[] => {
     const roomKey = matrixRoomKey(obj) ?? inheritedRoomKey;
     const bookingStatus = String(obj.bookingStatus ?? obj.status ?? "").toUpperCase();
 
-    if (bookingStatus === "CANCELLED" || bookingStatus === "CANCELED") return;
+    if (bookingStatus.startsWith("CANCELLED") || bookingStatus === "CANCELED") return;
 
     const startVal = matrixValue(obj, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]);
     const endVal = matrixValue(obj, ["endDate", "end", "checkOutDate", "checkOut", "checkOutTime", "checkoutTime", "bookingEndDate"]);

@@ -112,9 +112,17 @@ export type BookingCancellationStatus =
   | "REFUND_BANK_DETAILS_REQUIRED"
   | "REFUND_REVIEW_PENDING"
   | "REFUND_APPROVED"
+  | "PAYOUT_PROCESSING"
+  | "PAYOUT_FAILED"
   | "REFUND_REJECTED"
   | "REFUNDED"
   | "NO_REFUND_REQUIRED";
+
+export type PayOSPayoutState =
+  | "PROCESSING"
+  | "TRANSFERRED"
+  | "FAILED"
+  | "UNKNOWN";
 
 export type BookingChannel = "ONLINE" | "OFFLINE";
 export type CheckoutRefundStatus = "PENDING" | "APPROVED" | "REFUNDED";
@@ -148,6 +156,10 @@ export type BookingCancellation = {
   customerPhone?: string | null;
   status: BookingCancellationStatus;
   refundMethod?: "CASH" | "BANK" | null;
+  hasRefundBankDetails?: boolean;
+  payoutReference?: string | null;
+  payoutState?: PayOSPayoutState | null;
+  payoutError?: string | null;
   reason?: string | null;
   paidAmount?: number;
   refundAmount: number;
@@ -156,10 +168,6 @@ export type BookingCancellation = {
   roomPenaltyAmount?: number;
   hoursBeforeCheckIn?: number;
   refundPolicy?: string | null;
-  bankName?: string | null;
-  bankCode?: string | null;
-  bankAccountName?: string | null;
-  bankAccountNumber?: string | null;
   refundEmail?: string | null;
   reviewNote?: string | null;
   refundReference?: string | null;
@@ -168,10 +176,21 @@ export type BookingCancellation = {
   refundedAt?: string | null;
 };
 
+export type RefundBankDetails = {
+  bankName: string;
+  bankCode: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+};
+
 type BookingCancellationApiResponse = {
   code?: number;
   message?: string;
   result?: BookingCancellation;
+};
+
+type RefundBankDetailsApiResponse = {
+  result?: RefundBankDetails;
 };
 
 const unwrapCancellationList = (response: unknown): BookingCancellation[] => {
@@ -214,6 +233,16 @@ export const managementBookingApi = baseApi.injectEndpoints({
       }),
       transformResponse: unwrapCancellationList,
       providesTags: ["RefundCancellation"],
+    }),
+    getCancellationBankDetails: builder.query<RefundBankDetails, string>({
+      query: (cancellationId) => ({
+        url: `/management-bookings/cancellations/${cancellationId}/bank-details`,
+        method: "GET",
+      }),
+      transformResponse: (response: RefundBankDetailsApiResponse) => {
+        if (!response.result) throw new Error("Refund bank details were not returned.");
+        return response.result;
+      },
     }),
     cancelBookingByStaff: builder.mutation<
       BookingCancellationApiResponse,
@@ -263,6 +292,16 @@ export const managementBookingApi = baseApi.injectEndpoints({
         data: note ? { note } : {},
       }),
       invalidatesTags: ["RefundCancellation"],
+    }),
+    requestBookingPayout: builder.mutation<
+      BookingCancellationApiResponse,
+      { cancellationId: string }
+    >({
+      query: ({ cancellationId }) => ({
+        url: `/management-bookings/cancellations/${cancellationId}/payout`,
+        method: "POST",
+      }),
+      invalidatesTags: ["RefundCancellation", "Booking"],
     }),
     submitRefundBankDetailsByStaff: builder.mutation<
       BookingCancellationApiResponse,
@@ -324,9 +363,11 @@ export const {
   useGetBookingCancellationPreviewQuery,
   useCancelBookingByStaffMutation,
   useGetBookingCancellationsQuery,
+  useLazyGetCancellationBankDetailsQuery,
   useApproveBookingRefundMutation,
   useRejectBookingRefundMutation,
   useConfirmBookingRefundMutation,
+  useRequestBookingPayoutMutation,
   useSubmitRefundBankDetailsByStaffMutation,
   useGetCheckoutRefundsQuery,
   useUpdateCheckoutRefundBankDetailsMutation,

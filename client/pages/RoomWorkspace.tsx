@@ -1035,9 +1035,6 @@ export default function RoomWorkspace() {
       toast({ variant: "destructive", title: "Không thể cập nhật trạng thái phòng", description: message });
     }
   };
-  const completeCleaning = async (room: Room) => {
-    await updateRoom(room.id, { status: "Sẵn sàng" });
-  };
   const closeCreateRoomModal = () => {
     setShowCreateRoom(false);
     setEditingRoomId(null);
@@ -1932,7 +1929,6 @@ export default function RoomWorkspace() {
       onPageChange={setPage}
       onPageSizeChange={setPageSize}
       onUpdateRoom={updateRoom}
-      onCompleteCleaning={completeCleaning}
       onEditRoom={openEditRoomModal}
       onShowGallery={(room) => { setGalleryRoom(room); setGalleryIndex(0); }}
       onShowDetails={setDetailRoom}

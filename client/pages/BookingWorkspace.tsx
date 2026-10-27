@@ -188,7 +188,7 @@ const buildMatrixBusyMap = (matrix: RoomMatrixResponse[], excludedBookingId?: st
     if (excludedBookingId && bookingId !== undefined && String(bookingId) === excludedBookingId) return;
     const roomKey = matrixRoomKey(item) ?? inheritedRoomKey;
     const bookingStatus = String(item.bookingStatus ?? item.status ?? "").toUpperCase();
-    if (bookingStatus === "CANCELLED" || bookingStatus === "CANCELED") return;
+    if (bookingStatus.startsWith("CANCELLED") || bookingStatus === "CANCELED") return;
     addMatrixRange(busy, roomKey, matrixValue(item, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]), matrixValue(item, ["endDate", "end", "checkOutDate", "checkOut", "checkOutTime", "checkoutTime", "bookingEndDate"]));
     const dates = item.dates ?? item.bookedDates ?? item.occupiedDates;
     if (Array.isArray(dates) && roomKey) {
@@ -234,7 +234,7 @@ const buildMatrixGuestNameMap = (matrix: RoomMatrixResponse[], excludedBookingId
 
     const roomKey = matrixRoomKey(item) ?? inheritedRoomKey;
     const status = String(item.bookingStatus ?? item.status ?? "").toUpperCase();
-    if (status === "CANCELLED" || status === "CANCELED") return;
+    if (status.startsWith("CANCELLED") || status === "CANCELED") return;
 
     const guestName = matrixGuestName(item) ?? inheritedGuestName;
     const start = matrixDate(matrixValue(item, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]));

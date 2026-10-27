@@ -1,7 +1,6 @@
-import { CalendarClock, Check, Clock3 } from "lucide-react";
-import { useCompleteHousekeepingTaskMutation, useGetMyHousekeepingTasksQuery, useGetTodayShiftAssignmentsQuery } from "../services/shiftApi";
+import { CalendarClock, Clock3 } from "lucide-react";
+import { useGetMyHousekeepingTasksQuery, useGetTodayShiftAssignmentsQuery } from "../services/shiftApi";
 import { useAppSelector } from "../store/hooks";
-import { useState } from "react";
 import { localizedText } from "../i18n";
 
 const localDate = () => {
@@ -22,8 +21,6 @@ export default function EmployeeShiftSchedule() {
     pollingInterval: 30000,
   });
   const employeeId = useAppSelector((state) => state.auth.employeeId);
-  const [completeTask, { isLoading: isCompletingTask }] = useCompleteHousekeepingTaskMutation();
-  const [taskActionError, setTaskActionError] = useState("");
   const today = localDate();
   const myShifts = shifts.filter((shift) => shift.employeeId === employeeId && shift.workDate === today);
 
@@ -85,24 +82,10 @@ export default function EmployeeShiftSchedule() {
                     {task.status === "REASSIGNED" ? localizedText("Đã chuyển giao sau 1 giờ chưa xác nhận", "Reassigned after no confirmation for 1 hour") : localizedText("Được giao sau khi khách checkout", "Assigned after guest checkout")}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  disabled={isCompletingTask}
-                  onClick={() => {
-                    setTaskActionError("");
-                    void completeTask(task.id).unwrap().catch((error: { data?: { message?: string } }) => {
-                      setTaskActionError(error.data?.message ?? localizedText("Không xác nhận được việc dọn phòng. Vui lòng thử lại.", "Could not confirm room cleaning. Please try again."));
-                    });
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                >
-                  <Check size={14} />{localizedText("Xác nhận đã dọn xong", "Confirm cleaning complete")}
-                </button>
               </article>
             ))}
           </div>
         )}
-        {taskActionError && <p role="alert" className="mt-3 text-sm text-rose-700">{taskActionError}</p>}
       </section>
     </section>
   );

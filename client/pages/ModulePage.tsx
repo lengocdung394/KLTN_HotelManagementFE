@@ -72,7 +72,8 @@ const normalizedStatus = (value: unknown) => {
 };
 const isActiveBooking = (booking: BookingListItem) => {
   const status = normalizedStatus(booking.bookingStatus ?? booking.status);
-  return !["CANCELLED", "CANCELED", "REFUNDED", "REJECTED"].includes(status);
+  return !status.startsWith("CANCELLED")
+    && !["CANCELED", "REFUNDED", "REJECTED"].includes(status);
 };
 const isCancelledDetail = (detail: Record<string, unknown>) =>
   ["CANCELLED", "CANCELED"].includes(normalizedStatus(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status));
@@ -90,7 +91,7 @@ const summarizeBookings = (bookings: BookingListItem[]) => {
     const allActiveDetailsCheckedOut = activeDetails.length > 0 && activeDetails.every((detail) =>
       normalizedStatus(detail.bookingStatusType ?? detail.bookingDetailStatusType ?? detail.bookingDetailStatus ?? detail.status) === "CHECKED_OUT",
     );
-    const isCancelled = ["CANCELLED", "CANCELED"].includes(status);
+    const isCancelled = status.startsWith("CANCELLED") || status === "CANCELED";
     if (!isCancelled && status === "PENDING") counts.pending += 1;
     if (!isCancelled && (status === "IN_HOUSE" || hasCheckedInRoom)) counts.inHouse += 1;
     if (!isCancelled && (status === "COMPLETED" || allActiveDetailsCheckedOut)) counts.completed += 1;

@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Bell, CheckCheck, LoaderCircle } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import {
@@ -19,6 +20,7 @@ import {
   isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
+import { localizedText } from "../i18n";
 
 const formatOccurredAt = (value: string) =>
   new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
@@ -42,6 +44,10 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
     referenceType,
     referenceId,
   } = payload as Record<string, unknown>;
+  const isHousekeepingNotification = referenceType === "HOUSEKEEPING_TASK"
+    || type === "HOUSEKEEPING_TASK_ASSIGNED"
+    || type === "HOUSEKEEPING_TASK_REASSIGNED"
+    || type === "HOUSEKEEPING_TASK_COMPLETED";
   if (
     type !== "BOOKING_CREATED"
     && type !== "BOOKING_UPDATED"
@@ -53,6 +59,10 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
     && type !== "PROMOTION_UPDATED"
     && type !== "SERVICE_CREATED"
     && type !== "SERVICE_UPDATED"
+    && type !== "HOUSEKEEPING_TASK_ASSIGNED"
+    && type !== "HOUSEKEEPING_TASK_REASSIGNED"
+    && type !== "HOUSEKEEPING_TASK_COMPLETED"
+    && !(type === "SYSTEM" && isHousekeepingNotification)
   ) {
     return null;
   }
@@ -203,11 +213,22 @@ export default function NotificationBell() {
         void refetchNotifications();
         void refetchSummary();
         if (!isHousekeepingCompletionUpdate(payload)) {
+          const checkoutCompleted = isCheckoutCompletionUpdate(payload);
           toast({
-            title: isCheckoutCompletionUpdate(payload)
+            title: checkoutCompleted
               ? localizedText("Phòng vừa check-out", "Room checked out")
               : "Phòng được cập nhật",
             description: formatRoomUpdateNotification(payload),
+            ...(checkoutCompleted ? {
+              action: (
+                <ToastAction
+                  altText={localizedText("Mở trang phân công dọn phòng", "Open housekeeping assignments")}
+                  onClick={() => navigate("/staff?tab=tasks")}
+                >
+                  {localizedText("Mở phân công", "View assignments")}
+                </ToastAction>
+              ),
+            } : {}),
           });
         }
       },
@@ -264,7 +285,7 @@ export default function NotificationBell() {
         dispatch(baseApi.util.invalidateTags(["Notification"]));
       },
     }),
-    [dispatch, refetchNotifications, refetchSummary],
+    [dispatch, navigate, refetchNotifications, refetchSummary],
   );
 
   return (
@@ -330,6 +351,13 @@ export default function NotificationBell() {
                   }
                   setIsOpen(false);
                   if (
+                    notification.referenceType === "HOUSEKEEPING_TASK"
+                    || notification.type === "HOUSEKEEPING_TASK_ASSIGNED"
+                    || notification.type === "HOUSEKEEPING_TASK_REASSIGNED"
+                    || notification.type === "HOUSEKEEPING_TASK_COMPLETED"
+                  ) {
+                    navigate("/staff?tab=tasks");
+                  } else if (
                     notification.type === "BOOKING_REFUND_REQUESTED"
                     || notification.type === "BOOKING_REFUND_COMPLETED"
                   ) {

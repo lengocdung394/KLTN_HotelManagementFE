@@ -56,6 +56,8 @@ export type BookingListItem = {
   customerName?: string;
   bookingStatus?: string;
   bookingChannel?: string;
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
   createdAt?: string;
   roomTotal?: number;
   serviceTotal?: number;

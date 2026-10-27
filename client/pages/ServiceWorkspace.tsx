@@ -57,7 +57,7 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const getServiceUsageRows = (bookings: BookingListItem[]): ServiceUsageRow[] => {
   return bookings.flatMap((bookingItem) => {
     const booking = asRecord(bookingItem);
-    if (!booking || String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return [];
+    if (!booking || String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return [];
     const bookingId = String(booking.bookingId ?? booking.id ?? "");
     if (!bookingId) return [];
     const bookingDetails = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
@@ -126,7 +126,7 @@ const getTodayServiceStats = (bookings: BookingListItem[]) => {
 
   bookings.forEach((bookingItem) => {
     const booking = asRecord(bookingItem);
-    if (!booking || String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return;
+    if (!booking || String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return;
     const isBookingToday = typeof booking.createdAt === "string"
       && !Number.isNaN(new Date(booking.createdAt).getTime())
       && new Date(booking.createdAt).toDateString() === today;
@@ -244,7 +244,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   }), [pendingUsageGroups, usageDateFrom, usageDateTo]);
   const usedServiceRows = useMemo(() => bookings.flatMap((bookingItem) => {
       const booking = asRecord(bookingItem);
-      if (!booking || String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return [];
+      if (!booking || String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return [];
       const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
       return details.flatMap((detailValue) => {
         const detail = asRecord(detailValue);

@@ -89,7 +89,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
     ? Math.round((occupiedRooms / roomsAvailableForOccupancy) * 100)
     : 0;
   const currentGuestCount = bookings.reduce((guestCount, booking) => {
-    if (String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return guestCount;
+    if (String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return guestCount;
     const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
     return guestCount + details.reduce((roomGuestCount, detail) => {
       const status = String(detail.bookingStatusType ?? detail.status ?? "").toUpperCase();
