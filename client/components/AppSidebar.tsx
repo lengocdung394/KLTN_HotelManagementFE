@@ -3,6 +3,7 @@ import { CalendarCheck, CalendarDays, ClipboardCheck, ClipboardList, ConciergeBe
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
+import { isEmployeePortalUser } from "../lib/employeeRoles";
 import UserProfileCard from "./UserProfileCard";
 
 type AppSidebarProps = {
@@ -34,7 +35,7 @@ const adminItems = [
 export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, position, collapsed, onToggleCollapse }: AppSidebarProps) {
   const { t } = useTranslation();
   const { hotelName, roles } = useAppSelector((state) => state.auth);
-  const isEmployee = roles.includes("ROLE_EMPLOYEE") && !roles.includes("ROLE_MANAGER");
+  const isEmployee = isEmployeePortalUser(roles);
   const location = useLocation();
   const [bookingMenuOpen, setBookingMenuOpen] = useState(() => location.pathname === "/bookings" || location.pathname === "/booking-list");
   const [roomsMenuOpen, setRoomsMenuOpen] = useState(() => location.pathname === "/rooms");
@@ -150,7 +151,8 @@ export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, 
       <nav className="space-y-1">
         {isEmployee ? (
           <>
-            <Link to="/staff?tab=shifts" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/staff" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><CalendarDays size={17} />{t("staff.assignmentTab", "Lịch trực")}</Link>
+            <Link to="/staff?tab=today" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/staff" && currentStaffTab === "today" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><CalendarDays size={17} />{t("staff.todayShifts")}</Link>
+            <Link to="/staff?tab=tasks" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/staff" && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><ClipboardList size={17} />{t("staff.housekeepingAssignment")}</Link>
             <Link to="/reports" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/reports" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><FileText size={17} />{t("navigation.reports")}</Link>
             <Link to="/settings" onClick={onCloseMobile} className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/settings" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Settings size={17} />{t("navigation.settings")}</Link>
           </>
@@ -168,19 +170,19 @@ export default function AppSidebar({ mobile, onCloseMobile, onLogout, fullName, 
             {staffMenuOpen && (
               <div className="space-y-1 pb-2 pl-9 pr-2">
                 <Link to="/staff?tab=today" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "today" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
-                  Ca làm hôm nay
+                  {t("staff.todayShifts")}
                 </Link>
                 <Link to="/staff?tab=employees" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "employees" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
-                  Danh sách nhân viên
+                  {t("staff.employeeList")}
                 </Link>
                 {roles.includes("ROLE_MANAGER") && (
                   <Link to="/staff?tab=shifts" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "shifts" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
-                    Phân ca làm
+                    {t("staff.assignShifts")}
                   </Link>
                 )}
                 {(roles.includes("ROLE_MANAGER") || roles.includes("ROLE_ADMIN")) && (
                   <Link to="/staff?tab=tasks" onClick={onCloseMobile} className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
-                    Phân công công việc
+                    {t("staff.assignTasks")}
                   </Link>
                 )}
               </div>

@@ -23,6 +23,8 @@ export type Promotion = {
   minRoomValue?: number;
   minServiceValue?: number;
   usageLimit?: number;
+  claimedCount?: number;
+  usedCount?: number;
   isExclusive?: boolean;
   imageUrl?: string;
   minimumOrderAmount?: number;
@@ -127,6 +129,8 @@ const normalizePromotion = (item: PromotionApiResponse): Promotion => {
     minRoomValue: getValue(["minRoomValue"]) == null ? undefined : parseNumber(getValue(["minRoomValue"])),
     minServiceValue: getValue(["minServiceValue"]) == null ? undefined : parseNumber(getValue(["minServiceValue"])),
     usageLimit: getValue(["usageLimit"]) == null ? undefined : parseNumber(getValue(["usageLimit"])),
+    claimedCount: getValue(["claimedCount"]) == null ? undefined : parseNumber(getValue(["claimedCount"])),
+    usedCount: getValue(["usedCount"]) == null ? undefined : parseNumber(getValue(["usedCount"])),
     isExclusive,
     imageUrl: getValue(["imageUrl", "imageURL"]) == null ? undefined : String(getValue(["imageUrl", "imageURL"])),
     minimumOrderAmount: minimumValue == null ? minimumFromDescription(description) : parseNumber(minimumValue),

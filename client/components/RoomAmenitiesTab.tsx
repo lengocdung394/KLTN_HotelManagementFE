@@ -9,8 +9,8 @@ type RoomAmenitiesTabProps = {
   canManage: boolean;
   isCreating: boolean;
   onCreateOpenChange: (open: boolean) => void;
-  onSave: (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => void;
-  onAdd: (amenity: Pick<AmenityResponse, "name" | "price">) => void;
+  onSave: (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => void | Promise<void>;
+  onAdd: (amenity: Pick<AmenityResponse, "name" | "price">) => void | Promise<void>;
 };
 
 const normalizeText = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -21,6 +21,8 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   const [editingAmenity, setEditingAmenity] = useState<AmenityResponse | null>(null);
   const [editForm, setEditForm] = useState({ name: "", price: "" });
   const [createForm, setCreateForm] = useState({ name: "", price: "" });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const normalizedSearch = normalizeText(search);
   const filteredAmenities = useMemo(
     () => amenities.filter((amenity) => !normalizedSearch || normalizeText(amenity.name).includes(normalizedSearch)),
@@ -32,37 +34,63 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
     onCreateOpenChange(false);
     setCreateForm({ name: "", price: "" });
   };
-  const saveNewAmenity = () => {
+  const saveNewAmenity = async () => {
     const name = createForm.name.trim();
     const price = Number(createForm.price);
     if (!name || !createForm.price || !Number.isFinite(price) || price < 0) return;
-    onAdd({ name, price });
-    closeCreateForm();
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      await onAdd({ name, price });
+      closeCreateForm();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Không thể thêm tiện ích.");
+    } finally {
+      setIsSaving(false);
+    }
   };
-  const saveEdit = () => {
+
+  const saveEdit = async () => {
     if (!editingAmenity) return;
     const name = editForm.name.trim();
     const price = Number(editForm.price);
     if (!name || !editForm.price || !Number.isFinite(price) || price < 0) return;
-    onSave(editingAmenity, { name, price });
-    closeEditor();
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      await onSave(editingAmenity, { name, price });
+      closeEditor();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Không thể cập nhật tiện ích.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="p-5">
-      <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h3 className="font-bold text-slate-900">Danh sách tiện nghi</h3>
-          <p className="mt-1 text-sm text-slate-500">{filteredAmenities.length} tiện nghi</p>
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div>
+            <h3 className="font-bold text-slate-900">Danh sách tiện ích</h3>
+            <p className="mt-1 text-sm text-slate-500">Tìm kiếm và quản lý giá tiện ích</p>
+          </div>
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+            {filteredAmenities.length} mục
+          </span>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <label className="relative block w-full sm:w-64">
-            <Search size={15} className="absolute left-3 top-3 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tiện nghi..." className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400" />
+        <div className="w-full sm:w-72">
+          <label className="relative block">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên tiện ích..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
           </label>
         </div>
       </div>
-      <p className="mt-3 text-xs text-slate-500">File CSV/Excel cần có hai cột <strong>Tên tiện ích</strong> và <strong>Giá</strong>.</p>
+      {canManage && (
+        <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+          File CSV/Excel cần có hai cột <strong className="font-semibold text-slate-700">Tên tiện ích</strong> và <strong className="font-semibold text-slate-700">Giá</strong>.
+        </p>
+      )}
       {isLoading ? (
         <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách tiện nghi...</p>
       ) : isError ? (
@@ -70,22 +98,22 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
       ) : filteredAmenities.length === 0 ? (
         <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-105 text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-slate-100">
-                <th className="px-3 py-3 font-semibold">Tên tiện nghi</th>
-                <th className="px-3 py-3 text-right font-semibold">Giá</th>
-                {canManage && <th className="px-3 py-3 text-right font-semibold">Thao tác</th>}
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="px-4 py-3.5 font-semibold">Tên tiện ích</th>
+                <th className="px-4 py-3.5 text-right font-semibold">Giá</th>
+                {canManage && <th className="px-4 py-3.5 text-right font-semibold">Thao tác</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {filteredAmenities.map((amenity) => (
-                <tr key={amenity.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-3 font-medium text-slate-800">{amenity.name}</td>
-                  <td className="px-3 py-3 text-right font-semibold text-blue-700">{money(amenity.price)}</td>
+                <tr key={amenity.id} className="transition-colors hover:bg-blue-50/40">
+                  <td className="px-4 py-4 font-medium text-slate-800">{amenity.name}</td>
+                  <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-800">{money(amenity.price)}</td>
                   {canManage && <td className="px-3 py-3 text-right">
-                    <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+                    <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
                       <Pencil size={13} />Chỉnh sửa
                     </button>
                   </td>}
@@ -103,10 +131,10 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
               <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Danh sách tiện nghi</p><h4 className="mt-1 text-xl font-bold text-slate-900">Chỉnh sửa tiện nghi</h4></div>
               <button type="button" onClick={closeEditor} aria-label="Đóng" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={18} /></button>
             </div>
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Lưu tạm trên giao diện; API cập nhật sẽ được kết nối sau.</p>
+            {saveError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{saveError}</p>}
             <label className="mt-4 block text-sm font-semibold text-slate-700">Tên tiện nghi<input required autoFocus value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label>
             <label className="mt-4 block text-sm font-semibold text-slate-700">Giá<input required type="number" min="0" value={editForm.price} onChange={(event) => setEditForm((current) => ({ ...current, price: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label>
-            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeEditor} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button><button type="submit" disabled={!editForm.name.trim() || !editForm.price || !Number.isFinite(Number(editForm.price)) || Number(editForm.price) < 0} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} />Lưu</button></div>
+            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeEditor} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button><button type="submit" disabled={isSaving || !editForm.name.trim() || !editForm.price || !Number.isFinite(Number(editForm.price)) || Number(editForm.price) < 0} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} />{isSaving ? "Đang lưu..." : "Lưu"}</button></div>
           </form>
         </div>
       )}
@@ -125,7 +153,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
               </div>
               <button type="button" onClick={closeCreateForm} aria-label="Đóng" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={18} /></button>
             </div>
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Tiện nghi mới được thêm tạm trên giao diện.</p>
+            {saveError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{saveError}</p>}
             <label className="mt-4 block text-sm font-semibold text-slate-700">
               Tên tiện nghi
               <input required autoFocus value={createForm.name} onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
@@ -135,8 +163,8 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
               <input required type="number" min="0" value={createForm.price} onChange={(event) => setCreateForm((current) => ({ ...current, price: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
             </label>
             <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={closeCreateForm} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
-              <button type="submit" disabled={!createForm.name.trim() || !createForm.price || !Number.isFinite(Number(createForm.price)) || Number(createForm.price) < 0} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={15} />Thêm tiện nghi</button>
+              <button type="button" onClick={closeCreateForm} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
+              <button type="submit" disabled={isSaving || !createForm.name.trim() || !createForm.price || !Number.isFinite(Number(createForm.price)) || Number(createForm.price) < 0} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={15} />{isSaving ? "Đang lưu..." : "Thêm tiện nghi"}</button>
             </div>
           </form>
         </div>

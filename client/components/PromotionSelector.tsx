@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Eye, Search, Sparkles, Tag } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useGetCustomerPromotionsQuery, useGetPromotionsQuery, type Promotion } from "../services/promotionApi";
 import { calculatePromotionDiscount, promotionEligibilityMessage } from "../lib/promotionPricing";
 import { useAppSelector } from "../store/hooks";
@@ -39,6 +40,7 @@ const promotionValueLabel = (promotion: SelectedPromotion) =>
 const moneyAmount = (amount: number) => `${Math.round(amount).toLocaleString("vi-VN")}đ`;
 
 function PromotionRail({ promotions, source, title, loading, error, emptyMessage, appliedPromotion, appliedSource, onApply, onDetails }: PromotionRailProps) {
+  const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollByPage = (direction: -1 | 1) => {
     const container = scrollRef.current;
@@ -49,28 +51,28 @@ function PromotionRail({ promotions, source, title, loading, error, emptyMessage
     <div className="flex items-center justify-between gap-2">
       <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700">{title}</h4>
       {promotions.length > 2 && <div className="flex shrink-0 gap-1">
-        <button type="button" onClick={() => scrollByPage(-1)} aria-label={`Khuyến mãi ${title}: trang trước`} className="grid h-7 w-7 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"><ChevronLeft size={15} /></button>
-        <button type="button" onClick={() => scrollByPage(1)} aria-label={`Khuyến mãi ${title}: trang tiếp theo`} className="grid h-7 w-7 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"><ChevronRight size={15} /></button>
+        <button type="button" onClick={() => scrollByPage(-1)} aria-label={t("promotion.previousPromotions", { title })} className="grid h-7 w-7 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"><ChevronLeft size={15} /></button>
+        <button type="button" onClick={() => scrollByPage(1)} aria-label={t("promotion.nextPromotions", { title })} className="grid h-7 w-7 place-items-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50"><ChevronRight size={15} /></button>
       </div>}
     </div>
-    {loading ? <p className="mt-3 text-xs text-slate-500">Đang tải...</p> : error ? <p className="mt-3 text-xs text-rose-600">Không thể tải.</p> : promotions.length === 0 ? <p className="mt-3 text-xs text-slate-500">{emptyMessage}</p> : <div ref={scrollRef} className="mt-3 grid auto-cols-[calc((100%-2rem)/2)] grid-flow-col gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
+    {loading ? <p className="mt-3 text-xs text-slate-500">{t("promotion.loading")}</p> : error ? <p className="mt-3 text-xs text-rose-600">{t("promotion.loadError")}</p> : promotions.length === 0 ? <p className="mt-3 text-xs text-slate-500">{emptyMessage}</p> : <div ref={scrollRef} className="mt-3 grid auto-cols-[calc((100%-2rem)/2)] grid-flow-col gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
       {promotions.map((promotion) => <article key={`${source}-${promotion.id}`} className={`flex min-h-21.25 min-w-0 snap-start flex-col rounded-lg border p-1.5 transition ${appliedPromotion?.id === promotion.id && appliedSource === source ? "border-emerald-400 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1 space-y-1">
             <p className="flex min-w-0 items-baseline gap-1 text-[11px] leading-4">
-              <span className="shrink-0 text-slate-500">Tên khuyến mãi:</span>
+              <span className="shrink-0 text-slate-500">{t("promotion.nameLabel")}</span>
               <strong title={promotion.name} className="truncate text-sm font-bold text-slate-900">{promotion.name}</strong>
             </p>
             <p className="flex min-w-0 items-baseline gap-1 text-[11px] leading-4">
-              <span className="shrink-0 text-slate-500">Mã khuyến mãi:</span>
+              <span className="shrink-0 text-slate-500">{t("promotion.codeLabel")}</span>
               <span title={promotion.code} className="truncate font-mono font-bold text-slate-800">{promotion.code}</span>
             </p>
           </div>
           <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">-{promotionValueLabel(promotion)}</span>
         </div>
         <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-          <button type="button" onClick={() => onDetails(promotion, source)} className="inline-flex min-w-0 items-center gap-1 text-xs font-semibold text-slate-600 hover:text-emerald-700"><Eye size={14} /> <span className="truncate">Chi tiết</span></button>
-          <button type="button" onClick={() => onApply(promotion, source)} className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Chọn mã</button>
+          <button type="button" onClick={() => onDetails(promotion, source)} className="inline-flex min-w-0 items-center gap-1 text-xs font-semibold text-slate-600 hover:text-emerald-700"><Eye size={14} /> <span className="truncate">{t("promotion.details")}</span></button>
+          <button type="button" onClick={() => onApply(promotion, source)} className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">{t("promotion.chooseCode")}</button>
         </div>
       </article>)}
     </div>}
@@ -78,6 +80,7 @@ function PromotionRail({ promotions, source, title, loading, error, emptyMessage
 }
 
 export default function PromotionSelector({ customerId, initialPromotionId, initialCustomerPromotionId, initialPromotionApplyAt, orderTotal = 0, roomTotal = orderTotal, serviceTotal = 0, onApply, onEligibilityChange }: PromotionSelectorProps) {
+  const { t, i18n } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: branchPromotions = [], isLoading: isBranchLoading, isError: isBranchError } = useGetPromotionsQuery(hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true });
   const { data: promotionLookup = [], isLoading: isPromotionLookupLoading } = useGetPromotionsQuery(
@@ -101,8 +104,18 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       || promotion.id === initialCustomerPromotionId
       || (promotion as SelectedPromotion & { customerPromotionId?: string }).customerPromotionId === initialCustomerPromotionId
     );
+  const localizedEligibilityMessage = (promotion: SelectedPromotion, options: Parameters<typeof promotionEligibilityMessage>[4] = {}) => {
+    const message = promotionEligibilityMessage(promotion, orderTotal, roomTotal, serviceTotal, options);
+    if (!i18n.language.startsWith("en")) return message;
+    return message
+      .replace(/Tổng booking cần đạt ([\d.,]+đ)/g, (_match, amount: string) => t("promotion.minimumBookingAmount", { amount }))
+      .replace(/Tiền phòng cần đạt ([\d.,]+đ)/g, (_match, amount: string) => t("promotion.minimumRoomAmount", { amount }))
+      .replace(/Tiền dịch vụ cần đạt ([\d.,]+đ)/g, (_match, amount: string) => t("promotion.minimumServiceAmount", { amount }))
+      .replace("Mã khuyến mãi không còn hiệu lực", t("promotion.notEffective"))
+      .replace("Mã khuyến mãi này đã được sử dụng", t("promotion.alreadyUsed"));
+  };
   const detailEligibilityWarning = detailPromotion
-    ? promotionEligibilityMessage(detailPromotion.promotion, orderTotal, roomTotal, serviceTotal, {
+    ? localizedEligibilityMessage(detailPromotion.promotion, {
       alreadyApplied: isCurrentBookingPromotion(detailPromotion.promotion),
       applyAt: initialPromotionApplyAt,
     })
@@ -111,13 +124,10 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
   useEffect(() => {
     if (!appliedPromotion) return;
     const isPersistedPromotion = isCurrentBookingPromotion(appliedPromotion);
-    const warning = promotionEligibilityMessage(
-      appliedPromotion,
-      orderTotal,
-      roomTotal,
-      serviceTotal,
-      { alreadyApplied: isPersistedPromotion, applyAt: initialPromotionApplyAt },
-    );
+    const warning = localizedEligibilityMessage(appliedPromotion, {
+      alreadyApplied: isPersistedPromotion,
+      applyAt: initialPromotionApplyAt,
+    });
     if (!warning) return;
     if (isPersistedPromotion) restoredPromotionRef.current = null;
     setAppliedPromotion(null);
@@ -125,7 +135,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
     onApply(null);
     onEligibilityChange?.(true);
     setPromotionCode("");
-    setPromotionWarning(`Đã bỏ mã ${appliedPromotion.code}: ${warning}`);
+    setPromotionWarning(t("promotion.codeRemoved", { code: appliedPromotion.code, reason: warning }));
   }, [orderTotal, roomTotal, serviceTotal, appliedPromotion, initialPromotionId, initialCustomerPromotionId, initialPromotionApplyAt, onApply, onEligibilityChange]);
 
   useEffect(() => {
@@ -165,7 +175,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
 
   const applyPromotion = (promotion: SelectedPromotion | null, source: "branch" | "customer") => {
     const warning = promotion
-      ? promotionEligibilityMessage(promotion, orderTotal, roomTotal, serviceTotal, {
+      ? localizedEligibilityMessage(promotion, {
         alreadyApplied: isCurrentBookingPromotion(promotion),
         applyAt: initialPromotionApplyAt,
       })
@@ -186,7 +196,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       setAppliedSource(null);
       setPromotionCode("");
       onApply(null);
-      setPromotionWarning(`Mã ${promotion.code} chưa được áp dụng: ${warning}`);
+      setPromotionWarning(t("promotion.codeIneligible", { code: promotion.code, reason: warning }));
       onEligibilityChange?.(true);
       if (import.meta.env.DEV) console.warn("[promotions] minimum order not met:\n" + JSON.stringify({
         code: promotion.code,
@@ -234,7 +244,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
     }, null);
 
     if (!bestCandidate || bestCandidate.discount <= 0) {
-      setPromotionWarning("Không có khuyến mãi hợp lệ giúp giảm thêm cho booking này.");
+      setPromotionWarning(t("promotion.noAdditionalDiscount"));
       onEligibilityChange?.(false);
       return;
     }
@@ -263,7 +273,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       setAppliedPromotion(null);
       setAppliedSource(null);
       onApply(null);
-      setPromotionWarning(`Không tìm thấy mã khuyến mãi ${code || "này"}.`);
+      setPromotionWarning(t("promotion.codeNotFound", { code: code || t("promotion.thisCode") }));
       onEligibilityChange?.(true);
       return;
     }
@@ -271,52 +281,52 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
   };
 
   return <div className="promotion-panel mt-5 mb-5 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
-    <div className="flex items-center gap-2"><Tag size={16} className="text-emerald-600" /><h3 className="text-sm font-bold text-slate-900">Khuyến mãi</h3></div>
-    <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input value={promotionCode} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} placeholder="Nhập mã khuyến mãi" className="h-10 min-w-0 flex-1 rounded-lg border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400" /><button type="button" onClick={applyPromotionCode} className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700">Áp dụng</button></div>
-    <button type="button" onClick={applyBestPromotion} disabled={isBranchLoading || Boolean(customerId && isCustomerLoading)} className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"><Sparkles size={15} />Chọn mã giảm nhiều nhất</button>
-    {promotionWarning && <div role="alert" className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800"><p>{promotionWarning}</p><button type="button" onClick={() => { setPromotionWarning(""); setPromotionCode(""); onEligibilityChange?.(false); }} className="shrink-0 underline">Đóng</button></div>}
-    <div className="relative mt-2"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={promotionSearch} onChange={(event) => setPromotionSearch(event.target.value)} placeholder="Tìm khuyến mãi" className="h-10 w-full rounded-lg border border-blue-100 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400" />{promotionSearch && <div className="absolute left-0 right-0 top-11 z-10 overflow-hidden rounded-lg border border-blue-100 bg-white shadow-lg">{matchingPromotions.map((promotion) => <button type="button" key={`${promotion.id}-${promotion.code}`} onClick={() => { applyPromotion(promotion, customerPromotions.some((item) => item.id === promotion.id) ? "customer" : "branch"); setPromotionSearch(""); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-blue-50"><span><strong className="block text-slate-800">{promotion.name}</strong><small className="text-slate-500">{promotion.code}</small></span><span className="font-bold text-blue-700">-{promotionValueLabel(promotion)}</span></button>)}</div>}</div>
+    <div className="flex items-center gap-2"><Tag size={16} className="text-emerald-600" /><h3 className="text-sm font-bold text-slate-900">{t("promotion.bookingTitle")}</h3></div>
+    <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input value={promotionCode} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} placeholder={t("promotion.enterCode")} className="h-10 min-w-0 flex-1 rounded-lg border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400" /><button type="button" onClick={applyPromotionCode} className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700">{t("promotion.apply")}</button></div>
+    <button type="button" onClick={applyBestPromotion} disabled={isBranchLoading || Boolean(customerId && isCustomerLoading)} className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"><Sparkles size={15} />{t("promotion.bestDiscount")}</button>
+    {promotionWarning && <div role="alert" className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800"><p>{promotionWarning}</p><button type="button" onClick={() => { setPromotionWarning(""); setPromotionCode(""); onEligibilityChange?.(false); }} className="shrink-0 underline">{t("promotion.close")}</button></div>}
+    <div className="relative mt-2"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={promotionSearch} onChange={(event) => setPromotionSearch(event.target.value)} placeholder={t("promotion.searchBookingPromotions")} className="h-10 w-full rounded-lg border border-blue-100 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400" />{promotionSearch && <div className="absolute left-0 right-0 top-11 z-10 overflow-hidden rounded-lg border border-blue-100 bg-white shadow-lg">{matchingPromotions.map((promotion) => <button type="button" key={`${promotion.id}-${promotion.code}`} onClick={() => { applyPromotion(promotion, customerPromotions.some((item) => item.id === promotion.id) ? "customer" : "branch"); setPromotionSearch(""); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-blue-50"><span><strong className="block text-slate-800">{promotion.name}</strong><small className="text-slate-500">{promotion.code}</small></span><span className="font-bold text-blue-700">-{promotionValueLabel(promotion)}</span></button>)}</div>}</div>
     <div className="mt-4 grid min-w-0 gap-3">
-      <PromotionRail promotions={branchPromotions} source="branch" title="Khuyến mãi chi nhánh" loading={isBranchLoading} error={isBranchError} emptyMessage="Chưa có mã khả dụng." appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
-      <PromotionRail promotions={customerPromotions} source="customer" title="Khuyến mãi khách hàng" loading={!customerId || isCustomerLoading} error={isCustomerError} emptyMessage={!customerId ? "Chọn khách hàng để xem mã đã lưu." : "Khách hàng chưa lưu mã nào."} appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
+      <PromotionRail promotions={branchPromotions} source="branch" title={t("promotion.branchOffers")} loading={isBranchLoading} error={isBranchError} emptyMessage={t("promotion.availableCodesEmpty")} appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
+      <PromotionRail promotions={customerPromotions} source="customer" title={t("promotion.customerOffers")} loading={!customerId || isCustomerLoading} error={isCustomerError} emptyMessage={!customerId ? t("promotion.selectCustomerToViewCodes") : t("promotion.customerHasNoCodes")} appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
     </div>
-    {appliedPromotion && <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><p>Đã áp dụng {appliedSource === "customer" ? "khuyến mãi khách hàng" : "khuyến mãi chi nhánh"}: {appliedPromotion.code} · giảm {moneyAmount(calculatePromotionDiscount(appliedPromotion, roomTotal, serviceTotal, orderTotal))}</p><button type="button" onClick={() => { restoredPromotionRef.current = null; setAppliedPromotion(null); setAppliedSource(null); setPromotionCode(""); setPromotionWarning(""); onEligibilityChange?.(false); onApply(null); }} className="shrink-0 underline">Bỏ chọn</button></div>}
+    {appliedPromotion && <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><p>{t(appliedSource === "customer" ? "promotion.appliedCustomer" : "promotion.appliedBranch")}: {appliedPromotion.code} · {t("promotion.discountAmount", { amount: moneyAmount(calculatePromotionDiscount(appliedPromotion, roomTotal, serviceTotal, orderTotal)) })}</p><button type="button" onClick={() => { restoredPromotionRef.current = null; setAppliedPromotion(null); setAppliedSource(null); setPromotionCode(""); setPromotionWarning(""); onEligibilityChange?.(false); onApply(null); }} className="shrink-0 underline">{t("promotion.removeSelection")}</button></div>}
     <Dialog open={Boolean(detailPromotion)} onOpenChange={(open) => { if (!open) setDetailPromotion(null); }}>
       {detailPromotion && <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="pr-8">{detailPromotion.promotion.name}</DialogTitle>
-          <DialogDescription>{detailPromotion.source === "branch" ? "Khuyến mãi của chi nhánh" : "Khuyến mãi dành cho khách hàng"}</DialogDescription>
+          <DialogDescription>{t(detailPromotion.source === "branch" ? "promotion.branchPromotionDescription" : "promotion.customerPromotionDescription")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <section className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-800">1. Mức giảm</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-emerald-800">{t("promotion.discountSection")}</h3>
             <div className="mt-2 flex items-center justify-between gap-3">
               <span className="font-mono font-semibold text-slate-700">{detailPromotion.promotion.code}</span>
               <strong className="text-emerald-700">-{promotionValueLabel(detailPromotion.promotion)}</strong>
             </div>
-            {String(detailPromotion.promotion.valueType ?? "PERCENTAGE").toUpperCase().includes("PERCENT") && Number(detailPromotion.promotion.maxDiscountAmount) > 0 && <p className="mt-2 text-xs text-slate-600">Giảm tối đa {moneyAmount(Number(detailPromotion.promotion.maxDiscountAmount))}</p>}
-            {detailEligibilityWarning ? <p role="status" className="mt-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs font-medium text-amber-800">{detailEligibilityWarning}</p> : <p className="mt-2 text-xs text-slate-600">Giảm dự kiến cho booking này: <strong>{moneyAmount(calculatePromotionDiscount(detailPromotion.promotion, roomTotal, serviceTotal, orderTotal))}</strong></p>}
+            {String(detailPromotion.promotion.valueType ?? "PERCENTAGE").toUpperCase().includes("PERCENT") && Number(detailPromotion.promotion.maxDiscountAmount) > 0 && <p className="mt-2 text-xs text-slate-600">{t("promotion.maxDiscount", { amount: moneyAmount(Number(detailPromotion.promotion.maxDiscountAmount)) })}</p>}
+            {detailEligibilityWarning ? <p role="status" className="mt-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs font-medium text-amber-800">{detailEligibilityWarning}</p> : <p className="mt-2 text-xs text-slate-600">{t("promotion.estimatedDiscount")} <strong>{moneyAmount(calculatePromotionDiscount(detailPromotion.promotion, roomTotal, serviceTotal, orderTotal))}</strong></p>}
             {detailPromotion.promotion.description && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{detailPromotion.promotion.description}</p>}
           </section>
           <section className="rounded-lg border border-slate-200 p-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">2. Phạm vi và điều kiện</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">{t("promotion.conditionsSection")}</h3>
             <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-              <div><dt className="text-xs text-slate-500">Áp dụng trên</dt><dd className="mt-1 font-semibold text-slate-800">{String(detailPromotion.promotion.type ?? "TOTAL").toUpperCase() === "ROOM" ? "Tiền phòng" : String(detailPromotion.promotion.type ?? "TOTAL").toUpperCase() === "SERVICE" ? "Tiền dịch vụ" : "Tổng hóa đơn"}</dd></div>
-              {detailPromotion.promotion.minimumOrderAmount != null || detailPromotion.promotion.minBookingValue != null ? <div><dt className="text-xs text-slate-500">Booking tối thiểu</dt><dd className="mt-1 font-semibold text-slate-800">{moneyAmount(Number(detailPromotion.promotion.minimumOrderAmount ?? detailPromotion.promotion.minBookingValue))}</dd></div> : null}
-              {detailPromotion.promotion.minRoomValue != null ? <div><dt className="text-xs text-slate-500">Tiền phòng tối thiểu</dt><dd className="mt-1 font-semibold text-slate-800">{moneyAmount(Number(detailPromotion.promotion.minRoomValue))}</dd></div> : null}
-              {detailPromotion.promotion.minServiceValue != null ? <div><dt className="text-xs text-slate-500">Tiền dịch vụ tối thiểu</dt><dd className="mt-1 font-semibold text-slate-800">{moneyAmount(Number(detailPromotion.promotion.minServiceValue))}</dd></div> : null}
+              <div><dt className="text-xs text-slate-500">{t("promotion.appliesTo")}</dt><dd className="mt-1 font-semibold text-slate-800">{t(String(detailPromotion.promotion.type ?? "TOTAL").toUpperCase() === "ROOM" ? "promotion.scopeRoom" : String(detailPromotion.promotion.type ?? "TOTAL").toUpperCase() === "SERVICE" ? "promotion.scopeService" : "promotion.scopeTotal")}</dd></div>
+              {detailPromotion.promotion.minimumOrderAmount != null || detailPromotion.promotion.minBookingValue != null ? <div><dt className="text-xs text-slate-500">{t("promotion.bookingMinimum")}</dt><dd className="mt-1 font-semibold text-slate-800">{moneyAmount(Number(detailPromotion.promotion.minimumOrderAmount ?? detailPromotion.promotion.minBookingValue))}</dd></div> : null}
+              {detailPromotion.promotion.minRoomValue != null ? <div><dt className="text-xs text-slate-500">{t("promotion.roomMinimum")}</dt><dd className="mt-1 font-semibold text-slate-800">{moneyAmount(Number(detailPromotion.promotion.minRoomValue))}</dd></div> : null}
+              {detailPromotion.promotion.minServiceValue != null ? <div><dt className="text-xs text-slate-500">{t("promotion.serviceMinimum")}</dt><dd className="mt-1 font-semibold text-slate-800">{moneyAmount(Number(detailPromotion.promotion.minServiceValue))}</dd></div> : null}
             </dl>
           </section>
           <section className="rounded-lg border border-slate-200 p-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">3. Hiệu lực và trạng thái</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700">{t("promotion.validitySection")}</h3>
             <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-              <div><dt className="text-xs text-slate-500">Bắt đầu</dt><dd className="mt-1 font-semibold text-slate-800">{detailPromotion.promotion.startDate ? new Date(detailPromotion.promotion.startDate).toLocaleString("vi-VN") : "Chưa cập nhật"}</dd></div>
-              <div><dt className="text-xs text-slate-500">Kết thúc</dt><dd className="mt-1 font-semibold text-slate-800">{detailPromotion.promotion.endDate ? new Date(detailPromotion.promotion.endDate).toLocaleString("vi-VN") : "Chưa cập nhật"}</dd></div>
-              <div><dt className="text-xs text-slate-500">Trạng thái</dt><dd className="mt-1 font-semibold text-slate-800">{detailPromotion.promotion.active ? "Đang hoạt động" : "Không hoạt động"}</dd></div>
-              {(detailPromotion.promotion as SelectedPromotion & { used?: boolean }).used != null ? <div><dt className="text-xs text-slate-500">Tình trạng sử dụng</dt><dd className="mt-1 font-semibold text-slate-800">{(detailPromotion.promotion as SelectedPromotion & { used?: boolean }).used ? "Đã sử dụng" : "Chưa sử dụng"}</dd></div> : null}
+              <div><dt className="text-xs text-slate-500">{t("promotion.startDate")}</dt><dd className="mt-1 font-semibold text-slate-800">{detailPromotion.promotion.startDate ? new Date(detailPromotion.promotion.startDate).toLocaleString(i18n.language) : t("promotion.notUpdated")}</dd></div>
+              <div><dt className="text-xs text-slate-500">{t("promotion.endDate")}</dt><dd className="mt-1 font-semibold text-slate-800">{detailPromotion.promotion.endDate ? new Date(detailPromotion.promotion.endDate).toLocaleString(i18n.language) : t("promotion.notUpdated")}</dd></div>
+              <div><dt className="text-xs text-slate-500">{t("promotion.status")}</dt><dd className="mt-1 font-semibold text-slate-800">{detailPromotion.promotion.active ? t("promotion.activeStatus") : t("promotion.inactiveStatus")}</dd></div>
+              {(detailPromotion.promotion as SelectedPromotion & { used?: boolean }).used != null ? <div><dt className="text-xs text-slate-500">{t("promotion.usageStatus")}</dt><dd className="mt-1 font-semibold text-slate-800">{(detailPromotion.promotion as SelectedPromotion & { used?: boolean }).used ? t("promotion.used") : t("promotion.unused")}</dd></div> : null}
             </dl>
           </section>
-          <button type="button" disabled={Boolean(detailEligibilityWarning)} onClick={() => { applyPromotion(detailPromotion.promotion, detailPromotion.source); setDetailPromotion(null); }} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">Chọn khuyến mãi này</button>
+          <button type="button" disabled={Boolean(detailEligibilityWarning)} onClick={() => { applyPromotion(detailPromotion.promotion, detailPromotion.source); setDetailPromotion(null); }} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">{t("promotion.chooseThisPromotion")}</button>
         </div>
       </DialogContent>}
     </Dialog>

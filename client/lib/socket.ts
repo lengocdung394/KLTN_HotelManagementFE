@@ -535,6 +535,15 @@ export const initSocket = (token: string | null) => {
     }
   });
 
+  socket.on("housekeeping_task_updated", (data) => {
+    console.log("🧹 [Socket] housekeeping_task_updated:", data);
+    try {
+      store.dispatch(baseApi.util.invalidateTags(["Room", "Notification"]));
+    } catch (error) {
+      console.error("Could not refresh housekeeping task data:", error);
+    }
+  });
+
   socket.on("room_policy_updated", (data) => {
     console.log("💰 [Socket] room_policy_updated:", data);
   });

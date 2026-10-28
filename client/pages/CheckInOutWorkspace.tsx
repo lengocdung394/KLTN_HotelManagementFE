@@ -164,7 +164,7 @@ const extractMatrixBusyRanges = (matrix: unknown[]): MatrixBusyItem[] => {
     const roomKey = matrixRoomKey(obj) ?? inheritedRoomKey;
     const bookingStatus = String(obj.bookingStatus ?? obj.status ?? "").toUpperCase();
 
-    if (bookingStatus === "CANCELLED" || bookingStatus === "CANCELED") return;
+    if (bookingStatus.startsWith("CANCELLED") || bookingStatus === "CANCELED") return;
 
     const startVal = matrixValue(obj, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]);
     const endVal = matrixValue(obj, ["endDate", "end", "checkOutDate", "checkOut", "checkOutTime", "checkoutTime", "bookingEndDate"]);
@@ -1039,14 +1039,25 @@ export default function CheckInOutWorkspace() {
         ),
       );
       records.forEach((record) => completeRecord(record.id, "check-out"));
+      const selectedRefundMethods = Object.values(refundMethodsByBooking);
+      const cashRefundSelected = selectedRefundMethods.includes("CASH");
+      const bankRefundSelected = selectedRefundMethods.includes("BANK");
+      const refundTimingMessage = [
+        ...(cashRefundSelected
+          ? [localizedText("Tiền dư chọn hoàn mặt đã được ghi nhận hoàn ngay tại quầy.", "The cash surplus refund was recorded as completed at the front desk.")]
+          : []),
+        ...(bankRefundSelected
+          ? [localizedText("Khoản hoàn chuyển khoản đang chờ xử lý; sau khi chuyển, tiền thường về trong 1–3 ngày làm việc.", "The bank refund is pending processing; after transfer, funds usually arrive within 1–3 business days.")]
+          : []),
+      ].join(" ");
       toast({
         variant: "checkout",
         title: localizedText("Check-out thành công", "Check-out successful"),
-        description: localizedText(`Đã hoàn tất check-out cho ${records.length} phòng.`, `Check-out completed for ${records.length} rooms.`),
+        description: [
+          localizedText(`Đã hoàn tất check-out cho ${records.length} phòng.`, `Check-out completed for ${records.length} rooms.`),
+          refundTimingMessage,
+        ].filter(Boolean).join(" "),
       });
-      if (Object.values(refundMethodsByBooking).includes("CASH")) {
-        navigate("/refund-approvals");
-      }
       return true;
     } catch (error) {
       console.error("Bulk check-out failed", error);

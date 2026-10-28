@@ -12,12 +12,17 @@ import {
   CircleUserRound,
   Eye,
   LayoutDashboard,
+  Layers,
+  LoaderCircle,
   LogOut,
   MapPin,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Pencil,
   FileSpreadsheet,
   ShieldCheck,
+  Sparkles,
   Tag,
   Upload,
   Users,
@@ -27,11 +32,14 @@ import {
   X,
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { localizedText } from "../i18n";
 import { toast } from "@/components/ui/use-toast";
 import { baseApi } from "../services/baseApi";
 import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
 import {
   formatEntityUpdateNotification,
+  isCheckoutCompletionUpdate,
+  isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
 import { uploadProvinceBackgroundToCloudinary } from "../services/cloudinaryUploadApi";
@@ -81,6 +89,7 @@ import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } f
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
 import SuperAdminResourceStatsPanel from "../components/SuperAdminResourceStatsPanel";
+import SuperAdminAmenitiesPanel from "../components/SuperAdminAmenitiesPanel";
 import PromotionWorkspace from "./PromotionWorkspace";
 import ServiceWorkspace from "./ServiceWorkspace";
 
@@ -90,6 +99,7 @@ type AdminSection =
   | "branches"
   | "provinces"
   | "amenities"
+  | "bed-types"
   | "permissions"
   | "resource-stats"
   | "promotions"
@@ -271,6 +281,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [section, setSection] = useState<AdminSection>("overview");
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isCatalogMenuOpen, setIsCatalogMenuOpen] = useState(false);
+  const [isSalesMenuOpen, setIsSalesMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [expandedBranchGroup, setExpandedBranchGroup] = useState<string | null>(null);
   const [isBranchFormOpen, setIsBranchFormOpen] = useState(false);
   const [isProvinceFormOpen, setIsProvinceFormOpen] = useState(false);
@@ -300,6 +313,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [editingBedTypeId, setEditingBedTypeId] = useState<number | null>(null);
   const [bedTypeError, setBedTypeError] = useState("");
   const [bedTypeMessage, setBedTypeMessage] = useState("");
+  const [isBedTypeImportDialogOpen, setIsBedTypeImportDialogOpen] = useState(false);
   const [isParsingBedTypeFile, setIsParsingBedTypeFile] = useState(false);
   const notificationHotelId = notificationBranchFilter === "all" ? undefined : Number(notificationBranchFilter);
   const {
@@ -506,10 +520,16 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       },
       onRoomUpdated: (payload) => {
         const event = getSocketPayload(payload);
-        const data = getSocketPayload(event.data);
         const description = formatRoomUpdateNotification(event);
-        addNotification("Phòng được cập nhật", description, { category: "room", hotelId: getHotelId(event) });
-        toast({ title: "Danh sách phòng đã cập nhật", description });
+        const title = isHousekeepingCompletionUpdate(event)
+          ? "Phòng đã dọn xong"
+          : isCheckoutCompletionUpdate(event)
+            ? localizedText("Phòng vừa check-out", "Room checked out")
+            : "Phòng được cập nhật";
+        addNotification(title, description, { category: "room", hotelId: getHotelId(event) });
+        if (!isHousekeepingCompletionUpdate(event)) {
+          toast({ title, description });
+        }
         dispatch(baseApi.util.invalidateTags(["Room", "Booking", "SuperAdminBranch"]));
       },
       onRoomPolicyUpdated: (payload) => {
@@ -749,19 +769,20 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "notifications", label: "Thông báo", icon: Bell },
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
-    { id: "amenities", label: "Quản lý tiện nghi", icon: BedDouble },
     { id: "permissions", label: "Quản lý Role và quyền", icon: ShieldCheck },
-    { id: "promotions", label: "Quản lý khuyến mãi", icon: Tag },
-    { id: "services", label: "Quản lý dịch vụ", icon: ConciergeBell },
     { id: "resource-stats", label: "Thống kê", icon: BarChart3 },
   ];
   const isAccountSection =
     section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
+  const isCatalogSection = section === "amenities" || section === "bed-types";
+  const isSalesSection = section === "promotions" || section === "services";
 
   const handleAccountMenuSelect = () => {
     setSection("accounts-overview");
     setIsAccountMenuOpen((isOpen) => !isOpen);
     setIsBranchMenuOpen(false);
+    setIsCatalogMenuOpen(false);
+    setIsSalesMenuOpen(false);
     setSelectedBranchId(null);
   };
 
@@ -944,6 +965,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const handleSectionSelect = (id: AdminSection) => {
     if (id === "branches") {
       setIsAccountMenuOpen(false);
+      setIsCatalogMenuOpen(false);
       if (section === "branches") {
         setIsBranchMenuOpen((isOpen) => !isOpen);
       } else {
@@ -958,6 +980,16 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     } else {
       setIsAccountMenuOpen(false);
     }
+    if (id === "amenities" || id === "bed-types") {
+      setIsCatalogMenuOpen(true);
+    } else {
+      setIsCatalogMenuOpen(false);
+    }
+    if (id === "promotions" || id === "services") {
+      setIsSalesMenuOpen(true);
+    } else {
+      setIsSalesMenuOpen(false);
+    }
     setSection(id);
     setIsBranchMenuOpen(false);
     setSelectedBranchId(null);
@@ -965,8 +997,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-      <aside className="fixed inset-y-0 left-0 hidden w-72 flex-col bg-slate-950 px-5 py-6 text-white lg:flex">
-        <div className="flex items-center gap-3 px-2">
+      {isSidebarOpen && <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col bg-slate-950 px-5 py-6 text-white lg:flex">
+        <div className="flex items-center justify-between gap-3 px-2">
+          <div className="flex items-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-500 text-white shadow-lg shadow-blue-950/40">
             <ShieldCheck size={22} />
           </span>
@@ -974,11 +1007,93 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             <p className="font-bold tracking-wide">SEN VIET</p>
             <p className="mt-0.5 text-xs text-slate-400">Quản trị hệ thống</p>
           </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-label="Thu gọn menu"
+            title="Thu gọn menu"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
+          >
+            <PanelLeftClose size={18} />
+          </button>
         </div>
 
         <nav className="mt-12 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1" aria-label="Điều hướng quản trị">
           {navItems.map(({ id, label, icon: Icon }) => (
             <div key={id}>
+              {id === "permissions" && (
+                <div className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsCatalogMenuOpen((isOpen) => !isOpen)}
+                    aria-expanded={isCatalogMenuOpen}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      isCatalogSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <Layers size={18} />
+                    <span className="flex-1">Quản lý danh mục</span>
+                    {isCatalogMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </button>
+                  {isCatalogMenuOpen && (
+                    <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
+                      {([
+                        { id: "amenities", label: "Tiện ích", icon: Sparkles },
+                        { id: "bed-types", label: "Loại giường", icon: BedDouble },
+                      ] as const).map(({ id: childId, label: childLabel, icon: ChildIcon }) => (
+                        <button
+                          key={childId}
+                          type="button"
+                          onClick={() => handleSectionSelect(childId)}
+                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+                            section === childId ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <ChildIcon size={15} />
+                          {childLabel}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {id === "resource-stats" && (
+                <div className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsSalesMenuOpen((isOpen) => !isOpen)}
+                    aria-expanded={isSalesMenuOpen}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      isSalesSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <ConciergeBell size={18} />
+                    <span className="flex-1">Quản lý kinh doanh</span>
+                    {isSalesMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </button>
+                  {isSalesMenuOpen && (
+                    <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
+                      {([
+                        { id: "promotions", label: "Khuyến mãi", icon: Tag },
+                        { id: "services", label: "Dịch vụ", icon: ConciergeBell },
+                      ] as const).map(({ id: childId, label: childLabel, icon: ChildIcon }) => (
+                        <button
+                          key={childId}
+                          type="button"
+                          onClick={() => handleSectionSelect(childId)}
+                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+                            section === childId ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <ChildIcon size={15} />
+                          {childLabel}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => handleSectionSelect(id)}
@@ -1122,9 +1237,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           <LogOut size={18} />
           Đăng xuất
         </button>
-      </aside>
+      </aside>}
 
-      <main className="min-h-screen lg:pl-72">
+      <main className={`min-h-screen ${isSidebarOpen ? "lg:pl-72" : ""}`}>
         <header className="flex min-h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
           <div className="flex items-center gap-3 lg:hidden">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 text-white"><ShieldCheck size={20} /></span>
@@ -1133,7 +1248,20 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               <p className="text-xs text-slate-500">Quản trị hệ thống</p>
             </div>
           </div>
-          <p className="hidden text-sm font-semibold text-slate-500 lg:block">Cổng quản trị toàn hệ thống</p>
+          <div className="hidden items-center gap-3 lg:flex">
+            {!isSidebarOpen && (
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Mở menu"
+                title="Mở menu"
+                className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                <PanelLeftOpen size={18} />
+              </button>
+            )}
+            <p className="text-sm font-semibold text-slate-500">Cổng quản trị toàn hệ thống</p>
+          </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-800">{fullName || "Quản trị viên"}</p>
@@ -1168,6 +1296,30 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           ))}
           <button
             type="button"
+            onClick={() => setIsCatalogMenuOpen((isOpen) => !isOpen)}
+            aria-expanded={isCatalogMenuOpen}
+            className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+              isCatalogSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <Layers size={15} />
+            Quản lý danh mục
+            {isCatalogMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSalesMenuOpen((isOpen) => !isOpen)}
+            aria-expanded={isSalesMenuOpen}
+            className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+              isSalesSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            <ConciergeBell size={15} />
+            Quản lý kinh doanh
+            {isSalesMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+          <button
+            type="button"
             onClick={handleAccountMenuSelect}
             aria-expanded={isAccountMenuOpen}
             className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
@@ -1179,6 +1331,46 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             {isAccountMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
         </nav>
+        {isCatalogMenuOpen && (
+          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý danh mục">
+            {([
+              { id: "amenities", label: "Tiện ích", icon: Sparkles },
+              { id: "bed-types", label: "Loại giường", icon: BedDouble },
+            ] as const).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleSectionSelect(id)}
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+                  section === id ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-white"
+                }`}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+        {isSalesMenuOpen && (
+          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý kinh doanh">
+            {([
+              { id: "promotions", label: "Khuyến mãi", icon: Tag },
+              { id: "services", label: "Dịch vụ", icon: ConciergeBell },
+            ] as const).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleSectionSelect(id)}
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+                  section === id ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-white"
+                }`}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
         {isAccountMenuOpen && (
           <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý tài khoản">
             {([
@@ -1258,7 +1450,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               <div className="pointer-events-none absolute inset-0 z-0 bg-white/30" />
             </>
           )}
-          <div className="relative z-10 mx-auto max-w-7xl px-5 pt-4 pb-8 sm:px-8 sm:pt-5 sm:pb-10">
+          <div className={`relative z-10 pt-4 pb-8 sm:pt-5 sm:pb-10 ${
+            section === "resource-stats" && !isSidebarOpen
+              ? "w-full max-w-none px-3 sm:px-5"
+              : "mx-auto max-w-7xl px-5 sm:px-8"
+          }`}>
           {section === "notifications" && (
             <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1416,6 +1612,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           )}
 
           {section !== "amenities" &&
+            section !== "bed-types" &&
             section !== "provinces" &&
             section !== "permissions" &&
             section !== "resource-stats" &&
@@ -1586,7 +1783,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             </section>
           )}
 
-          {section === "amenities" && (
+          {section === "amenities" && <SuperAdminAmenitiesPanel />}
+
+          {section === "bed-types" && (
             <section className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1595,22 +1794,18 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                     <p className="mt-1 text-sm text-slate-500">Danh mục loại giường dùng chung để chọn khi cấu hình phòng.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={downloadBedTypeTemplate} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                      <FileSpreadsheet size={16} /> Tải mẫu Excel
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBedTypeError("");
+                        setBedTypeMessage("");
+                        setIsBedTypeImportDialogOpen(true);
+                      }}
+                      disabled={isParsingBedTypeFile || isImportingBedTypes}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Upload size={16} /> Nhập từ file
                     </button>
-                    <label className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 ${isParsingBedTypeFile || isImportingBedTypes ? "pointer-events-none opacity-50" : ""}`}>
-                      <Upload size={16} /> {isParsingBedTypeFile || isImportingBedTypes ? "Đang nhập..." : "Import Excel"}
-                      <input
-                        type="file"
-                        accept=".xlsx"
-                        className="sr-only"
-                        disabled={isParsingBedTypeFile || isImportingBedTypes}
-                        onChange={(event) => {
-                          void importBedTypeFile(event.target.files?.[0]);
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
                   </div>
                 </div>
                 {isBedTypesLoading ? <p className="py-8 text-center text-sm text-slate-500">Đang tải danh sách...</p>
@@ -1684,6 +1879,95 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   </button>
                 )}
               </form>
+              {isBedTypeImportDialogOpen && (
+                <div
+                  className="fixed inset-0 z-70 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
+                  onMouseDown={() => {
+                    if (!isParsingBedTypeFile && !isImportingBedTypes) setIsBedTypeImportDialogOpen(false);
+                  }}
+                >
+                  <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="bed-type-import-title"
+                    className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+                    onMouseDown={(event) => event.stopPropagation()}
+                  >
+                    <header className="flex items-start justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                          <Upload size={19} />
+                        </span>
+                        <div>
+                          <h3 id="bed-type-import-title" className="font-bold text-slate-900">Nhập loại giường từ file</h3>
+                          <p className="mt-1 text-xs text-slate-500">Tải file mẫu và chọn file Excel để nhập</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsBedTypeImportDialogOpen(false)}
+                        disabled={isParsingBedTypeFile || isImportingBedTypes}
+                        aria-label="Đóng"
+                        className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <X size={18} />
+                      </button>
+                    </header>
+                    <div className="space-y-4 p-5 sm:p-6">
+                      <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                        <div className="flex items-start gap-3">
+                          <FileSpreadsheet size={19} className="mt-0.5 shrink-0 text-blue-700" />
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">Bước 1: Chuẩn bị file theo mẫu</p>
+                            <p className="mt-1 text-xs leading-5 text-slate-600">
+                              Tải mẫu Excel để xem đúng cấu trúc cột, điền thông tin loại giường rồi chọn file để nhập.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={downloadBedTypeTemplate}
+                              className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                            >
+                              <FileSpreadsheet size={15} /> Tải file mẫu Excel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <label className={`flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition hover:border-emerald-400 hover:bg-emerald-50/50 ${isParsingBedTypeFile || isImportingBedTypes ? "pointer-events-none opacity-60" : ""}`}>
+                        {isParsingBedTypeFile || isImportingBedTypes ? (
+                          <LoaderCircle size={22} className="animate-spin text-emerald-700" />
+                        ) : (
+                          <Upload size={22} className="text-emerald-700" />
+                        )}
+                        <span className="mt-2 text-sm font-semibold text-slate-800">
+                          {isParsingBedTypeFile || isImportingBedTypes ? "Đang xử lý file..." : "Bước 2: Chọn file Excel"}
+                        </span>
+                        <span className="mt-1 text-xs text-slate-500">
+                          {isParsingBedTypeFile || isImportingBedTypes ? "Vui lòng đợi trong giây lát" : "Nhấn vào đây để chọn file .xlsx"}
+                        </span>
+                        <input
+                          type="file"
+                          accept=".xlsx"
+                          className="sr-only"
+                          disabled={isParsingBedTypeFile || isImportingBedTypes}
+                          onChange={(event) => {
+                            void importBedTypeFile(event.target.files?.[0]);
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                      {(isParsingBedTypeFile || isImportingBedTypes) && (
+                        <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                          Đang đọc và nhập danh sách loại giường...
+                        </p>
+                      )}
+                      {bedTypeError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{bedTypeError}</p>}
+                      {!isParsingBedTypeFile && !isImportingBedTypes && bedTypeMessage && (
+                        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{bedTypeMessage}</p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
             </section>
           )}
 

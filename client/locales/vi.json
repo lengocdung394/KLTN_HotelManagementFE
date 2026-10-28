@@ -17,6 +17,8 @@
     "edit": "Chỉnh sửa",
     "delete": "Xóa",
     "back": "Quay lại",
+    "previousPage": "Trang trước",
+    "nextPage": "Trang sau",
     "newBookingEyebrow": "Đặt phòng mới",
     "createBooking": "Tạo đặt phòng",
     "openFrontDesk": "Mở quầy lễ tân",
@@ -162,6 +164,8 @@
     "permissions": { "eyebrow": "Quản trị hệ thống", "title": "Phân quyền", "description": "Thiết lập vai trò và quyền truy cập cho từng nhóm nhân viên trong chi nhánh.", "stats": ["Vai trò", "Nhân viên", "Quyền truy cập", "Cập nhật gần nhất"] },
     "reports": { "eyebrow": "Phân tích kinh doanh", "title": "Báo cáo doanh thu", "description": "Theo dõi công suất phòng, ADR, RevPAR và hiệu quả kinh doanh theo thời gian.", "stats": ["Doanh thu tháng", "Công suất phòng", "ADR", "RevPAR"] },
     "settings": { "eyebrow": "Thiết lập hệ thống", "title": "Cài đặt", "description": "Cấu hình chi nhánh, loại phòng, thông báo và quyền truy cập tài khoản.", "stats": ["Chi nhánh", "Múi giờ", "Ngôn ngữ", "Vai trò"] }
+    ,"serviceUsage": { "eyebrow": "Vận hành lưu trú", "title": "Thao tác dịch vụ khách hàng", "description": "Theo dõi dịch vụ đã đặt và xác nhận sau khi khách sử dụng.", "stats": [] }
+    ,"serviceCatalog": { "eyebrow": "Quản lý danh mục", "title": "Quản lý danh mục dịch vụ", "description": "Thêm, chỉnh sửa và quản lý trạng thái các dịch vụ của khách sạn.", "stats": [] }
   },
   "booking": {
     "adults": "Người lớn",
@@ -235,6 +239,70 @@
     ,"rooms": "phòng"
     ,"estimatedTotal": "Tạm tính"
     ,"selectDateToAddRoom": "Chọn ngày trên lịch để thêm phòng khác."
+    ,"guestSearchLoading": "Đang tìm..."
+    ,"emailConfirmation": "Email nhận xác nhận đặt phòng"
+    ,"emailConfirmationHelp": "Email sẽ được lưu vào hồ sơ khách hàng và dùng để gửi xác nhận booking."
+    ,"createCustomer": "Tạo khách hàng"
+    ,"creatingCustomer": "Đang tạo khách hàng..."
+    ,"customerCreated": "Đã có mã khách hàng"
+    ,"guestStayingInRoom": "Khách lưu trú phòng {{room}}"
+    ,"roomGuestPolicy": "Quy định khách và phụ thu"
+    ,"standardCapacity": "Tiêu chuẩn:"
+    ,"maxAdditionalGuests": "Ghép thêm tối đa:"
+    ,"adultAgeRange": "Người lớn (từ 12 tuổi)"
+    ,"childAgeRange": "Trẻ em (2 - dưới 12 tuổi)"
+    ,"infantAgeRange": "Em bé (dưới 2 tuổi)"
+    ,"infantFree": "miễn phí"
+    ,"privateRoomNote": "Ghi chú riêng cho phòng {{room}}"
+    ,"roomGuestCount": "{{count}} người · {{nights}} đêm"
+    ,"adultSurcharge": "Phụ thu người lớn"
+    ,"childSurcharge": "Phụ thu trẻ em"
+    ,"noServiceSelected": "Chưa chọn"
+    ,"roomSubtotal": "Tạm tính phòng"
+    ,"removeSelectedRoom": "Bỏ chọn phòng"
+    ,"roomCancelledOnSave": "Phòng sẽ được hủy khi lưu booking."
+    ,"cannotRemoveRoom": "Không thể bỏ phòng sau khi check-in hoặc khi booking-detail không còn PENDING."
+    ,"guestInfo": "Thông tin người đặt"
+    ,"roomInfo": "Thông tin phòng"
+    ,"multipleSchedules": "Nhiều lịch"
+    ,"selected": "Đã chọn"
+    ,"enterGuestDetailsForSummary": "Nhập đủ họ tên, số điện thoại và CCCD để hiển thị thông tin khách hàng."
+    ,"promoSelected": "Khuyến mãi đã chọn: {{code}}"
+    ,"people": "người"
+    ,"currencyPerPerson": "đ/người"
+    ,"specialGuestRequests": "Yêu cầu đặc biệt của khách..."
+    ,"continueToServices": "Tiếp tục chọn dịch vụ"
+    ,"guestDetailsRequired": "Vui lòng nhập đủ họ tên, số điện thoại và CCCD của khách hàng."
+    ,"creatingGuestProfile": "Đang tạo hồ sơ khách hàng, vui lòng chờ trong giây lát."
+    ,"employeeIdMissing": "Không tìm thấy mã admin/nhân viên trong phiên đăng nhập."
+    ,"updatingBooking": "Đang cập nhật..."
+    ,"creatingBooking": "Đang tạo đặt phòng..."
+    ,"updateBooking": "Cập nhật"
+    ,"cancelRoomChange": "Hủy đổi phòng"
+    ,"onlyChangePendingRoom": "Chỉ được đổi phòng khi booking-detail còn PENDING và chưa check-in."
+    ,"selectForAllRooms": "Chọn cho tất cả phòng"
+    ,"selectPerRoom": "Chọn riêng từng phòng"
+    ,"serviceNavigation": "Điều hướng trang dịch vụ"
+    ,"selectServices": "Chọn dịch vụ"
+    ,"costSummary": "Tóm tắt chi phí"
+    ,"searchServices": "Tìm dịch vụ..."
+    ,"loadingServices": "Đang tải danh sách dịch vụ..."
+    ,"servicesLoadError": "Không thể tải danh sách dịch vụ."
+    ,"noServicesAvailable": "Chưa có dịch vụ khả dụng."
+    ,"servicesByRoom": "Dịch vụ theo từng phòng"
+    ,"roomCount": "{{count}} phòng"
+    ,"noRoomsSelected": "Chưa có phòng nào được chọn."
+    ,"roomWithNumber": "Phòng {{room}}"
+    ,"guestCountAndSelectServices": "{{count}} người · Chọn dịch vụ và số lượng"
+    ,"searchServicesForRoom": "Tìm dịch vụ cho phòng {{room}}..."
+    ,"guestCount": "Số người: {{count}}"
+    ,"checkInLabel": "Check-in"
+    ,"checkOutLabel": "Check-out"
+    ,"applyToWholeRoom": "Áp dụng cả phòng"
+    ,"peopleUsingService": "Số người dùng {{service}} tại phòng {{room}}"
+    ,"roomDetails": "Chi tiết từng phòng"
+    ,"service": "dịch vụ"
+    ,"name": "Tên"
   },
   "room": {
     "ready": "Sẵn sàng",
@@ -248,6 +316,12 @@
     "perNight": "/ đêm",
     "roomList": "Danh sách phòng",
     "roomsAtBranch": "phòng tại chi nhánh Sen Việt",
+    "buildingList": "Danh sách tòa nhà",
+    "amenityList": "Danh sách tiện nghi",
+    "buildingCount": "{{count}} tòa nhà",
+    "floorCount": "{{count}} tầng",
+    "amenityCount": "{{count}} tiện nghi",
+    "addAmenity": "Thêm tiện nghi",
     "realTimeUpdate": "Cập nhật thời gian thực",
     "addBuilding": "Thêm tòa nhà",
     "addRoom": "Thêm phòng",
@@ -265,6 +339,7 @@
     "allBuildings": "Tất cả các tòa",
     "allFloors": "Tất cả các tầng",
     "allStatuses": "Tất cả trạng thái",
+    "allRoomTypes": "Tất cả loại phòng",
     "searchRooms": "Tìm theo số phòng hoặc loại phòng...",
     "roomStatus": "Trạng thái phòng",
     "maxGuests": "Tối đa {{count}} khách",
@@ -275,6 +350,19 @@
     "assign": "Phân công",
     "noRooms": "Không tìm thấy phòng",
     "changeFilters": "Thử thay đổi từ khóa hoặc bộ lọc trạng thái."
+    ,"buildingPrefix": "Tòa"
+    ,"buildingNotUpdated": "Chưa cập nhật tòa"
+    ,"standardCapacitySummary": "Tiêu chuẩn {{count}} người"
+    ,"adultSurcharge": "Phụ thu người lớn"
+    ,"childSurcharge": "Phụ thu trẻ em"
+    ,"capacityUnit": "người"
+    ,"areaNotUpdated": "Chưa cập nhật"
+    ,"bedNotUpdated": "Chưa cập nhật loại giường"
+    ,"noAmenitiesUpdated": "Chưa cập nhật tiện nghi."
+    ,"perPersonSuffix": "/người"
+    ,"infantFreeNotice": "Em bé dưới 2 tuổi được miễn phí."
+    ,"paginationSummary": "Hiển thị {{from}}-{{to}} trên {{total}} phòng"
+    ,"rowsPerPage": "Số dòng"
     ,"singleBed": "giường đơn"
     ,"doubleSingleBeds": "2 giường đơn"
     ,"kingBed": "giường King Size"
@@ -285,6 +373,10 @@
     ,"airConditioning": "Điều hòa"
     ,"privateBathroom": "Phòng tắm riêng"
     ,"wifi": "Wifi"
+    ,"minibar": "Minibar"
+    ,"workDesk": "Bàn làm việc"
+    ,"television": "Tivi"
+    ,"hotWater": "Nước nóng"
     ,"generatedCode": "Mã phòng tự tạo"
     ,"pricePerNight": "Giá phòng / đêm"
     ,"guestCapacity": "Quy định số lượng người"
@@ -321,6 +413,265 @@
     ,"amenitiesLabel": "Tiện ích"
     ,"gallery": "Thư viện ảnh"
     ,"viewAllPhotos": "Xem toàn bộ ảnh"
+    ,"createForm": {
+      "basicInformation": "Thông tin cơ bản",
+      "roomDetails": "Chi tiết phòng",
+      "floor": "Tầng",
+      "notSelected": "Chưa chọn",
+      "saving": "Đang lưu...",
+      "roomNumber": "Số phòng",
+      "roomNumberPlaceholder": "Ví dụ: 101",
+      "loadingRoomTypes": "Đang tải loại phòng...",
+      "roomTypesError": "Không tải được loại phòng từ API.",
+      "loadingRoomTypeDetails": "Đang tải thông tin chi tiết loại phòng...",
+      "roomTypeDetailsError": "Không tải được chi tiết loại phòng.",
+      "loadingFloors": "Đang tải tầng...",
+      "noFloors": "Chưa có tầng",
+      "floorExample": "Ví dụ: 1 hoặc -1",
+      "standardPrice": "Giá tiêu chuẩn",
+      "officialPricePerNight": "Giá chính thức / đêm: {{price}} (tiện ích tính riêng)",
+      "standardCapacity": "Sức chứa tiêu chuẩn",
+      "includedGuests": "Số khách đã bao gồm trong giá phòng",
+      "maxExtraGuests": "Số người ghép tối đa",
+      "extraGuestsDescription": "Số khách thêm ngoài tiêu chuẩn",
+      "extraAdultFee": "Phụ thu người lớn / người",
+      "extraChildFee": "Phụ thu trẻ em / người",
+      "loadingPolicy": "Đang tải sức chứa và phụ thu theo chính sách loại phòng...",
+      "policyError": "Không tải được chính sách sức chứa và phụ thu. Vui lòng thử lại.",
+      "loadingSurcharge": "Đang tải phụ thu cho loại phòng này...",
+      "missingPolicy": "Không tìm thấy chính sách phụ thu cho loại phòng này. Vui lòng kiểm tra cấu hình giá phòng.",
+      "bedType": "Loại giường",
+      "loading": "Đang tải...",
+      "bedTypesError": "Không tải được danh sách loại giường.",
+      "extraBed": "Giường phụ",
+      "quantity": "SL",
+      "quantityFor": "Số lượng {{bedType}}",
+      "noBedTypes": "Chưa có loại giường. Hãy thêm loại giường trước khi tạo phòng.",
+      "roomStatus": "Trạng thái phòng",
+      "loadingRoomStatuses": "Đang tải trạng thái phòng...",
+      "roomStatusesError": "Không tải được trạng thái phòng từ API.",
+      "amenitiesAndServices": "Tiện nghi & dịch vụ",
+      "descriptionAndImages": "Mô tả & hình ảnh",
+      "deselectAll": "Bỏ chọn tất cả",
+      "useDefault": "Dùng mặc định",
+      "add": "Thêm",
+      "newAmenityName": "Tên tiện nghi mới",
+      "amenityPrice": "Giá tiện nghi",
+      "detailedDescriptionPlaceholder": "Nhập mô tả chi tiết phòng, phong cách, vị trí và trải nghiệm khách hàng...",
+      "uploadImage": "Tải ảnh lên",
+      "imageAlt": "Ảnh phòng",
+      "setDefaultImage": "Đặt ảnh làm ảnh mặc định",
+      "noImages": "Chưa có ảnh nào được tải lên.",
+      "preview": "Xem trước",
+      "noPreviewImage": "Chưa có ảnh xem trước",
+      "officialPrice": "Giá chính thức",
+      "highlights": "Tính năng nổi bật",
+      "noAmenitiesSelected": "Chưa có tiện nghi nào được chọn",
+      "familyRoom": "Phòng gia đình"
+    },
+    "editForm": {
+      "title": "Chỉnh sửa phòng",
+      "save": "Lưu thay đổi",
+      "basicInformation": "Thông tin cơ bản",
+      "building": "Tòa nhà",
+      "capacityAndSurcharges": "Sức chứa và phụ thu theo chính sách",
+      "area": "Diện tích (m²)",
+      "basePrice": "Giá cơ bản / đêm",
+      "standardCapacity": "Sức chứa tiêu chuẩn",
+      "maxExtraGuests": "Khách thêm tối đa",
+      "extraAdultFee": "Phụ thu người lớn",
+      "extraChildFee": "Phụ thu trẻ em",
+      "noBedTypes": "Chưa có loại giường để chọn.",
+      "roomImages": "Ảnh phòng",
+      "imageRange": "4–8 ảnh",
+      "addImages": "Thêm ảnh",
+      "roomImageAlt": "Ảnh phòng {{count}}",
+      "defaultImage": "Ảnh chính",
+      "setDefaultImage": "Chọn ảnh chính",
+      "amenities": "Tiện nghi",
+      "noAmenities": "Chưa tải được danh sách tiện nghi."
+    },
+    "pricingConfig": {
+      "title": "Cấu hình giá niêm yết",
+      "description": "Thiết lập mức giá cơ bản và phụ thu theo loại phòng hoặc theo lịch sự kiện đặc biệt.",
+      "loading": "Đang tải cấu hình giá chi nhánh...",
+      "loadError": "Không thể tải cấu hình giá chi nhánh. Vui lòng kiểm tra kết nối Backend!",
+      "retry": "Thử lại",
+      "byRoomType": "Cấu hình giá theo loại phòng",
+      "byEvent": "Cấu hình giá theo sự kiện",
+      "editRoomType": "Cập nhật cho loại phòng",
+      "standardCapacity": "Số lượng người tiêu chuẩn",
+      "extraGuestCapacity": "Số người cho phép ở ghép",
+      "pricePerNight": "Giá phòng / đêm",
+      "extraAdultFee": "Phụ thu người lớn",
+      "extraChildFee": "Phụ thu trẻ em",
+      "guestSummary": "{{standard}} người tiêu chuẩn · {{extra}} ghép thêm · {{price}} / {{adultFee}} / {{childFee}}",
+      "cancel": "Hủy",
+      "save": "Lưu",
+      "saving": "Đang lưu...",
+      "currency": "VNĐ",
+      "roomCount": "{{count}} phòng",
+      "edit": "Chỉnh sửa",
+      "standard": "Tiêu chuẩn",
+      "extraGuestsAllowed": "Cho phép ghép",
+      "adultFeePerPerson": "+{{price}}/người",
+      "childFeePerPerson": "+{{price}}/trẻ",
+      "updateSuccess": "Cập nhật giá thành công!",
+      "updateSuccessDescription": "Giá cho {{roomType}} đã được cập nhật và đồng bộ cho chi nhánh.",
+      "updateError": "Không thể cập nhật cấu hình giá. Vui lòng thử lại.",
+      "people": "Sức chứa: {{count}} người"
+    },
+    "eventPricing": {
+      "listTitle": "Danh sách cấu hình giá theo sự kiện",
+      "badge": "EVENT PRICING",
+      "description": "Quản lý các quy tắc sự kiện tăng/giảm giá theo % linh hoạt cho từng loại phòng theo khoảng thời gian.",
+      "create": "Tạo sự kiện giá mới",
+      "searchPlaceholder": "Tìm tên sự kiện giá...",
+      "chooseDate": "Chọn ngày",
+      "allStatuses": "Tất cả trạng thái",
+      "active": "Đang diễn ra",
+      "upcoming": "Sắp diễn ra",
+      "expired": "Hết hạn",
+      "allRoomTypes": "Tất cả loại phòng",
+      "loading": "Đang tải danh sách sự kiện giá...",
+      "emptyTitle": "Chưa có sự kiện cấu hình giá nào",
+      "emptyDescription": "Thử thay đổi bộ lọc tìm kiếm hoặc tạo thêm sự kiện cấu hình giá mới.",
+      "createNew": "Tạo sự kiện mới",
+      "adjustmentRange": "Điều chỉnh {{min}} ~ {{max}} theo nhóm phòng",
+      "increase": "Tăng +{{percent}}% giá phòng",
+      "discount": "Giảm {{percent}}% ưu đãi",
+      "edit": "Chỉnh sửa",
+      "delete": "Xóa sự kiện",
+      "dateRange": "Khoảng thời gian áp dụng",
+      "applicableRoomTypes": "Loại phòng áp dụng",
+      "allFourRoomTypes": "Tất cả 4 loại phòng",
+      "applies": "Áp dụng",
+      "noPrice": "Chưa có giá",
+      "page": "Trang {{current}} / {{total}}",
+      "previous": "Trước",
+      "next": "Sau",
+      "editTitle": "Chỉnh sửa sự kiện giá",
+      "createTitle": "Tạo sự kiện giá mới",
+      "formDescription": "Thiết lập khoảng thời gian và tỷ lệ % điều chỉnh giá linh hoạt theo nhóm phòng",
+      "closeError": "Đóng thông báo lỗi",
+      "eventName": "Tên sự kiện / Quy tắc giá",
+      "eventNamePlaceholder": "Ví dụ: Phụ thu Lễ 30/4, Khuyến mãi mùa hè...",
+      "startDate": "Từ ngày",
+      "endDate": "Đến ngày",
+      "groupPricingTitle": "Cấu hình giá phòng theo nhóm",
+      "groupPricingDescription": "Thiết lập giá tiền (VNĐ) cụ thể cho từng nhóm loại phòng trong sự kiện",
+      "roomGroup": "Nhóm phòng #{{number}}",
+      "removeGroup": "Xóa nhóm",
+      "roomTypesInGroup": "Loại phòng áp dụng nhóm này:",
+      "allRoomTypesButton": "Tất cả loại phòng",
+      "assignedElsewhere": "(Đã gán nhóm khác)",
+      "applicablePrice": "Giá phòng áp dụng (VNĐ)",
+      "pricePlaceholder": "Ví dụ: 750000 hoặc 1200000",
+      "fixedPrice": "Giá cố định áp dụng: {{price}}",
+      "enterFixedPrice": "Nhập giá tiền cụ thể cho nhóm phòng",
+      "addRemainingTypes": "+ Thêm cấu hình giá riêng cho các loại phòng còn lại ({{roomTypes}})",
+      "allTypesAssigned": "Tất cả loại phòng đã được phân bổ vào các nhóm cấu hình giá.",
+      "cancel": "Hủy",
+      "saving": "Đang lưu...",
+      "update": "Cập nhật sự kiện",
+      "savePricing": "Lưu cấu hình giá",
+      "updatedToastTitle": "Cập nhật giá mùa vụ",
+      "updatedToastDescription": "Đã chỉnh sửa {{eventName}} và đồng bộ thay đổi tới khách hàng.",
+      "savedToastTitle": "Cập nhật giá thành công",
+      "savedToastDescription": "Đã lưu cấu hình giá theo sự kiện cho các loại phòng đã chọn.",
+      "saveError": "Không thể lưu cấu hình giá.",
+      "updateErrorTitle": "Cập nhật cấu hình giá thất bại",
+      "createErrorTitle": "Lưu cấu hình giá thất bại",
+      "eventUpdatedToastTitle": "Cập nhật giá mùa vụ",
+      "eventUpdatedToastDescription": "{{eventName}} vừa được cập nhật. Danh sách giá đã được đồng bộ mới nhất.",
+      "seasonalPricing": "giá mùa vụ",
+      "roomTypeStandard": "Phòng tiêu chuẩn",
+      "roomTypeDeluxe": "Phòng Deluxe",
+      "roomTypeSuite": "Phòng Suite",
+      "roomTypeFamily": "Phòng gia đình"
+    },
+    "importDialog": {
+      "eyebrow": "NHẬP HÀNG LOẠT",
+      "roomsTitle": "Tải dữ liệu phòng",
+      "roomsDescription": "Đặt file Excel mẫu và ảnh trong thư mục dulieuphong rồi nén thành dulieuphong.zip. Ảnh được tải trực tiếp lên Cloudinary trước khi gửi dữ liệu phòng cho máy chủ.",
+      "downloadRoomTemplate": "Tải file Excel mẫu phòng",
+      "roomZipLabel": "File ZIP bộ dữ liệu phòng (.zip)",
+      "roomZipValidation": "Vui lòng chọn đúng file dulieuphong.zip.",
+      "zipStructure": "Cấu trúc file ZIP",
+      "roomInstructionsTypes": "Trong Excel, chọn loại phòng, tòa và trạng thái từ danh sách xổ xuống. Cột Tầng nhập số nguyên floorNumber; hệ thống ghép số tầng với tòa để tìm đúng tầng. Nhập ID tiện ích trong một ô, ngăn cách bằng dấu chấm phẩy (;); tra ID và tên ở sheet Danh mục. Chỉ ID có trong danh mục mới được chấp nhận. Số phòng phải là số nguyên dương.",
+      "roomInstructionsBeds": "Tại sheet Giường phòng, chọn số phòng và loại giường từ danh sách xổ xuống rồi nhập số lượng từ 1 trở lên. Một phòng có thể có nhiều loại giường bằng cách thêm nhiều dòng cho cùng số phòng; mỗi phòng cần ít nhất một dòng cấu hình giường.",
+      "roomInstructionsImages": "Mỗi phòng cần từ 4 đến 8 ảnh, tối đa 5 MB mỗi ảnh. Nhập tên file ảnh vào các cột Ảnh 1–Ảnh 8; tên phải khớp với ảnh trong thư mục images, gồm cả phần đuôi (ví dụ: 101-1.jpg). Mỗi dòng là một phòng. Không đổi tên cột.",
+      "roomInstructionsArchive": "Trong thư mục dulieuphong, đặt phong.xlsx và thư mục images cùng cấp, sau đó nén thư mục dulieuphong thành dulieuphong.zip. Frontend tải ảnh trực tiếp lên Cloudinary bằng unsigned upload preset; máy chủ nhận URL ảnh và lưu phòng.",
+      "importRooms": "Nhập phòng",
+      "roomImportButton": "Tải dữ liệu bằng file",
+      "readingFile": "Đang đọc file...",
+      "preparingRoomImport": "Đang đọc file ZIP và kiểm tra dữ liệu phòng...",
+      "uploadingImages": "Đang tải {{count}} ảnh lên Cloudinary...",
+      "uploadingImageProgress": "Đang tải ảnh lên Cloudinary: {{uploaded}}/{{total}}...",
+      "sendingRoomData": "Đã tải ảnh xong. Đang gửi dữ liệu phòng lên máy chủ...",
+      "amenitiesTitle": "Tải dữ liệu tiện nghi",
+      "amenitiesDescription": "Tải file Excel mẫu tại đây, điền danh sách tiện nghi và giữ nguyên tên file khi tải lên.",
+      "downloadAmenityTemplate": "Tải file Excel mẫu tiện nghi",
+      "amenityFileLabel": "File Excel tiện nghi (mau-nhap-tien-ich.xlsx)",
+      "amenityFileValidation": "Vui lòng chọn đúng file \"mau-nhap-tien-ich.xlsx\". Không đổi tên file mẫu.",
+      "amenityInstructionsColumns": "File cần có hai cột: Tên tiện ích và Giá tiền. Giá nhập bằng số không âm, không thêm ký hiệu tiền tệ.",
+      "amenityInstructionsDuplicates": "Tiện ích trùng tên (không phân biệt chữ hoa, chữ thường hoặc dấu tiếng Việt) sẽ được bỏ qua; tiện ích mới được lưu vào cơ sở dữ liệu.",
+      "importAmenities": "Nhập tiện nghi",
+      "uploading": "Đang tải lên...",
+      "uploadFailed": "Không thể tải dữ liệu lên.",
+      "progressLabel": "Tiến trình nhập dữ liệu"
+      ,"loadingBedTypesTitle": "Đang tải danh sách loại giường"
+      ,"loadingBedTypesDescription": "Vui lòng đợi danh sách giường tải xong rồi tạo mẫu."
+      ,"bedTypesErrorTitle": "Không thể tải danh sách loại giường"
+      ,"serverRetry": "Hãy kiểm tra kết nối máy chủ rồi thử lại."
+      ,"loadingBuildingsFloorsTitle": "Đang tải danh sách tòa và tầng"
+      ,"loadingTemplateWait": "Vui lòng đợi trong giây lát rồi tải mẫu Excel."
+      ,"buildingsFloorsErrorTitle": "Không thể tải danh sách tòa và tầng"
+      ,"templateErrorTitle": "Không thể tạo file Excel mẫu"
+      ,"unknownError": "Đã xảy ra lỗi không xác định."
+      ,"importFailedTitle": "Nhập phòng thất bại"
+      ,"importCompletedTitle": "Nhập phòng hoàn tất"
+      ,"importFailedDescription": "Máy chủ báo tiến trình nhập phòng thất bại."
+      ,"importUpdatedDescription": "Danh sách phòng đã được cập nhật từ máy chủ."
+      ,"retryingStatus": "Đang thử lại trạng thái từ máy chủ: {{message}}"
+      ,"readingAmenityFile": "Đang đọc file tiện nghi..."
+      ,"emptyFile": "File không có dòng dữ liệu."
+      ,"amenityRowInvalid": "Dòng {{row}} cần có tên tiện ích và giá không âm hợp lệ."
+      ,"noValidAmenities": "File không có tiện ích hợp lệ để nhập."
+      ,"missingTaskId": "Máy chủ không trả về mã tiến trình nhập tiện nghi."
+      ,"processingAmenities": "Máy chủ đang xử lý dữ liệu tiện nghi..."
+      ,"amenityRowsChecked": "Đã kiểm tra {{count}} dòng. Đang gửi dữ liệu lên máy chủ..."
+      ,"amenitiesSaved": "Hoàn tất: đã lưu {{saved}} tiện nghi{{skipped}}."
+      ,"amenitiesNoneSaved": "Hoàn tất: không có tiện nghi mới; đã bỏ qua {{count}} dòng trùng tên."
+      ,"skippedDuplicateRows": ", bỏ qua {{count}} dòng trùng tên"
+      ,"amenityImportSuccess": "Nhập tiện nghi thành công"
+      ,"noNewAmenities": "Không có tiện nghi mới"
+      ,"amenitiesSavedDescription": "Đã lưu {{count}} tiện nghi vào cơ sở dữ liệu.{{skipped}}"
+      ,"amenitiesSkippedDescription": "Tất cả {{count}} tiện nghi đã tồn tại nên không có dữ liệu mới được lưu."
+      ,"skippedDuplicateNames": " Đã bỏ qua {{count}} dòng bị trùng tên."
+      ,"importDataError": "Không thể nhập dữ liệu"
+      ,"couldNotReadFile": "Không thể đọc file."
+    },
+    "importProgress": {
+      "importing": "Đang nhập phòng",
+      "completedWithErrors": "Nhập phòng hoàn tất · có dòng lỗi",
+      "completed": "Tiến trình nhập phòng hoàn tất",
+      "checking": "Đang kiểm tra dữ liệu phòng",
+      "fileChecked": "Đã kiểm tra file phòng",
+      "checkingArchive": "Đang đọc file ZIP và kiểm tra từng dòng...",
+      "passedCount": "{{count}} dòng đạt",
+      "failedCount": "{{count}} dòng lỗi",
+      "totalCount": "{{count}} dòng tổng",
+      "hideDetails": "Ẩn chi tiết",
+      "showDetails": "Xem chi tiết từng dòng",
+      "showFailedDetails": "Xem chi tiết từng dòng ({{count}} lỗi)",
+      "rowLabel": "Dòng {{row}}",
+      "roomLabel": "Phòng {{room}}",
+      "rowPassed": "Đạt theo trạng thái tiến trình.",
+      "statusLabel": "Trạng thái xử lý: {{status}}",
+      "rowMissingStatus": "Dòng chưa được máy chủ đánh dấu thành công.",
+      "waitingForProgress": "Đang nhận tiến trình nhập phòng."
+    }
   },
   "modules": {
     "bookingEyebrow": "Vận hành lưu trú",
@@ -354,6 +705,10 @@
     "housekeeping": "Housekeeping",
     "dailySchedule": "Lịch làm việc theo ngày",
     "todayShifts": "Danh sách ca trực hôm nay",
+    "employeeList": "Danh sách nhân viên",
+    "assignShifts": "Phân ca làm",
+    "assignTasks": "Phân công công việc",
+    "housekeepingAssignment": "Phân công dọn phòng",
     "staffShiftsTab": "Nhân viên ca làm",
     "assignmentTab": "Phân công ca làm",
     "weeklyOverview": "Lịch phân ca cả tuần",
@@ -449,7 +804,164 @@
       "staff": "Quản lý nhân viên"
     }
   },
+  "serviceWorkspace": {
+    "bookedToday": "Dịch vụ đặt hôm nay",
+    "bookedTodayHelp": "Lượt dịch vụ trong booking tạo hôm nay",
+    "usedToday": "Dịch vụ đã dùng hôm nay",
+    "usedTodayHelp": "Lượt đã được nhân viên xác nhận",
+    "estimatedRevenueToday": "Tiền dịch vụ ước tính hôm nay",
+    "revenueHelp": "Tính theo dịch vụ đã xác nhận sử dụng",
+    "pendingConfirmation": "Dịch vụ chờ xác nhận",
+    "pendingHelp": "Lượt dịch vụ đang chờ nhân viên xử lý",
+    "uploadFromFile": "Tải dữ liệu bằng file",
+    "addService": "Thêm dịch vụ",
+    "usageSection": "Thao tác dịch vụ khách hàng",
+    "usageTabs": "Danh sách thao tác dịch vụ",
+    "pendingBookings": "Booking có dịch vụ chờ",
+    "processed": "Đã thao tác",
+    "bookedFrom": "Đặt từ ngày",
+    "usedFrom": "Đã dùng từ ngày",
+    "bookedTo": "Đặt đến ngày",
+    "usedTo": "Đã dùng đến ngày",
+    "clearFilter": "Xóa lọc",
+    "loadingBookings": "Đang tải dịch vụ trong các booking...",
+    "pendingLoadError": "Không thể tải danh sách dịch vụ cần xác nhận. Vui lòng tải lại trang.",
+    "noPendingServices": "Hiện không có dịch vụ nào đang chờ xác nhận.",
+    "noPendingInRange": "Không có booking nào có dịch vụ chờ trong khoảng ngày đã chọn.",
+    "pendingCount": "{{count}} dịch vụ chờ",
+    "collapse": "Thu gọn",
+    "actions": "Thao tác",
+    "bookedAt": "Đặt:",
+    "room": "Phòng {{room}}",
+    "checkIn": "Nhận phòng:",
+    "confirmUsed": "Xác nhận đã dùng",
+    "loadingHistory": "Đang tải lịch sử thao tác dịch vụ...",
+    "historyLoadError": "Không thể tải lịch sử thao tác dịch vụ. Vui lòng tải lại trang.",
+    "noUsedInRange": "Không có dịch vụ nào được xác nhận sử dụng trong khoảng ngày đã chọn.",
+    "confirmedBy": "Xác nhận bởi {{name}}",
+    "branch": "Chi nhánh",
+    "filterByBranch": "Lọc dịch vụ theo chi nhánh",
+    "allBranches": "Tất cả chi nhánh",
+    "searchPlaceholder": "Tìm theo tên, mô tả hoặc danh mục dịch vụ...",
+    "searchServices": "Tìm kiếm dịch vụ",
+    "filterByStatus": "Lọc dịch vụ theo trạng thái",
+    "allStatuses": "Tất cả trạng thái",
+    "active": "Đang hoạt động",
+    "inactive": "Tạm ngưng",
+    "loadingServices": "Đang tải danh sách dịch vụ...",
+    "servicesLoadError": "Không thể tải danh sách dịch vụ.",
+    "branchUnknown": "Chưa xác định được chi nhánh hiện tại.",
+    "noServices": "Chưa có dịch vụ nào.",
+    "noMatchingServices": "Không tìm thấy dịch vụ phù hợp với từ khóa hoặc trạng thái đã chọn.",
+    "viewDetails": "Xem chi tiết",
+    "edit": "Chỉnh sửa",
+    "showing": "Hiển thị {{from}}-{{to}} trên {{total}} dịch vụ",
+    "rows": "Số dòng",
+    "previousPage": "Trang trước",
+    "nextPage": "Trang sau",
+    "unitPrice": "Đơn giá",
+    "serviceId": "Mã dịch vụ",
+    "serviceDescription": "Mô tả dịch vụ",
+    "noDescription": "Chưa có mô tả cho dịch vụ này.",
+    "close": "Đóng",
+    "serviceType": "Dịch vụ lưu trú",
+    "editService": "Chỉnh sửa dịch vụ",
+    "serviceScope": "Phạm vi dịch vụ",
+    "entireSystem": "Toàn hệ thống",
+    "branchOnly": "Dịch vụ chỉ áp dụng cho chi nhánh đã chọn.",
+    "allBranchesApply": "Dịch vụ sẽ áp dụng cho toàn bộ chi nhánh.",
+    "serviceName": "Tên dịch vụ",
+    "enterServiceName": "Nhập tên dịch vụ",
+    "price": "Giá",
+    "unit": "Đơn vị",
+    "category": "Danh mục",
+    "other": "Khác",
+    "roomService": "Dịch vụ phòng",
+    "sports": "Thể thao",
+    "restaurant": "Nhà hàng",
+    "electronics": "Điện tử",
+    "image": "Hình ảnh",
+    "uploadImage": "Tải ảnh lên",
+    "servicePreview": "Xem trước dịch vụ",
+    "description": "Mô tả",
+    "enterDescription": "Nhập mô tả dịch vụ",
+    "cancel": "Hủy",
+    "saving": "Đang lưu...",
+    "saveChanges": "Lưu thay đổi",
+    "saveError": "Không thể lưu dịch vụ. Vui lòng kiểm tra thông tin hoặc thử lại.",
+    "importServices": "Nhập dịch vụ",
+    "importProgress": "Tiến trình nhập dịch vụ",
+    "importFailed": "Nhập dịch vụ thất bại",
+    "importSucceeded": "Nhập dịch vụ thành công",
+    "bulkImportFinished": "Tiến trình máy chủ hoàn tất. Có {{passed}} dòng đạt kiểm tra và {{failed}} dòng cần xem lại trong thông báo góc phải dưới.",
+    "servicesAdded": "Đã thêm tất cả {{count}} dịch vụ cho bạn thành công!",
+    "dateLocale": "vi-VN"
+    ,"bulkImportDescription": "Ảnh được tải trực tiếp từ FE lên Cloudinary theo thư mục chi nhánh; BE chỉ nhận URL ảnh và lưu thông tin dịch vụ."
+    ,"downloadTemplate": "Tải file Excel mẫu"
+    ,"zipFileLabel": "File ZIP bộ dữ liệu (.zip)"
+    ,"unitOnce": "lần"
+    ,"unitHour": "giờ"
+    ,"unitDay": "ngày"
+    ,"spa": "Spa"
+  },
   "promotion": {
+    "bookingTitle": "Khuyến mãi",
+    "enterCode": "Nhập mã khuyến mãi",
+    "apply": "Áp dụng",
+    "bestDiscount": "Chọn mã giảm nhiều nhất",
+    "searchBookingPromotions": "Tìm khuyến mãi",
+    "branchOffers": "Khuyến mãi chi nhánh",
+    "customerOffers": "Khuyến mãi khách hàng",
+    "availableCodesEmpty": "Chưa có mã khả dụng.",
+    "selectCustomerToViewCodes": "Chọn khách hàng để xem mã đã lưu.",
+    "customerHasNoCodes": "Khách hàng chưa lưu mã nào.",
+    "loading": "Đang tải...",
+    "loadError": "Không thể tải.",
+    "nameLabel": "Tên khuyến mãi:",
+    "codeLabel": "Mã khuyến mãi:",
+    "details": "Chi tiết",
+    "chooseCode": "Chọn mã",
+    "close": "Đóng",
+    "noAdditionalDiscount": "Không có khuyến mãi hợp lệ giúp giảm thêm cho booking này.",
+    "codeNotFound": "Không tìm thấy mã khuyến mãi {{code}}.",
+    "codeIneligible": "Mã {{code}} chưa được áp dụng: {{reason}}",
+    "codeRemoved": "Đã bỏ mã {{code}}: {{reason}}",
+    "appliedCustomer": "Đã áp dụng khuyến mãi khách hàng",
+    "appliedBranch": "Đã áp dụng khuyến mãi chi nhánh",
+    "removeSelection": "Bỏ chọn",
+    "branchPromotionDescription": "Khuyến mãi của chi nhánh",
+    "customerPromotionDescription": "Khuyến mãi dành cho khách hàng",
+    "discountSection": "1. Mức giảm",
+    "maxDiscount": "Giảm tối đa {{amount}}",
+    "estimatedDiscount": "Giảm dự kiến cho booking này:",
+    "conditionsSection": "2. Phạm vi và điều kiện",
+    "appliesTo": "Áp dụng trên",
+    "bookingMinimum": "Booking tối thiểu",
+    "roomMinimum": "Tiền phòng tối thiểu",
+    "serviceMinimum": "Tiền dịch vụ tối thiểu",
+    "validitySection": "3. Hiệu lực và trạng thái",
+    "startDate": "Bắt đầu",
+    "endDate": "Kết thúc",
+    "notUpdated": "Chưa cập nhật",
+    "status": "Trạng thái",
+    "activeStatus": "Đang hoạt động",
+    "inactiveStatus": "Không hoạt động",
+    "usageStatus": "Tình trạng sử dụng",
+    "used": "Đã sử dụng",
+    "unused": "Chưa sử dụng",
+    "chooseThisPromotion": "Chọn khuyến mãi này",
+    "scopeRoom": "Tiền phòng",
+    "scopeService": "Tiền dịch vụ",
+    "scopeTotal": "Tổng hóa đơn",
+    "minimumBookingAmount": "Tổng booking cần đạt {{amount}}",
+    "minimumRoomAmount": "Tiền phòng cần đạt {{amount}}",
+    "minimumServiceAmount": "Tiền dịch vụ cần đạt {{amount}}",
+    "notEffective": "Mã khuyến mãi không còn hiệu lực",
+    "alreadyUsed": "Mã khuyến mãi này đã được sử dụng",
+    "thisCode": "này",
+    "discountAmount": "giảm {{amount}}",
+    "previousPromotions": "Khuyến mãi {{title}}: trang trước",
+    "nextPromotions": "Khuyến mãi {{title}}: trang tiếp theo",
     "createTitle": "Tạo khuyến mãi",
     "createDescription": "Thiết lập ưu đãi mới cho khách hàng.",
     "editTitle": "Chỉnh sửa khuyến mãi",
@@ -524,6 +1036,8 @@
     "minRoomValue": "Tiền phòng tối thiểu",
     "minServiceValue": "Tiền dịch vụ tối thiểu",
     "usageLimit": "Số lượt sử dụng tối đa",
+    "claimedCount": "Khách đã lưu mã",
+    "usedCount": "Lượt đã sử dụng",
     "hotelName": "Khách sạn áp dụng",
     "status": "Trạng thái",
     "allPromotionStatuses": "Tất cả trạng thái",
@@ -620,6 +1134,7 @@
     ,"legend": "Chú thích"
     ,"waitingCheckIn": "Đã đặt · chờ check-in"
     ,"inHouse": "Đang lưu trú"
+    ,"checkedIn": "Đã check-in · đang lưu trú"
     ,"checkOut": "Ngày check-out"
     ,"noBookingsThisWeek": "Không có phòng nào được đặt trong tuần này."
     ,"previousWeek": "Tuần trước"

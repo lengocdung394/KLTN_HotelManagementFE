@@ -1,56 +1,218 @@
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Check, LockKeyhole, Save, ShieldCheck, UserRound } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
+import { useMemo, useState } from "react";
+import { AlertCircle, Check, LoaderCircle, LockKeyhole, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { localizedText } from "../i18n";
+import {
+  useGetSuperAdminRolePermissionsQuery,
+  useGetSuperAdminRolesQuery,
+  type SuperAdminPermissionAssignment,
+} from "../services/superAdminApi";
 
-const roles = [
-  { key: "branchManager", tone: "blue", permissions: [true, true, true, true, true, true] },
-  { key: "receptionist", tone: "blue", permissions: [true, true, true, false, false, false] },
-  { key: "housekeeping", tone: "amber", permissions: [false, true, true, false, false, false] },
-  { key: "accountant", tone: "emerald", permissions: [false, false, false, true, true, false] },
-];
-const permissionKeys = ["overview", "bookings", "roomStatus", "invoices", "reports", "staff"];
-const tone: Record<string, string> = { blue: "bg-blue-100 text-blue-700", amber: "bg-amber-100 text-amber-700", emerald: "bg-emerald-100 text-emerald-700" };
+const getErrorMessage = (error: unknown) => {
+  if (!error || typeof error !== "object") {
+    return localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "Something went wrong. Please try again.");
+  }
+  const apiError = error as { data?: { message?: string }; message?: string; error?: string };
+  return apiError.data?.message
+    ?? apiError.message
+    ?? apiError.error
+    ?? localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "Something went wrong. Please try again.");
+};
+
+const categoryOf = (category?: string) =>
+  category?.trim() || localizedText("Chưa phân loại", "Uncategorized");
 
 export default function PermissionsWorkspace() {
-  const { t } = useTranslation();
-  const [matrix, setMatrix] = useState<boolean[][]>(() => {
-    try {
-      const saved = localStorage.getItem("staff_permissions_matrix");
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // fallback
-    }
-    return roles.map((role) => role.permissions);
-  });
-  const [saved, setSaved] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedRoleCode, setSelectedRoleCode] = useState("");
+  const {
+    data: roles = [],
+    isLoading: isRolesLoading,
+    isError: isRolesError,
+    error: rolesError,
+    refetch: refetchRoles,
+  } = useGetSuperAdminRolesQuery();
+  const {
+    data: rolePermissionGroups = [],
+    isLoading: isPermissionsLoading,
+    isError: isPermissionsError,
+    error: permissionsError,
+    refetch: refetchPermissions,
+  } = useGetSuperAdminRolePermissionsQuery();
+  const isLoading = isRolesLoading || isPermissionsLoading;
+  const isError = isRolesError || isPermissionsError;
+  const error = isRolesError ? rolesError : permissionsError;
 
-  const toggle = (roleIndex: number, permissionIndex: number) => {
-    setSaved(false);
-    setMatrix((current) => current.map((row, index) => index === roleIndex ? row.map((value, item) => item === permissionIndex ? !value : value) : row));
+  const selectedRole = roles.find((role) => role.code === selectedRoleCode) ?? roles[0];
+  const permissionCategories = useMemo(() => {
+    if (!selectedRole) return [];
+    const query = search.trim().toLocaleLowerCase();
+    const permissions = rolePermissionGroups.find((group) => group.roleCode === selectedRole.code)?.permissions ?? [];
+    const visiblePermissions = permissions
+      .filter((permission) => permission.granted)
+      .filter((permission) => !query || matchesPermission(permission, query));
+    const permissionsByCategory = new Map<string, SuperAdminPermissionAssignment[]>();
+    visiblePermissions.forEach((permission) => {
+      const category = categoryOf(permission.category);
+      const categoryPermissions = permissionsByCategory.get(category) ?? [];
+      categoryPermissions.push(permission);
+      permissionsByCategory.set(category, categoryPermissions);
+    });
+    return [...permissionsByCategory.entries()]
+      .sort(([left], [right]) => left.localeCompare(right, "vi"))
+      .map(([category, categoryPermissions]) => ({
+        category,
+        permissions: categoryPermissions.sort((left, right) => left.name.localeCompare(right.name, "vi")),
+      }));
+  }, [selectedRole, rolePermissionGroups, search]);
+
+  const refresh = () => {
+    void refetchRoles();
+    void refetchPermissions();
   };
 
-  const handleSave = () => {
-    try {
-      localStorage.setItem("staff_permissions_matrix", JSON.stringify(matrix));
-      setSaved(true);
-      toast({
-        title: "Đã lưu thành công",
-        description: "Ma trận phân quyền nhân viên đã được cập nhật thành công.",
-      });
-    } catch {
-      toast({
-        title: "Lỗi",
-        description: "Không thể lưu cấu hình phân quyền.",
-        variant: "destructive",
-      });
-    }
-  };
+  return (
+    <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <header className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700">
+            <ShieldCheck size={19} />
+          </span>
+          <div>
+            <h3 className="font-bold text-slate-900">{localizedText("Quyền theo vai trò", "Permissions by role")}</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {localizedText(
+                "Chỉ xem quyền đang được cấp. Mọi thay đổi do Super Admin quản lý.",
+                "View assigned permissions only. Changes are managed by the Super Admin.",
+              )}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={isLoading}
+          className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+        >
+          <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
+          {localizedText("Làm mới", "Refresh")}
+        </button>
+      </header>
 
-  return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-    <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><ShieldCheck size={18} className="text-blue-600" /><h3 className="font-bold text-slate-900">{t("permission.accessTitle")}</h3></div><p className="mt-1 text-sm text-slate-500">{t("permission.accessDescription")}</p></div><button onClick={handleSave} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition"><Save size={16} />{saved ? t("permission.saved") : t("permission.save")}</button></div>
-    <div className="border-b border-slate-100 bg-blue-50/50 p-4"><div className="flex items-start gap-3"><LockKeyhole size={17} className="mt-0.5 text-blue-600" /><p className="text-xs leading-5 text-blue-900">{t("permission.notice")}</p></div></div>
-    <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-212.5 text-left"><thead className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400"><tr><th className="w-56 px-5 py-4">{t("permission.role")}</th>{permissionKeys.map((key) => <th key={key} className="px-3 py-4 text-center">{t(`permission.permissions.${key}`)}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{roles.map((role, roleIndex) => <tr key={role.key} className="hover:bg-slate-50/60"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className={`grid h-9 w-9 place-items-center rounded-lg ${tone[role.tone]}`}><UserRound size={16} /></span><span><p className="text-xs font-bold text-slate-800">{t(`permission.roles.${role.key}.name`)}</p><p className="mt-1 text-[10px] text-slate-400">{t(`permission.roles.${role.key}.description`)}</p></span></div></td>{role.permissions.map((_, permissionIndex) => <td key={permissionIndex} className="px-3 py-4 text-center"><button onClick={() => toggle(roleIndex, permissionIndex)} className={`mx-auto grid h-7 w-7 place-items-center rounded-lg ${matrix[roleIndex][permissionIndex] ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-300"}`} aria-label={`${t(`permission.roles.${role.key}.name`)}: ${t(`permission.permissions.${permissionKeys[permissionIndex]}`)}`}><Check size={15} /></button></td>)}</tr>)}</tbody></table></div>
-    <div className="space-y-3 p-4 md:hidden">{roles.map((role, roleIndex) => <div key={role.key} className="rounded-xl border border-slate-200 p-4"><div className="flex items-center gap-3"><span className={`grid h-9 w-9 place-items-center rounded-lg ${tone[role.tone]}`}><UserRound size={16} /></span><div><p className="text-sm font-bold text-slate-800">{t(`permission.roles.${role.key}.name`)}</p><p className="mt-1 text-[10px] text-slate-400">{t(`permission.roles.${role.key}.description`)}</p></div></div><div className="mt-4 grid grid-cols-2 gap-2">{permissionKeys.map((key, permissionIndex) => <button key={key} onClick={() => toggle(roleIndex, permissionIndex)} className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[10px] font-semibold ${matrix[roleIndex][permissionIndex] ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-400"}`}><Check size={12} />{t(`permission.permissions.${key}`)}</button>)}</div></div>)}</div>
-  </section>;
+      {!isLoading && !isError && roles.length > 0 && (
+        <div className="border-b border-slate-100 bg-slate-50/60 px-4 pt-3">
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label={localizedText("Vai trò", "Roles")}>
+            {roles.map((role) => {
+              const isSelected = role.code === selectedRole?.code;
+              return (
+                <button
+                  key={role.code}
+                  type="button"
+                  role="tab"
+                  id={`permission-role-tab-${role.code}`}
+                  aria-selected={isSelected}
+                  aria-controls="permission-role-panel"
+                  onClick={() => setSelectedRoleCode(role.code)}
+                  className={`rounded-t-lg border px-4 py-2 text-sm font-semibold transition ${
+                    isSelected
+                      ? "border-slate-200 border-b-white bg-white text-blue-700"
+                      : "border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-800"
+                  }`}
+                >
+                  {role.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="border-b border-slate-100 p-4">
+        <label className="flex h-10 max-w-xl items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-slate-400">
+          <Search size={16} />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={localizedText("Tìm quyền trong vai trò đang chọn...", "Search permissions in the selected role...")}
+            className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+          />
+        </label>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500">
+          <LoaderCircle size={18} className="animate-spin" />
+          {localizedText("Đang tải cấu hình quyền...", "Loading permission configuration...")}
+        </div>
+      ) : isError ? (
+        <div className="p-8 text-center">
+          <AlertCircle size={22} className="mx-auto text-rose-500" />
+          <p className="mt-3 text-sm font-semibold text-slate-800">
+            {localizedText("Không tải được cấu hình quyền", "Could not load permissions")}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">{getErrorMessage(error)}</p>
+          <button type="button" onClick={refresh} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            {localizedText("Thử lại", "Try again")}
+          </button>
+        </div>
+      ) : (
+        selectedRole ? (
+          <article
+            id="permission-role-panel"
+            role="tabpanel"
+            aria-labelledby={`permission-role-tab-${selectedRole.code}`}
+            className="p-5"
+          >
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                <h4 className="font-semibold text-slate-900">{selectedRole.name}</h4>
+                <span className="font-mono text-xs text-slate-500">{selectedRole.code}</span>
+              </div>
+              {selectedRole.description && <p className="mt-1 text-sm text-slate-500">{selectedRole.description}</p>}
+              {permissionCategories.length === 0 ? (
+                <div className="mt-4">
+                  <span className="text-sm text-slate-400">
+                    {search.trim()
+                      ? localizedText("Không tìm thấy quyền phù hợp trong vai trò này.", "No matching permissions in this role.")
+                      : localizedText("Chưa có quyền được cấp.", "No permissions assigned.")}
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {permissionCategories.map(({ category, permissions }) => (
+                    <section key={category} aria-label={category}>
+                      <h5 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                        {category}
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                          {permissions.length}
+                        </span>
+                      </h5>
+                      <div className="flex flex-wrap gap-2">
+                        {permissions.map((permission) => (
+                          <span key={permission.code} title={permission.description || permission.code} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-800">
+                            <Check size={13} />
+                            <span>{permission.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+          </article>
+        ) : (
+          <p className="p-10 text-center text-sm text-slate-500">
+            {localizedText("Chưa có vai trò để hiển thị.", "There are no roles to display.")}
+          </p>
+        )
+      )}
+      <footer className="flex items-center gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3 text-xs text-slate-500">
+        <LockKeyhole size={14} />
+        {localizedText("Quản lý không thể thêm, xóa hoặc sửa quyền tại màn hình này.", "Managers cannot add, remove, or edit permissions here.")}
+      </footer>
+    </section>
+  );
+}
+
+function matchesPermission(permission: SuperAdminPermissionAssignment, query: string) {
+  return [permission.code, permission.name, permission.category, permission.description]
+    .some((value) => value?.toLocaleLowerCase().includes(query));
 }

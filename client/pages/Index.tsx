@@ -21,6 +21,7 @@ import { useGetHotelHousekeepingTasksQuery, useGetMyHousekeepingTasksQuery } fro
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import { useGetHotelReportQuery } from "../services/reportApi";
+import { isEmployeePortalUser } from "../lib/employeeRoles";
 
 const getLocalDateParam = () => {
   const today = new Date();
@@ -32,7 +33,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
   const dispatch = useAppDispatch();
   const { fullName, email, position, hotelId, roles } = useAppSelector((state) => state.auth);
-  const isEmployee = roles.includes("ROLE_EMPLOYEE") && !roles.includes("ROLE_MANAGER");
+  const isEmployee = isEmployeePortalUser(roles);
   const { data: rooms = [], isLoading: roomsLoading, isError: roomsError } = useGetRoomsByCurrentHotelQuery(undefined, {
     skip: !hotelId,
     pollingInterval: 30000,
@@ -88,7 +89,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
     ? Math.round((occupiedRooms / roomsAvailableForOccupancy) * 100)
     : 0;
   const currentGuestCount = bookings.reduce((guestCount, booking) => {
-    if (String(booking.bookingStatus ?? "").toUpperCase() === "CANCELLED") return guestCount;
+    if (String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return guestCount;
     const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
     return guestCount + details.reduce((roomGuestCount, detail) => {
       const status = String(detail.bookingStatusType ?? detail.status ?? "").toUpperCase();
@@ -238,9 +239,12 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                     {t("common.tasksUpdated")}
                   </p>
                 </div>
-                <span className="text-xs font-semibold text-slate-400">
+                <Link
+                  to="/staff?tab=tasks"
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                >
                   {t("dashboard.viewAll")}
-                </span>
+                </Link>
               </div>
               <div className="space-y-3">
                 {tasksLoading ? (

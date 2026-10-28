@@ -39,7 +39,7 @@ export default function CheckoutSurplusRefundChoice({
         />
         <span>
           <span className="block font-semibold text-slate-800">Hoàn qua ngân hàng</span>
-          <span className="mt-0.5 block text-xs text-slate-500">Quản lý xử lý thủ công trong 1–3 ngày; có thể kiểm tra hoặc cập nhật tài khoản nhận.</span>
+          <span className="mt-0.5 block text-xs text-slate-500">Quản lý duyệt và chuyển khoản; tiền thường về trong 1–3 ngày làm việc kể từ khi chuyển.</span>
         </span>
       </label>
     </fieldset>

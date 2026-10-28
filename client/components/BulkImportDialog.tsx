@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Download, Upload, X } from "lucide-react";
 
 type BulkImportDialogProps = {
@@ -36,6 +37,7 @@ export default function BulkImportDialog({
   progressPercent,
   onUpload,
 }: BulkImportDialogProps) {
+  const { t } = useTranslation();
   const titleId = useId();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -68,7 +70,7 @@ export default function BulkImportDialog({
     try {
       if (await onUpload(selectedFile)) onOpenChange(false);
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Không thể tải dữ liệu lên.");
+      setUploadError(error instanceof Error ? error.message : t("room.importDialog.uploadFailed"));
     } finally {
       setIsUploading(false);
     }
@@ -98,7 +100,7 @@ export default function BulkImportDialog({
             type="button"
             disabled={isUploading}
             onClick={() => onOpenChange(false)}
-            aria-label="Đóng"
+            aria-label={t("common.close")}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
           >
             <X size={20} />
@@ -142,7 +144,7 @@ export default function BulkImportDialog({
               <div
                 className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"
                 role="progressbar"
-                aria-label="Tiến trình nhập dữ liệu"
+                aria-label={t("room.importDialog.progressLabel")}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={progressPercent}
@@ -163,7 +165,7 @@ export default function BulkImportDialog({
             onClick={() => onOpenChange(false)}
             className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
-            Hủy
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -171,7 +173,7 @@ export default function BulkImportDialog({
             onClick={() => void upload()}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Upload size={16} />{isUploading ? "Đang tải lên..." : uploadLabel}
+            <Upload size={16} />{isUploading ? t("room.importDialog.uploading") : uploadLabel}
           </button>
         </div>
       </div>

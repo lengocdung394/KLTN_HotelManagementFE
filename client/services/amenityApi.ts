@@ -13,6 +13,8 @@ export type AmenityResponse = {
   price: number;
 };
 
+export type AmenityRequest = Pick<AmenityResponse, "name" | "price">;
+
 export type AmenityImportRequest = {
   amenities: Array<{
     row: number;
@@ -66,6 +68,16 @@ export const amenityApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<AmenityResponse[]>) => response?.result ?? [],
       invalidatesTags: ["Amenity"],
     }),
+    createAmenity: builder.mutation<AmenityResponse, AmenityRequest>({
+      query: (data) => ({ url: "/amenities", method: "POST", data }),
+      transformResponse: (response: ApiResponse<AmenityResponse>) => response.result,
+      invalidatesTags: ["Amenity"],
+    }),
+    updateAmenity: builder.mutation<AmenityResponse, { id: number; amenity: AmenityRequest }>({
+      query: ({ id, amenity }) => ({ url: `/amenities/${id}`, method: "PUT", data: amenity }),
+      transformResponse: (response: ApiResponse<AmenityResponse>) => response.result,
+      invalidatesTags: ["Amenity", "Room"],
+    }),
     importAmenitiesFromFile: builder.mutation<StartAmenityImportResponse, AmenityImportRequest>({
       query: (data) => ({
         url: "/amenitiesExcel/importExcel/async",
@@ -78,3 +90,4 @@ export const amenityApi = baseApi.injectEndpoints({
 });
 
 export const { useGetAllAmenitiesQuery, useCreateSharedAmenityMutation, useImportAmenitiesFromFileMutation } = amenityApi;
+export const { useCreateAmenityMutation, useUpdateAmenityMutation } = amenityApi;

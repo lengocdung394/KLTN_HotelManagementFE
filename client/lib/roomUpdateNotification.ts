@@ -1,3 +1,5 @@
+import { localizedText } from "../i18n";
+
 type RoomChange = {
   field?: unknown;
   label?: unknown;
@@ -46,5 +48,21 @@ export const formatRoomUpdateNotification = (value: unknown) => {
   const event = asRecord(value);
   const data = asRecord(event?.data) ?? event;
   const roomNumber = data?.roomNumber == null ? "" : `Phòng ${String(data.roomNumber)}`;
+  const action = String(event?.action ?? "").toUpperCase();
+  if (action === "CHECKOUT_COMPLETED") {
+    return localizedText(
+      `${roomNumber || "Phòng"} vừa check-out xong. Trạng thái phòng đã được cập nhật sang đang dọn dẹp trong mục dọn dẹp.`,
+      `${roomNumber || "Room"} has just checked out. Its status was updated to cleaning in housekeeping.`,
+    );
+  }
+  if (action === "HOUSEKEEPING_COMPLETED") {
+    return `${roomNumber || "Phòng"} đã dọn xong; trạng thái được cập nhật thành sẵn sàng.`;
+  }
   return formatEntityUpdateNotification(value, roomNumber || "Phòng");
 };
+
+export const isHousekeepingCompletionUpdate = (value: unknown) =>
+  String(asRecord(value)?.action ?? "").toUpperCase() === "HOUSEKEEPING_COMPLETED";
+
+export const isCheckoutCompletionUpdate = (value: unknown) =>
+  String(asRecord(value)?.action ?? "").toUpperCase() === "CHECKOUT_COMPLETED";

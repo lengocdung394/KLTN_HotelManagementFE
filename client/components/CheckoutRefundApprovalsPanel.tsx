@@ -132,7 +132,8 @@ export default function CheckoutRefundApprovalsPanel() {
 
 function CheckoutRefundRow({ refund }: { refund: CheckoutRefund }) {
   const roles = useAppSelector((state) => state.auth.roles);
-  const canApproveRefund = roles.includes("ROLE_RECEPTIONIST") || roles.includes("ROLE_STAFF") || roles.includes("ROLE_EMPLOYEE") || roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
+  const canApproveRefund = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
+  const canConfirmCashRefund = canApproveRefund || roles.includes("ROLE_RECEPTIONIST") || roles.includes("ROLE_STAFF") || roles.includes("ROLE_EMPLOYEE");
   useTranslation();
   const [updateBankDetails, { isLoading: isSaving }] = useUpdateCheckoutRefundBankDetailsMutation();
   const [approveRefund, { isLoading: isApproving }] = useApproveCheckoutRefundMutation();
@@ -336,22 +337,36 @@ function CheckoutRefundRow({ refund }: { refund: CheckoutRefund }) {
             />
             {refund.status === "PENDING" && (
               isCashRefund ? (
-                <button type="button" onClick={() => void completeRefund()} disabled={isWorking} className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                  {isConfirming ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
-                  {localizedText("Xác nhận đã hoàn tiền mặt", "Confirm cash refund")}
-                </button>
+                canConfirmCashRefund ? (
+                  <button type="button" onClick={() => void completeRefund()} disabled={isWorking} className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    {isConfirming ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
+                    {localizedText("Xác nhận đã hoàn tiền mặt", "Confirm cash refund")}
+                  </button>
+                ) : null
               ) : (
-                <button type="button" onClick={() => void approve()} disabled={!hasBankAccount || !amountConfirmed || !customerConfirmed || isWorking} className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                  {isApproving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
-                  {localizedText("Duyệt hoàn", "Approve refund")}
-                </button>
+                canApproveRefund ? (
+                  <button type="button" onClick={() => void approve()} disabled={!hasBankAccount || !amountConfirmed || !customerConfirmed || isWorking} className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-blue-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    {isApproving ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
+                    {localizedText("Duyệt hoàn", "Approve refund")}
+                  </button>
+                ) : (
+                  <p className="rounded-lg bg-amber-50 px-2 py-2 text-xs text-amber-800">
+                    {localizedText("Chờ quản lý quyết định duyệt hoàn.", "Awaiting manager's refund decision.")}
+                  </p>
+                )
               )
             )}
             {refund.status === "APPROVED" && (
-              <button type="button" onClick={() => void completeRefund()} disabled={!note.trim() || isWorking} className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                {isConfirming ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
-                {localizedText("Xác nhận đã chuyển", "Confirm transfer")}
-              </button>
+              canApproveRefund ? (
+                <button type="button" onClick={() => void completeRefund()} disabled={!note.trim() || isWorking} className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                  {isConfirming ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
+                  {localizedText("Xác nhận đã chuyển", "Confirm transfer")}
+                </button>
+              ) : (
+                <p className="rounded-lg bg-blue-50 px-2 py-2 text-xs text-blue-800">
+                  {localizedText("Đã duyệt; chờ quản lý xác nhận chuyển khoản.", "Approved; awaiting manager confirmation of the transfer.")}
+                </p>
+              )
             )}
           </div>
         )}
