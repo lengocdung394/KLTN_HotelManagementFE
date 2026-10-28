@@ -6,7 +6,6 @@ import {
   ChevronsUpDown,
   FileSpreadsheet,
   LayoutDashboard,
-  LockKeyhole,
   Plus,
   Search,
   ShieldCheck,
@@ -370,18 +369,6 @@ export default function SuperAdminRolePermissionsPanel() {
         </p>
       </header>
 
-      <div className="m-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:m-5">
-        <LockKeyhole size={17} className="mt-0.5 shrink-0 text-amber-700" />
-        <p className="text-sm leading-6 text-amber-900">
-          Thao tác được lưu vào backend. Danh mục quyền dùng GET/POST{" "}
-          <code>/role_permissions/permissions</code> và POST{" "}
-          <code>/role_permissions/permissions/import</code>. Phân quyền role dùng{" "}
-          <code>GET/POST /role_permissions/roles</code>,{" "}
-          <code>GET /role_permissions/roles/permissions</code>,{" "}
-          <code>POST /role_permissions/roles/permissions/import</code>, và POST/DELETE tại{" "}
-          <code>/role_permissions/roles/{"{roleCode}"}/permissions/{"{permissionCode}"}</code>.
-        </p>
-      </div>
       {(isRolesError || isRolePermissionsError || isPermissionCatalogError) && (
         <div role="alert" className="mx-4 mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 sm:mx-5">
           <p>Không thể tải role hoặc danh mục quyền từ backend.</p>

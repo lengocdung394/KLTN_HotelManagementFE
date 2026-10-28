@@ -68,20 +68,29 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   };
 
   return (
-    <div className="p-5">
-      <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h3 className="font-bold text-slate-900">Danh sách tiện nghi</h3>
-          <p className="mt-1 text-sm text-slate-500">{filteredAmenities.length} tiện nghi</p>
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div>
+            <h3 className="font-bold text-slate-900">Danh sách tiện ích</h3>
+            <p className="mt-1 text-sm text-slate-500">Tìm kiếm và quản lý giá tiện ích</p>
+          </div>
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+            {filteredAmenities.length} mục
+          </span>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <label className="relative block w-full sm:w-64">
-            <Search size={15} className="absolute left-3 top-3 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm tiện nghi..." className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400" />
+        <div className="w-full sm:w-72">
+          <label className="relative block">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên tiện ích..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
           </label>
         </div>
       </div>
-      <p className="mt-3 text-xs text-slate-500">File CSV/Excel cần có hai cột <strong>Tên tiện ích</strong> và <strong>Giá</strong>.</p>
+      {canManage && (
+        <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+          File CSV/Excel cần có hai cột <strong className="font-semibold text-slate-700">Tên tiện ích</strong> và <strong className="font-semibold text-slate-700">Giá</strong>.
+        </p>
+      )}
       {isLoading ? (
         <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách tiện nghi...</p>
       ) : isError ? (
@@ -89,22 +98,22 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
       ) : filteredAmenities.length === 0 ? (
         <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-105 text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-slate-100">
-                <th className="px-3 py-3 font-semibold">Tên tiện nghi</th>
-                <th className="px-3 py-3 text-right font-semibold">Giá</th>
-                {canManage && <th className="px-3 py-3 text-right font-semibold">Thao tác</th>}
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="px-4 py-3.5 font-semibold">Tên tiện ích</th>
+                <th className="px-4 py-3.5 text-right font-semibold">Giá</th>
+                {canManage && <th className="px-4 py-3.5 text-right font-semibold">Thao tác</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {filteredAmenities.map((amenity) => (
-                <tr key={amenity.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-3 font-medium text-slate-800">{amenity.name}</td>
-                  <td className="px-3 py-3 text-right font-semibold text-blue-700">{money(amenity.price)}</td>
+                <tr key={amenity.id} className="transition-colors hover:bg-blue-50/40">
+                  <td className="px-4 py-4 font-medium text-slate-800">{amenity.name}</td>
+                  <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-800">{money(amenity.price)}</td>
                   {canManage && <td className="px-3 py-3 text-right">
-                    <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+                    <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
                       <Pencil size={13} />Chỉnh sửa
                     </button>
                   </td>}

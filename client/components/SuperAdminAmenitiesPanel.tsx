@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileSpreadsheet, LoaderCircle, Plus, Upload } from "lucide-react";
+import { FileSpreadsheet, LoaderCircle, Plus, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import RoomAmenitiesTab from "./RoomAmenitiesTab";
 import { downloadAmenityTemplate, parseAmenityImportFile } from "../lib/amenityBulkImport";
@@ -24,6 +24,7 @@ export default function SuperAdminAmenitiesPanel() {
   const [updateAmenity] = useUpdateAmenityMutation();
   const [importAmenities] = useImportAmenitiesFromFileMutation();
   const [isCreatingFormOpen, setIsCreatingFormOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
 
@@ -70,6 +71,7 @@ export default function SuperAdminAmenitiesPanel() {
         title: savedCount > 0 ? "Nhập tiện ích thành công" : "Không có tiện ích mới",
         description: savedCount > 0 ? `Đã thêm ${savedCount} tiện ích.` : "Các tiện ích trong file đã tồn tại.",
       });
+      setIsImportDialogOpen(false);
     } catch (error) {
       const message = errorMessage(error);
       setImportMessage(message);
@@ -80,36 +82,36 @@ export default function SuperAdminAmenitiesPanel() {
   };
 
   return (
-    <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <header className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Danh mục tiện ích toàn hệ thống</h2>
-          <p className="mt-1 text-sm text-slate-500">Chỉ Super Admin được thêm, chỉnh sửa hoặc nhập tiện ích. Danh mục này dùng chung cho các chi nhánh.</p>
+    <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <header className="border-b border-slate-100 bg-gradient-to-br from-blue-50/80 via-white to-white p-5 sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700">
+            <Sparkles size={20} />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-slate-900">Danh mục tiện ích toàn hệ thống</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+              Quản lý danh mục tiện ích dùng chung cho các chi nhánh. Chỉ Super Admin được thêm, chỉnh sửa hoặc nhập dữ liệu.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setIsCreatingFormOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">
+        <div className="mt-5 flex flex-col gap-2 border-t border-blue-100/80 pt-4 sm:flex-row sm:flex-wrap sm:justify-end">
+          <button type="button" onClick={() => setIsCreatingFormOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
             <Plus size={16} /> Thêm tiện ích
           </button>
-          <button type="button" onClick={downloadAmenityTemplate} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            <FileSpreadsheet size={16} /> Tải mẫu Excel
+          <button
+            type="button"
+            onClick={() => {
+              setImportMessage("");
+              setIsImportDialogOpen(true);
+            }}
+            disabled={isImporting}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Upload size={16} /> Nhập từ file
           </button>
-          <label className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 ${isImporting ? "pointer-events-none opacity-50" : ""}`}>
-            {isImporting ? <LoaderCircle size={16} className="animate-spin" /> : <Upload size={16} />}
-            {isImporting ? "Đang nhập..." : "Import CSV / Excel"}
-            <input
-              type="file"
-              accept=".csv,.xlsx"
-              className="sr-only"
-              disabled={isImporting}
-              onChange={(event) => {
-                void importFile(event.target.files?.[0]);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
         </div>
       </header>
-      {importMessage && <p role="status" className={`border-b px-5 py-2 text-sm ${isImporting ? "border-blue-100 bg-blue-50 text-blue-700" : "border-slate-100 bg-slate-50 text-slate-600"}`}>{importMessage}</p>}
       <RoomAmenitiesTab
         amenities={amenities}
         isLoading={isLoading || isCreating}
@@ -120,6 +122,96 @@ export default function SuperAdminAmenitiesPanel() {
         onSave={(amenity, changes) => saveAmenity(amenity.id, changes)}
         onAdd={addAmenity}
       />
+      {isImportDialogOpen && (
+        <div
+          className="fixed inset-0 z-70 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          onMouseDown={() => {
+            if (!isImporting) setIsImportDialogOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="amenity-import-title"
+            className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-start justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
+              <div className="flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <Upload size={19} />
+                </span>
+                <div>
+                  <h3 id="amenity-import-title" className="font-bold text-slate-900">Nhập tiện ích từ file</h3>
+                  <p className="mt-1 text-xs text-slate-500">Tải file mẫu hoặc chọn file dữ liệu của bạn</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImportDialogOpen(false)}
+                disabled={isImporting}
+                aria-label="Đóng"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <div className="space-y-4 p-5 sm:p-6">
+              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                <div className="flex items-start gap-3">
+                  <FileSpreadsheet size={19} className="mt-0.5 shrink-0 text-blue-700" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-slate-800">Bước 1: Chuẩn bị file theo mẫu</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      File cần có hai cột <strong>Tên tiện ích</strong> và <strong>Giá</strong>. Hỗ trợ định dạng CSV hoặc Excel.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={downloadAmenityTemplate}
+                      className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                    >
+                      <FileSpreadsheet size={15} /> Tải file mẫu Excel
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <label className={`flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition hover:border-emerald-400 hover:bg-emerald-50/50 ${isImporting ? "pointer-events-none opacity-60" : ""}`}>
+                {isImporting ? (
+                  <LoaderCircle size={22} className="animate-spin text-emerald-700" />
+                ) : (
+                  <Upload size={22} className="text-emerald-700" />
+                )}
+                <span className="mt-2 text-sm font-semibold text-slate-800">
+                  {isImporting ? "Đang xử lý file..." : "Bước 2: Chọn file CSV hoặc Excel"}
+                </span>
+                <span className="mt-1 text-xs text-slate-500">
+                  {isImporting ? "Vui lòng đợi trong giây lát" : "Nhấn vào đây để duyệt file từ thiết bị"}
+                </span>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx"
+                  className="sr-only"
+                  disabled={isImporting}
+                  onChange={(event) => {
+                    void importFile(event.target.files?.[0]);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              {isImporting && (
+                <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                  {importMessage || "Đang nhập tiện ích..."}
+                </p>
+              )}
+              {!isImporting && importMessage && (
+                <p role="status" className={`rounded-lg px-3 py-2 text-sm ${importMessage.startsWith("Đã nhập") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                  {importMessage}
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

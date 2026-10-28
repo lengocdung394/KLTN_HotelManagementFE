@@ -43,6 +43,8 @@ export type HotelReport = {
   endDate: string;
   totalBookingCount?: number;
   cashReceived?: number;
+  cashReceivedCash?: number;
+  cashReceivedBank?: number;
   cashRefunded?: number;
   cashChangeReturned?: number;
   netCashReceived?: number;
