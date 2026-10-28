@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useGetRoomMatrixQuery, type RoomMatrixResponse, type RoomMatrixSchedule } from "../services/bookingApi";
 import { useAppSelector } from "../store/hooks";
 
@@ -30,9 +30,8 @@ const formatDate = (value: string, language: string) =>
 const getScheduleStatusForDate = (schedule: RoomMatrixSchedule, date: string) => {
   const roomStatus = schedule.roomStatus?.toUpperCase();
   if (roomStatus === "CANCELLED") return undefined;
-  const isInHouse = roomStatus
-    ? roomStatus === "CHECKED_IN" || roomStatus === "CHECKED_OUT"
-    : schedule.bookingStatus?.toUpperCase() === "IN_HOUSE";
+  const isInHouse = roomStatus === "CHECKED_IN"
+    || (!roomStatus && schedule.bookingStatus?.toUpperCase() === "IN_HOUSE");
 
   const checkIn = schedule.checkinTime?.slice(0, 10);
   const checkOut = schedule.checkoutTime?.slice(0, 10);
@@ -165,7 +164,7 @@ export default function OverviewCalendarNew() {
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="h-3 w-3 rounded-sm bg-emerald-100" />
-                {t("calendar.inHouse", "Đang lưu trú")}
+                {t("calendar.checkedIn", "Đã check-in · đang lưu trú")}
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="h-3 w-3 rounded-sm bg-amber-200" />
@@ -197,12 +196,12 @@ export default function OverviewCalendarNew() {
                   </span>
                 </div>
                 {days.map((day) => {
-                  const entry = room.schedules
-                    ?.map((schedule) => ({ schedule, status: getScheduleStatusForDate(schedule, day.date) }))
-                    .find((item) => item.status === "CHECK_OUT")
-                    ?? room.schedules
-                      ?.map((schedule) => ({ schedule, status: getScheduleStatusForDate(schedule, day.date) }))
-                      .find((item) => item.status);
+                  const scheduleEntries = room.schedules?.map((schedule) => ({
+                    schedule,
+                    status: getScheduleStatusForDate(schedule, day.date),
+                  })) ?? [];
+                  const entry = scheduleEntries.find((item) => item.status === "CHECK_OUT")
+                    ?? scheduleEntries.find((item) => item.status);
                   const schedule = entry?.schedule;
                   const status = entry?.status;
                   const bookingMarker = schedule?.bookingId ? bookingMarkers.get(String(schedule.bookingId)) : undefined;
@@ -221,7 +220,7 @@ export default function OverviewCalendarNew() {
                             {status === "CHECK_OUT"
                               ? t("calendar.checkOut", "Check-out")
                               : status === "IN_HOUSE"
-                                ? t("calendar.inHouse", "Đang lưu trú")
+                                ? <><CheckCircle2 className="mr-0.5 inline-block" size={10} />{t("calendar.checkedIn", "Đã check-in · đang lưu trú")}</>
                                 : t("calendar.waitingCheckIn", "Chờ check-in")}
                           </span>
                         </div>

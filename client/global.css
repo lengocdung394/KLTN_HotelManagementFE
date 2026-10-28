@@ -15,7 +15,7 @@ section:has(input[type="file"]) label > span:first-child:not(.text-rose-500):not
   color: #ef4444;
 }
 
-body:has(input[placeholder="Nhập mật khẩu hiện tại"])::before {
+body:has(.password-gate)::before {
   position: fixed;
   inset: 0;
   z-index: 49;
@@ -24,11 +24,12 @@ body:has(input[placeholder="Nhập mật khẩu hiện tại"])::before {
   pointer-events: auto;
 }
 
-body:has(div.fixed.inset-0) {
+body:has(div.fixed.inset-0),
+body:has(.password-gate) {
   overflow: hidden !important;
 }
 
-section:has(input[placeholder="Nhập mật khẩu hiện tại"]) {
+.password-gate {
   position: fixed;
   left: 50%;
   top: 50%;

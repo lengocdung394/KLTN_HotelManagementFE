@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
+import { localizedText } from "../i18n";
 import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import EventPricingCalendar from "../components/EventPricingCalendar";
-import RoomAmenitiesTab from "../components/RoomAmenitiesTab";
 import RoomListTab from "../components/RoomListTab";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
 import BulkImportDialog from "../components/BulkImportDialog";
@@ -14,7 +14,7 @@ import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation, useUpdateRoomStatusMutation } from "../services/roomApi";
-import { getAmenityImportStatus, isAmenityImportFinished, useGetAllAmenitiesQuery, useImportAmenitiesFromFileMutation, type AmenityResponse } from "../services/amenityApi.ts";
+import { useGetAllAmenitiesQuery } from "../services/amenityApi.ts";
 import { useCreateBuildingMutation, useGetBuildingsByCurrentHotelQuery, useUpdateBuildingMutation } from "../services/buildingApi";
 import { useCreateFloorMutation, useGetFloorsByBuildingIdQuery, useGetFloorsByHotelIdQuery, useUpdateFloorMutation } from "../services/floorApi";
 import { useGetBranchRoomPoliciesQuery, useUpdateBranchRoomPolicyMutation } from "../services/branchRoomPolicyApi";
@@ -22,12 +22,12 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
-import { downloadAmenityTemplate } from "../lib/amenityBulkImport";
+import { getRoomAmenityTranslationKey } from "../lib/roomLocalization";
 import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
 import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
 
 type ImportedRoomRow = Record<string, string>;
-type ImportTarget = "rooms" | "buildings" | "floors" | "amenities";
+type ImportTarget = "rooms" | "buildings" | "floors";
 type RoomSocketImportProgress = {
   taskId: string;
   percent: number | null;
@@ -36,7 +36,7 @@ type RoomSocketImportProgress = {
   rows: RoomImportRowResult[];
 };
 
-const parseRoomSocketImportProgress = (data: unknown): RoomSocketImportProgress => {
+const parseRoomSocketImportProgress = (data: unknown, translate: (key: string, options?: Record<string, unknown>) => string): RoomSocketImportProgress => {
   const payload = data && typeof data === "object" ? data as Record<string, unknown> : {};
   const detailItems = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.details) ? payload.details : [];
   const rows = detailItems.map((item, index): RoomImportRowResult => {
@@ -58,7 +58,7 @@ const parseRoomSocketImportProgress = (data: unknown): RoomSocketImportProgress 
       rowNumber: Number.isFinite(rowNumber) ? rowNumber : index + 1,
       roomNumber,
       passed,
-      ...(!passed ? { message: message || (rawStatus ? `Trạng thái xử lý: ${rawStatus}` : "Dòng chưa được đánh dấu thành công từ máy chủ.") } : {}),
+      ...(!passed ? { message: message || (rawStatus ? translate("room.importProgress.statusLabel", { status: rawStatus }) : translate("room.importProgress.rowMissingStatus")) } : {}),
     };
   });
   const percentValue = payload.percent ?? payload.percentage ?? payload.progress;
@@ -69,7 +69,7 @@ const parseRoomSocketImportProgress = (data: unknown): RoomSocketImportProgress 
   return {
     taskId: typeof payload.taskId === "string" || typeof payload.taskId === "number" ? String(payload.taskId) : "",
     percent,
-    message: typeof payload.message === "string" ? payload.message : "Đang nhận tiến trình nhập phòng.",
+    message: typeof payload.message === "string" ? payload.message : translate("room.importProgress.waitingForProgress"),
     completed: payload.completed === true ||
       (percent !== null && percent >= 100) ||
       ["COMPLETED", "COMPLETE", "SUCCESS", "SUCCEEDED", "FAILED", "ERROR", "DONE"].includes(rawTaskStatus),
@@ -318,7 +318,9 @@ const emptyBuildingForm = { name: "", code: "" };
 const emptyFloorForm = { name: "" };
 
 export default function RoomWorkspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const formatPricingMoney = (value: number) =>
+    `${Number(value).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
   const location = useLocation();
   const dispatch = useAppDispatch();
   const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
@@ -336,23 +338,14 @@ export default function RoomWorkspace() {
   const [updateBuildingApi, { isLoading: isUpdatingBuilding }] = useUpdateBuildingMutation();
   const [createFloorApi, { isLoading: isCreatingFloor }] = useCreateFloorMutation();
   const [updateFloorApi, { isLoading: isUpdatingFloor }] = useUpdateFloorMutation();
-  const [importAmenitiesFromFile] = useImportAmenitiesFromFileMutation();
-  const [amenityOverrides, setAmenityOverrides] = useState<Record<number, AmenityResponse>>({});
-  const [localAmenities, setLocalAmenities] = useState<AmenityResponse[]>([]);
-  const amenityCatalog = useMemo(() => {
-    const catalog = [...(apiAmenities ?? [])];
-    localAmenities.forEach((amenity) => {
-      if (!catalog.some((item) => normalizeText(item.name) === normalizeText(amenity.name))) catalog.push(amenity);
-    });
-    return catalog.map((amenity) => amenityOverrides[amenity.id] ?? amenity);
-  }, [apiAmenities, amenityOverrides, localAmenities]);
+  const amenityCatalog = apiAmenities ?? [];
   const availableRoomTypes = useMemo(() => (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value))), [apiRoomTypes]);
   const availableRoomStatuses = useMemo(() => (apiRoomStatuses ?? []).map((value) => statusLabel(String(value))), [apiRoomStatuses]);
   const amenityOptions = useMemo(() => amenityCatalog.map((amenity) => amenity.name).filter(Boolean), [amenityCatalog]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const requestedTab = new URLSearchParams(location.search).get("tab");
-  const defaultRoomTab: "rooms" | "pricing" | "amenities" = canManageRooms && (requestedTab === "pricing" || requestedTab === "amenities") ? requestedTab : "rooms";
-  const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing" | "amenities">(defaultRoomTab);
+  const defaultRoomTab: "rooms" | "pricing" = canManageRooms && requestedTab === "pricing" ? "pricing" : "rooms";
+  const [activeTab, setActiveTab] = useState<"rooms" | "buildings" | "floors" | "pricing">(defaultRoomTab);
   const [pricingMode, setPricingMode] = useState<"branch" | "event">("branch");
   const [editingPricingType, setEditingPricingType] = useState<string | null>(null);
   const { data: branchRoomPolicies = [], isLoading: isBranchPoliciesLoading, isError: isBranchPoliciesError, refetch: refetchBranchPolicies } = useGetBranchRoomPoliciesQuery(hotelId ? Number(hotelId) : undefined);
@@ -378,9 +371,17 @@ export default function RoomWorkspace() {
         dispatch(baseApi.util.invalidateTags(["Room", "Booking"]));
         const event = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
         const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
+        const isCheckout = String(event.action ?? "").toUpperCase() === "CHECKOUT_COMPLETED";
         toast({
-          title: "Phòng được cập nhật",
-          description: `Thông tin phòng ${String(data.roomNumber ?? "")} đã được làm mới.`,
+          title: isCheckout
+            ? localizedText("Phòng vừa check-out", "Room checked out")
+            : "Phòng được cập nhật",
+          description: isCheckout
+            ? localizedText(
+              `Phòng ${String(data.roomNumber ?? "")} vừa check-out xong. Trạng thái phòng đã được cập nhật sang đang dọn dẹp trong mục dọn dẹp.`,
+              `Room ${String(data.roomNumber ?? "")} has just checked out. Its status was updated to cleaning in housekeeping.`,
+            )
+            : `Thông tin phòng ${String(data.roomNumber ?? "")} đã được làm mới.`,
         });
       },
       onRoomPolicyUpdated: () => {
@@ -393,7 +394,7 @@ export default function RoomWorkspace() {
         dispatch(baseApi.util.invalidateTags(["Floor", "Room"]));
       },
       onRoomImportProgress: (data) => {
-        const progress = parseRoomSocketImportProgress(data);
+        const progress = parseRoomSocketImportProgress(data, (key, options) => String(t(key, options)));
         const activeTaskId = activeRoomImportTaskIdRef.current;
         if (progress.completed) {
           const completedTaskId = progress.taskId || activeTaskId;
@@ -406,7 +407,7 @@ export default function RoomWorkspace() {
         setRoomSocketImportProgress(progress);
       },
     });
-  }, [dispatch, hotelId]);
+  }, [dispatch, hotelId, t]);
   useEffect(() => {
     setActiveTab((current) => (current === defaultRoomTab ? current : defaultRoomTab));
   }, [defaultRoomTab]);
@@ -448,9 +449,6 @@ export default function RoomWorkspace() {
   const [importingRooms, setImportingRooms] = useState(false);
   const [roomImportUploadProgress, setRoomImportUploadProgress] = useState("");
   const [isRoomImportDialogOpen, setIsRoomImportDialogOpen] = useState(false);
-  const [isAmenityImportDialogOpen, setIsAmenityImportDialogOpen] = useState(false);
-  const [amenityImportProgress, setAmenityImportProgress] = useState("");
-  const [amenityImportProgressPercent, setAmenityImportProgressPercent] = useState<number>();
   const [roomImportReport, setRoomImportReport] = useState<{
     processing: boolean;
     rows: RoomImportRowResult[];
@@ -472,7 +470,7 @@ export default function RoomWorkspace() {
       try {
         const status = await getRoomImportStatus(roomImportTaskId, controller.signal);
         if (controller.signal.aborted) return;
-        const nextProgress = parseRoomSocketImportProgress({ ...status, taskId: status.taskId ?? roomImportTaskId });
+        const nextProgress = parseRoomSocketImportProgress({ ...status, taskId: status.taskId ?? roomImportTaskId }, (key, options) => String(t(key, options)));
         setRoomSocketImportProgress((current) => ({
           ...nextProgress,
           rows: nextProgress.rows.length > 0
@@ -493,8 +491,8 @@ export default function RoomWorkspace() {
             const failed = ["FAILED", "ERROR"].includes(String(status.status ?? "").trim().toUpperCase());
             toast({
               variant: failed ? "destructive" : "success",
-              title: failed ? "Nhập phòng thất bại" : "Nhập phòng hoàn tất",
-              description: status.message || (failed ? "Backend báo tiến trình nhập phòng thất bại." : "Danh sách phòng đã được cập nhật từ máy chủ."),
+              title: failed ? t("room.importDialog.importFailedTitle") : t("room.importDialog.importCompletedTitle"),
+              description: status.message || (failed ? t("room.importDialog.importFailedDescription") : t("room.importDialog.importUpdatedDescription")),
             });
           }
           return;
@@ -505,11 +503,11 @@ export default function RoomWorkspace() {
         if (controller.signal.aborted) return;
         const message = getRoomImportErrorMessage(error);
         setRoomSocketImportProgress((current) => current
-          ? { ...current, message: `Đang thử lại trạng thái từ máy chủ: ${message}` }
+          ? { ...current, message: t("room.importDialog.retryingStatus", { message }) }
           : {
             taskId: roomImportTaskId,
             percent: null,
-            message: `Đang thử lại trạng thái từ máy chủ: ${message}`,
+            message: t("room.importDialog.retryingStatus", { message }),
             completed: false,
             rows: [],
           });
@@ -522,14 +520,13 @@ export default function RoomWorkspace() {
       controller.abort();
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [dispatch, roomImportTaskId]);
+  }, [dispatch, roomImportTaskId, t]);
   const [detailRoom, setDetailRoom] = useState<Room | null>(null);
   const [createRoomForm, setCreateRoomForm] = useState<CreateRoomFormState>(emptyCreateRoomForm);
   const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
   const [newAmenityName, setNewAmenityName] = useState("");
   const [amenityPrice, setAmenityPrice] = useState("");
-  const [isCreatingAmenity, setIsCreatingAmenity] = useState(false);
   const [customAmenityPrices, setCustomAmenityPrices] = useState<Record<string, number>>({});
   const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
@@ -542,6 +539,44 @@ export default function RoomWorkspace() {
     { hotelId: Number(hotelId), roomType: selectedRoomTypeValue },
     { skip: !hotelId || !createRoomForm.roomType },
   );
+  const localizedRoomType = (value: string) => {
+    const keys: Record<string, string> = {
+      STANDARD: "calendar.standardRoom",
+      DELUXE: "calendar.deluxeRoom",
+      SUITE: "calendar.suiteRoom",
+      FAMILY: "room.createForm.familyRoom",
+    };
+    const key = keys[roomTypeIdentity(value)];
+    return key ? t(key) : value;
+  };
+  const localizedRoomStatus = (value: string) => {
+    const status = statusValues[value] ?? value;
+    const keys: Record<string, string> = {
+      READY: "room.ready",
+      CLEANING: "room.cleaning",
+      IN_USE: "room.staying",
+      MAINTENANCE: "room.maintenance",
+    };
+    const key = keys[status];
+    return key ? t(key) : value;
+  };
+  const localizedBuildingName = (value: string) => value.replace(/^Tòa\s*/i, `${t("room.buildingPrefix")} `);
+  const localizedBedTypeName = (value: string) => {
+    const normalized = value.toLocaleLowerCase();
+    if (normalized.includes("2 giường đơn") || normalized.includes("2 single beds")) return t("room.doubleSingleBeds");
+    if (normalized.includes("giường đơn") || normalized.includes("single bed")) return t("room.singleBed");
+    if (normalized.includes("giường king") || normalized.includes("king-size") || normalized.includes("king size")) return t("room.kingBed");
+    if (normalized.includes("giường phụ") || normalized.includes("extra bed")) return t("room.createForm.extraBed");
+    return value;
+  };
+  const localizedAmenityName = (value: string) => {
+    const translationKey = getRoomAmenityTranslationKey(value);
+    return translationKey ? t(translationKey) : value;
+  };
+  const localizedFloorName = (value: string) => {
+    const floorNumber = value.replace(/^Tầng\s*/i, "");
+    return floorNumber === value ? value : t("room.floorOption", { floor: floorNumber });
+  };
   const getApiValue = (item: Record<string, unknown>, keys: string[]) => keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
   const { data: apiFloorsByHotel = [], isLoading: isHotelFloorsLoading, isError: isHotelFloorsError } = useGetFloorsByHotelIdQuery();
   const getRoomAmenityNames = (item: Record<string, unknown>) => {
@@ -628,11 +663,11 @@ export default function RoomWorkspace() {
       .filter((item) => buildings.some((building) => building.id === item.buildingId))
       .map((item) => [`${item.buildingId}:${normalizeText(item.name)}`, item])).values()],
   }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, apiBedTypes, buildings, hotelFloorOptions]);
-  const selectedBuildingName = buildings.find((item) => item.id === createRoomForm.building)?.name ?? "Chưa chọn";
+  const selectedBuildingName = buildings.find((item) => item.id === createRoomForm.building)?.name ?? t("room.createForm.notSelected");
   const selectedFloorName = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor)?.name;
   const selectedFloorLabel = selectedFloorName
-    ? selectedFloorName.startsWith("Tầng") ? selectedFloorName : `Tầng ${selectedFloorName}`
-    : "Chưa chọn";
+    ? localizedFloorName(selectedFloorName.startsWith("Tầng") ? selectedFloorName : t("room.floorOption", { floor: selectedFloorName }))
+    : t("room.createForm.notSelected");
   useEffect(() => {
     console.log("[RoomWorkspace] rooms by current hotel", { rooms: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError });
   }, [apiRooms, roomsError, isRoomsLoading, isRoomsFetching, isRoomsError]);
@@ -647,8 +682,21 @@ export default function RoomWorkspace() {
       const databaseId = databaseIdValue == null ? undefined : String(databaseIdValue);
       const floorId = getApiValue(item, ["floorId", "floorID"]);
       const floorNumber = getApiValue(item, ["floorNumber", "floorLevel"]);
-      const buildingId = hotelFloorOptions.find((floorOption) => floorOption.id === String(floorId ?? ""))?.buildingId; // Added buildingId
-      const buildingName = String(getApiValue(item, ["nameBuilding", "buildingName"]) ?? "").trim();
+      const roomBuildingValue = getApiValue(item, ["building", "buildingInfo", "buildingResponse", "tower", "towerInfo"]);
+      const roomBuildingRecord = roomBuildingValue && typeof roomBuildingValue === "object"
+        ? roomBuildingValue as Record<string, unknown>
+        : {};
+      const roomBuildingId = getApiValue(item, ["buildingId", "buildingID", "towerId", "towerID"])
+        ?? getApiValue(roomBuildingRecord, ["id", "buildingId", "buildingID", "towerId", "towerID"]);
+      const buildingName = String(
+        getApiValue(item, ["nameBuilding", "buildingName", "towerName"])
+        ?? getApiValue(roomBuildingRecord, ["name", "buildingName", "towerName"])
+        ?? "",
+      ).trim();
+      const buildingId = roomBuildingId != null
+        ? String(roomBuildingId)
+        : hotelFloorOptions.find((floorOption) => floorOption.id === String(floorId ?? ""))?.buildingId
+          ?? buildings.find((building) => buildingName && normalizeText(building.name) === normalizeText(buildingName))?.id;
       const avatarValue = getApiValue(item, ["avatarUrl", "imageUrls", "images"]);
       const avatarUrls = Array.isArray(avatarValue)
         ? avatarValue.map((image, imageIndex) => {
@@ -834,7 +882,7 @@ export default function RoomWorkspace() {
   }, [isAnyModalOpen]);
   const filtered = useMemo(() => rooms
     .filter((room) => `${room.id} ${room.name}`.toLowerCase().includes(query.toLowerCase()))
-    .filter((room) => building === "Tất cả các tòa" || room.id.startsWith(`${building}-`) || room.buildingName?.includes(building))
+    .filter((room) => building === "Tất cả các tòa" || room.buildingId === building)
     .filter((room) => floor === "Tất cả các tầng" || room.floor === floor)
     .filter((room) => roomType === "Tất cả loại phòng" || room.name === roomType)
     .filter((room) => status === "Tất cả trạng thái" || room.status === status), [rooms, query, building, floor, roomType, status]);
@@ -945,17 +993,6 @@ export default function RoomWorkspace() {
 
     return (apiAmenities ?? []).filter((amenity) => !normalizedQuery || normalizeText(amenity.name).includes(normalizedQuery));
   }, [apiAmenities, amenitySearch]);
-  const saveAmenityEdit = (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => {
-    setAmenityOverrides((current) => ({ ...current, [amenity.id]: { ...amenity, ...changes } }));
-  };
-  const addLocalAmenity = (amenity: Pick<AmenityResponse, "name" | "price">) => {
-    if (amenityCatalog.some((item) => normalizeText(item.name) === normalizeText(amenity.name))) {
-      toast({ variant: "destructive", title: "Tiện nghi đã tồn tại", description: `“${amenity.name}” đã có trong danh sách.` });
-      return;
-    }
-    setLocalAmenities((current) => [...current, { ...amenity, id: -(Date.now() + current.length) }]);
-    toast({ variant: "success", title: "Thêm tiện nghi thành công", description: `Đã thêm “${amenity.name}” vào giao diện.` });
-  };
   const filteredBuildings = useMemo(() => {
     const normalizedQuery = normalizeText(buildingQuery);
     const matchingBuildings = buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
@@ -986,9 +1023,6 @@ export default function RoomWorkspace() {
       toast({ variant: "destructive", title: "Không thể cập nhật trạng thái phòng", description: message });
     }
   };
-  const completeCleaning = async (room: Room) => {
-    await updateRoom(room.id, { status: "Sẵn sàng" });
-  };
   const closeCreateRoomModal = () => {
     setShowCreateRoom(false);
     setEditingRoomId(null);
@@ -1005,6 +1039,11 @@ export default function RoomWorkspace() {
     const standardRoomType = availableRoomTypes.find((item) => roomTypeIdentity(item) === "STANDARD")
       ?? availableRoomTypes[0]
       ?? "Standard Room";
+    const standardPolicy = branchRoomPolicies.find((policy) => {
+      const policyRoomType = getApiValue(policy, ["roomType", "roomTypeName", "type", "name"]);
+      return policyRoomType != null
+        && roomTypeIdentity(String(policyRoomType)) === roomTypeIdentity(standardRoomType);
+    });
 
     setSelectedBuildingId(building?.id ?? "");
     setEditingRoomId(null);
@@ -1013,6 +1052,10 @@ export default function RoomWorkspace() {
       ...emptyCreateRoomForm,
       roomType: standardRoomType,
       ...roomFormDefaults(standardRoomType),
+      standardCapacity: String(getApiValue(standardPolicy ?? {}, ["standardCapacity", "standard_capacity", "capacity", "maxCapacity", "maxAdults"]) ?? roomFormDefaults(standardRoomType).standardCapacity),
+      maxExtraGuests: String(getApiValue(standardPolicy ?? {}, ["maxExtraGuests", "maxExtraGuest", "max_extra_guests", "extraGuestCapacity"]) ?? ""),
+      extraAdultFee: String(getApiValue(standardPolicy ?? {}, ["extraAdultFee", "extra_adult_fee", "adultSurcharge"]) ?? ""),
+      extraChildFee: String(getApiValue(standardPolicy ?? {}, ["extraChildFee", "extra_child_fee", "childSurcharge"]) ?? ""),
       building: building?.id ?? "",
       floor: floor?.id ?? "",
     });
@@ -1066,12 +1109,12 @@ export default function RoomWorkspace() {
       } : room));
       toast({
         variant: "success",
-        title: "Cập nhật giá thành công!",
-        description: `Giá cho ${roomType} đã được cập nhật và đồng bộ cho chi nhánh.`,
+        title: t("room.pricingConfig.updateSuccess"),
+        description: t("room.pricingConfig.updateSuccessDescription", { roomType: localizedRoomType(roomType) }),
       });
       return true;
     } catch {
-      setPricingSaveError("Không thể cập nhật cấu hình giá. Vui lòng thử lại.");
+      setPricingSaveError(t("room.pricingConfig.updateError"));
       return false;
     }
   };
@@ -1460,7 +1503,7 @@ export default function RoomWorkspace() {
     setRoomImportReport(null);
     setRoomSocketImportProgress(null);
     setRoomImportTaskId("");
-    setRoomImportUploadProgress("Đang đọc ZIP và kiểm tra dữ liệu phòng...");
+    setRoomImportUploadProgress(t("room.importDialog.preparingRoomImport"));
     activeRoomImportTaskIdRef.current = "";
     try {
       const parsed = await parseRoomImportArchive(file, roomImportOptions, rooms.map((room) => room.id));
@@ -1480,12 +1523,12 @@ export default function RoomWorkspace() {
 
       const files = [...new Map(parsed.rooms.flatMap((room) => room.imageFiles)
         .map((image) => [image.name.toLocaleLowerCase(), image])).values()];
-      setRoomImportUploadProgress(`Đang tải ${files.length} ảnh lên Cloudinary...`);
+      setRoomImportUploadProgress(t("room.importDialog.uploadingImages", { count: files.length }));
       if (!hotelName) {
         throw new Error("Không xác định được tên chi nhánh từ tài khoản đang đăng nhập.");
       }
       const imageUrls = await uploadRoomImagesToCloudinary(files, hotelName, (uploaded, total) => {
-        setRoomImportUploadProgress(`Đang tải ảnh lên Cloudinary: ${uploaded}/${total}...`);
+        setRoomImportUploadProgress(t("room.importDialog.uploadingImageProgress", { uploaded, total }));
       });
       const request = {
         rooms: parsed.rooms.map((room) => ({
@@ -1507,7 +1550,7 @@ export default function RoomWorkspace() {
           }),
         })),
       };
-      setRoomImportUploadProgress("Đã tải ảnh xong. Đang gửi dữ liệu phòng lên máy chủ...");
+      setRoomImportUploadProgress(t("room.importDialog.sendingRoomData"));
       const { taskId, message } = await startRoomImport(request);
       activeRoomImportTaskIdRef.current = taskId;
       setRoomImportTaskId(taskId);
@@ -1549,12 +1592,8 @@ export default function RoomWorkspace() {
     }
 
     try {
-      if (target === "amenities") {
-        setAmenityImportProgress("Đang đọc file tiện nghi...");
-        setAmenityImportProgressPercent(10);
-      }
       const rows = await readImportRows(file);
-      if (rows.length === 0) throw new Error("File không có dòng dữ liệu.");
+      if (rows.length === 0) throw new Error(t("room.importDialog.emptyFile"));
 
       if (target === "buildings") {
         const nextBuildings = [...buildings];
@@ -1597,67 +1636,11 @@ export default function RoomWorkspace() {
         return true;
       }
 
-      const importedAmenities = rows.map((row, index) => {
-        const name = getImportedValue(row, ["tên tiện ích", "ten tien ich", "tên tiện nghi", "ten tien nghi", "tiện ích", "tien ich", "amenity", "name"]);
-        const priceText = getImportedValue(row, ["giá tiền", "gia tien", "giá", "gia", "price"]);
-        const price = Number(priceText.replace(/\./g, "").replace(/,/g, "."));
-        if (!name || !priceText || !Number.isFinite(price) || price < 0) {
-          throw new Error(`Dòng ${index + 2} cần có tên tiện ích và giá không âm hợp lệ.`);
-        }
-        return { row: index + 2, name, price };
-      });
-      if (importedAmenities.length === 0) throw new Error("File không có tiện ích hợp lệ để nhập.");
-      setAmenityImportProgress(`Đã kiểm tra ${importedAmenities.length} dòng. Đang gửi dữ liệu lên máy chủ...`);
-      setAmenityImportProgressPercent(5);
-      const { taskId } = await importAmenitiesFromFile({ amenities: importedAmenities }).unwrap();
-      if (!taskId) throw new Error("Máy chủ không trả về mã tiến trình nhập tiện nghi.");
-
-      let importStatus = await getAmenityImportStatus(taskId);
-      while (!isAmenityImportFinished(importStatus)) {
-        if (typeof importStatus.percent === "number") {
-          setAmenityImportProgressPercent(importStatus.percent);
-        }
-        setAmenityImportProgress(importStatus.message || "Máy chủ đang xử lý dữ liệu tiện nghi...");
-        await new Promise((resolve) => window.setTimeout(resolve, 500));
-        importStatus = await getAmenityImportStatus(taskId);
-      }
-
-      if (importStatus.status.trim().toUpperCase() !== "SUCCESS") {
-        throw new Error(importStatus.message || "Máy chủ không thể lưu tiện nghi.");
-      }
-      const savedAmenities = Array.isArray(importStatus.details) ? importStatus.details : [];
-      dispatch(baseApi.util.invalidateTags(["Amenity", "Room"]));
-      const skippedCount = importedAmenities.length - savedAmenities.length;
-      setAmenityImportProgress(
-        savedAmenities.length > 0
-          ? `Hoàn tất: đã lưu ${savedAmenities.length} tiện nghi${skippedCount > 0 ? `, bỏ qua ${skippedCount} dòng trùng tên` : ""}.`
-          : `Hoàn tất: không có tiện nghi mới; đã bỏ qua ${skippedCount} dòng trùng tên.`,
-      );
-      setAmenityImportProgressPercent(100);
-      toast({
-        variant: savedAmenities.length > 0 ? "success" : "default",
-        title: savedAmenities.length > 0 ? "Nhập tiện nghi thành công" : "Không có tiện nghi mới",
-        description: savedAmenities.length > 0
-          ? `Đã lưu ${savedAmenities.length} tiện nghi vào cơ sở dữ liệu.${skippedCount > 0 ? ` Đã bỏ qua ${skippedCount} dòng bị trùng tên.` : ""}`
-          : `Tất cả ${skippedCount} tiện nghi đã tồn tại nên không có dữ liệu mới được lưu.`,
-      });
-      return true;
     } catch (error) {
-      if (target === "amenities") {
-        setAmenityImportProgress("");
-        setAmenityImportProgressPercent(undefined);
-        if (typeof error === "object" && error !== null && "data" in error) {
-          const response = error.data;
-          if (typeof response === "object" && response !== null && "message" in response && typeof response.message === "string") {
-            throw new Error(response.message);
-          }
-        }
-        throw error;
-      }
       toast({
         variant: "destructive",
-        title: "Không thể nhập dữ liệu",
-        description: error instanceof Error ? error.message : "Không thể đọc file.",
+        title: t("room.importDialog.importDataError"),
+        description: error instanceof Error ? error.message : t("room.importDialog.couldNotReadFile"),
       });
       return true;
     }
@@ -1679,26 +1662,25 @@ export default function RoomWorkspace() {
       <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="font-bold text-slate-900">
-            {activeTab === "rooms" ? t("room.roomList") : activeTab === "buildings" ? t("room.buildingList", "Danh sách tòa nhà") : activeTab === "floors" ? t("room.floorManagement") : "Danh sách tiện nghi"}
+            {activeTab === "rooms" ? t("room.roomList") : activeTab === "buildings" ? t("room.buildingList") : t("room.floorManagement")}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            {activeTab === "rooms" ? `${filtered.length} ${t("room.roomsAtBranch")} · ${t("room.realTimeUpdate")}` : activeTab === "buildings" ? `${filteredBuildings.length} tòa nhà` : activeTab === "floors" ? `${floors.length} tầng · ${buildings.find((item) => item.id === selectedBuildingId)?.name ?? ""}` : `${amenityCatalog.length} tiện nghi`}
+            {activeTab === "rooms" ? `${filtered.length} ${t("room.roomsAtBranch")} · ${t("room.realTimeUpdate")}` : activeTab === "buildings" ? t("room.buildingCount", { count: filteredBuildings.length }) : `${t("room.floorCount", { count: floors.length })} · ${buildings.find((item) => item.id === selectedBuildingId)?.name ?? ""}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canManageRooms && (activeTab === "rooms" || activeTab === "amenities") && <button
+          {canManageRooms && (activeTab === "rooms" || activeTab === "buildings" || activeTab === "floors") && <button
             type="button"
             onClick={() => {
               if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
-              else if (activeTab === "amenities") setIsAmenityImportDialogOpen(true);
               else openImportPicker(activeTab);
             }}
             disabled={importingRooms}
             className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:opacity-50"
           >
-            <Upload size={16} />{importingRooms && activeTab === "rooms" ? "Đang đọc file..." : "Tải dữ liệu bằng file"}
+            <Upload size={16} />{importingRooms && activeTab === "rooms" ? t("room.importDialog.readingFile") : t("room.importDialog.roomImportButton")}
           </button>}
-          {canManageRooms && activeTab !== "amenities" && (
+          {canManageRooms && (
             <button
               type="button"
               onClick={() => activeTab === "rooms" ? openCreateRoomModal() : activeTab === "buildings" ? openCreateBuildingModal() : openCreateFloorModal()}
@@ -1707,22 +1689,12 @@ export default function RoomWorkspace() {
               <span className="text-lg leading-none">+</span>{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
             </button>
           )}
-          {canManageRooms && activeTab === "amenities" && (
-            <button
-              type="button"
-              onClick={() => setIsCreatingAmenity(true)}
-              className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700"
-            >
-              <span className="text-lg leading-none">+</span>Thêm tiện nghi
-            </button>
-          )}
         </div>
       </div>
       <div className="flex flex-wrap border-b border-slate-100 bg-slate-50/60 p-2">
         <button type="button" onClick={() => setActiveTab("rooms")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "rooms" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("navigation.rooms")}</button>
         {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("buildings")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "buildings" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.buildings")}</button>}
         {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("floors")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "floors" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>{t("room.floors")}</button>}
-        {canViewRoomStructure && <button type="button" onClick={() => setActiveTab("amenities")} className={`min-w-36 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === "amenities" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:bg-white/70"}`}>Danh sách tiện nghi</button>}
       </div>
     </>}
     {canViewRoomStructure && activeTab === "buildings" && <>
@@ -1737,29 +1709,28 @@ export default function RoomWorkspace() {
       {(isFloorsLoading || isFloorsFetching) && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tầng...</p>}
       <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} canManage={canManageRooms} />
     </>}
-    {canViewRoomStructure && activeTab === "amenities" && <RoomAmenitiesTab amenities={amenityCatalog} isLoading={isAmenitiesLoading} isError={isAmenitiesError} canManage={canManageRooms} isCreating={isCreatingAmenity} onCreateOpenChange={setIsCreatingAmenity} onSave={saveAmenityEdit} onAdd={addLocalAmenity} />}
     <BulkImportDialog
       open={isRoomImportDialogOpen}
       onOpenChange={setIsRoomImportDialogOpen}
-      eyebrow="Nhập hàng loạt"
-      title="Tải dữ liệu phòng"
-      description="Đặt file Excel mẫu và ảnh trong thư mục dulieuphong rồi nén thành dulieuphong.zip. Ảnh được tải trực tiếp lên Cloudinary trước khi gửi dữ liệu phòng cho máy chủ."
-      templateLabel="Tải file Excel mẫu"
+      eyebrow={t("room.importDialog.eyebrow")}
+      title={t("room.importDialog.roomsTitle")}
+      description={t("room.importDialog.roomsDescription")}
+      templateLabel={t("room.importDialog.downloadRoomTemplate")}
       onDownloadTemplate={() => {
         if (isBedTypesLoading) {
-          toast({ title: "Đang tải danh sách loại giường", description: "Vui lòng đợi danh sách giường tải xong rồi tạo mẫu." });
+          toast({ title: t("room.importDialog.loadingBedTypesTitle"), description: t("room.importDialog.loadingBedTypesDescription") });
           return;
         }
         if (isBedTypesError) {
-          toast({ variant: "destructive", title: "Không thể tải danh sách loại giường", description: "Hãy kiểm tra kết nối máy chủ rồi thử lại." });
+          toast({ variant: "destructive", title: t("room.importDialog.bedTypesErrorTitle"), description: t("room.importDialog.serverRetry") });
           return;
         }
         if (isBuildingsLoading || isHotelFloorsLoading) {
-          toast({ title: "Đang tải danh sách tòa và tầng", description: "Vui lòng đợi trong giây lát rồi tải mẫu Excel." });
+          toast({ title: t("room.importDialog.loadingBuildingsFloorsTitle"), description: t("room.importDialog.loadingTemplateWait") });
           return;
         }
         if (isBuildingsError || isHotelFloorsError) {
-          toast({ variant: "destructive", title: "Không thể tải danh sách tòa và tầng", description: "Hãy kiểm tra kết nối máy chủ rồi thử lại." });
+          toast({ variant: "destructive", title: t("room.importDialog.buildingsFloorsErrorTitle"), description: t("room.importDialog.serverRetry") });
           return;
         }
         try {
@@ -1767,17 +1738,17 @@ export default function RoomWorkspace() {
         } catch (error) {
           toast({
             variant: "destructive",
-            title: "Không thể tạo file Excel mẫu",
-            description: error instanceof Error ? error.message : "Đã xảy ra lỗi không xác định.",
+            title: t("room.importDialog.templateErrorTitle"),
+            description: error instanceof Error ? error.message : t("room.importDialog.unknownError"),
           });
         }
       }}
       acceptedFileTypes=".zip,application/zip"
-      fileLabel="File ZIP bộ dữ liệu (.zip)"
-      validateFile={(file) => file.name.toLocaleLowerCase() === "dulieuphong.zip" ? null : "Vui lòng chọn đúng file dulieuphong.zip."}
+      fileLabel={t("room.importDialog.roomZipLabel")}
+      validateFile={(file) => file.name.toLocaleLowerCase() === "dulieuphong.zip" ? null : t("room.importDialog.roomZipValidation")}
       instructions={
         <>
-          <p className="font-bold">Cấu trúc file ZIP</p>
+          <p className="font-bold">{t("room.importDialog.zipStructure")}</p>
           <pre className="my-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dulieuphong.zip
 └── dulieuphong/
     ├── phong.xlsx
@@ -1786,45 +1757,15 @@ export default function RoomWorkspace() {
         ├── 101-2.jpg
         ├── 101-3.jpg
         └── 101-4.jpg`}</pre>
-          <p>Trong Excel, các ô Loại phòng, Tòa và Trạng thái có danh sách xổ xuống để chọn. Cột Tầng nhập số nguyên floorNumber; hệ thống ghép số tầng với Tòa để tìm đúng tầng. Tiện ích nhập trong một ô bằng ID, ngăn cách nhiều ID bằng dấu chấm phẩy (;); tra ID và tên ở sheet Danh mục. Chỉ ID có trong danh mục mới được chấp nhận. Số phòng phải là số nguyên dương.</p>
-          <p className="mt-2">Tại sheet <strong>Giường phòng</strong>, mỗi dòng chọn Số phòng và Loại giường từ danh sách xổ xuống rồi nhập số lượng (từ 1 trở lên). Một phòng có thể có nhiều loại giường bằng cách thêm nhiều dòng cho cùng số phòng; mỗi phòng cần ít nhất một dòng cấu hình giường.</p>
-          <p className="mt-2">Mỗi phòng cần từ 4 đến 8 ảnh, tối đa 5 MB mỗi ảnh. Nhập tên file ảnh bằng tay vào các cột Ảnh 1–Ảnh 8; tên phải khớp ảnh trong thư mục <strong>images</strong>, gồm phần đuôi, ví dụ <strong>101-1.jpg</strong>. Mỗi dòng là một phòng, không đổi tên cột.</p>
-          <p className="mt-2">Trong thư mục <strong>dulieuphong</strong>, đặt <strong>phong.xlsx</strong> và thư mục <strong>images</strong> cùng cấp. Sau đó nén thư mục <strong>dulieuphong</strong> thành <strong>dulieuphong.zip</strong>. FE tải ảnh trực tiếp lên Cloudinary bằng unsigned upload preset; máy chủ chỉ nhận URL ảnh và lưu phòng.</p>
+          <p>{t("room.importDialog.roomInstructionsTypes")}</p>
+          <p className="mt-2">{t("room.importDialog.roomInstructionsBeds")}</p>
+          <p className="mt-2">{t("room.importDialog.roomInstructionsImages")}</p>
+          <p className="mt-2">{t("room.importDialog.roomInstructionsArchive")}</p>
         </>
       }
-      uploadLabel="Nhập phòng"
+      uploadLabel={t("room.importDialog.importRooms")}
       progress={roomImportUploadProgress || undefined}
       onUpload={importRoomsFromFile}
-    />
-    <BulkImportDialog
-      open={isAmenityImportDialogOpen}
-      onOpenChange={(open) => {
-        setIsAmenityImportDialogOpen(open);
-        if (open) {
-          setAmenityImportProgress("");
-          setAmenityImportProgressPercent(undefined);
-        }
-      }}
-      eyebrow="Nhập hàng loạt"
-      title="Tải dữ liệu tiện nghi"
-      description="Tải file Excel mẫu ngay tại đây, điền danh sách tiện nghi và giữ nguyên tên file khi tải lên."
-      templateLabel="Tải file Excel mẫu tiện nghi"
-      onDownloadTemplate={downloadAmenityTemplate}
-      acceptedFileTypes=".xlsx"
-      fileLabel="File Excel tiện nghi (mau-nhap-tien-ich.xlsx)"
-      validateFile={(file) => file.name.toLocaleLowerCase() === "mau-nhap-tien-ich.xlsx"
-        ? null
-        : 'Vui lòng chọn đúng file "mau-nhap-tien-ich.xlsx". Không đổi tên file mẫu.'}
-      instructions={
-        <>
-          <p>File cần có hai cột <strong>Tên tiện ích</strong> và <strong>Giá tiền</strong>. Giá nhập bằng số không âm, không thêm ký hiệu tiền tệ.</p>
-          <p className="mt-2">Các tiện ích trùng tên (không phân biệt hoa thường hoặc dấu tiếng Việt) sẽ được bỏ qua; các tiện nghi mới được lưu vào cơ sở dữ liệu.</p>
-        </>
-      }
-      uploadLabel="Nhập tiện nghi"
-      progress={amenityImportProgress || undefined}
-      progressPercent={amenityImportProgress ? amenityImportProgressPercent : undefined}
-      onUpload={(file) => importLocalDataFromFile(file, "amenities")}
     />
     {(roomImportReport || roomSocketImportProgress) && (
       <RoomImportProgressCard
@@ -1843,6 +1784,7 @@ export default function RoomWorkspace() {
     {activeTab === "rooms" && <RoomListTab
        canManageRooms={canManageRooms}
        canUpdateRoomStatus={canUpdateRoomStatus}
+      localizeRoomType={localizedRoomType}
       filtered={filtered}
       paginatedRooms={paginatedRooms}
       buildings={buildings}
@@ -1867,7 +1809,6 @@ export default function RoomWorkspace() {
       onPageChange={setPage}
       onPageSizeChange={setPageSize}
       onUpdateRoom={updateRoom}
-      onCompleteCleaning={completeCleaning}
       onEditRoom={openEditRoomModal}
       onShowGallery={(room) => { setGalleryRoom(room); setGalleryIndex(0); }}
       onShowDetails={setDetailRoom}
@@ -1877,27 +1818,27 @@ export default function RoomWorkspace() {
       <div className="p-6 space-y-6">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h4 className="text-xl font-bold text-slate-900">Cấu hình giá niêm yết</h4>
-            <p className="mt-1 text-xs text-slate-500">Thiết lập mức giá cơ bản và phụ thu theo loại phòng hoặc theo lịch sự kiện đặc biệt.</p>
+            <h4 className="text-xl font-bold text-slate-900">{t("room.pricingConfig.title")}</h4>
+            <p className="mt-1 text-xs text-slate-500">{t("room.pricingConfig.description")}</p>
           </div>
         </div>
-        {pricingMode === "branch" && isBranchPoliciesLoading && <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Đang tải cấu hình giá chi nhánh...</p>}
+        {pricingMode === "branch" && isBranchPoliciesLoading && <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">{t("room.pricingConfig.loading")}</p>}
         {pricingMode === "branch" && isBranchPoliciesError && (
           <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs text-rose-700">
-            <span>Không thể tải cấu hình giá chi nhánh. Vui lòng kiểm tra kết nối Backend!</span>
+            <span>{t("room.pricingConfig.loadError")}</span>
             <button
               type="button"
               onClick={() => refetchBranchPolicies()}
               className="ml-3 rounded-md bg-rose-600 px-3 py-1 font-semibold text-white shadow-xs hover:bg-rose-700 transition"
             >
-              Thử lại
+              {t("room.pricingConfig.retry")}
             </button>
           </div>
         )}
         {pricingMode === "branch" && pricingSaveError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{pricingSaveError}</p>}
         <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-1">
           <button type="button" onClick={() => setPricingMode("branch")} className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold transition ${pricingMode === "branch" ? "bg-white text-blue-700 shadow-xs" : "text-slate-500 hover:text-slate-800"}`}>
-            <Building2 size={16} />Cấu hình giá theo loại phòng
+            <Building2 size={16} />{t("room.pricingConfig.byRoomType")}
           </button>
           <button
             type="button"
@@ -1907,7 +1848,7 @@ export default function RoomWorkspace() {
             }`}
           >
             <CalendarDays size={16} />
-            Cấu hình giá theo sự kiện
+            {t("room.pricingConfig.byEvent")}
           </button>
         </div>
 
@@ -1935,8 +1876,8 @@ export default function RoomWorkspace() {
                   <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.12)]" onMouseDown={(event) => event.stopPropagation()}>
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="mt-2 text-[18px] font-bold leading-none tracking-[-0.02em] text-slate-600">Cập nhật cho loại phòng</h3>
-                        <h3 className="mt-2 text-[16px] font-black leading-none tracking-[-0.03em] text-slate-900">{entry.roomType}</h3>
+                        <h3 className="mt-2 text-[18px] font-bold leading-none tracking-[-0.02em] text-slate-600">{t("room.pricingConfig.editRoomType")}</h3>
+                        <h3 className="mt-2 text-[16px] font-black leading-none tracking-[-0.03em] text-slate-900">{localizedRoomType(entry.roomType)}</h3>
                       </div>
                       <button type="button" onClick={() => setEditingPricingType(null)} className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700">
                         <X size={20} />
@@ -1946,7 +1887,7 @@ export default function RoomWorkspace() {
                     <div className="space-y-3 text-sm">
                       <div>
                         <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
-                          Số lượng người tiêu chuẩn
+                          {t("room.pricingConfig.standardCapacity")}
                           <span className="ml-1 text-red-500">*</span>
                         </label>
                         <input
@@ -1960,7 +1901,7 @@ export default function RoomWorkspace() {
 
                       <div>
                         <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
-                          Số người cho phép ở ghép
+                          {t("room.pricingConfig.extraGuestCapacity")}
                           <span className="ml-1 text-red-500">*</span>
                         </label>
                         <input
@@ -1974,7 +1915,7 @@ export default function RoomWorkspace() {
 
                       <div>
                         <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
-                          Giá phòng / đêm
+                          {t("room.pricingConfig.pricePerNight")}
                           <span className="ml-1 text-red-500">*</span>
                         </label>
                         <div className="relative">
@@ -1986,13 +1927,13 @@ export default function RoomWorkspace() {
                             onChange={(event) => handlePricingDraftChange(entry.roomType, "price", event.target.value)}
                             className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 pr-12 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">VNĐ</span>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">{t("room.pricingConfig.currency")}</span>
                         </div>
                       </div>
 
                       <div>
                         <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
-                          Phụ thu người lớn
+                          {t("room.pricingConfig.extraAdultFee")}
                           <span className="ml-1 text-red-500">*</span>
                         </label>
                         <div className="relative">
@@ -2004,13 +1945,13 @@ export default function RoomWorkspace() {
                             onChange={(event) => handlePricingDraftChange(entry.roomType, "extraAdultFee", event.target.value)}
                             className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 pr-12 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">VNĐ</span>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">{t("room.pricingConfig.currency")}</span>
                         </div>
                       </div>
 
                       <div>
                         <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
-                          Phụ thu trẻ em
+                          {t("room.pricingConfig.extraChildFee")}
                           <span className="ml-1 text-red-500">*</span>
                         </label>
                         <div className="relative">
@@ -2022,15 +1963,15 @@ export default function RoomWorkspace() {
                             onChange={(event) => handlePricingDraftChange(entry.roomType, "extraChildFee", event.target.value)}
                             className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 pr-12 text-[15px] font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">VNĐ</span>
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">{t("room.pricingConfig.currency")}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
-                      <span className="text-[11px] font-semibold text-slate-500">{currentStandardCapacity} người · {currentMaxExtraGuests} ghép thêm · {money(currentPriceNum)} / {money(currentAdultFeeNum)} / {money(currentChildFeeNum)}</span>
+                      <span className="text-[11px] font-semibold text-slate-500">{t("room.pricingConfig.guestSummary", { standard: currentStandardCapacity, extra: currentMaxExtraGuests, price: formatPricingMoney(currentPriceNum), adultFee: formatPricingMoney(currentAdultFeeNum), childFee: formatPricingMoney(currentChildFeeNum) })}</span>
                       <div className="flex gap-2.5">
-                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-100">Hủy</button>
+                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-100">{t("room.pricingConfig.cancel")}</button>
                         <button
                           type="button"
                           onClick={async () => {
@@ -2039,7 +1980,7 @@ export default function RoomWorkspace() {
                           className={`h-10 rounded-xl px-4 text-sm font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
                           disabled={!isModified || !entry.policyId || isUpdatingPolicy}
                         >
-                          {isUpdatingPolicy ? "Đang lưu..." : "Lưu"}
+                          {isUpdatingPolicy ? t("room.pricingConfig.saving") : t("room.pricingConfig.save")}
                         </button>
                       </div>
                     </div>
@@ -2103,11 +2044,11 @@ export default function RoomWorkspace() {
                             <BedDouble size={20} />
                           </div>
                           <div className="w-full">
-                            <h5 className="text-base font-bold text-slate-900">{entry.roomType}</h5>
+                            <h5 className="text-base font-bold text-slate-900">{localizedRoomType(entry.roomType)}</h5>
                             <div className={`mt-1 h-1 w-20 rounded-full ${theme.accent}`} />
                             {details && (
                               <p className="mt-2 text-xs text-slate-500">
-                                {displayArea} · {displayCapacity} người
+                                {displayArea} · {t("room.pricingConfig.people", { count: displayCapacity })}
                               </p>
                             )}
                           </div>
@@ -2115,13 +2056,13 @@ export default function RoomWorkspace() {
 
                         <div className="flex items-center gap-2">
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
-                            {entry.count} phòng
+                            {t("room.pricingConfig.roomCount", { count: entry.count })}
                           </span>
                           <button
                             type="button"
                             onClick={() => setEditingPricingType(entry.roomType)}
                             className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
-                            title="Chỉnh sửa"
+                            title={t("room.pricingConfig.edit")}
                           >
                             <Pencil size={14} />
                           </button>
@@ -2130,24 +2071,24 @@ export default function RoomWorkspace() {
 
                       <div className="grid gap-2 border-t border-slate-100 pt-3">
                         <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Tiêu chuẩn</span>
-                          <strong className="text-sm font-bold text-slate-900">{currentStandardCapacity} người</strong>
+                          <span>{t("room.pricingConfig.standard")}</span>
+                          <strong className="text-sm font-bold text-slate-900">{t("room.pricingConfig.people", { count: currentStandardCapacity })}</strong>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Cho phép ghép</span>
-                          <strong className="text-sm font-bold text-slate-900">{currentMaxExtraGuests} người</strong>
+                          <span>{t("room.pricingConfig.extraGuestsAllowed")}</span>
+                          <strong className="text-sm font-bold text-slate-900">{t("room.pricingConfig.people", { count: currentMaxExtraGuests })}</strong>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Giá phòng / đêm</span>
-                          <strong className="text-sm font-bold text-slate-900">{money(currentPriceNum)}</strong>
+                          <span>{t("room.pricingConfig.pricePerNight")}</span>
+                          <strong className="text-sm font-bold text-slate-900">{formatPricingMoney(currentPriceNum)}</strong>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Phụ thu người lớn</span>
-                          <strong className="font-semibold text-slate-700">+{money(currentAdultFeeNum)}/người</strong>
+                          <span>{t("room.pricingConfig.extraAdultFee")}</span>
+                          <strong className="font-semibold text-slate-700">{t("room.pricingConfig.adultFeePerPerson", { price: formatPricingMoney(currentAdultFeeNum) })}</strong>
                         </div>
                         <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Phụ thu trẻ em</span>
-                          <strong className="font-semibold text-slate-700">+{money(currentChildFeeNum)}/trẻ</strong>
+                          <span>{t("room.pricingConfig.extraChildFee")}</span>
+                          <strong className="font-semibold text-slate-700">{t("room.pricingConfig.childFeePerPerson", { price: formatPricingMoney(currentChildFeeNum) })}</strong>
                         </div>
                       </div>
                     </div>
@@ -2196,12 +2137,12 @@ export default function RoomWorkspace() {
                 <span className="inline-flex h-2 w-2 rounded-full bg-blue-500" />
                 <span>{t(editingRoomId ? "room.editRoomBadge" : "room.createRoomBadge")}</span>
               </div>
-              <h3 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">{editingRoomId ? "Sửa phòng" : "Tạo phòng mới"}</h3>
+              <h3 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">{t(editingRoomId ? "room.editRoomTitle" : "room.createRoomTitle")}</h3>
             </div>
 
             <div className="flex items-center gap-2">
-              <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Hủy</button>
-              <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom || isUpdatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom || isUpdatingRoom ? "Đang lưu..." : editingRoomId ? "Lưu thay đổi" : "Lưu phòng"}</button>
+              <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">{t("common.cancel")}</button>
+              <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom || isUpdatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom || isUpdatingRoom ? t("room.createForm.saving") : editingRoomId ? t("room.saveChanges") : t("room.createRoom")}</button>
             </div>
           </div>
 
@@ -2210,22 +2151,23 @@ export default function RoomWorkspace() {
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">1</span>
-                  Thông tin cơ bản
+                  {t("room.createForm.basicInformation")}
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Loại phòng <span className="text-rose-500">*</span>
-                    {isRoomTypesError && <p className="mt-1 text-xs font-normal text-rose-600">Không tải được loại phòng từ API.</p>}
-                    {isRoomTypeDetailLoading && <p className="mt-1 text-xs font-normal text-blue-600">Đang tải thông tin chi tiết loại phòng...</p>}
-                    {isRoomTypeDetailError && <p className="mt-1 text-xs font-normal text-rose-600">Không tải được chi tiết loại phòng.</p>}
+                    {t("room.roomType")} <span className="text-rose-500">*</span>
+                    {isRoomTypesError && <p className="mt-1 text-xs font-normal text-rose-600">{t("room.createForm.roomTypesError")}</p>}
+                    {isRoomTypeDetailLoading && <p className="mt-1 text-xs font-normal text-blue-600">{t("room.createForm.loadingRoomTypeDetails")}</p>}
+                    {isRoomTypeDetailError && <p className="mt-1 text-xs font-normal text-rose-600">{t("room.createForm.roomTypeDetailsError")}</p>}
                     <select disabled={isRoomTypesLoading || isRoomTypesError || availableRoomTypes.length === 0} value={createRoomForm.roomType} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomType: event.target.value, ...roomFormDefaults(event.target.value) }))} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
-                      {availableRoomTypes.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+                      {isRoomTypesLoading && <option value="">{t("room.createForm.loadingRoomTypes")}</option>}
+                      {availableRoomTypes.map((roomType) => <option key={roomType} value={roomType}>{localizedRoomType(roomType)}</option>)}
                     </select>
                   </label>
 
                   <label className="block text-sm font-semibold text-slate-700">
-                    Tòa nhà <span className="text-rose-500">*</span>
+                    {t("room.buildingLabel")} <span className="text-rose-500">*</span>
                     <select value={createRoomForm.building} onChange={(event) => { const buildingId = event.target.value; setSelectedBuildingId(buildingId); setCreateRoomForm((current) => ({ ...current, building: buildingId, floor: "" })); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
@@ -2234,14 +2176,14 @@ export default function RoomWorkspace() {
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Số phòng <span className="text-rose-500">*</span>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" required value={createRoomForm.roomNumber} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomNumber: event.target.value.replace(/\D/g, "") }))} placeholder="Ví dụ: 101" className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    {t("room.createForm.roomNumber")} <span className="text-rose-500">*</span>
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" required value={createRoomForm.roomNumber} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomNumber: event.target.value.replace(/\D/g, "") }))} placeholder={t("room.createForm.roomNumberPlaceholder")} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    Tầng <span className="text-rose-500">*</span>
+                    {t("room.createForm.floor")} <span className="text-rose-500">*</span>
                     <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} disabled={isFloorsLoading || isFloorsFetching || selectedBuildingFloorOptions.length === 0} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
-                      {isFloorsLoading || isFloorsFetching ? <option value="">Đang tải tầng...</option> : selectedBuildingFloorOptions.length === 0 ? <option value="">Chưa có tầng</option> : selectedBuildingFloorOptions.map((item) => (
-                        <option key={item.id} value={item.id}>{item.name.startsWith("Tầng") ? item.name : `Tầng ${item.name}`}</option>
+                      {isFloorsLoading || isFloorsFetching ? <option value="">{t("room.createForm.loadingFloors")}</option> : selectedBuildingFloorOptions.length === 0 ? <option value="">{t("room.createForm.noFloors")}</option> : selectedBuildingFloorOptions.map((item) => (
+                        <option key={item.id} value={item.id}>{localizedFloorName(item.name)}</option>
                       ))}
                     </select>
                   </label>
@@ -2251,55 +2193,57 @@ export default function RoomWorkspace() {
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">2</span>
-                  Chi tiết phòng
+                  {t("room.createForm.roomDetails")}
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Diện tích <span className="text-rose-500">*</span>
+                    {t("room.area")} <span className="text-rose-500">*</span>
                     <input type="number" min="1" step="0.1" value={createRoomForm.area} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
 
                   <label className="block text-sm font-semibold text-slate-700">
-                    Giá tiêu chuẩn
+                    {t("room.createForm.standardPrice")}
                     <input type="number" min="1" step="1000" value={standardRoomPrice} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-normal text-slate-500 outline-none" />
-                    <span className="mt-1 block text-xs font-normal text-slate-500">Giá chính thức / đêm: {money(officialRoomPrice)} (tiện ích tính riêng)</span>
+                    <span className="mt-1 block text-xs font-normal text-slate-500">{t("room.createForm.officialPricePerNight", { price: money(officialRoomPrice) })}</span>
                   </label>
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-3">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Sức chứa tiêu chuẩn <span className="text-rose-500">*</span>
+                    {t("room.createForm.standardCapacity")} <span className="text-rose-500">*</span>
                     <input type="number" min="1" value={createRoomForm.standardCapacity} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
-                    <span className="mt-1 block text-xs font-normal text-slate-400">Số khách đã bao gồm trong giá phòng</span>
+                    <span className="mt-1 block text-xs font-normal text-slate-400">{t("room.createForm.includedGuests")}</span>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    Số người ghép tối đa<span className="text-rose-500">*</span>
+                    {t("room.createForm.maxExtraGuests")}<span className="text-rose-500">*</span>
                     <input type="number" min="0" value={createRoomForm.maxExtraGuests} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
-                    <span className="mt-1 block text-xs font-normal text-slate-400">Số khách thêm ngoài tiêu chuẩn</span>
+                    <span className="mt-1 block text-xs font-normal text-slate-400">{t("room.createForm.extraGuestsDescription")}</span>
                   </label>
                 </div>
 
                 <div className="mt-4 grid gap-4 rounded-xl border border-amber-100 bg-amber-50/60 p-3 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-amber-900">
-                    Phụ thu người lớn / người
+                    {t("room.createForm.extraAdultFee")}
                     <input type="number" min="0" step="1000" value={createRoomForm.extraAdultFee} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-amber-200 bg-amber-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
                   <label className="block text-sm font-semibold text-amber-900">
-                    Phụ thu trẻ em / người
+                    {t("room.createForm.extraChildFee")}
                     <input type="number" min="0" step="1000" value={createRoomForm.extraChildFee} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-amber-200 bg-amber-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
                 </div>
-                {isBranchPoliciesLoading && <p className="mt-2 text-xs font-normal text-blue-600">Đang tải sức chứa và phụ thu theo chính sách loại phòng...</p>}
-                {isBranchPoliciesError && <p role="alert" className="mt-2 text-xs font-normal text-rose-600">Không tải được chính sách sức chứa và phụ thu. Vui lòng thử tải lại trang.</p>}
+                {isBranchPoliciesLoading && <p className="mt-2 text-xs font-normal text-blue-600">{t("room.createForm.loadingPolicy")}</p>}
+                {isBranchPoliciesError && <p role="alert" className="mt-2 text-xs font-normal text-rose-600">{t("room.createForm.policyError")}</p>}
+                {!isBranchPoliciesLoading && !isBranchPoliciesError && !selectedRoomTypePolicy && isRoomTypeDetailLoading && <p className="mt-2 text-xs font-normal text-blue-600">{t("room.createForm.loadingSurcharge")}</p>}
+                {!isBranchPoliciesLoading && !isBranchPoliciesError && !selectedRoomTypePolicy && !isRoomTypeDetailLoading && (isRoomTypeDetailError || createRoomForm.extraAdultFee === "" || createRoomForm.extraChildFee === "") && <p role="alert" className="mt-2 text-xs font-normal text-rose-600">{t("room.createForm.missingPolicy")}</p>}
 
                 <div className="mt-4">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-700">Loại giường <span className="text-rose-500">*</span></p>
-                    {isBedTypesLoading && <span className="text-xs font-normal text-blue-600">Đang tải...</span>}
+                    <p className="text-sm font-semibold text-slate-700">{t("room.createForm.bedType")} <span className="text-rose-500">*</span></p>
+                    {isBedTypesLoading && <span className="text-xs font-normal text-blue-600">{t("room.createForm.loading")}</span>}
                   </div>
                   {isBedTypesError ? (
-                    <p className="mt-1 text-xs text-rose-600">Không tải được danh sách loại giường.</p>
+                    <p className="mt-1 text-xs text-rose-600">{t("room.createForm.bedTypesError")}</p>
                   ) : apiBedTypes?.length ? (
                     <div className="mt-2 space-y-2">
                       {apiBedTypes.map((bedType) => {
@@ -2320,17 +2264,17 @@ export default function RoomWorkspace() {
                                 className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                               />
                               <span className="truncate">{bedType.name ?? bedType.bedTypeName}</span>
-                              {bedType.isExtraBed && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">Giường phụ</span>}
+                              {bedType.isExtraBed && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{t("room.createForm.extraBed")}</span>}
                             </label>
                             {selected && (
                               <label className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
-                                SL
+                                {t("room.createForm.quantity")}
                                 <input
                                   type="number"
                                   min="1"
                                   step="1"
                                   value={selected.quantity}
-                                  aria-label={`Số lượng ${bedType.name ?? bedType.bedTypeName}`}
+                                  aria-label={t("room.createForm.quantityFor", { bedType: bedType.name ?? bedType.bedTypeName })}
                                   onChange={(event) => {
                                     const quantity = Number(event.target.value);
                                     setCreateRoomForm((current) => ({
@@ -2349,15 +2293,15 @@ export default function RoomWorkspace() {
                       })}
                     </div>
                   ) : (
-                    <p className="mt-1 text-xs text-amber-700">Chưa có loại giường. Hãy thêm loại giường trước khi tạo phòng.</p>
+                    <p className="mt-1 text-xs text-amber-700">{t("room.createForm.noBedTypes")}</p>
                   )}
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-sm font-semibold text-slate-700">Trạng thái phòng <span className="text-rose-500">*</span></p>
+                  <p className="text-sm font-semibold text-slate-700">{t("room.createForm.roomStatus")} <span className="text-rose-500">*</span></p>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    {isRoomStatusesLoading && <p className="col-span-2 text-xs font-normal text-slate-400">Đang tải trạng thái phòng...</p>}
-                    {isRoomStatusesError && <p className="col-span-2 text-xs font-normal text-rose-600">Không tải được trạng thái phòng từ API.</p>}
+                    {isRoomStatusesLoading && <p className="col-span-2 text-xs font-normal text-slate-400">{t("room.createForm.loadingRoomStatuses")}</p>}
+                    {isRoomStatusesError && <p className="col-span-2 text-xs font-normal text-rose-600">{t("room.createForm.roomStatusesError")}</p>}
                     {availableRoomStatuses.map((status) => {
                       const active = createRoomForm.status === status;
                       const badge = "bg-blue-50 text-blue-700 border-blue-200";
@@ -2368,7 +2312,7 @@ export default function RoomWorkspace() {
                           onClick={() => setCreateRoomForm((current) => ({ ...current, status }))}
                           className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${active ? badge : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
                         >
-                          {status}
+                          {localizedRoomStatus(status)}
                         </button>
                       );
                     })}
@@ -2380,7 +2324,7 @@ export default function RoomWorkspace() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                     <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">3</span>
-                    Tiện nghi & dịch vụ <span className="text-rose-500">*</span>
+                    {t("room.createForm.amenitiesAndServices")} <span className="text-rose-500">*</span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -2391,14 +2335,14 @@ export default function RoomWorkspace() {
                         onClick={clearAllAmenities}
                         className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
                       >
-                        Bỏ chọn tất cả
+                        {t("room.createForm.deselectAll")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setShowAmenityMenu(false)}
                         className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
                       >
-                        Dùng Mặc định
+                        {t("room.createForm.useDefault")}
                       </button>
                     
   
@@ -2407,7 +2351,7 @@ export default function RoomWorkspace() {
                       onClick={() => setShowAmenityMenu((current) => !current)}
                       className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
                     >
-                      + Thêm
+                      + {t("room.createForm.add")}
                     </button>
                   </div>
                 </div>
@@ -2417,7 +2361,7 @@ export default function RoomWorkspace() {
                   <input
                     value={amenitySearch}
                     onChange={(event) => setAmenitySearch(event.target.value)}
-                    placeholder="Tìm kiếm tiện nghi..."
+                    placeholder={t("room.searchAmenities")}
                     className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
                   />
                 </div>
@@ -2434,7 +2378,7 @@ export default function RoomWorkspace() {
                             appendAmenity();
                           }
                         }}
-                        placeholder="Tên tiện nghi mới"
+                        placeholder={t("room.createForm.newAmenityName")}
                         className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       />
                       <input
@@ -2442,7 +2386,7 @@ export default function RoomWorkspace() {
                         min="0"
                         value={amenityPrice}
                         onChange={(event) => setAmenityPrice(event.target.value)}
-                        placeholder="Giá tiện nghi"
+                        placeholder={t("room.createForm.amenityPrice")}
                         className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                       />
                     </div>
@@ -2453,7 +2397,7 @@ export default function RoomWorkspace() {
                         onClick={() => appendAmenity(newAmenityName)}
                         className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
                       >
-                        Thêm
+                        {t("room.createForm.add")}
                       </button>
                     </div>
 
@@ -2477,15 +2421,15 @@ export default function RoomWorkspace() {
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">4</span>
-                  Mô tả & hình ảnh <span className="text-rose-500">*</span>
+                  {t("room.createForm.descriptionAndImages")} <span className="text-rose-500">*</span>
                 </div>
 
-                <textarea value={createRoomForm.description} onChange={(event) => setCreateRoomForm((current) => ({ ...current, description: event.target.value }))} rows={4} placeholder="Nhập mô tả chi tiết phòng, phong cách, vị trí và trải nghiệm khách hàng..." className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                <textarea value={createRoomForm.description} onChange={(event) => setCreateRoomForm((current) => ({ ...current, description: event.target.value }))} rows={4} placeholder={t("room.createForm.detailedDescriptionPlaceholder")} className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
 
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
                   <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
                     <Upload size={18} />
-                    Tải ảnh lên
+                    {t("room.createForm.uploadImage")}
                     <input type="file" multiple accept="image/*" onChange={(event) => addImages(event.target.files)} className="hidden" />
                   </label>
 
@@ -2494,7 +2438,7 @@ export default function RoomWorkspace() {
                       const isDefault = createRoomForm.defaultImage ? image === createRoomForm.defaultImage : index === 0;
                       return (
                         <div key={`${image}-${index}`} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-white">
-                          <img src={image} alt="Ảnh phòng" className="h-24 w-full object-cover" />
+                          <img src={image} alt={t("room.createForm.imageAlt")} className="h-24 w-full object-cover" />
                           <button
                             type="button"
                             onClick={(event) => {
@@ -2504,7 +2448,7 @@ export default function RoomWorkspace() {
                             className={`absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border transition ${
                               isDefault ? "border-amber-300 bg-amber-400 text-white" : "border-white/80 bg-slate-900/65 text-slate-100"
                             }`}
-                            aria-label="Đặt ảnh làm ảnh mặc định"
+                            aria-label={t("room.createForm.setDefaultImage")}
                           >
                             <Star size={13} fill={isDefault ? "currentColor" : "none"} />
                           </button>
@@ -2515,7 +2459,7 @@ export default function RoomWorkspace() {
                       );
                     }) : (
                       <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-400">
-                        Chưa có ảnh nào được tải lên.
+                        {t("room.createForm.noImages")}
                       </div>
                     )}
                   </div>
@@ -2527,40 +2471,40 @@ export default function RoomWorkspace() {
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Xem trước</p>
-                    <h4 className="mt-2 text-xl font-bold text-slate-900">{createRoomForm.roomType}</h4>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{t("room.createForm.preview")}</p>
+                    <h4 className="mt-2 text-xl font-bold text-slate-900">{localizedRoomType(createRoomForm.roomType)}</h4>
                   </div>
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[createRoomForm.status] ?? "bg-emerald-50 text-emerald-700"}`}>
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                    {createRoomForm.status}
+                    {localizedRoomStatus(createRoomForm.status)}
                   </span>
                 </div>
 
                 <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                   {createRoomForm.images.length > 0 ? (
-                    <img src={createRoomForm.defaultImage ?? createRoomForm.images[0]} alt="Preview room" className="h-44 w-full object-cover" />
+                    <img src={createRoomForm.defaultImage ?? createRoomForm.images[0]} alt={t("room.createForm.imageAlt")} className="h-44 w-full object-cover" />
                   ) : (
                     <div className="grid h-44 place-items-center bg-slate-100 text-sm text-slate-400">
-                      Chưa có ảnh preview
+                      {t("room.createForm.noPreviewImage")}
                     </div>
                   )}
                 </div>
 
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span>Tòa</span>
+                    <span>{t("room.buildingLabel")}</span>
                     <strong className="font-semibold text-slate-800">{selectedBuildingName}</strong>
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span>Tầng</span>
+                    <span>{t("room.createForm.floor")}</span>
                     <strong className="font-semibold text-slate-800">{selectedFloorLabel}</strong>
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span>Diện tích</span>
+                    <span>{t("room.area")}</span>
                     <strong className="font-semibold text-slate-800">{createRoomForm.area || 25} m²</strong>
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span>Giá chính thức</span>
+                    <span>{t("room.createForm.officialPrice")}</span>
                     <strong className="font-semibold text-slate-800">{money(officialRoomPrice)}</strong>
                   </div>
                 </div>
@@ -2571,7 +2515,7 @@ export default function RoomWorkspace() {
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
                     <ImagePlus size={16} />
                   </span>
-                  Tính năng nổi bật
+                  {t("room.createForm.highlights")}
                 </div>
 
                 <div className="mt-4 space-y-2 text-sm text-slate-600">
@@ -2582,7 +2526,7 @@ export default function RoomWorkspace() {
                     </div>
                   ))}
                   {createRoomForm.amenities.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-sm text-slate-400">Chưa có tiện nghi nào được chọn</p>
+                    <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-center text-sm text-slate-400">{t("room.createForm.noAmenitiesSelected")}</p>
                   )}
                 </div>
               </div>
@@ -2637,30 +2581,30 @@ export default function RoomWorkspace() {
             })),
           }));
         }}
-        buildings={buildings.map((item) => ({ value: item.id, label: item.name }))}
+        buildings={buildings.map((item) => ({ value: item.id, label: localizedBuildingName(item.name) }))}
         floors={hotelFloorOptions.map((item) => ({
           value: item.id,
-          label: `Tầng ${item.name}`,
+          label: t("room.floorOption", { floor: item.name.replace(/^Tầng\s*/i, "") }),
           buildingId: item.buildingId,
         }))}
         roomTypes={availableRoomTypes.map((label) => ({
           value: roomTypeValues[label] ?? label,
-          label,
+          label: localizedRoomType(label),
         }))}
         roomStatuses={availableRoomStatuses.map((label) => ({
           value: statusValues[label] ?? label,
-          label,
+          label: localizedRoomStatus(label),
         }))}
         amenities={amenityCatalog.map((amenity) => ({
           id: amenity.id,
-          name: amenity.name,
+          name: localizedAmenityName(amenity.name),
           price: amenity.price,
         }))}
         bedTypes={(apiBedTypes ?? [])
           .filter((item) => item.id != null)
           .map((item) => ({
             id: Number(item.id),
-            name: String(item.name ?? item.bedTypeName ?? `Loại giường ${item.id}`),
+            name: localizedBedTypeName(String(item.name ?? item.bedTypeName ?? `Loại giường ${item.id}`)),
             isExtraBed: item.isExtraBed,
           }))}
         imageFiles={roomImageFiles}
@@ -2671,7 +2615,7 @@ export default function RoomWorkspace() {
         onCancel={closeCreateRoomModal}
       />
     )}
-    {galleryRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 p-4" onMouseDown={() => setGalleryRoom(null)}><div className="w-full max-w-4xl rounded-2xl bg-white p-4 shadow-2xl sm:p-5" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Thư viện ảnh</p><h3 className="mt-1 text-lg font-bold text-slate-900">Phòng {galleryRoom.id} · {galleryRoom.name}</h3></div><button type="button" onClick={() => setGalleryRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="relative mt-4 overflow-hidden rounded-xl bg-slate-100"><img src={galleryRoom.images[galleryIndex]} alt={`${galleryRoom.name} · ảnh ${galleryIndex + 1}`} className="h-[min(52vh,420px)] w-full object-cover" /><button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryRoom.images.length) % galleryRoom.images.length)} className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md">‹</button><button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryRoom.images.length)} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md">›</button></div><div className="mt-3 grid grid-cols-4 gap-2">{galleryRoom.images.map((image, index) => <button type="button" key={image} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-600" : "border-transparent"}`}><img src={image} alt={`Ảnh thu nhỏ ${index + 1}`} className="h-16 w-full object-cover" /></button>)}</div></div></div>}
-    {assignmentRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4" onMouseDown={() => setAssignmentRoom(null)}><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-amber-600">{t("frontDesk.cleaningAssignment")}</p><h3 className="mt-1 text-lg font-bold text-slate-900">{t("room.roomLabel")} {assignmentRoom.id} · {assignmentRoom.name}</h3><p className="mt-1 text-sm text-slate-500">{t("frontDesk.cleaningDescription")}</p></div><button type="button" onClick={() => setAssignmentRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button></div><div className="mt-5 space-y-2">{employees.map((employee) => <button type="button" key={employee} onClick={() => { updateRoom(assignmentRoom.id, { cleaner: employee, status: "Đang dọn" }); setAssignmentRoom(null); }} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition hover:border-amber-300 hover:bg-amber-50"><span className="grid h-9 w-9 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">{employee.split(" ").map((part) => part[0]).slice(-2).join("")}</span><span><span className="block text-sm font-semibold text-slate-800">{employee}</span><span className="mt-0.5 block text-xs text-slate-500">Housekeeping · {t("room.housekeepingReady")}</span></span></button>)}</div><button type="button" onClick={() => setAssignmentRoom(null)} className="mt-5 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("common.cancel")}</button></div></div>}
+    {galleryRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/75 p-4" onMouseDown={() => setGalleryRoom(null)}><div className="w-full max-w-4xl rounded-2xl bg-white p-4 shadow-2xl sm:p-5" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">{t("room.gallery")}</p><h3 className="mt-1 text-lg font-bold text-slate-900">{t("room.roomLabel")} {galleryRoom.id} · {localizedRoomType(galleryRoom.name)}</h3></div><button type="button" onClick={() => setGalleryRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700" aria-label={t("common.close")}>×</button></div><div className="relative mt-4 overflow-hidden rounded-xl bg-slate-100"><img src={galleryRoom.images[galleryIndex]} alt={t("room.editForm.roomImageAlt", { count: galleryIndex + 1 })} className="h-[min(52vh,420px)] w-full object-cover" /><button type="button" onClick={() => setGalleryIndex((galleryIndex - 1 + galleryRoom.images.length) % galleryRoom.images.length)} className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md" aria-label={t("common.previousPage")}>‹</button><button type="button" onClick={() => setGalleryIndex((galleryIndex + 1) % galleryRoom.images.length)} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-xl text-slate-700 shadow-md" aria-label={t("common.nextPage")}>›</button></div><div className="mt-3 grid grid-cols-4 gap-2">{galleryRoom.images.map((image, index) => <button type="button" key={image} onClick={() => setGalleryIndex(index)} className={`overflow-hidden rounded-lg border-2 ${galleryIndex === index ? "border-blue-600" : "border-transparent"}`}><img src={image} alt={t("room.editForm.roomImageAlt", { count: index + 1 })} className="h-16 w-full object-cover" /></button>)}</div></div></div>}
+    {assignmentRoom && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4" onMouseDown={() => setAssignmentRoom(null)}><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-amber-600">{t("frontDesk.cleaningAssignment")}</p><h3 className="mt-1 text-lg font-bold text-slate-900">{t("room.roomLabel")} {assignmentRoom.id} · {localizedRoomType(assignmentRoom.name)}</h3><p className="mt-1 text-sm text-slate-500">{t("frontDesk.cleaningDescription")}</p></div><button type="button" onClick={() => setAssignmentRoom(null)} className="text-2xl leading-none text-slate-400 hover:text-slate-700" aria-label={t("common.close")}>×</button></div><div className="mt-5 space-y-2">{employees.map((employee) => <button type="button" key={employee} onClick={() => { updateRoom(assignmentRoom.id, { cleaner: employee, status: "Đang dọn" }); setAssignmentRoom(null); }} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition hover:border-amber-300 hover:bg-amber-50"><span className="grid h-9 w-9 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">{employee.split(" ").map((part) => part[0]).slice(-2).join("")}</span><span><span className="block text-sm font-semibold text-slate-800">{employee}</span><span className="mt-0.5 block text-xs text-slate-500">Housekeeping · {t("room.housekeepingReady")}</span></span></button>)}</div><button type="button" onClick={() => setAssignmentRoom(null)} className="mt-5 w-full rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">{t("common.cancel")}</button></div></div>}
   </section>;
 }

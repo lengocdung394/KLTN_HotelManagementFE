@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import DatePickerPopover from "./DatePickerPopover";
 import { toast } from "../hooks/use-toast";
 import { bindHotelSocketEvents, SEASONAL_RATE_UPDATE_EVENT } from "../lib/socket";
@@ -34,6 +35,7 @@ const roomTypesList: RoomType[] = [
   "Suite Room",
   "Family Room",
 ];
+const defaultEventName = "__DEFAULT_EVENT_NAME__";
 
 
 const roomTypeThemeStyles: Record<RoomType, { bg: string; border: string; text: string; badge: string }> = {
@@ -96,8 +98,6 @@ const statusColorHeader: Record<"ACTIVE" | "UPCOMING" | "EXPIRED", string> = {
   UPCOMING: "from-blue-50/80 via-sky-50/80 to-blue-50/80 border-blue-100 text-blue-900",
   EXPIRED: "from-orange-50/80 via-orange-50 to-amber-50/60 border-orange-100 text-orange-900",
 };
-
-const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
 
 const normalizeDateKey = (value: string | null | undefined) => {
   if (!value) return "";
@@ -179,7 +179,7 @@ const mapRoomSeasonalRateToEvent = (item: RoomSeasonalRate): PriceEventRule => {
 
   return {
     id: String(item.id ?? `evt-${Date.now()}`),
-    name: String(item.rateName ?? item.name ?? "Sự kiện giá"),
+    name: String(item.rateName ?? item.name ?? defaultEventName),
     startDate: String(item.startDate ?? ""),
     endDate: String(item.endDate ?? ""),
     roomTypes: normalizedRoomTypes.length > 0 ? normalizedRoomTypes : ["ALL"],
@@ -197,7 +197,7 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
   const groupsMap = new Map<string, RoomSeasonalRate[]>();
 
   rates.forEach((item) => {
-    const name = String(item.rateName ?? item.name ?? "Sự kiện giá").trim();
+    const name = String(item.rateName ?? item.name ?? defaultEventName).trim();
     const startDate = String(item.startDate ?? "").trim();
     const endDate = String(item.endDate ?? "").trim();
     // Key bao gồm Tên + Ngày bắt đầu + Ngày kết thúc để gộp đúng sự kiện trùng ngày
@@ -213,7 +213,7 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
 
   groupsMap.forEach((groupItems) => {
     const firstItem = groupItems[0];
-    const name = String(firstItem.rateName ?? firstItem.name ?? "Sự kiện giá").trim();
+    const name = String(firstItem.rateName ?? firstItem.name ?? defaultEventName).trim();
     const startDate = String(firstItem.startDate ?? "").trim();
     const endDate = String(firstItem.endDate ?? "").trim();
 
@@ -278,6 +278,22 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
 };
 
 export default function EventPricingCalendar() {
+  const { t: translate, i18n } = useTranslation();
+  const t = (key: string, options?: Record<string, string | number>) =>
+    translate(key.startsWith("eventPricing.") ? `room.${key}` : key, options);
+  const getRoomTypeLabel = (roomType: string) => {
+    const keys: Record<string, string> = {
+      "Standard Room": "eventPricing.roomTypeStandard",
+      "Deluxe Room": "eventPricing.roomTypeDeluxe",
+      "Suite Room": "eventPricing.roomTypeSuite",
+      "Family Room": "eventPricing.roomTypeFamily",
+    };
+    return t(keys[roomType] ?? roomType);
+  };
+  const getEventStatusLabel = (status: "ACTIVE" | "UPCOMING" | "EXPIRED") =>
+    t(status === "ACTIVE" ? "eventPricing.active" : status === "UPCOMING" ? "eventPricing.upcoming" : "eventPricing.expired");
+  const formatMoney = (value: number) =>
+    `${Number(value).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
@@ -383,19 +399,19 @@ export default function EventPricingCalendar() {
         const rateLabel =
           (payloadData[0] as Record<string, unknown> | undefined)?.rateName ??
           (payloadData[0] as Record<string, unknown> | undefined)?.name ??
-          "giá mùa vụ";
+          t("eventPricing.seasonalPricing");
 
         toast({
           variant: "default",
-          title: "Cập nhật giá mùa vụ",
-          description: `${String(rateLabel)} vừa được cập nhật. Danh sách giá đã được đồng bộ mới nhất.`,
+          title: t("eventPricing.eventUpdatedToastTitle"),
+          description: t("eventPricing.eventUpdatedToastDescription", { eventName: String(rateLabel) }),
           duration: 10000,
         });
 
         refetch();
       },
     });
-  }, [refetch]);
+  }, [refetch, t]);
 
   // Modal State
   const [showEventModal, setShowEventModal] = useState(false);
@@ -441,7 +457,7 @@ export default function EventPricingCalendar() {
 
   const openEditModal = (evt: PriceEventRule) => {
     setEditingEventId(evt.id);
-    setEventName(evt.name);
+    setEventName(evt.name === defaultEventName ? t("eventPricing.seasonalPricing") : evt.name);
     setStartDate(evt.startDate);
     setEndDate(evt.endDate);
     setColorTheme(evt.colorTheme);
@@ -569,16 +585,16 @@ export default function EventPricingCalendar() {
         await updateRoomSeasonalRate(seasonalRateRequests).unwrap();
         toast({
           variant: "default",
-          title: "Cập nhật giá mùa vụ",
-          description: `Đã chỉnh sửa ${eventName.trim()} và đồng bộ thay đổi tới khách hàng.`,
+          title: t("eventPricing.updatedToastTitle"),
+          description: t("eventPricing.updatedToastDescription", { eventName: eventName.trim() }),
           duration: 10000,
         });
       } else {
         await createRoomSeasonalRate(seasonalRateRequests).unwrap();
         toast({
           variant: "success",
-          title: "Cập nhật giá thành công",
-          description: "Đã lưu cấu hình giá theo sự kiện cho các loại phòng đã chọn.",
+          title: t("eventPricing.savedToastTitle"),
+          description: t("eventPricing.savedToastDescription"),
           duration: 10000,
         });
       }
@@ -586,15 +602,15 @@ export default function EventPricingCalendar() {
       await refetch();
       closeFormModal();
     } catch (error) {
-      console.error("Lỗi khi lưu sự kiện giá theo phòng:", error);
+      console.error("Failed to save room event pricing:", error);
       const errorMessage =
         typeof error === "object" && error !== null && "data" in error
-          ? ((error as { data?: { message?: string } }).data?.message ?? "Không thể lưu cấu hình giá.")
-          : "Không thể lưu cấu hình giá.";
+          ? ((error as { data?: { message?: string } }).data?.message ?? t("eventPricing.saveError"))
+          : t("eventPricing.saveError");
       setFormValidationError(errorMessage);
       toast({
         variant: "destructive",
-        title: editingEventId ? "Cập nhật cấu hình giá thất bại" : "Lưu cấu hình giá thất bại",
+        title: editingEventId ? t("eventPricing.updateErrorTitle") : t("eventPricing.createErrorTitle"),
         description: errorMessage,
         duration: 10000,
       });
@@ -633,13 +649,13 @@ export default function EventPricingCalendar() {
         <div className="flex items-center gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h4 className="text-lg font-bold text-slate-900 tracking-tight">Danh sách cấu hình giá theo sự kiện</h4>
+              <h4 className="text-lg font-bold text-slate-900 tracking-tight">{t("eventPricing.listTitle")}</h4>
               <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-[10px] font-bold text-violet-700 uppercase tracking-wider">
                 Event Pricing
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Quản lý các quy tắc sự kiện tăng/giảm giá theo % linh hoạt cho từng loại phòng theo khoảng thời gian.
+              {t("eventPricing.description")}
             </p>
           </div>
         </div>
@@ -650,7 +666,7 @@ export default function EventPricingCalendar() {
           className="flex w-fit items-center gap-2 rounded-xl bg-linear-to-r from-blue-600 to-sky-500 px-4.5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-sky-600 transition duration-150 active:scale-95"
         >
           <Plus size={16} className="stroke-[2.5]" />
-          Tạo sự kiện giá mới
+          {t("eventPricing.create")}
         </button>
       </div>
 
@@ -664,7 +680,7 @@ export default function EventPricingCalendar() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm tên sự kiện giá..."
+              placeholder={t("eventPricing.searchPlaceholder")}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9.5 pr-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
@@ -691,7 +707,7 @@ export default function EventPricingCalendar() {
                 setCurrentPage(0);
               }}
               highlightDates={eventDates}
-              placeholder="Chọn ngày"
+              placeholder={t("eventPricing.chooseDate")}
               buttonClassName="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white p-0 text-slate-700 shadow-2xs outline-none transition hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
@@ -703,10 +719,10 @@ export default function EventPricingCalendar() {
               onChange={(e) => setStatusFilter(e.target.value as "ALL" | "ACTIVE" | "UPCOMING" | "EXPIRED")}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs outline-none focus:border-blue-500"
             >
-              <option value="ALL">Tất cả trạng thái</option>
-              <option value="ACTIVE">Đang diễn ra</option>
-              <option value="UPCOMING">Sắp diễn ra</option>
-              <option value="EXPIRED">Hết hạn</option>
+              <option value="ALL">{t("eventPricing.allStatuses")}</option>
+              <option value="ACTIVE">{t("eventPricing.active")}</option>
+              <option value="UPCOMING">{t("eventPricing.upcoming")}</option>
+              <option value="EXPIRED">{t("eventPricing.expired")}</option>
             </select>
           </div>
 
@@ -717,10 +733,10 @@ export default function EventPricingCalendar() {
               onChange={(e) => setSelectedRoomTypeFilter(e.target.value as any)}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs outline-none focus:border-blue-500"
             >
-              <option value="ALL">Tất cả loại phòng</option>
+              <option value="ALL">{t("eventPricing.allRoomTypes")}</option>
               {roomTypesList.map((rt) => (
                 <option key={rt} value={rt}>
-                  {rt}
+                  {getRoomTypeLabel(rt)}
                 </option>
               ))}
             </select>
@@ -732,19 +748,19 @@ export default function EventPricingCalendar() {
       {/* 3. Event Rules List (Main View) */}
       {isLoadingSeasonalRates ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-8 text-center text-sm font-medium text-slate-500">
-          Đang tải danh sách sự kiện giá...
+          {t("eventPricing.loading")}
         </div>
       ) : filteredEvents.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
           <Sparkles size={32} className="mx-auto text-slate-400 opacity-60 mb-2" />
-          <h5 className="text-sm font-bold text-slate-700">Chưa có sự kiện cấu hình giá nào</h5>
-          <p className="mt-1 text-xs text-slate-500">Thử thay đổi bộ lọc tìm kiếm hoặc tạo thêm sự kiện cấu hình giá mới.</p>
+          <h5 className="text-sm font-bold text-slate-700">{t("eventPricing.emptyTitle")}</h5>
+          <p className="mt-1 text-xs text-slate-500">{t("eventPricing.emptyDescription")}</p>
           <button
             type="button"
             onClick={openCreateModal}
             className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition"
           >
-            <Plus size={15} /> Tạo sự kiện mới
+            <Plus size={15} /> {t("eventPricing.createNew")}
           </button>
         </div>
       ) : (
@@ -755,16 +771,16 @@ export default function EventPricingCalendar() {
               status === "ACTIVE" ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Đang diễn ra
+                  {getEventStatusLabel(status)}
                 </span>
               ) : status === "UPCOMING" ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800 border border-blue-200">
                   <span className="h-2 w-2 rounded-full bg-blue-500" />
-                  Sắp diễn ra
+                  {getEventStatusLabel(status)}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700 border border-orange-300">
-                  Đã hết hạn
+                  {getEventStatusLabel(status)}
                 </span>
               );
 
@@ -776,17 +792,17 @@ export default function EventPricingCalendar() {
             const modifierBadge = hasMultipleAdjustments ? (
               <span className="inline-flex items-center gap-1 rounded-xl bg-purple-500/15 px-3 py-1 text-xs font-extrabold text-purple-900 border border-purple-300">
                 <TrendingUp size={14} className="text-purple-600" />
-                Điều chỉnh {minPct > 0 ? `+${minPct}%` : `${minPct}%`} ~ {maxPct > 0 ? `+${maxPct}%` : `${maxPct}%`} theo nhóm phòng
+                {t("eventPricing.adjustmentRange", { min: minPct > 0 ? `+${minPct}%` : `${minPct}%`, max: maxPct > 0 ? `+${maxPct}%` : `${maxPct}%` })}
               </span>
             ) : evt.percentValue > 0 ? (
               <span className="inline-flex items-center gap-1 rounded-xl bg-orange-50 px-3 py-1 text-xs font-extrabold text-orange-900 border border-orange-100">
                 <TrendingUp size={14} className="text-orange-600" />
-                Tăng +{evt.percentValue}% giá phòng
+                {t("eventPricing.increase", { percent: evt.percentValue })}
               </span>
             ) : evt.percentValue < 0 ? (
               <span className="inline-flex items-center gap-1 rounded-xl bg-orange-50 px-3 py-1 text-xs font-extrabold text-orange-900 border border-orange-100">
                 <TrendingDown size={14} className="text-orange-600" />
-                Giảm {evt.percentValue}% ưu đãi
+                {t("eventPricing.discount", { percent: Math.abs(evt.percentValue) })}
               </span>
             ) : null;
 
@@ -808,7 +824,7 @@ export default function EventPricingCalendar() {
                       {statusPill}
                       {modifierBadge}
                     </div>
-                    <h5 className="mt-2.5 text-base font-extrabold text-slate-900 tracking-tight">{evt.name}</h5>
+                    <h5 className="mt-2.5 text-base font-extrabold text-slate-900 tracking-tight">{evt.name === defaultEventName ? t("eventPricing.seasonalPricing") : evt.name}</h5>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -818,14 +834,14 @@ export default function EventPricingCalendar() {
                       className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3.5 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-white hover:text-blue-700 transition"
                     >
                       <Pencil size={14} />
-                      Chỉnh sửa
+                      {t("eventPricing.edit")}
                     </button>
 
                     <button
                       type="button"
                       onClick={() => deleteEventRule(evt.id)}
                       className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white/90 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition"
-                      title="Xóa sự kiện"
+                      title={t("eventPricing.delete")}
                     >
                       <Trash2 size={15} />
                     </button>
@@ -838,7 +854,7 @@ export default function EventPricingCalendar() {
                     <div className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
                       <CalendarDays size={18} className="text-blue-600 shrink-0" />
                       <div>
-                        <span className="text-slate-400 block text-[11px] font-semibold">Khoảng thời gian áp dụng</span>
+                        <span className="text-slate-400 block text-[11px] font-semibold">{t("eventPricing.dateRange")}</span>
                         <strong className="font-extrabold text-slate-800">
                           {evt.startDate.split("-").reverse().join("/")} ➔ {evt.endDate.split("-").reverse().join("/")}
                         </strong>
@@ -848,9 +864,9 @@ export default function EventPricingCalendar() {
                     <div className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
                       <BedDouble size={18} className="text-purple-600 shrink-0" />
                       <div>
-                        <span className="text-slate-400 block text-[11px] font-semibold">Loại phòng áp dụng</span>
+                        <span className="text-slate-400 block text-[11px] font-semibold">{t("eventPricing.applicableRoomTypes")}</span>
                         <strong className="font-extrabold text-slate-800">
-                          {evt.roomTypes.includes("ALL") ? "Tất cả 4 loại phòng" : evt.roomTypes.join(", ")}
+                          {evt.roomTypes.includes("ALL") ? t("eventPricing.allFourRoomTypes") : evt.roomTypes.map(getRoomTypeLabel).join(", ")}
                         </strong>
                       </div>
                     </div>
@@ -875,16 +891,16 @@ export default function EventPricingCalendar() {
                             }`}
                           >
                             <div className="flex items-center justify-between text-xs">
-                              <span className={`font-bold ${isApplicable && displayPrice > 0 ? theme.text : "text-slate-800"}`}>{rt}</span>
+                              <span className={`font-bold ${isApplicable && displayPrice > 0 ? theme.text : "text-slate-800"}`}>{getRoomTypeLabel(rt)}</span>
                               {isApplicable && displayPrice > 0 && (
                                 <span className="text-[10px] font-extrabold text-blue-700">
-                                  Áp dụng
+                                  {t("eventPricing.applies")}
                                 </span>
                               )}
                             </div>
                             <div className="mt-1 flex items-baseline justify-between">
                               <span className={`text-xs font-extrabold ${isApplicable && displayPrice > 0 ? theme.text : "text-slate-900"}`}>
-                                {displayPrice > 0 ? money(displayPrice) : "Chưa có giá"}
+                                {displayPrice > 0 ? formatMoney(displayPrice) : t("eventPricing.noPrice")}
                               </span>
                             </div>
                           </div>
@@ -901,7 +917,7 @@ export default function EventPricingCalendar() {
 
       <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div className="text-xs font-semibold text-slate-500">
-          Trang {Math.min(currentPage + 1, totalPages)} / {totalPages}
+          {t("eventPricing.page", { current: Math.min(currentPage + 1, totalPages), total: totalPages })}
         </div>
 
         <div className="flex items-center gap-2">
@@ -911,7 +927,7 @@ export default function EventPricingCalendar() {
             disabled={currentPage === 0}
             className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Trước
+            {t("eventPricing.previous")}
           </button>
           <button
             type="button"
@@ -919,7 +935,7 @@ export default function EventPricingCalendar() {
             disabled={currentPage >= totalPages - 1}
             className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Sau
+            {t("eventPricing.next")}
           </button>
         </div>
       </div>
@@ -939,9 +955,9 @@ export default function EventPricingCalendar() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">
-                    {editingEventId ? "Chỉnh sửa sự kiện giá" : "Tạo sự kiện giá mới"}
+                    {editingEventId ? t("eventPricing.editTitle") : t("eventPricing.createTitle")}
                   </h3>
-                  <p className="text-xs text-slate-500">Thiết lập khoảng thời gian và tỷ lệ % điều chỉnh giá linh hoạt theo nhóm phòng</p>
+                  <p className="text-xs text-slate-500">{t("eventPricing.formDescription")}</p>
                 </div>
               </div>
               <button
@@ -963,7 +979,7 @@ export default function EventPricingCalendar() {
                   type="button"
                   onClick={() => setFormValidationError(null)}
                   className="rounded-lg p-1 text-rose-500 hover:bg-rose-100 transition"
-                  title="Đóng thông báo lỗi"
+                  title={t("eventPricing.closeError")}
                 >
                   <X size={14} />
                 </button>
@@ -972,18 +988,18 @@ export default function EventPricingCalendar() {
 
             <div className="mt-5 space-y-4 text-xs sm:text-sm">
               <label className="block font-bold text-slate-700">
-                Tên sự kiện / Quy tắc giá <span className="text-rose-500">*</span>
+                {t("eventPricing.eventName")} <span className="text-rose-500">*</span>
                 <input
                   value={eventName}
                   onChange={(e) => setEventName(e.target.value)}
-                  placeholder="Ví dụ: Phụ thu Lễ 30/4, Khuyến mãi mùa hè..."
+                  placeholder={t("eventPricing.eventNamePlaceholder")}
                   className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block font-bold text-slate-700">
-                  Từ ngày <span className="text-rose-500">*</span>
+                  {t("eventPricing.startDate")} <span className="text-rose-500">*</span>
                   <input
                     type="date"
                     value={startDate}
@@ -992,7 +1008,7 @@ export default function EventPricingCalendar() {
                   />
                 </label>
                 <label className="block font-bold text-slate-700">
-                  Đến ngày <span className="text-rose-500">*</span>
+                  {t("eventPricing.endDate")} <span className="text-rose-500">*</span>
                   <input
                     type="date"
                     value={endDate}
@@ -1006,8 +1022,8 @@ export default function EventPricingCalendar() {
               <div className="space-y-4 border-t border-slate-100 pt-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="font-bold text-slate-800 text-xs sm:text-sm">Cấu hình giá phòng theo nhóm</h4>
-                    <p className="text-[11px] text-slate-500">Thiết lập giá tiền (VNĐ) cụ thể cho từng nhóm loại phòng trong sự kiện</p>
+                    <h4 className="font-bold text-slate-800 text-xs sm:text-sm">{t("eventPricing.groupPricingTitle")}</h4>
+                    <p className="text-[11px] text-slate-500">{t("eventPricing.groupPricingDescription")}</p>
                   </div>
                 </div>
 
@@ -1025,7 +1041,7 @@ export default function EventPricingCalendar() {
                           <span className="grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white text-[10px] font-bold">
                             {groupIdx + 1}
                           </span>
-                          Nhóm phòng #{groupIdx + 1}
+                          {t("eventPricing.roomGroup", { number: groupIdx + 1 })}
                         </span>
                         {pricingGroups.length > 1 && (
                           <button
@@ -1033,14 +1049,14 @@ export default function EventPricingCalendar() {
                             onClick={() => setPricingGroups((current) => current.filter((g) => g.id !== group.id))}
                             className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700"
                           >
-                            <Trash2 size={13} /> Xóa nhóm
+                            <Trash2 size={13} /> {t("eventPricing.removeGroup")}
                           </button>
                         )}
                       </div>
 
                       {/* Room types selection */}
                       <div>
-                        <p className="text-xs font-semibold text-slate-700 mb-1.5">Loại phòng áp dụng nhóm này:</p>
+                        <p className="text-xs font-semibold text-slate-700 mb-1.5">{t("eventPricing.roomTypesInGroup")}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {groupIdx === 0 && pricingGroups.length === 1 && (
                             <button
@@ -1050,7 +1066,7 @@ export default function EventPricingCalendar() {
                                 isAllSelected ? "bg-blue-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
                               }`}
                             >
-                              Tất cả loại phòng
+                              {t("eventPricing.allRoomTypesButton")}
                             </button>
                           )}
                           {roomTypesList.map((rt) => {
@@ -1083,7 +1099,7 @@ export default function EventPricingCalendar() {
                                     : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
                                 }`}
                               >
-                                {rt} {isAssignedElsewhere && "(Đã gán nhóm khác)"}
+                                {getRoomTypeLabel(rt)} {isAssignedElsewhere && t("eventPricing.assignedElsewhere")}
                               </button>
                             );
                           })}
@@ -1093,7 +1109,7 @@ export default function EventPricingCalendar() {
                       {/* Fixed Price input for this group */}
                       <div>
                         <label className="block text-xs font-bold text-slate-700">
-                          Giá phòng áp dụng (VNĐ) <span className="text-rose-500">*</span>
+                          {t("eventPricing.applicablePrice")} <span className="text-rose-500">*</span>
                         </label>
                         <div className="mt-1 flex items-center gap-2">
                           <input
@@ -1105,15 +1121,15 @@ export default function EventPricingCalendar() {
                                 current.map((g) => (g.id === group.id ? { ...g, percentValue: val } : g))
                               );
                             }}
-                            placeholder="Ví dụ: 750000 hoặc 1200000"
+                            placeholder={t("eventPricing.pricePlaceholder")}
                             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                           />
-                          <span className="text-xs font-bold text-slate-500 shrink-0">VNĐ</span>
+                          <span className="text-xs font-bold text-slate-500 shrink-0">{t("room.pricingConfig.currency")}</span>
                         </div>
                         <p className="mt-1 text-[11px] text-slate-400">
                           {Number(group.percentValue) > 0
-                            ? `Giá cố định áp dụng: ${Number(group.percentValue).toLocaleString("vi-VN")}đ`
-                            : "Nhập giá tiền cụ thể cho nhóm phòng"}
+                            ? t("eventPricing.fixedPrice", { price: formatMoney(Number(group.percentValue)) })
+                            : t("eventPricing.enterFixedPrice")}
                         </p>
                       </div>
                     </div>
@@ -1145,14 +1161,14 @@ export default function EventPricingCalendar() {
                         className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/60 p-3 text-xs font-bold text-blue-700 hover:bg-blue-100/80 hover:border-blue-400 transition shadow-2xs"
                       >
                         <Plus size={16} />
-                        + Thêm cấu hình giá riêng cho các loại phòng còn lại ({unassigned.join(", ")})
+                        {t("eventPricing.addRemainingTypes", { roomTypes: unassigned.map(getRoomTypeLabel).join(", ") })}
                       </button>
                     );
                   }
                   return (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-center text-xs font-bold text-emerald-800">
                       <Check size={15} className="inline mr-1 text-emerald-600" />
-                      Tất cả loại phòng đã được phân bổ vào các nhóm cấu hình giá.
+                      {t("eventPricing.allTypesAssigned")}
                     </div>
                   );
                 })()}
@@ -1165,7 +1181,7 @@ export default function EventPricingCalendar() {
                 onClick={closeFormModal}
                 className="rounded-xl border border-slate-200 px-4.5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
               >
-                Hủy
+                {t("eventPricing.cancel")}
               </button>
               <button
                 type="button"
@@ -1173,7 +1189,7 @@ export default function EventPricingCalendar() {
                 disabled={!eventName.trim() || !startDate || !endDate || isCreatingSeasonalRate || isUpdatingSeasonalRate}
                 className="rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 px-4.5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50"
               >
-                {isCreatingSeasonalRate || isUpdatingSeasonalRate ? "Đang lưu..." : editingEventId ? "Cập nhật sự kiện" : "Lưu cấu hình giá"}
+                {isCreatingSeasonalRate || isUpdatingSeasonalRate ? t("eventPricing.saving") : editingEventId ? t("eventPricing.update") : t("eventPricing.savePricing")}
               </button>
             </div>
           </div>

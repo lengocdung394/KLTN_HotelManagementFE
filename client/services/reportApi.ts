@@ -17,6 +17,7 @@ export type PromotionUsageReport = {
   promotionName: string;
   promotionCode: string;
   usageCount: number;
+  userCount: number;
   savings: number;
 };
 
@@ -42,6 +43,8 @@ export type HotelReport = {
   endDate: string;
   totalBookingCount?: number;
   cashReceived?: number;
+  cashReceivedCash?: number;
+  cashReceivedBank?: number;
   cashRefunded?: number;
   cashChangeReturned?: number;
   netCashReceived?: number;

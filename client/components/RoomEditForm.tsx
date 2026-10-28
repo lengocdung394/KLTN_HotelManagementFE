@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 
 export type RoomEditDraft = {
   roomNumber: string;
@@ -54,6 +55,7 @@ export default function RoomEditForm({
   onSave,
   onCancel,
 }: RoomEditFormProps) {
+  const { t, i18n } = useTranslation();
   const [imageFilesByUrl, setImageFilesByUrl] = useState<Record<string, File>>({});
   const objectUrls = useRef<string[]>([]);
   useEffect(() => () => {
@@ -130,32 +132,32 @@ export default function RoomEditForm({
       >
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Phòng</p>
-            <h2 id="room-edit-title" className="mt-1 text-xl font-bold text-slate-900">Chỉnh sửa phòng</h2>
+            <p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.roomLabel")}</p>
+            <h2 id="room-edit-title" className="mt-1 text-xl font-bold text-slate-900">{t("room.editForm.title")}</h2>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={onCancel} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50">Hủy</button>
-            <button type="submit" disabled={isSaving || draft.images.length < 4 || draft.images.length > 8 || draft.beds.length === 0} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isSaving ? "Đang lưu..." : "Lưu thay đổi"}</button>
+            <button type="button" onClick={onCancel} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50">{t("common.cancel")}</button>
+            <button type="submit" disabled={isSaving || draft.images.length < 4 || draft.images.length > 8 || draft.beds.length === 0} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isSaving ? t("room.createForm.saving") : t("room.editForm.save")}</button>
           </div>
         </header>
 
         <div className="grid gap-4 overflow-y-auto p-5 lg:grid-cols-2">
           <section className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-bold text-slate-800">Thông tin cơ bản</h3>
+              <h3 className="text-sm font-bold text-slate-800">{t("room.editForm.basicInformation")}</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="text-sm font-semibold text-slate-700">
-                  Số phòng
+                  {t("room.createForm.roomNumber")}
                   <input required value={draft.roomNumber} onChange={(event) => patch({ roomNumber: event.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal" />
                 </label>
                 <label className="text-sm font-semibold text-slate-700">
-                  Loại phòng
+                  {t("room.roomType")}
                   <select value={draft.roomType} onChange={(event) => patch({ roomType: event.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal">
                     {roomTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                   </select>
                 </label>
                 <label className="text-sm font-semibold text-slate-700">
-                  Tòa nhà
+                  {t("room.editForm.building")}
                   <select value={selectedFloor?.buildingId ?? ""} onChange={(event) => {
                     const nextFloor = floors.find((floor) => floor.buildingId === event.target.value);
                     patch({ floorId: nextFloor?.value ?? "" });
@@ -164,7 +166,7 @@ export default function RoomEditForm({
                   </select>
                 </label>
                 <label className="text-sm font-semibold text-slate-700">
-                  Tầng
+                  {t("room.createForm.floor")}
                   <select value={draft.floorId} onChange={(event) => patch({ floorId: event.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal">
                     {availableFloors.map((floor) => <option key={floor.value} value={floor.value}>{floor.label}</option>)}
                   </select>
@@ -173,24 +175,24 @@ export default function RoomEditForm({
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-bold text-slate-800">Sức chứa và phụ thu theo chính sách</h3>
+              <h3 className="text-sm font-bold text-slate-800">{t("room.editForm.capacityAndSurcharges")}</h3>
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <ReadOnlyValue label="Diện tích (m²)" value={draft.area} />
+                <ReadOnlyValue label={t("room.editForm.area")} value={draft.area} />
                 <ReadOnlyValue
-                  label="Giá cơ bản / đêm"
+                  label={t("room.editForm.basePrice")}
                   value={draft.basePrice != null && draft.basePrice !== "" && Number.isFinite(Number(draft.basePrice))
-                    ? `${Number(draft.basePrice).toLocaleString("vi-VN")} đ`
+                    ? `${Number(draft.basePrice).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")} ${t("room.pricingConfig.currency")}`
                     : ""}
                 />
-                <ReadOnlyValue label="Sức chứa tiêu chuẩn" value={draft.standardCapacity} />
-                <ReadOnlyValue label="Khách thêm tối đa" value={draft.maxExtraGuests} />
-                <ReadOnlyValue label="Phụ thu người lớn" value={draft.extraAdultFee} />
-                <ReadOnlyValue label="Phụ thu trẻ em" value={draft.extraChildFee} />
+                <ReadOnlyValue label={t("room.editForm.standardCapacity")} value={draft.standardCapacity} />
+                <ReadOnlyValue label={t("room.editForm.maxExtraGuests")} value={draft.maxExtraGuests} />
+                <ReadOnlyValue label={t("room.editForm.extraAdultFee")} value={draft.extraAdultFee} />
+                <ReadOnlyValue label={t("room.editForm.extraChildFee")} value={draft.extraChildFee} />
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-bold text-slate-800">Loại giường</h3>
+              <h3 className="text-sm font-bold text-slate-800">{t("room.createForm.bedType")}</h3>
               <div className="mt-3 space-y-2">
                 {bedTypes.map((bedType) => {
                   const selected = draft.beds.find((bed) => bed.bedTypeId === bedType.id);
@@ -199,9 +201,9 @@ export default function RoomEditForm({
                       <label className="flex min-w-0 flex-1 items-center gap-2 text-sm text-slate-700">
                         <input type="checkbox" checked={Boolean(selected)} onChange={(event) => toggleBedType(bedType.id, event.target.checked)} />
                         <span className="truncate">{bedType.name}</span>
-                        {bedType.isExtraBed && <span className="text-xs text-amber-700">Giường phụ</span>}
+                        {bedType.isExtraBed && <span className="text-xs text-amber-700">{t("room.createForm.extraBed")}</span>}
                       </label>
-                      {selected && <label className="flex items-center gap-2 text-xs text-slate-500">SL
+                      {selected && <label className="flex items-center gap-2 text-xs text-slate-500">{t("room.createForm.quantity")}
                         <input type="number" min="1" step="1" value={selected.quantity} onChange={(event) => patch({
                           beds: draft.beds.map((bed) => bed.bedTypeId === bedType.id
                             ? { ...bed, quantity: Number(event.target.value) }
@@ -211,7 +213,7 @@ export default function RoomEditForm({
                     </div>
                   );
                 })}
-                {bedTypes.length === 0 && <p className="text-sm text-amber-700">Chưa có loại giường để chọn.</p>}
+                {bedTypes.length === 0 && <p className="text-sm text-amber-700">{t("room.editForm.noBedTypes")}</p>}
               </div>
             </div>
           </section>
@@ -219,9 +221,9 @@ export default function RoomEditForm({
           <section className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold text-slate-800">Ảnh phòng <span className="font-normal text-slate-500">(4–8 ảnh)</span></h3>
+                <h3 className="text-sm font-bold text-slate-800">{t("room.editForm.roomImages")} <span className="font-normal text-slate-500">({t("room.editForm.imageRange")})</span></h3>
                 <label className="cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-blue-700">
-                  Thêm ảnh
+                  {t("room.editForm.addImages")}
                   <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => {
                     addImages(event.target.files);
                     event.currentTarget.value = "";
@@ -231,18 +233,18 @@ export default function RoomEditForm({
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {draft.images.map((image, index) => (
                   <div key={`${image}-${index}`} className="relative overflow-hidden rounded-lg border border-slate-200">
-                    <img src={image} alt={`Ảnh phòng ${index + 1}`} className="h-24 w-full object-cover" />
+                    <img src={image} alt={t("room.editForm.roomImageAlt", { count: index + 1 })} className="h-24 w-full object-cover" />
                     <button type="button" onClick={() => patch({ defaultImageIndex: index })} className={`absolute right-1 top-1 rounded-full px-2 py-1 text-[10px] font-bold ${draft.defaultImageIndex === index ? "bg-amber-400 text-white" : "bg-black/60 text-white"}`}>
-                      {draft.defaultImageIndex === index ? "Ảnh chính" : "Chọn ảnh chính"}
+                      {draft.defaultImageIndex === index ? t("room.editForm.defaultImage") : t("room.editForm.setDefaultImage")}
                     </button>
-                    <button type="button" onClick={() => removeImage(index)} className="absolute left-1 top-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-white">Xóa</button>
+                    <button type="button" onClick={() => removeImage(index)} className="absolute left-1 top-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold text-white">{t("common.delete")}</button>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-bold text-slate-800">Tiện nghi</h3>
+              <h3 className="text-sm font-bold text-slate-800">{t("room.editForm.amenities")}</h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {amenities.map((amenity) => (
                   <label key={amenity.id} className="flex items-start gap-2 rounded-lg border border-slate-200 p-2.5 text-sm text-slate-700">
@@ -250,7 +252,7 @@ export default function RoomEditForm({
                     <span>{amenity.name}{amenity.price != null ? <span className="ml-1 text-xs text-slate-500">({amenity.price.toLocaleString("vi-VN")}đ)</span> : null}</span>
                   </label>
                 ))}
-                {amenities.length === 0 && <p className="text-sm text-amber-700">Chưa tải được danh sách tiện nghi.</p>}
+                {amenities.length === 0 && <p className="text-sm text-amber-700">{t("room.editForm.noAmenities")}</p>}
               </div>
             </div>
             {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}

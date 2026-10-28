@@ -161,17 +161,122 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
 
   return <div className="space-y-4">
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-violet-100 text-violet-700"><UserRound size={16} /></div><div><p className="text-sm font-bold text-slate-900">{t("booking.stayingGuest", "Guest staying")}</p><p className="mt-0.5 text-xs text-slate-500">{rooms.length} {t("booking.rooms")}</p></div></div>
-      <div className="relative mb-4"><label className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer", "Tìm khách hàng đã lưu")}</label><div className="relative mt-1.5"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={customerQuery} onChange={(event) => setCustomerQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void findCustomerByCode(); } }} placeholder={t("booking.searchCustomerPlaceholder", "Nhập mã khách hàng hoặc tìm theo tên, số điện thoại")} className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100" />{isFindingCustomer && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Đang tìm...</span>}</div>{matches.length > 0 && <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">{matches.map((customer) => <button type="button" key={customer.id} onClick={() => chooseCustomer(customer)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-violet-50"><span className="font-semibold text-slate-700">{customer.name}</span><span className="text-xs text-slate-400">{customer.phone}</span></button>)}</div>}</div>
-        <div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-slate-700">{t("customer.fullName")}<span className="ml-1 text-red-500">*</span><input value={guest.name} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder", "Nguyễn Văn A")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.name)}`} /></label><label className="text-sm font-semibold text-slate-700">{t("customer.phone")}<span className="ml-1 text-red-500">*</span><input value={guest.phone} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.phone)}`} /></label><label className="text-sm font-semibold text-slate-700">{t("customer.identityNumber", "Số CCCD")}<span className="ml-1 text-red-500">*</span><input value={guest.identityNumber} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.identityNumber)}`} /></label></div>
-        {requireEmail && !guest.emailOnFile && <label className="mt-4 block text-sm font-semibold text-slate-700">Email nhận xác nhận đặt phòng<span className="ml-1 text-red-500">*</span><input type="email" autoComplete="email" required value={guest.email} onChange={(event) => updateGuest("email", event.target.value)} placeholder="ten@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(isValidEmail(guest.email) ? guest.email : "")}`} /><span className="mt-1 block text-xs font-normal text-slate-500">Email sẽ được lưu vào hồ sơ khách hàng và dùng để gửi xác nhận booking.</span></label>}
-        <div className="mt-4 flex justify-end"><button type="button" disabled={!isBookingGuestValid(guest, requireEmail) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingCustomer ? "Đang tạo khách hàng..." : guest.customerId ? "Đã có mã khách hàng" : "Tạo khách hàng"}</button></div>
+      <div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3">
+        <div className="grid h-9 w-9 place-items-center rounded-lg bg-violet-100 text-violet-700"><UserRound size={16} /></div>
+        <div>
+          <p className="text-sm font-bold text-slate-900">{t("booking.stayingGuest")}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{rooms.length} {t("booking.rooms")}</p>
+        </div>
+      </div>
+      <div className="relative mb-4">
+        <label className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer")}</label>
+        <div className="relative mt-1.5">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={customerQuery}
+            onChange={(event) => setCustomerQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void findCustomerByCode();
+              }
+            }}
+            placeholder={t("booking.searchCustomerPlaceholder")}
+            className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+          />
+          {isFindingCustomer && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{t("booking.guestSearchLoading")}</span>
+          )}
+        </div>
+        {matches.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+            {matches.map((customer) => (
+              <button type="button" key={customer.id} onClick={() => chooseCustomer(customer)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-violet-50">
+                <span className="font-semibold text-slate-700">{customer.name}</span>
+                <span className="text-xs text-slate-400">{customer.phone}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className="text-sm font-semibold text-slate-700">
+          {t("customer.fullName")}<span className="ml-1 text-red-500">*</span>
+          <input value={guest.name} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.name)}`} />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          {t("customer.phone")}<span className="ml-1 text-red-500">*</span>
+          <input value={guest.phone} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.phone)}`} />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          {t("customer.identityNumber")}<span className="ml-1 text-red-500">*</span>
+          <input value={guest.identityNumber} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.identityNumber)}`} />
+        </label>
+      </div>
+      {requireEmail && !guest.emailOnFile && (
+        <label className="mt-4 block text-sm font-semibold text-slate-700">
+          {t("booking.emailConfirmation")}<span className="ml-1 text-red-500">*</span>
+          <input type="email" autoComplete="email" required value={guest.email} onChange={(event) => updateGuest("email", event.target.value)} placeholder="name@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(isValidEmail(guest.email) ? guest.email : "")}`} />
+          <span className="mt-1 block text-xs font-normal text-slate-500">{t("booking.emailConfirmationHelp")}</span>
+        </label>
+      )}
+      <div className="mt-4 flex justify-end">
+        <button type="button" disabled={!isBookingGuestValid(guest, requireEmail) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
+          {isCreatingCustomer ? t("booking.creatingCustomer") : guest.customerId ? t("booking.customerCreated") : t("booking.createCustomer")}
+        </button>
+      </div>
     </div>
     {rooms.map((room, index) => {
       const selected = getRoomGuests(room);
       const roomLimits = getRoomLimits(room);
-      const limits = { ...roomLimits, adults: Math.max(0, totalCapacityFor(room) - selected.children), children: Math.max(0, totalCapacityFor(room) - selected.adults) };
-      return <div key={room.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3"><div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-100 text-blue-700"><UserRound size={17} /></div><div className="min-w-0"><p className="text-sm font-bold text-slate-900">Khách lưu trú phòng {room.id}</p><p className="mt-0.5 truncate text-xs text-slate-500">{room.type} · {room.beds}</p></div><span className="ml-auto shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">Khách {index + 1}</span></div><div className="mb-4 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-3 text-xs"><p className="font-bold text-blue-700">Quy định khách và phụ thu</p><div className="mt-2 grid gap-2 sm:grid-cols-2"><p className="text-slate-600">Tiêu chuẩn: <strong className="text-slate-800">{room.guests} người</strong></p><p className="text-slate-600">Ghép thêm tối đa: <strong className="text-slate-800">{room.maxExtraGuests ?? 0} người</strong></p><p className="text-slate-600">Người lớn từ 12 tuổi: <strong className="text-amber-800">{(room.extraAdultFee ?? 0).toLocaleString("vi-VN")}đ/người</strong></p><p className="text-slate-600">Trẻ em 2 - dưới 12 tuổi: <strong className="text-amber-800">{(room.extraChildFee ?? 0).toLocaleString("vi-VN")}đ/người</strong></p></div><p className="mt-2 border-t border-blue-100 pt-2 text-slate-500">Em bé dưới 2 tuổi: <strong className="text-emerald-700">miễn phí</strong></p></div><div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-semibold text-slate-700">Người lớn (từ 12 tuổi)<select value={selected.adults} onChange={(event) => updateRoomGuest(room, "adults", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.adults, selected.adults).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Trẻ em (2 - dưới 12 tuổi)<select value={selected.children} onChange={(event) => updateRoomGuest(room, "children", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.children, selected.children).map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-sm font-semibold text-slate-700">Em bé (dưới 2 tuổi)<select value={selected.infants} onChange={(event) => updateRoomGuest(room, "infants", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">{countOptions(limits.infants, selected.infants).map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div><label className="mt-4 block text-sm font-semibold text-slate-700">Ghi chú riêng cho phòng {room.id}<textarea placeholder="Special guest requests..." className="mt-1.5 min-h-20 w-full resize-none rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none focus:border-violet-400" /></label></div>;
+      const limits = {
+        ...roomLimits,
+        adults: Math.max(0, totalCapacityFor(room) - selected.children),
+        children: Math.max(0, totalCapacityFor(room) - selected.adults),
+      };
+      return (
+        <div key={room.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex items-center gap-3 border-b border-slate-100 pb-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-100 text-blue-700"><UserRound size={17} /></div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-slate-900">{t("booking.guestStayingInRoom", { room: room.id })}</p>
+              <p className="mt-0.5 truncate text-xs text-slate-500">{room.type} · {room.beds}</p>
+            </div>
+            <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">{t("booking.guestNumber", { count: index + 1 })}</span>
+          </div>
+          <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-3 text-xs">
+            <p className="font-bold text-blue-700">{t("booking.roomGuestPolicy")}</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <p className="text-slate-600">{t("booking.standardCapacity")} <strong className="text-slate-800">{room.guests} {t("booking.people")}</strong></p>
+              <p className="text-slate-600">{t("booking.maxAdditionalGuests")} <strong className="text-slate-800">{room.maxExtraGuests ?? 0} {t("booking.people")}</strong></p>
+              <p className="text-slate-600">{t("booking.adultAgeRange")}: <strong className="text-amber-800">{(room.extraAdultFee ?? 0).toLocaleString("vi-VN")}{t("booking.currencyPerPerson")}</strong></p>
+              <p className="text-slate-600">{t("booking.childAgeRange")}: <strong className="text-amber-800">{(room.extraChildFee ?? 0).toLocaleString("vi-VN")}{t("booking.currencyPerPerson")}</strong></p>
+            </div>
+            <p className="mt-2 border-t border-blue-100 pt-2 text-slate-500">{t("booking.infantAgeRange")}: <strong className="text-emerald-700">{t("booking.infantFree")}</strong></p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="text-sm font-semibold text-slate-700">{t("booking.adultAgeRange")}
+              <select value={selected.adults} onChange={(event) => updateRoomGuest(room, "adults", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">
+                {countOptions(limits.adults, selected.adults).map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">{t("booking.childAgeRange")}
+              <select value={selected.children} onChange={(event) => updateRoomGuest(room, "children", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">
+                {countOptions(limits.children, selected.children).map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">{t("booking.infantAgeRange")}
+              <select value={selected.infants} onChange={(event) => updateRoomGuest(room, "infants", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">
+                {countOptions(limits.infants, selected.infants).map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          </div>
+          <label className="mt-4 block text-sm font-semibold text-slate-700">
+            {t("booking.privateRoomNote", { room: room.id })}
+            <textarea placeholder={t("booking.specialGuestRequests")} className="mt-1.5 min-h-20 w-full resize-none rounded-lg border border-slate-200 px-3 py-3 text-sm font-normal outline-none focus:border-violet-400" />
+          </label>
+        </div>
+      );
     })}
   </div>;
 }

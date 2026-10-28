@@ -9,6 +9,7 @@ import {
   type ShiftAssignmentRequest,
 } from "../services/shiftApi";
 import { useAppSelector } from "../store/hooks";
+import { localizedText } from "../i18n";
 
 const shifts = [
   { type: "Ca sáng", time: "06:00 – 14:00" },
@@ -41,7 +42,7 @@ const addDays = (date: Date, count: number) => {
   return result;
 };
 
-const formatDay = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString("vi-VN", {
+const formatDay = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString(localizedText("vi-VN", "en-US"), {
   weekday: "long",
   day: "2-digit",
   month: "2-digit",
@@ -179,7 +180,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
           for (let slot = 0; slot < role.count; slot += 1) {
             const employeeId = assignments[assignmentKey(date, shift.type, role.name, slot)];
             if (!employeeId) {
-              setError(`${formatDay(date)} · ${shift.type}: cần phân đủ ${role.count} nhân viên ${role.name.toLowerCase()}.`);
+              setError(localizedText(`${formatDay(date)} · ${shift.type}: cần phân đủ ${role.count} nhân viên ${role.name.toLowerCase()}.`, `${formatDay(date)} · ${shift.type === "Ca sáng" ? "Morning shift" : shift.type === "Ca chiều" ? "Afternoon shift" : "Night shift"}: assign all ${role.count} ${role.name === "Lễ tân" ? "front desk employees" : role.name === "Buồng phòng" ? "housekeeping employees" : "security employees"}.`));
               return;
             }
             requests.push({
@@ -202,7 +203,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
       setHasUnsavedChanges(false);
     } catch (saveError) {
       const response = saveError as { data?: { message?: string }; error?: string };
-      setError(response.data?.message ?? response.error ?? "Không thể lưu lịch phân ca. Vui lòng thử lại.");
+      setError(response.data?.message ?? response.error ?? localizedText("Không thể lưu lịch phân ca. Vui lòng thử lại.", "Could not save the shift schedule. Please try again."));
     }
   };
 
@@ -212,10 +213,10 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
       .reduce((count, day) => count + day.assignments.length, 0) ?? 0;
     if (!editableAssignments) {
       if (!hasUnsavedChanges) {
-        setError("Tuần này không có phân công từ ngày mai trở đi để làm trống.");
+        setError(localizedText("Tuần này không có phân công từ ngày mai trở đi để làm trống.", "There are no assignments from tomorrow onward to clear."));
         return;
       }
-      if (!window.confirm("Bỏ các thay đổi bản nháp từ ngày mai trở đi? Lịch hôm nay và những ngày đã qua sẽ được giữ nguyên.")) return;
+      if (!window.confirm(localizedText("Bỏ các thay đổi bản nháp từ ngày mai trở đi? Lịch hôm nay và những ngày đã qua sẽ được giữ nguyên.", "Discard draft changes from tomorrow onward? Today's and past schedules will be kept."))) return;
       setAssignments((current) => Object.fromEntries(
         Object.entries(current).filter(([key]) => key.split("|")[0] <= today),
       ));
@@ -225,7 +226,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
       return;
     }
     const confirmed = window.confirm(
-      `Xóa ${editableAssignments} phân công đã lưu từ ngày mai trở đi trong tuần ${weekStart} – ${dates[6]}? Lịch hôm nay và những ngày đã qua sẽ được giữ nguyên.${hasUnsavedChanges ? " Các thay đổi bản nháp của tuần này cũng sẽ bị bỏ." : ""}`,
+      localizedText(`Xóa ${editableAssignments} phân công đã lưu từ ngày mai trở đi trong tuần ${weekStart} – ${dates[6]}? Lịch hôm nay và những ngày đã qua sẽ được giữ nguyên.${hasUnsavedChanges ? " Các thay đổi bản nháp của tuần này cũng sẽ bị bỏ." : ""}`, `Delete ${editableAssignments} saved assignments from tomorrow onward for ${weekStart} – ${dates[6]}? Today's and past schedules will be kept.${hasUnsavedChanges ? " Draft changes for this week will also be discarded." : ""}`),
     );
     if (!confirmed) return;
 
@@ -251,21 +252,21 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
       setHasUnsavedChanges(false);
     } catch (clearError) {
       const response = clearError as { data?: { message?: string }; error?: string };
-      setError(response.data?.message ?? response.error ?? "Không thể xóa lịch phân ca. Vui lòng thử lại.");
+      setError(response.data?.message ?? response.error ?? localizedText("Không thể xóa lịch phân ca. Vui lòng thử lại.", "Could not clear the shift schedule. Please try again."));
     }
   };
 
   const copyWeek = async () => {
     if (sourceWeekStart === weekStart) {
-      setError("Hãy chọn tuần nguồn khác với tuần đang mở.");
+      setError(localizedText("Hãy chọn tuần nguồn khác với tuần đang mở.", "Choose a source week different from the currently open week."));
       return;
     }
-    if (hasUnsavedChanges && !window.confirm("Các thay đổi chưa lưu của tuần đích sẽ bị bỏ khi sao chép. Bạn có muốn tiếp tục không?")) return;
+    if (hasUnsavedChanges && !window.confirm(localizedText("Các thay đổi chưa lưu của tuần đích sẽ bị bỏ khi sao chép. Bạn có muốn tiếp tục không?", "Unsaved changes in the target week will be discarded when copying. Continue?"))) return;
     const targetAssignments = schedule?.days
       .filter((day) => day.date > today)
       .reduce((count, day) => count + day.assignments.length, 0) ?? 0;
     if (targetAssignments > 0 && !window.confirm(
-      `Tuần đích hiện có ${targetAssignments} phân công từ ngày mai trở đi. Sao chép sẽ thay thế các phân công này; lịch hôm nay và những ngày đã qua vẫn được giữ nguyên. Tiếp tục?`,
+      localizedText(`Tuần đích hiện có ${targetAssignments} phân công từ ngày mai trở đi. Sao chép sẽ thay thế các phân công này; lịch hôm nay và những ngày đã qua vẫn được giữ nguyên. Tiếp tục?`, `The target week has ${targetAssignments} assignments from tomorrow onward. Copying will replace them; today's and past schedules will be kept. Continue?`),
     )) return;
 
     setError("");
@@ -290,7 +291,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
       setHasUnsavedChanges(false);
     } catch (copyError) {
       const response = copyError as { data?: { message?: string }; error?: string };
-      setError(response.data?.message ?? response.error ?? "Không thể sao chép lịch tuần. Vui lòng thử lại.");
+      setError(response.data?.message ?? response.error ?? localizedText("Không thể sao chép lịch tuần. Vui lòng thử lại.", "Could not copy the weekly schedule. Please try again."));
     }
   };
 
@@ -316,15 +317,15 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
           <div className="flex min-w-64 items-center gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600"><CalendarClock size={20} /></span>
             <div>
-              <h2 className="font-bold text-slate-900">Phân ca tuần tiếp theo</h2>
-              <p className="mt-1 text-xs text-slate-500">Mỗi ca cần 2 lễ tân, 2 buồng phòng và 1 bảo vệ. Hệ thống nhắc quản lý lúc 15:00 thứ Bảy.</p>
+              <h2 className="font-bold text-slate-900">{localizedText("Phân ca tuần tiếp theo", "Assign shifts for the upcoming week")}</h2>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Mỗi ca cần 2 lễ tân, 2 buồng phòng và 1 bảo vệ. Hệ thống nhắc quản lý lúc 15:00 thứ Bảy.", "Each shift needs 2 front desk employees, 2 housekeeping employees, and 1 security employee. Managers are reminded at 3:00 PM on Saturday.")}</p>
             </div>
           </div>
           <div className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2 sm:w-auto sm:flex-nowrap">
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => moveWeek(-7)} aria-label="Tuần trước" disabled={isSaving || isClearing || isCopying} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-600 transition hover:bg-white hover:text-blue-700 disabled:opacity-50"><ChevronLeft size={17} /></button>
+              <button type="button" onClick={() => moveWeek(-7)} aria-label={localizedText("Tuần trước", "Previous week")} disabled={isSaving || isClearing || isCopying} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-600 transition hover:bg-white hover:text-blue-700 disabled:opacity-50"><ChevronLeft size={17} /></button>
               <input
-                aria-label="Chọn tuần cần phân ca"
+                aria-label={localizedText("Chọn tuần cần phân ca", "Select week to schedule")}
                 type="date"
                 value={weekStart}
                 onChange={(event) => {
@@ -336,7 +337,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
                 disabled={isSaving || isClearing || isCopying}
                 className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
               />
-              <button type="button" onClick={() => moveWeek(7)} aria-label="Tuần sau" disabled={isSaving || isClearing || isCopying} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-600 transition hover:bg-white hover:text-blue-700 disabled:opacity-50"><ChevronRight size={17} /></button>
+              <button type="button" onClick={() => moveWeek(7)} aria-label={localizedText("Tuần sau", "Next week")} disabled={isSaving || isClearing || isCopying} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-600 transition hover:bg-white hover:text-blue-700 disabled:opacity-50"><ChevronRight size={17} /></button>
             </div>
             <span className="min-w-40 text-center text-xs font-semibold text-slate-700 sm:border-l sm:border-slate-200 sm:pl-3">{weekStart} – {dates[6]}</span>
           </div>
@@ -345,9 +346,9 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
         <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
-              Sao chép lịch từ tuần
+              {localizedText("Sao chép lịch từ tuần", "Copy schedule from week")}
               <input
-                aria-label="Chọn tuần nguồn để sao chép"
+                aria-label={localizedText("Chọn tuần nguồn để sao chép", "Select source week to copy")}
                 type="date"
                 value={sourceWeekStart}
                 onChange={(event) => {
@@ -362,7 +363,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
               disabled={isCopying || isSaving || isClearing || isScheduleLoading || !canEditWeek}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-4 text-sm font-semibold text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Copy size={15} />{isCopying ? "Đang sao chép..." : "Sao chép tuần"}
+              <Copy size={15} />{isCopying ? localizedText("Đang sao chép...", "Copying...") : localizedText("Sao chép tuần", "Copy week")}
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -372,7 +373,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
               disabled={isClearing || isSaving || isCopying || isScheduleLoading || !canEditWeek}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Trash2 size={15} />{isClearing ? "Đang xóa..." : "Làm trống"}
+              <Trash2 size={15} />{isClearing ? localizedText("Đang xóa...", "Clearing...") : localizedText("Làm trống", "Clear")}
             </button>
             <button
               type="button"
@@ -380,66 +381,66 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
               disabled={isSaving || isClearing || isCopying || isScheduleLoading || isEmployeesLoading || !canEditWeek}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Save size={15} />{isSaving ? "Đang lưu..." : "Lưu lịch"}
+              <Save size={15} />{isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu lịch", "Save schedule")}
             </button>
           </div>
         </div>
         <p className="flex items-center gap-1.5 px-1 text-xs text-slate-500">
           <Copy size={13} className="shrink-0" />
-          Có thể dùng tuần đã qua làm nguồn; lịch hôm nay và ngày đã qua trong tuần đích không bị thay đổi.
+          {localizedText("Có thể dùng tuần đã qua làm nguồn; lịch hôm nay và ngày đã qua trong tuần đích không bị thay đổi.", "A past week can be used as the source; today's and past dates in the target week will not change.")}
         </p>
       </header>
 
-      {dates[6] <= today && <p className="mx-5 mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-600">Tuần này không còn ngày tương lai để chỉnh sửa.</p>}
-      {weekStart <= today && dates[6] > today && <p className="mx-5 mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-600">Hôm nay và các ngày đã qua chỉ xem được. Bạn chỉ có thể chỉnh sửa lịch từ ngày mai ({firstEditableDate}) trở đi.</p>}
-      {hasUnsavedChanges && <p className="mx-5 mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Thay đổi chưa lưu đang được giữ thành bản nháp trên trình duyệt cho tuần này.</p>}
+      {dates[6] <= today && <p className="mx-5 mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-600">{localizedText("Tuần này không còn ngày tương lai để chỉnh sửa.", "There are no future dates left to edit this week.")}</p>}
+      {weekStart <= today && dates[6] > today && <p className="mx-5 mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-600">{localizedText(`Hôm nay và các ngày đã qua chỉ xem được. Bạn chỉ có thể chỉnh sửa lịch từ ngày mai (${firstEditableDate}) trở đi.`, `Today and past dates are read-only. You can edit the schedule from tomorrow (${firstEditableDate}) onward.`)}</p>}
+      {hasUnsavedChanges && <p className="mx-5 mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{localizedText("Thay đổi chưa lưu đang được giữ thành bản nháp trên trình duyệt cho tuần này.", "Unsaved changes are stored as a browser draft for this week.")}</p>}
       {pendingWeek && (
         <div className="mx-5 mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4" role="dialog" aria-modal="true" aria-labelledby="shift-draft-dialog-title">
-          <h3 id="shift-draft-dialog-title" className="font-semibold text-blue-950">Bạn đang có thay đổi chưa lưu</h3>
-          <p className="mt-1 text-sm text-blue-900">Bạn muốn lưu bản nháp của tuần này trước khi chuyển tuần?</p>
+          <h3 id="shift-draft-dialog-title" className="font-semibold text-blue-950">{localizedText("Bạn đang có thay đổi chưa lưu", "You have unsaved changes")}</h3>
+          <p className="mt-1 text-sm text-blue-900">{localizedText("Bạn muốn lưu bản nháp của tuần này trước khi chuyển tuần?", "Would you like to save this week's draft before switching weeks?")}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => acceptWeekChange(true)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Lưu bản nháp và chuyển tuần</button>
-            <button type="button" onClick={() => acceptWeekChange(false)} className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">Bỏ thay đổi và chuyển tuần</button>
-            <button type="button" onClick={() => setPendingWeek(null)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Tiếp tục chỉnh sửa</button>
+            <button type="button" onClick={() => acceptWeekChange(true)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">{localizedText("Lưu bản nháp và chuyển tuần", "Save draft and switch week")}</button>
+            <button type="button" onClick={() => acceptWeekChange(false)} className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700">{localizedText("Bỏ thay đổi và chuyển tuần", "Discard changes and switch week")}</button>
+            <button type="button" onClick={() => setPendingWeek(null)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">{localizedText("Tiếp tục chỉnh sửa", "Continue editing")}</button>
           </div>
         </div>
       )}
 
       {error && <p role="alert" className="mx-5 mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-      {isScheduleError && <p role="alert" className="mx-5 mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">Không tải được lịch tuần. Hãy thử tải lại.</p>}
-      {isEmployeesError && <p role="alert" className="mx-5 mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">Không tải được danh sách nhân viên của chi nhánh{typeof employeesError === "object" && employeesError !== null && "status" in employeesError ? ` (HTTP ${String(employeesError.status)})` : ""}. Kiểm tra tài khoản đã được liên kết với chi nhánh chưa.</p>}
+      {isScheduleError && <p role="alert" className="mx-5 mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{localizedText("Không tải được lịch tuần. Hãy thử tải lại.", "Could not load the weekly schedule. Please try again.")}</p>}
+      {isEmployeesError && <p role="alert" className="mx-5 mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{localizedText("Không tải được danh sách nhân viên của chi nhánh", "Could not load the branch employee list")}{typeof employeesError === "object" && employeesError !== null && "status" in employeesError ? ` (HTTP ${String(employeesError.status)})` : ""}{localizedText(". Kiểm tra tài khoản đã được liên kết với chi nhánh chưa.", ". Check that the account is linked to a branch.")}</p>}
       {!isEmployeesLoading && !isEmployeesError && (
         <div className={`mx-5 mt-4 rounded-lg p-3 text-xs ${staffingShortages.length ? "bg-amber-50 text-amber-900" : "bg-blue-50 text-blue-800"}`}>
-          <p className="font-semibold">Nhân viên trong chi nhánh / nhu cầu mỗi ngày: {roles.map((role) => `${role.name} ${employeesForRole(role.name).length}/${role.count * shifts.length}`).join(" · ")}.</p>
-          <p className="mt-1">Giới hạn chỉ áp dụng trong cùng một ngày: một nhân viên chỉ được làm một ca/ngày. Sang ngày kế tiếp, bạn có thể chọn lại chính nhân viên đó.</p>
+          <p className="font-semibold">{localizedText("Nhân viên trong chi nhánh / nhu cầu mỗi ngày:", "Branch staff / daily staffing needs:")} {roles.map((role) => `${role.name === "Lễ tân" ? localizedText(role.name, "Front desk") : role.name === "Buồng phòng" ? localizedText(role.name, "Housekeeping") : localizedText(role.name, "Security")} ${employeesForRole(role.name).length}/${role.count * shifts.length}`).join(" · ")}.</p>
+          <p className="mt-1">{localizedText("Giới hạn chỉ áp dụng trong cùng một ngày: một nhân viên chỉ được làm một ca/ngày. Sang ngày kế tiếp, bạn có thể chọn lại chính nhân viên đó.", "The limit applies within each day: an employee can work only one shift per day. They may be assigned again the next day.")}</p>
           {staffingShortages.length > 0 && (
             <p className="mt-1 font-semibold">
-              Chưa đủ nhân sự để lấp đủ ca: {staffingShortages.map((role) => `${role.name} còn thiếu ${role.required - role.available}`).join(" · ")}. Cần bổ sung nhân viên đúng chức vụ.
+              {localizedText("Chưa đủ nhân sự để lấp đủ ca:", "Not enough staff to fill all shifts:")} {staffingShortages.map((role) => `${role.name === "Lễ tân" ? localizedText(role.name, "Front desk") : role.name === "Buồng phòng" ? localizedText(role.name, "Housekeeping") : localizedText(role.name, "Security")} ${localizedText(`còn thiếu ${role.required - role.available}`, `short ${role.required - role.available}`)}`).join(" · ")}. {localizedText("Cần bổ sung nhân viên đúng chức vụ.", "Add employees with the required positions.")}
             </p>
           )}
         </div>
       )}
       {isEmployeesLoading || isScheduleLoading ? (
-        <p className="p-6 text-sm text-slate-500">Đang tải nhân viên và lịch tuần...</p>
+        <p className="p-6 text-sm text-slate-500">{localizedText("Đang tải nhân viên và lịch tuần...", "Loading employees and weekly schedule...")}</p>
       ) : (
         <div className="space-y-5 p-5">
           {dates.map((date) => (
             <article key={date} className="overflow-hidden rounded-xl border border-slate-200">
               <h3 className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold capitalize text-slate-800">
                 <span>{formatDay(date)}</span>
-                {date <= today && <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-semibold normal-case text-slate-600">{date === today ? "Hôm nay · chỉ xem" : "Đã qua · chỉ xem"}</span>}
+                {date <= today && <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-semibold normal-case text-slate-600">{date === today ? localizedText("Hôm nay · chỉ xem", "Today · read-only") : localizedText("Đã qua · chỉ xem", "Past · read-only")}</span>}
               </h3>
               <div className="grid gap-3 p-3 xl:grid-cols-3">
                 {shifts.map((shift) => (
                   <section key={shift.type} className="rounded-lg border border-slate-100 p-3">
                     <div className="mb-3 flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-slate-800">{shift.type}</h4>
+                      <h4 className="text-sm font-bold text-slate-800">{shift.type === "Ca sáng" ? localizedText(shift.type, "Morning shift") : shift.type === "Ca chiều" ? localizedText(shift.type, "Afternoon shift") : localizedText(shift.type, "Night shift")}</h4>
                       <span className="text-[11px] text-slate-500">{shift.time}</span>
                     </div>
                     <div className="space-y-3">
                       {roles.map((role) => (
                         <div key={role.name}>
-                          <p className="mb-1 text-xs font-semibold text-slate-600">{role.name} · {role.count} người</p>
+                          <p className="mb-1 text-xs font-semibold text-slate-600">{role.name === "Lễ tân" ? localizedText(role.name, "Front desk") : role.name === "Buồng phòng" ? localizedText(role.name, "Housekeeping") : localizedText(role.name, "Security")} · {role.count} {localizedText("người", "employees")}</p>
                           <div className="grid gap-2 sm:grid-cols-2">
                             {Array.from({ length: role.count }, (_, slot) => {
                               const key = assignmentKey(date, shift.type, role.name, slot);
@@ -454,12 +455,12 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
                                   disabled={date <= today || isSaving || isClearing || isCopying}
                                   className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-xs"
                                 >
-                                  <option value="">Chọn {role.name.toLocaleLowerCase()} {slot + 1}</option>
+                                  <option value="">{localizedText(`Chọn ${role.name.toLocaleLowerCase()} ${slot + 1}`, `Select ${role.name === "Lễ tân" ? "front desk" : role.name === "Buồng phòng" ? "housekeeping" : "security"} employee ${slot + 1}`)}</option>
                                   {options.map((employee) => {
                                     const unavailable = alreadyAssigned.has(employee.id);
                                     return (
                                       <option key={employee.id} value={employee.id} disabled={unavailable}>
-                                        {employee.fullName}{unavailable ? " (đã xếp ca trong ngày)" : ""}
+                                        {employee.fullName}{unavailable ? localizedText(" (đã xếp ca trong ngày)", " (already assigned for the day)") : ""}
                                       </option>
                                     );
                                   })}
@@ -468,7 +469,7 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
                             })}
                           </div>
                           {employeesForRole(role.name).length < role.count * shifts.length
-                            && <p className="mt-1 text-[10px] text-amber-700">Chi nhánh có {employeesForRole(role.name).length} người; cần {role.count * shifts.length} người/ngày để bố trí đủ 3 ca.</p>}
+                            && <p className="mt-1 text-[10px] text-amber-700">{localizedText(`Chi nhánh có ${employeesForRole(role.name).length} người; cần ${role.count * shifts.length} người/ngày để bố trí đủ 3 ca.`, `The branch has ${employeesForRole(role.name).length} employees; ${role.count * shifts.length} per day are needed to cover all 3 shifts.`)}</p>}
                         </div>
                       ))}
                     </div>

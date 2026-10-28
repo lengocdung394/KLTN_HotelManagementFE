@@ -188,7 +188,7 @@ const buildMatrixBusyMap = (matrix: RoomMatrixResponse[], excludedBookingId?: st
     if (excludedBookingId && bookingId !== undefined && String(bookingId) === excludedBookingId) return;
     const roomKey = matrixRoomKey(item) ?? inheritedRoomKey;
     const bookingStatus = String(item.bookingStatus ?? item.status ?? "").toUpperCase();
-    if (bookingStatus === "CANCELLED" || bookingStatus === "CANCELED") return;
+    if (bookingStatus.startsWith("CANCELLED") || bookingStatus === "CANCELED") return;
     addMatrixRange(busy, roomKey, matrixValue(item, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]), matrixValue(item, ["endDate", "end", "checkOutDate", "checkOut", "checkOutTime", "checkoutTime", "bookingEndDate"]));
     const dates = item.dates ?? item.bookedDates ?? item.occupiedDates;
     if (Array.isArray(dates) && roomKey) {
@@ -234,7 +234,7 @@ const buildMatrixGuestNameMap = (matrix: RoomMatrixResponse[], excludedBookingId
 
     const roomKey = matrixRoomKey(item) ?? inheritedRoomKey;
     const status = String(item.bookingStatus ?? item.status ?? "").toUpperCase();
-    if (status === "CANCELLED" || status === "CANCELED") return;
+    if (status.startsWith("CANCELLED") || status === "CANCELED") return;
 
     const guestName = matrixGuestName(item) ?? inheritedGuestName;
     const start = matrixDate(matrixValue(item, ["startDate", "start", "checkInDate", "checkIn", "checkInTime", "checkinTime", "bookingStartDate"]));
@@ -966,14 +966,14 @@ function DesktopCalendar({
                     <button
                       type="button"
                       disabled={!canChangeRoom?.(room)}
-                      title={!canChangeRoom?.(room) ? "Chỉ được đổi phòng khi booking-detail còn PENDING và chưa check-in." : isChangingRoom && room.id === roomChangeTargetRoomId ? "Hủy đổi phòng" : "Đổi phòng"}
-                      aria-label={`${isChangingRoom && room.id === roomChangeTargetRoomId ? "Hủy đổi phòng" : "Đổi phòng"} ${room.roomNumber ?? room.id}`}
+                      title={!canChangeRoom?.(room) ? t("booking.onlyChangePendingRoom") : isChangingRoom && room.id === roomChangeTargetRoomId ? t("booking.cancelRoomChange") : t("booking.changeRoom")}
+                      aria-label={`${isChangingRoom && room.id === roomChangeTargetRoomId ? t("booking.cancelRoomChange") : t("booking.changeRoom")} ${room.roomNumber ?? room.id}`}
                       onClick={() => onStartRoomChange?.(room)}
                       aria-pressed={isChangingRoom && room.id === roomChangeTargetRoomId}
                       className={`flex h-8 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent ${isChangingRoom && room.id === roomChangeTargetRoomId ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 shadow-sm" : "text-blue-600 hover:bg-blue-50"}`}
                     >
                       <RefreshCw size={13} />
-                      <span>{isChangingRoom && room.id === roomChangeTargetRoomId ? "Hủy" : "Đổi"}</span>
+                      <span>{isChangingRoom && room.id === roomChangeTargetRoomId ? t("common.cancel") : t("booking.changeRoom")}</span>
                     </button>
                   )}
                   <button type="button" title={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} aria-label={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} onClick={() => setRoomDetails({
@@ -1096,7 +1096,7 @@ export default function BookingWorkspace() {
   const [roomType, setRoomType] = useState(allRoomTypesLabel);
   const [building, setBuilding] = useState("Tất cả các tòa");
   const [floor, setFloor] = useState("Tất cả các tầng");
-  const [showFull, setShowFull] = useState(false);
+  const [showFull, setShowFull] = useState(true);
   const [showSelectedRoomsOnly, setShowSelectedRoomsOnly] = useState(false);
   const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [roomChangeTargetBookingDetailId, setRoomChangeTargetBookingDetailId] = useState<string | null>(null);
@@ -2085,15 +2085,15 @@ export default function BookingWorkspace() {
           <span className="text-xs font-semibold text-slate-500">{t("booking.guestInformation")}</span>
           <span className="h-px w-8 bg-slate-200" />
           <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "services" ? "bg-violet-600 text-white" : step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "promotion" ? <Check size={14} /> : "3"}</span>
-          <span className="text-xs font-semibold text-slate-500">Dịch vụ</span>
+          <span className="text-xs font-semibold text-slate-500">{t("booking.selectServices")}</span>
           <span className="h-px w-8 bg-slate-200" />
           <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "promotion" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-400"}`}>4</span>
-          <span className="text-xs font-semibold text-slate-500">Khuyến mãi</span>
+          <span className="text-xs font-semibold text-slate-500">{t("promotion.bookingTitle")}</span>
         </div>
         <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full bg-violet-600 transition-all ${step === "promotion" ? "w-full" : step === "services" ? "w-3/4" : step === "guest" ? "w-1/2" : "w-1/4"}`} /></div>
         <div className="mt-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">{step === "rooms" ? t("booking.selectDateAndRoom") : step === "guest" ? t("booking.bookingInformation") : step === "services" ? "Chọn dịch vụ" : "Khuyến mãi"}</h3>
+            <h3 className="text-lg font-bold text-slate-900">{step === "rooms" ? t("booking.selectDateAndRoom") : step === "guest" ? t("booking.bookingInformation") : step === "services" ? t("booking.selectServices") : t("promotion.bookingTitle")}</h3>
             <p className="mt-1 text-sm text-slate-500">
               {step === "rooms"
                 ? t("booking.calendarSelectionDescription")
@@ -2102,7 +2102,7 @@ export default function BookingWorkspace() {
           </div>
           {step === "guest" && <button onClick={() => { setShowSelectedRoomsOnly(false); setIsAddingRoom(true); setStep("rooms"); }} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />{t("booking.addAnotherRoom")}</button>}
           {step === "services" && <button onClick={() => setStep("guest")} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />{t("booking.guestInformation")}</button>}
-          {step === "promotion" && <button onClick={() => setStep("services")} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />Dịch vụ</button>}
+          {step === "promotion" && <button onClick={() => setStep("services")} className="flex items-center gap-1 text-sm font-semibold text-violet-600"><ChevronLeft size={16} />{t("booking.selectServices")}</button>}
         </div>
       </div>
 
@@ -2110,7 +2110,7 @@ export default function BookingWorkspace() {
         <div className="p-5">
           {roomChangeTargetRoomId && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <span>Đang đổi phòng {roomChangeTargetRoom?.id ?? String(roomChangeTargetDetail?.roomNumber ?? "")} · dịch vụ sẽ được giữ lại.</span>
-            <button type="button" onClick={cancelRoomReplacement} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Hủy đổi phòng</button>
+            <button type="button" onClick={cancelRoomReplacement} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">{t("booking.cancelRoomChange")}</button>
           </div>}
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
             <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} />
@@ -2278,16 +2278,16 @@ export default function BookingWorkspace() {
           roomRanges={selectedRanges}
           fallbackRange={{ checkIn, checkOut }}
           language={i18n.language}
-          continueLabel="Tiếp tục"
-          skipLabel="Tiếp tục"
+          continueLabel={t("booking.continue")}
+          skipLabel={t("booking.continue")}
           onContinue={() => setStep("promotion")}
           onSkip={() => setStep("promotion")}
         />
       </div>) : false ? (
         <div className="p-5">
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
-            <button type="button" onClick={() => setServiceMode("all")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "all" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>Chọn cho tất cả phòng</button>
-            <button type="button" onClick={() => setServiceMode("per-room")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "per-room" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>Chọn riêng từng phòng</button>
+            <button type="button" onClick={() => setServiceMode("all")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "all" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>{t("booking.selectForAllRooms")}</button>
+            <button type="button" onClick={() => setServiceMode("per-room")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "per-room" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>{t("booking.selectPerRoom")}</button>
           </div>
           {serviceMode === "all" ? <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {services.map((service) => {
@@ -2312,7 +2312,7 @@ export default function BookingWorkspace() {
             })}
           </div>}
           <div className="mt-5 rounded-xl bg-slate-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Thông tin phòng</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.roomInfo")}</p>
             <div className="mt-3 space-y-2">
               {selectedRooms.map((room) => {
                 const roomSelections = getRoomServiceSelections(room);
@@ -2335,16 +2335,16 @@ export default function BookingWorkspace() {
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
             <p className="text-center text-xs font-bold uppercase tracking-wider text-blue-600">{t("booking.bookingSummary")}</p>
-            <p className="mt-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UserRound size={14} />Thông tin người đặt</p>
+            <p className="mt-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UserRound size={14} />{t("booking.guestInfo")}</p>
             {hasGuestDetails ? <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
               <p className="mt-1 text-sm font-bold text-slate-800">{bookingGuest.name}</p>
               <p className="mt-0.5 text-xs text-slate-500">{bookingGuest.phone}</p>
-            </div> : <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">Nhập đủ họ tên, số điện thoại và CCCD để hiển thị thông tin khách hàng.</div>}
+            </div> : <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">{t("booking.enterGuestDetailsForSummary")}</div>}
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UsersRound size={14} />Thông tin phòng</p>
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600"><UsersRound size={14} />{t("booking.roomInfo")}</p>
               </div>
-              <span className="text-xs font-semibold text-slate-500">{hasDifferentStayPeriods ? "Nhiều lịch" : "Đã chọn"}</span>
+              <span className="text-xs font-semibold text-slate-500">{hasDifferentStayPeriods ? t("booking.multipleSchedules") : t("booking.selected")}</span>
             </div>
             <div className="mt-3 space-y-3">
               {summaryRanges.map(({ room, range }) => {
@@ -2366,29 +2366,29 @@ export default function BookingWorkspace() {
                     </div>
                     <span className="flex shrink-0 items-center gap-2"><strong className="text-sm text-blue-700">{money(roomSubtotal)}</strong><ChevronDown size={16} className={`text-blue-500 transition-transform ${isSummaryRoomCollapsed ? "-rotate-90" : ""}`} /></span>
                   </button>
-                  <button type="button" onClick={() => removeSelectedRoom(room)} disabled={Boolean(initialBooking) && !canChangeBookingRoom(roomBookingDetail)} title={initialBooking ? canChangeBookingRoom(roomBookingDetail) ? "Phòng sẽ được hủy khi lưu booking." : "Không thể bỏ phòng sau khi check-in hoặc khi booking-detail không còn PENDING." : undefined} className="mx-3 mt-2 rounded-md border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300 disabled:hover:bg-white">Bỏ chọn phòng</button>
+                  <button type="button" onClick={() => removeSelectedRoom(room)} disabled={Boolean(initialBooking) && !canChangeBookingRoom(roomBookingDetail)} title={initialBooking ? canChangeBookingRoom(roomBookingDetail) ? t("booking.roomCancelledOnSave") : t("booking.cannotRemoveRoom") : undefined} className="mx-3 mt-2 rounded-md border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300 disabled:hover:bg-white">{t("booking.removeSelectedRoom")}</button>
                   {!isSummaryRoomCollapsed && <div className="space-y-2 px-3 py-3 text-slate-600">
                     <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkInDate", "Nhận")}: {formatDateLabel(range.checkIn, "", i18n.language)}</span></div>
                     <div className="flex items-center gap-2"><CalendarDays size={14} className="shrink-0 text-blue-600" /><span>{t("booking.checkOutDate", "Trả")}: {formatDateLabel(range.checkOut, "", i18n.language)}</span></div>
-                    <div className="flex items-center gap-2"><UsersRound size={14} className="shrink-0 text-blue-600" /><span>{selectedGuestCount} người · {nightsForRoom(room.id)} đêm</span></div>
+                    <div className="flex items-center gap-2"><UsersRound size={14} className="shrink-0 text-blue-600" /><span>{t("booking.roomGuestCount", { count: selectedGuestCount, nights: nightsForRoom(room.id) })}</span></div>
                     <div className="my-2 border-t border-blue-100" />
-                    <div className="flex justify-between gap-3"><span>Tiền phòng</span><span className="font-medium text-slate-800">{money(roomBaseTotal)}</span></div>
-                    {(roomGuestSurcharges[room.id] ?? 0) > 0 && <><div className="flex justify-between gap-3"><span>Phụ thu người lớn</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.adult ?? 0) * (nightsForRoom(room.id) || 1))}</span></div><div className="flex justify-between gap-3"><span>Phụ thu trẻ em</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.child ?? 0) * (nightsForRoom(room.id) || 1))}</span></div></>}
-                    <div className="flex justify-between gap-3"><span>Dịch vụ</span><span className="text-right font-medium text-slate-800">{roomServiceTotal ? money(roomServiceTotal) : "Chưa chọn"}</span></div>
-                    <div className="mt-2 flex items-center justify-between gap-3 border-t border-blue-100 pt-2 font-bold text-blue-700"><span>Tạm tính phòng</span><span>{money(roomSubtotal)}</span></div>
+                    <div className="flex justify-between gap-3"><span>{t("booking.roomRate")}</span><span className="font-medium text-slate-800">{money(roomBaseTotal)}</span></div>
+                    {(roomGuestSurcharges[room.id] ?? 0) > 0 && <><div className="flex justify-between gap-3"><span>{t("booking.adultSurcharge")}</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.adult ?? 0) * (nightsForRoom(room.id) || 1))}</span></div><div className="flex justify-between gap-3"><span>{t("booking.childSurcharge")}</span><span className="font-medium text-amber-700">{money((roomGuestSurchargeDetails[room.id]?.child ?? 0) * (nightsForRoom(room.id) || 1))}</span></div></>}
+                    <div className="flex justify-between gap-3"><span>{t("booking.serviceFee")}</span><span className="text-right font-medium text-slate-800">{roomServiceTotal ? money(roomServiceTotal) : t("booking.noServiceSelected")}</span></div>
+                    <div className="mt-2 flex items-center justify-between gap-3 border-t border-blue-100 pt-2 font-bold text-blue-700"><span>{t("booking.roomSubtotal")}</span><span>{money(roomSubtotal)}</span></div>
                     {(!initialBooking || canChangeBookingRoom(roomBookingDetail)) && <button
                       type="button"
                       onClick={() => beginRoomReplacement(room)}
                       className="mt-2 flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
                     >
-                      <RefreshCw size={13} />Đổi phòng
+                      <RefreshCw size={13} />{t("booking.changeRoom")}
                     </button>}
                   </div>}
                 </div>
               })}
             </div>
             <div className="my-4 border-t border-slate-200" />
-            {appliedPromotion && <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold text-emerald-700">Khuyến mãi đã chọn: {appliedPromotion.code}</span><span className="font-bold text-emerald-700">-{money(discountAmount)}</span></div>}
+            {appliedPromotion && <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs"><span className="font-semibold text-emerald-700">{t("booking.promoSelected", { code: appliedPromotion.code })}</span><span className="font-bold text-emerald-700">-{money(discountAmount)}</span></div>}
             <div className="flex justify-between text-sm font-bold text-slate-900">
               <span>{t("booking.total")}</span>
               <span className="text-violet-700">{money(bookingEstimate.total)}</span>
@@ -2400,11 +2400,11 @@ export default function BookingWorkspace() {
               <p className="mt-0.5 text-xs text-violet-600">Số tiền cần thanh toán: {money(bookingEstimate.total)}</p>
               </div>
             </>}
-            {step === "guest" ? <button disabled={!hasGuestDetails} onClick={goToServices} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">Tiếp tục chọn dịch vụ</button> : <>
-              {step === "promotion" && !hasGuestDetails && <p className="mt-3 text-xs text-amber-600">Vui lòng nhập đủ tên, số điện thoại và CCCD của khách hàng.</p>}
-              {step === "promotion" && hasGuestDetails && !customerReady && <p className="mt-3 text-xs text-amber-600">Đang tạo hồ sơ khách hàng, vui lòng chờ trong giây lát.</p>}
-              {step === "promotion" && !String(bookingEmployeeId).trim() && <p className="mt-1 text-xs text-amber-600">Không tìm thấy mã admin/nhân viên trong phiên đăng nhập.</p>}
-              <button disabled={!canSubmitBooking} onClick={submitBooking} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingBooking || isModifyingBooking ? (initialBooking ? "Đang cập nhật..." : "Đang tạo đặt phòng...") : initialBooking ? "Cập nhật" : "Xác nhận đặt phòng"}</button>
+            {step === "guest" ? <button disabled={!hasGuestDetails} onClick={goToServices} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{t("booking.continueToServices")}</button> : <>
+              {step === "promotion" && !hasGuestDetails && <p className="mt-3 text-xs text-amber-600">{t("booking.guestDetailsRequired")}</p>}
+              {step === "promotion" && hasGuestDetails && !customerReady && <p className="mt-3 text-xs text-amber-600">{t("booking.creatingGuestProfile")}</p>}
+              {step === "promotion" && !String(bookingEmployeeId).trim() && <p className="mt-1 text-xs text-amber-600">{t("booking.employeeIdMissing")}</p>}
+              <button disabled={!canSubmitBooking} onClick={submitBooking} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{isCreatingBooking || isModifyingBooking ? (initialBooking ? t("booking.updatingBooking") : t("booking.creatingBooking")) : initialBooking ? t("booking.updateBooking") : t("booking.confirmBooking")}</button>
             </>}
           </div>
         </div>
