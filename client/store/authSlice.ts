@@ -120,14 +120,23 @@ const getEmployeeIdFromToken = (token: string | null) => {
   }
 };
 
+const getStoredItem = (key: string): string | null => {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return null;
+  }
+  return localStorage.getItem(key);
+};
+
+const initialToken = getStoredItem("accessToken");
+
 const initialState: AuthState = {
-  token: localStorage.getItem("accessToken"),
-  fullName: localStorage.getItem("fullName"),
-  email: localStorage.getItem("email"),
-  position: localStorage.getItem("position"),
-  ...getHotelFromToken(localStorage.getItem("accessToken")),
-  employeeId: getEmployeeIdFromToken(localStorage.getItem("accessToken")) ?? localStorage.getItem("id"),
-  roles: getRolesFromToken(localStorage.getItem("accessToken")),
+  token: initialToken,
+  fullName: getStoredItem("fullName"),
+  email: getStoredItem("email"),
+  position: getStoredItem("position"),
+  ...getHotelFromToken(initialToken),
+  employeeId: getEmployeeIdFromToken(initialToken) ?? getStoredItem("id"),
+  roles: getRolesFromToken(initialToken),
 };
 
 const authSlice = createSlice({

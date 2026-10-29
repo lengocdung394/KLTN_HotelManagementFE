@@ -3,7 +3,10 @@ import { initReactI18next } from "react-i18next";
 import en from "./locales/en.json";
 import vi from "./locales/vi.json";
 
-const savedLanguage = localStorage.getItem("language");
+const savedLanguage =
+  typeof window !== "undefined" && typeof localStorage !== "undefined"
+    ? localStorage.getItem("language")
+    : null;
 
 export const localizedText = (vietnamese: string, english: string) =>
   i18n.language.startsWith("en") ? english : vietnamese;
