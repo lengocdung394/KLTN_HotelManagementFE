@@ -75,9 +75,9 @@ const getCheckoutPreparationErrorMessage = (error: unknown) => {
 };
 
 const shiftDay = (dateStr: string, delta: number) => {
-  const d = new Date(dateStr);
+  const d = new Date(`${dateStr}T00:00:00`);
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return toDateParam(d) || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
 const formatOverdueDuration = (scheduledValue: string, currentValue: string, language: string) => {
@@ -440,7 +440,7 @@ export default function CheckInOutWorkspace() {
     };
   }) ?? [], [checkOutQuery.data, checkoutFeesByDetailId]);
 
-  const todayStr = date ?? toDateParam(new Date()) ?? new Date().toISOString().slice(0, 10);
+  const todayStr = date ?? toDateParam(new Date()) ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
   const matrixStart = shiftDay(todayStr, -3);
   const matrixEnd = shiftDay(todayStr, 3);
   const { data: matrixData = [] } = useGetRoomMatrixQuery({ startDate: matrixStart, endDate: matrixEnd });

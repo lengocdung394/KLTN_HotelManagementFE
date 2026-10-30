@@ -294,7 +294,7 @@ export default function EventPricingCalendar() {
     t(status === "ACTIVE" ? "eventPricing.active" : status === "UPCOMING" ? "eventPricing.upcoming" : "eventPricing.expired");
   const formatMoney = (value: number) =>
     `${Number(value).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
-  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date(); const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const [selectedDate, setSelectedDate] = useState(today);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -428,7 +428,7 @@ export default function EventPricingCalendar() {
   ]);
 
   // Today reference string
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayStr = useMemo(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }, []);
 
   // Helper to determine status
   const getEventStatus = (evt: PriceEventRule): "ACTIVE" | "UPCOMING" | "EXPIRED" => {

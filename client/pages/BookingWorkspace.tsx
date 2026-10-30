@@ -259,9 +259,9 @@ const buildMatrixGuestNameMap = (matrix: RoomMatrixResponse[], excludedBookingId
 
 // Dịch 1 chuỗi ngày "YYYY-MM-DD" đi +/- delta ngày
 const shiftDay = (dateStr: string, delta: number) => {
-  const d = new Date(dateStr);
+  const d = new Date(`${dateStr}T00:00:00`);
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
 type RoomDateRange = { checkIn: string; checkOut: string };
