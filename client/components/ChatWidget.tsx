@@ -784,10 +784,12 @@ export default function ChatWidget() {
     if (!trimmed || !selectedCustomerId) return;
 
     const currentSession = customerSessions[selectedCustomerId];
-    const staffName = auth?.fullName || "Trần Minh Tuấn (Lễ tân)";
+    const staffHotelId = auth?.hotelId;
+    const staffHotelName = auth?.hotelName || (String(staffHotelId) === "3" ? "Sen Việt Đà Nẵng" : String(staffHotelId) === "2" ? "Sen Việt Hà Nội" : String(staffHotelId) === "1" ? "Sen Việt Sài Gòn" : null);
+    const staffName = auth?.fullName || (staffHotelName ? `Lễ tân (${staffHotelName})` : "Lễ tân Sen Việt");
     const staffId = auth?.employeeId ? String(auth.employeeId) : "staff_1";
-    const hotelId = auth?.hotelId || currentSession?.hotelId || null;
-    const branchName = auth?.hotelName || currentSession?.branchName || "Chi nhánh Sen Việt";
+    const hotelId = staffHotelId || currentSession?.hotelId || null;
+    const branchName = staffHotelName || (currentSession?.branchName && currentSession.branchName !== "Tổng đài CSKH Toàn hệ thống Sen Việt" ? currentSession.branchName : "Sen Việt Đà Nẵng");
     const timestamp = new Date().toISOString();
     const msgId = "staff_msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
 
@@ -1205,7 +1207,7 @@ export default function ChatWidget() {
             </div>
             {selectedSession && (
               <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                {selectedSession.branchName || "Chi nhánh"}
+                {selectedSession.branchName && selectedSession.branchName !== "Tổng đài CSKH Toàn hệ thống Sen Việt" ? selectedSession.branchName : (auth?.hotelName || "Sen Việt Đà Nẵng")}
               </span>
             )}
           </div>
