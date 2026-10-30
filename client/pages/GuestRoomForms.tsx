@@ -21,11 +21,11 @@ type GuestRoom = {
 export type BookingGuest = { name: string; phone: string; identityNumber: string; email: string; emailOnFile?: boolean; customerId?: string };
 export type RoomGuestCounts = { adults: number; children: number; infants: number };
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-export const isBookingGuestValid = (guest: BookingGuest, requireEmail = true) => Boolean(
+export const isBookingGuestValid = (guest: BookingGuest) => Boolean(
   guest.name.trim()
   && /^\d{10}$/.test(guest.phone)
   && /^\d{12}$/.test(guest.identityNumber)
-  && (!requireEmail || guest.emailOnFile || isValidEmail(guest.email)),
+  && (!guest.email.trim() || guest.emailOnFile || isValidEmail(guest.email)),
 );
 type Customer = CustomerResponse;
 
@@ -61,7 +61,7 @@ export const setRoomGuestCache = (values: Record<string, RoomGuestCounts>) => {
   });
 };
 
-export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange, requireEmail = true }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void; requireEmail?: boolean }) {
+export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange, customerLocked = false }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void; customerLocked?: boolean }) {
   const { t } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const { data: customers = [] } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
@@ -79,6 +79,7 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   const search = customerQuery.trim().toLowerCase();
   const matches = search ? customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email} ${customer.identityNumber}`.toLowerCase().includes(search)).slice(0, 5) : [];
   const updateGuest = (field: keyof BookingGuest, value: string) => {
+    if (customerLocked) return;
     const normalizedValue = field === "phone"
       ? value.replace(/\D/g, "").slice(0, 10)
       : field === "identityNumber"
@@ -92,11 +93,13 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     });
   };
   const chooseCustomer = (customer: Customer) => {
+    if (customerLocked) return;
     const email = customer.email.trim();
     onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, email, emailOnFile: Boolean(email), customerId: customer.id });
     setCustomerQuery("");
   };
   const findCustomerByCode = async () => {
+    if (customerLocked) return;
     const code = customerQuery.trim();
     if (!code) return;
     console.log("[booking] customer code:", code);
@@ -109,9 +112,15 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     }
   };
   const createCustomer = async () => {
-    if (!isBookingGuestValid(guest, requireEmail) || guest.customerId || isCreatingCustomer) return;
+    if (customerLocked || !isBookingGuestValid(guest) || guest.customerId || isCreatingCustomer) return;
     try {
-      const customer = await createWalkInCustomer({ fullName: guest.name.trim(), phone: guest.phone.trim(), cccd: guest.identityNumber.trim(), email: guest.email.trim() }).unwrap();
+      const email = guest.email.trim();
+      const customer = await createWalkInCustomer({
+        fullName: guest.name.trim(),
+        phone: guest.phone.trim(),
+        cccd: guest.identityNumber.trim(),
+        ...(email ? { email } : {}),
+      }).unwrap();
       onGuestChange({ ...guest, email: customer.email || guest.email.trim(), emailOnFile: Boolean(customer.email || guest.email.trim()), customerId: String(customer.id) });
       emitCustomerCreated(hotelId, {
         id: customer.id,
@@ -170,10 +179,12 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
       </div>
       <div className="relative mb-4">
         <label className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer")}</label>
+        {customerLocked && <p className="mt-1 text-xs text-slate-500">{t("booking.customerCreated")}</p>}
         <div className="relative mt-1.5">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={customerQuery}
+            disabled={customerLocked}
             onChange={(event) => setCustomerQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -191,7 +202,7 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
         {matches.length > 0 && (
           <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             {matches.map((customer) => (
-              <button type="button" key={customer.id} onClick={() => chooseCustomer(customer)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-violet-50">
+              <button type="button" key={customer.id} disabled={customerLocked} onClick={() => chooseCustomer(customer)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50">
                 <span className="font-semibold text-slate-700">{customer.name}</span>
                 <span className="text-xs text-slate-400">{customer.phone}</span>
               </button>
@@ -202,27 +213,27 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.fullName")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.name} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.name)}`} />
+          <input value={guest.name} disabled={customerLocked} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.name)}`} />
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.phone")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.phone} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.phone)}`} />
+          <input value={guest.phone} disabled={customerLocked} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.phone)}`} />
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.identityNumber")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.identityNumber} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.identityNumber)}`} />
+          <input value={guest.identityNumber} disabled={customerLocked} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.identityNumber)}`} />
         </label>
       </div>
-      {requireEmail && !guest.emailOnFile && (
+      {!guest.emailOnFile && (
         <label className="mt-4 block text-sm font-semibold text-slate-700">
-          {t("booking.emailConfirmation")}<span className="ml-1 text-red-500">*</span>
-          <input type="email" autoComplete="email" required value={guest.email} onChange={(event) => updateGuest("email", event.target.value)} placeholder="name@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(isValidEmail(guest.email) ? guest.email : "")}`} />
+          {t("booking.emailConfirmation")}
+          <input type="email" autoComplete="email" value={guest.email} onChange={(event) => updateGuest("email", event.target.value)} placeholder="name@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${guest.email.trim() && !isValidEmail(guest.email) ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-violet-400 focus:ring-violet-100"}`} />
           <span className="mt-1 block text-xs font-normal text-slate-500">{t("booking.emailConfirmationHelp")}</span>
         </label>
       )}
       <div className="mt-4 flex justify-end">
-        <button type="button" disabled={!isBookingGuestValid(guest, requireEmail) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
-          {isCreatingCustomer ? t("booking.creatingCustomer") : guest.customerId ? t("booking.customerCreated") : t("booking.createCustomer")}
+        <button type="button" disabled={customerLocked || !isBookingGuestValid(guest) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
+          {customerLocked || guest.customerId ? t("booking.customerCreated") : isCreatingCustomer ? t("booking.creatingCustomer") : t("booking.createCustomer")}
         </button>
       </div>
     </div>

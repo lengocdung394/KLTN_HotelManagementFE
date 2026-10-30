@@ -181,7 +181,6 @@
     "selecting": "Đang chọn",
     "dragToSelect": "Kéo / bấm chọn",
     "today": "Hôm nay",
-    "holdRooms": "Giữ phòng",
     "viewBookedRooms": "Xem phòng đã chọn",
     "paymentMethod": "Chọn phương thức thanh toán",
     "paymentRequired": "Vui lòng chọn một phương thức để hoàn tất.",
@@ -240,8 +239,8 @@
     ,"estimatedTotal": "Tạm tính"
     ,"selectDateToAddRoom": "Chọn ngày trên lịch để thêm phòng khác."
     ,"guestSearchLoading": "Đang tìm..."
-    ,"emailConfirmation": "Email nhận xác nhận đặt phòng"
-    ,"emailConfirmationHelp": "Email sẽ được lưu vào hồ sơ khách hàng và dùng để gửi xác nhận booking."
+    ,"emailConfirmation": "Email nhận thông báo booking (không bắt buộc)"
+    ,"emailConfirmationHelp": "Nếu nhập email, khách sẽ nhận được email xác nhận booking. Có thể để trống."
     ,"createCustomer": "Tạo khách hàng"
     ,"creatingCustomer": "Đang tạo khách hàng..."
     ,"customerCreated": "Đã có mã khách hàng"

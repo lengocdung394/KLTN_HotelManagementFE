@@ -373,7 +373,7 @@ export default function RefundApprovalWorkspace() {
         <StatCard
           label={localizedText("Chờ xử lý hoàn tiền", "Refunds pending action")}
           value={String(pendingTotal)}
-          detail={`${counts.reviewPending + counts.needsBankDetails} ${localizedText("hoàn do hủy", "cancellation refunds")} · ${counts.checkoutPending} ${localizedText("hoàn do thanh toán dư", "overpayment refunds")}`}
+          detail={`${counts.reviewPending + counts.needsBankDetails} ${localizedText("hoàn do hủy booking", "booking cancellation refunds")} · ${counts.checkoutPending} ${localizedText("hoàn dư sau checkout", "checkout surplus refunds")}`}
           tone="violet"
         />
         <StatCard label={localizedText("Đang xử lý hoàn tiền", "Refunds in progress")} value={String(counts.processing)} tone="blue" />
@@ -386,16 +386,16 @@ export default function RefundApprovalWorkspace() {
           {
             value: "overpayment" as const,
             icon: Banknote,
-            title: localizedText("Thanh toán dư", "Overpayment"),
-            description: localizedText("Hoàn tiền từ giao dịch checkout", "Refunds from checkout payments"),
+            title: localizedText("Hoàn tiền sau khi checkout dư", "Checkout surplus refund"),
+            description: localizedText("Hoàn khoản thanh toán thừa khi checkout booking", "Refund overpayment after booking checkout"),
             count: counts.checkoutPending,
             tone: "amber",
           },
           {
             value: "cancellation" as const,
             icon: ClipboardCheck,
-            title: localizedText("Hủy phòng", "Room cancellation"),
-            description: localizedText("Duyệt và theo dõi hoàn tiền booking", "Review and track booking refunds"),
+            title: localizedText("Hoàn tiền hủy booking", "Booking cancellation refund"),
+            description: localizedText("Duyệt hoàn tiền khi hủy toàn bộ booking", "Review refunds for canceled bookings"),
             count: counts.reviewPending + counts.needsBankDetails,
             tone: "blue",
           },
@@ -448,9 +448,9 @@ export default function RefundApprovalWorkspace() {
               <ClipboardCheck size={20} />
             </span>
             <div>
-              <h3 className="font-bold text-slate-900">{localizedText("Hoàn tiền do hủy phòng", "Room cancellation refunds")}</h3>
+              <h3 className="font-bold text-slate-900">{localizedText("Hoàn tiền do hủy booking", "Booking cancellation refunds")}</h3>
               <p className="mt-1 text-sm text-slate-500">
-                {localizedText("Các khoản hoàn phát sinh do hủy phòng; tiền được hoàn qua chuyển khoản theo thông tin ngân hàng của khách.", "Refunds caused by room cancellations; money is returned by bank transfer to the guest's account.")}
+                {localizedText("Theo dõi và duyệt khoản hoàn khi booking bị hủy; đây không phải khoản hoàn do hủy riêng một phòng.", "Review refunds when a booking is canceled; this does not cover cancellation of an individual room.")}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">

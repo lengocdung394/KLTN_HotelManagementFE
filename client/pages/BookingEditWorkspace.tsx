@@ -154,6 +154,11 @@ export default function BookingEditWorkspace() {
     };
   }), [activeDetails]);
 
+  const editableServiceRooms = useMemo(
+    () => editRooms.filter((_, index) => canModifyBookingDetailRoom(activeDetails[index])),
+    [editRooms, activeDetails],
+  );
+
   const initialServices = useMemo(() => Object.fromEntries(details.flatMap((detail) => {
     const roomId = roomIdOf(detail);
     const detailId = detailIdOf(detail);
@@ -280,7 +285,11 @@ export default function BookingEditWorkspace() {
 
     const roomUpdatesByDetailId = new Map<string, ManagementBookingModificationRequest["roomsToChange"][number]>();
     Object.entries(roomChanges)
-      .filter(([detailIdStr, newRoomId]) => Boolean(newRoomId) && !cancelledDetailIds.includes(detailIdStr))
+      .filter(([detailIdStr, newRoomId]) => {
+        const detail = details.find((item) => detailIdOf(item) === detailIdStr);
+        return Boolean(newRoomId) && !cancelledDetailIds.includes(detailIdStr)
+          && detail !== undefined && canModifyBookingDetailRoom(detail);
+      })
       .forEach(([bookingDetailId, newRoomId]) => {
         roomUpdatesByDetailId.set(bookingDetailId, {
           bookingDetailId,
@@ -295,19 +304,20 @@ export default function BookingEditWorkspace() {
 
     Object.entries(dateUpdates)
       .filter(([detailIdStr, dates]) => Boolean(dates.checkIn || dates.checkOut) && !cancelledDetailIds.includes(detailIdStr))
-      .map(([detailIdStr, dates]) => {
+      .flatMap(([detailIdStr, dates]) => {
         const detailId = detailIdStr;
         const detail = details.find((d) => detailIdOf(d) === detailId);
+        if (!detail || !canModifyBookingDetailRoom(detail)) return [];
         const originalCheckIn = String(detail?.checkInTime ?? "").slice(0, 10);
         const originalCheckOut = String(detail?.checkOutTime ?? "").slice(0, 10);
-        return {
+        return [{
           bookingDetailId: detailId,
           newCheckInTime: dates.checkIn && dates.checkIn !== originalCheckIn ? `${dates.checkIn}T14:00:00` : null,
           newCheckoutTime: dates.checkOut && dates.checkOut !== originalCheckOut ? `${dates.checkOut}T12:00:00` : null,
           numAdults: null,
           numChildren: null,
           numInfants: null,
-        };
+        }];
       })
       .forEach((dateUpdate) => {
         if (!dateUpdate.newCheckInTime && !dateUpdate.newCheckoutTime) return;
@@ -332,7 +342,7 @@ export default function BookingEditWorkspace() {
     editRooms.forEach((room, index) => {
       const detail = activeDetails[index];
       const bookingDetailId = detailIdOf(detail);
-      if (!bookingDetailId) return;
+      if (!bookingDetailId || !canModifyBookingDetailRoom(detail)) return;
 
       const currentSelections = roomServices[room.id] ?? roomServices[String(room.databaseId)] ?? [];
       const origSelections = initialServices[room.id] ?? initialServices[String(room.databaseId)] ?? initialServices[String(roomIdOf(detail))] ?? [];
@@ -401,7 +411,8 @@ export default function BookingEditWorkspace() {
     });
 
     const servicesToCancelFormatted = Object.entries(servicesToCancelMap)
-      .filter(([_, serviceIds]) => serviceIds.length > 0)
+      .filter(([detailId, serviceIds]) => serviceIds.length > 0
+        && details.some((detail) => detailIdOf(detail) === detailId && canModifyBookingDetailRoom(detail)))
       .map(([detailIdStr, serviceDetailIds]) => ({
         bookingDetailId: detailIdStr,
         serviceDetailIds,
@@ -640,6 +651,11 @@ export default function BookingEditWorkspace() {
                         {localizedText("Đã đánh dấu Hủy", "Marked for cancellation")}
                       </span>
                     )}
+                    {!canModifyBookingDetailRoom(detail) && (
+                      <span className="text-xs font-medium text-slate-500">
+                        {localizedText("Chỉ phòng đang chờ nhận phòng mới có thể chỉnh sửa.", "Only rooms pending check-in can be modified.")}
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -669,8 +685,9 @@ export default function BookingEditWorkspace() {
                           <input
                             type="date"
                             value={currentDateUpdate.checkIn}
+                            disabled={!canModifyBookingDetailRoom(detail)}
                             onChange={(e) => handleDateChange(detailId, "checkIn", e.target.value)}
-                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                           />
                         </div>
                         <div>
@@ -678,8 +695,9 @@ export default function BookingEditWorkspace() {
                           <input
                             type="date"
                             value={currentDateUpdate.checkOut}
+                            disabled={!canModifyBookingDetailRoom(detail)}
                             onChange={(e) => handleDateChange(detailId, "checkOut", e.target.value)}
-                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                           />
                         </div>
                       </div>
@@ -733,8 +751,9 @@ export default function BookingEditWorkspace() {
                                 <span>{srvName} (x{Number(srv.quantity ?? 1)})</span>
                                 <button
                                   type="button"
+                                  disabled={!canModifyBookingDetailRoom(detail)}
                                   onClick={() => handleToggleCancelService(detailId, sDetailId)}
-                                  className="text-slate-400 hover:text-rose-600"
+                                  className="text-slate-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
                                   title={isSrvCancelled ? localizedText("Khôi phục dịch vụ", "Restore service") : localizedText("Hủy dịch vụ này", "Cancel this service")}
                                 >
                                   {isSrvCancelled ? <RefreshCw size={12} /> : <X size={12} />}
@@ -898,7 +917,7 @@ export default function BookingEditWorkspace() {
         <p className="mt-1 text-xs text-slate-500">{localizedText("Chọn dịch vụ mới bổ sung cho các phòng còn hoạt động trong booking.", "Select additional services for active rooms in this booking.")}</p>
         <div className="mt-4">
           <BookingServiceSelector
-            rooms={editRooms}
+            rooms={editableServiceRooms}
             services={services}
             servicesLoading={isServicesLoading}
             servicesError={isServicesError}

@@ -71,6 +71,23 @@ const getRuleSections = () => [
     ],
   },
   {
+    title: localizedText("Chính sách hủy phòng", "Room cancellation policy"),
+    description: localizedText(
+      "Áp dụng khi hủy riêng một phòng trong booking; khoản phạt được tính theo giờ check-in của phòng đó.",
+      "Applies when canceling an individual room in a booking; the penalty is based on that room's check-in time.",
+    ),
+    icon: Ban,
+    tone: "rose",
+    points: [
+      localizedText("Chỉ phòng đang ở trạng thái PENDING (chưa check-in) mới được hủy. Phòng đã check-in hoặc checkout không thể chỉnh sửa hay hủy.", "Only rooms in PENDING status (not checked in) can be canceled. Checked-in or checked-out rooms cannot be edited or canceled."),
+      localizedText("Từ 72 giờ trước check-in trở lên: không phạt tiền phòng.", "At least 72 hours before check-in: no room-charge penalty."),
+      localizedText("Từ 24 đến dưới 72 giờ trước check-in: phạt 50% phần tiền phòng đã thanh toán được phân bổ cho phòng đó.", "From 24 to under 72 hours before check-in: the penalty is 50% of the paid room amount allocated to that room."),
+      localizedText("Dưới 24 giờ trước check-in: phạt 100% phần tiền phòng đã thanh toán được phân bổ cho phòng đó.", "Under 24 hours before check-in: the penalty is 100% of the paid room amount allocated to that room."),
+      localizedText("Khi hủy phòng, các dịch vụ chưa bị hủy của phòng đó sẽ tự động bị hủy theo. Dịch vụ đã sử dụng thì không thể hủy phòng.", "When a room is canceled, its active services are canceled automatically. A room cannot be canceled if a service has already been used."),
+      localizedText("Hủy riêng phòng không tạo yêu cầu hoàn tiền ngay. Booking được đối soát khi checkout; nếu đã thanh toán dư, khoản dư được xử lý hoàn sau khi toàn bộ booking checkout.", "Canceling one room does not create an immediate refund request. The booking is reconciled at checkout; any overpayment is refunded after every room in the booking has checked out."),
+    ],
+  },
+  {
     title: localizedText("Hoàn tiền do hủy booking", "Refunds for booking cancellations"),
     description: localizedText(
       "Mức khấu trừ tiền phòng phụ thuộc vào thời điểm yêu cầu hủy so với giờ check-in đầu tiên của booking.",

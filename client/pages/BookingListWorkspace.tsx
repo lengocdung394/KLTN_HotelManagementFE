@@ -28,7 +28,7 @@ import {
   type BookingListItem,
   type BookingUpdateRequest,
 } from "../services/bookingApi";
-import { useCreatePaymentQrMutation, usePayWithCashMutation } from "../services/paymentApi";
+import { useCreatePaymentQrMutation, useGetPaymentStatusQuery, usePayWithCashMutation } from "../services/paymentApi";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCancelBookingByStaffMutation, useGetBookingCancellationPreviewQuery } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -286,6 +286,8 @@ export default function BookingListWorkspace() {
   const [cashAmountPaid, setCashAmountPaid] = useState("");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(0);
+  const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null);
+  const [paymentReturn, setPaymentReturn] = useState<{ orderId: string; startedAt: number } | null>(null);
   const [paymentError, setPaymentError] = useState("");
   const [paymentSuccess, setPaymentSuccess] = useState("");
   const [cashChangeAmount, setCashChangeAmount] = useState<number | null>(null);
@@ -303,6 +305,13 @@ export default function BookingListWorkspace() {
   // RTK Query hooks
   const [createPaymentQr, { isLoading: isCreatingQr }] = useCreatePaymentQrMutation();
   const [payWithCash, { isLoading: isPayingCash }] = usePayWithCashMutation();
+  const paymentStatusOrderId = paymentReturn?.orderId ?? selectedBooking?.orderId ?? selectedBooking?.bookingId ?? "";
+  const isVerifyingPaymentReturn = Boolean(paymentReturn && Date.now() - paymentReturn.startedAt < 120000);
+  const { currentData: paymentStatus } = useGetPaymentStatusQuery(paymentStatusOrderId, {
+    skip: (!showQrModal && !isVerifyingPaymentReturn) || !paymentStatusOrderId,
+    pollingInterval: showQrModal ? 5000 : isVerifyingPaymentReturn ? 3000 : 0,
+    refetchOnMountOrArgChange: true,
+  });
   const [updateBookingApi, { isLoading: isUpdatingBooking }] = useUpdateBookingMutation();
   const [cancelBookingByStaff, { isLoading: isCancellingBooking }] = useCancelBookingByStaffMutation();
   const {
@@ -316,6 +325,7 @@ export default function BookingListWorkspace() {
     { skip: !showCancelConfirmation || !selectedBooking, refetchOnMountOrArgChange: true },
   );
   const cancellationPreview = cancellationPreviewResponse?.result;
+
   useEffect(() => {
     setCashRefundConfirmed(false);
   }, [cancellationPreview?.refundAmount]);
@@ -334,7 +344,10 @@ export default function BookingListWorkspace() {
     isLoading,
     isError,
     refetch,
-  } = useGetBookingsByHotelQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  } = useGetBookingsByHotelQuery(Number(hotelId), {
+    skip: !hotelId || Number.isNaN(Number(hotelId)),
+    pollingInterval: 10000,
+  });
   const { data: hotelServices = [] } = useGetAllServicesQuery(
     hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true },
   );
@@ -364,6 +377,58 @@ export default function BookingListWorkspace() {
     }),
     [fetchedBookings, localOverrides],
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const paymentStatus = params.get("paymentStatus");
+    const orderId = params.get("orderId");
+    if (!paymentStatus || !orderId || isLoading) return;
+    if (paymentStatus !== "cancelled") {
+      setPaymentReturn({ orderId, startedAt: Date.now() });
+    }
+
+    const targetBooking = bookings.find((booking) =>
+      String(booking.orderId ?? "") === orderId || bookingId(booking) === orderId,
+    );
+    if (targetBooking) setSelectedBooking(targetBooking);
+
+    toast({
+      title: paymentStatus === "cancelled"
+        ? localizedText("Đã hủy thanh toán", "Payment cancelled")
+        : localizedText("Đã quay lại từ PayOS", "Returned from PayOS"),
+      description: paymentStatus === "cancelled"
+        ? localizedText("Booking vẫn được giữ đến hết thời hạn 5 phút.", "The booking remains on hold until its 5-minute deadline.")
+        : localizedText("Đang kiểm tra trạng thái giao dịch với PayOS.", "Checking the transaction status with PayOS."),
+    });
+
+    params.delete("paymentStatus");
+    params.delete("orderId");
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+    if (paymentStatus !== "cancelled") dispatch(baseApi.util.invalidateTags(["Booking"]));
+  }, [bookings, dispatch, isLoading, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!paymentReturn || !paymentStatus) return;
+
+    const isTerminalGatewayStatus = ["CANCELLED", "EXPIRED", "FAILED"].includes(
+      String(paymentStatus.gatewayStatus ?? "").toUpperCase(),
+    );
+    if (paymentStatus.isPaid || paymentStatus.bookingStatus?.startsWith("CANCELLED") || isTerminalGatewayStatus) {
+      setPaymentReturn(null);
+      dispatch(baseApi.util.invalidateTags(["Booking"]));
+    }
+  }, [dispatch, paymentReturn, paymentStatus]);
+
+  useEffect(() => {
+    if (!paymentReturn) return;
+    const remainingMs = 120000 - (Date.now() - paymentReturn.startedAt);
+    if (remainingMs <= 0) {
+      setPaymentReturn(null);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setPaymentReturn(null), remainingMs);
+    return () => window.clearTimeout(timeoutId);
+  }, [paymentReturn]);
 
   useEffect(() => {
     if (!selectedBooking) return;
@@ -471,6 +536,7 @@ export default function BookingListWorkspace() {
     setCashAmountPaid("");
     setCheckoutUrl(null);
     setQrSecondsLeft(0);
+    setQrExpiresAt(null);
     setPaymentError("");
     setPaymentSuccess("");
     setCashChangeAmount(null);
@@ -481,12 +547,16 @@ export default function BookingListWorkspace() {
     }
   }, [selectedBooking]);
 
-  // QR countdown timer
+  // Keep the displayed countdown aligned with the expiration time returned by PayOS.
   useEffect(() => {
-    if (qrSecondsLeft <= 0) return;
-    const timer = window.setInterval(() => setQrSecondsLeft((current) => Math.max(0, current - 1)), 1000);
+    if (qrExpiresAt === null) return;
+    const updateCountdown = () => {
+      setQrSecondsLeft(Math.max(0, Math.ceil((qrExpiresAt - Date.now()) / 1000)));
+    };
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(timer);
-  }, [qrSecondsLeft]);
+  }, [qrExpiresAt]);
 
   // Open Edit Modal & populate form
   const handleOpenEdit = (booking: BookingListItem) => {
@@ -628,33 +698,46 @@ export default function BookingListWorkspace() {
         return;
       }
 
-      const id = bookingId(selectedBooking);
       const orderId = selectedBooking.orderId ?? selectedBooking.bookingId ?? "";
-      const amount = bookingTotalIncludingSurcharges(selectedBooking);
+      if (isCancelledBooking(selectedBooking)) {
+        setPaymentError(localizedText(
+          "Booking đã hết hạn hoặc bị hủy; không thể tạo link thanh toán mới.",
+          "This booking has expired or been cancelled; a new payment link cannot be created.",
+        ));
+        return;
+      }
 
       let qrUrl = "";
+      let expirationTime: number | null = null;
 
-      if (orderId) {
-        try {
-          const response = await createPaymentQr({ orderId }).unwrap();
-          if (response && response.checkoutUrl) {
-            qrUrl = response.checkoutUrl;
+      if (!orderId) {
+        setPaymentError(localizedText("Không tìm thấy mã đơn để tạo thanh toán.", "Could not find an order ID to create a payment link."));
+        return;
+      }
+      try {
+        const response = await createPaymentQr({ orderId }).unwrap();
+        if (response && response.checkoutUrl) {
+          qrUrl = response.checkoutUrl;
+          const expiresAtSeconds = Number(response.expiredAt);
+          if (Number.isFinite(expiresAtSeconds) && expiresAtSeconds > 0) {
+            expirationTime = expiresAtSeconds * 1000;
           }
-        } catch {
-          // Backend endpoint not responding -> Fallback to VietQR image below
         }
+      } catch (error: any) {
+        const data = error?.data;
+        const message = typeof data === "string" ? data : data?.message ?? data?.result?.message ?? error?.message;
+        setPaymentError(String(message ?? localizedText("Không thể tạo link thanh toán.", "Could not create a payment link.")));
+        return;
       }
 
       if (!qrUrl) {
-        const bankId = "BIDV";
-        const accountNo = "V3CAS6811679267";
-        const accountName = "NGUYEN LE ANH PHONG";
-        const addInfo = encodeURIComponent(`CSNH0USH216 Thanh toan HD${id}`);
-        qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${encodeURIComponent(accountName)}`;
+        setPaymentError(localizedText("PayOS không trả về link thanh toán.", "PayOS did not return a payment link."));
+        return;
       }
 
       setCheckoutUrl(qrUrl);
-      setQrSecondsLeft(300);
+      setQrExpiresAt(expirationTime);
+      setQrSecondsLeft(expirationTime === null ? 0 : Math.max(0, Math.ceil((expirationTime - Date.now()) / 1000)));
       setShowQrModal(true);
     } finally {
       paymentRequestInFlight.current = false;
@@ -662,6 +745,9 @@ export default function BookingListWorkspace() {
   };
 
   const qrTimeLabel = `${String(Math.floor(qrSecondsLeft / 60)).padStart(2, "0")}:${String(qrSecondsLeft % 60).padStart(2, "0")}`;
+  const isPendingPaymentBooking = String(selectedBooking?.bookingStatus ?? selectedBooking?.status ?? "").toUpperCase() === "PENDING";
+  const isPaymentReceived = paymentStatus?.isPaid === true;
+  const isCancelledAfterPayment = Boolean(paymentStatus?.bookingStatus?.startsWith("CANCELLED"));
   const selectedBookingTotal = selectedBooking ? bookingTotalIncludingSurcharges(selectedBooking) : 0;
   const cashBillTotal = selectedBookingTotal;
   const enteredCashAmount = Number(cashAmountPaid) || 0;
@@ -1855,7 +1941,13 @@ export default function BookingListWorkspace() {
             <div className="flex items-center justify-between border-b border-slate-100 bg-white px-6 py-3.5">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">{localizedText("Thanh toán qua mã QR", "Pay by QR code")}</h3>
-                <p className="text-xs text-slate-500">{localizedText("Mã QR có hiệu lực trong 5 phút", "This QR code is valid for 5 minutes")}</p>
+                <p className="text-xs text-slate-500">
+                  {qrExpiresAt === null
+                    ? localizedText("QR chuyển khoản dự phòng không tự hết hạn", "Fallback bank-transfer QR does not expire automatically")
+                    : isPendingPaymentBooking
+                      ? localizedText("Mã QR có hiệu lực đến khi hết thời gian giữ booking", "This QR code is valid until the booking hold expires")
+                      : localizedText("Mã QR có hiệu lực trong 5 phút sau khi tạo", "This QR code is valid for 5 minutes after creation")}
+                </p>
               </div>
               <button
                 type="button"
@@ -1867,36 +1959,94 @@ export default function BookingListWorkspace() {
               </button>
             </div>
 
-            {/* Content Container: Wide Iframe for Horizontal PayOS View */}
+            {/* Launch PayOS as a top-level page so its redirect can return to this app. */}
             <div className="p-5">
-              <div className="h-[520px] sm:h-[550px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner">
-                {checkoutUrl.includes(".png") || checkoutUrl.includes(".jpg") ? (
-                  <div className="flex h-full w-full items-center justify-center p-4">
-                    <img src={checkoutUrl} alt="QR Code" className="h-full object-contain" />
+            <div className="flex min-h-[360px] flex-col items-center justify-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
+                {isPaymentReceived ? (
+                <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
+                    <Check className={isCancelledAfterPayment ? "text-amber-500" : "text-emerald-500"} size={40} />
+                    <p className="text-lg font-bold text-slate-900">
+                      {isCancelledAfterPayment
+                        ? localizedText("Đã nhận tiền sau khi booking bị hủy", "Payment received after the booking was cancelled")
+                        : localizedText("Thanh toán đã được xác nhận", "Payment confirmed")}
+                    </p>
+                    <p className="max-w-md text-sm text-slate-500">
+                      {isCancelledAfterPayment
+                        ? localizedText("Booking không được khôi phục. Khoản tiền đã được chuyển vào quy trình kiểm tra hoàn tiền.", "The booking will not be restored. The payment has been sent for refund review.")
+                        : localizedText("Hệ thống đã xác nhận giao dịch với PayOS.", "The transaction has been confirmed with PayOS.")}
+                    </p>
+                  </div>
+                ) : qrExpiresAt !== null && qrSecondsLeft === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
+                    <AlertCircle className="text-rose-500" size={36} />
+                    <p className="text-lg font-bold text-slate-900">
+                      {localizedText("Link thanh toán đã hết hạn", "Payment link has expired")}
+                    </p>
+                    <p className="max-w-md text-sm text-slate-500">
+                      {isPendingPaymentBooking
+                        ? localizedText("Booking đã hết thời gian giữ và sẽ được tự động hủy. Không thể tạo link mới cho booking này.", "The booking hold has expired and the booking will be cancelled automatically. A new payment link cannot be created for this booking.")
+                        : localizedText("Link thanh toán đã hết hạn. Vui lòng liên hệ nhân viên nếu cần hỗ trợ thanh toán.", "The payment link has expired. Contact staff if you need help with payment.")}
+                    </p>
                   </div>
                 ) : (
-                  <iframe
-                    title="PayOS Checkout Widget"
-                    src={checkoutUrl}
-                    className="h-full w-full border-0"
-                  />
+                  <>
+                    <QrCode className="text-blue-600" size={40} />
+                    <p className="max-w-md text-sm text-slate-600">
+                      {localizedText(
+                        "Trang thanh toán PayOS sẽ mở tại đây trong cùng tab. Sau khi thanh toán hoặc hủy, PayOS sẽ đưa bạn về danh sách booking.",
+                        "PayOS checkout will open in this tab. After payment or cancellation, PayOS will return you to the booking list.",
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => window.location.assign(checkoutUrl)}
+                      className="rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
+                    >
+                      {localizedText("Đi đến trang thanh toán PayOS", "Continue to PayOS checkout")}
+                    </button>
+                  </>
                 )}
               </div>
+              {!isPaymentReceived && qrExpiresAt !== null && paymentStatus?.gatewayStatus && paymentStatus.gatewayStatus !== "PENDING" && (
+                <p className={`mt-3 rounded-lg px-3 py-2 text-xs ${
+                  paymentStatus.gatewayStatus === "UNAVAILABLE"
+                    ? "bg-amber-50 text-amber-800"
+                    : ["FAILED", "CANCELLED", "EXPIRED"].includes(paymentStatus.gatewayStatus)
+                      ? "bg-rose-50 text-rose-700"
+                      : paymentStatus.gatewayStatus === "UNDERPAID"
+                        ? "bg-amber-50 text-amber-800"
+                        : "bg-slate-50 text-slate-600"
+                }`}>
+                  {paymentStatus.gatewayStatus === "UNAVAILABLE"
+                    ? localizedText("Chưa xác minh được giao dịch với PayOS. Vui lòng chờ hoặc liên hệ nhân viên; đừng chuyển khoản lại.", "PayOS could not verify the transaction yet. Please wait or contact staff; do not pay again.")
+                    : paymentStatus.gatewayStatus === "UNDERPAID"
+                      ? localizedText("PayOS ghi nhận thanh toán chưa đủ. Booking vẫn ở trạng thái chờ xác nhận.", "PayOS reports an underpayment. The booking is still awaiting confirmation.")
+                      : ["FAILED", "CANCELLED", "EXPIRED"].includes(paymentStatus.gatewayStatus)
+                        ? isPendingPaymentBooking
+                          ? localizedText(`Trạng thái link PayOS: ${paymentStatus.gatewayStatus}. Booking hết hạn sẽ tự hủy; không thể tạo link mới sau khi booking bị hủy.`, `PayOS link status: ${paymentStatus.gatewayStatus}. The booking will be cancelled when its hold expires; no new link can be created after cancellation.`)
+                          : localizedText(`Trạng thái link PayOS: ${paymentStatus.gatewayStatus}. Vui lòng liên hệ nhân viên để được hỗ trợ.`, `PayOS link status: ${paymentStatus.gatewayStatus}. Contact staff for assistance.`)
+                        : localizedText(`Trạng thái PayOS: ${paymentStatus.gatewayStatus}`, `PayOS status: ${paymentStatus.gatewayStatus}`)}
+                </p>
+              )}
 
               {/* Bottom Footer */}
               <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row border-t border-slate-100 pt-3">
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-                  </span>
-                  <span className="text-xs font-bold text-amber-600">
-                    {localizedText("Thời gian còn lại", "Time remaining")}: {qrTimeLabel}
-                  </span>
-                </div>
+                {qrExpiresAt !== null && (
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      {qrSecondsLeft > 0 && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />}
+                      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${qrSecondsLeft > 0 ? "bg-amber-500" : "bg-rose-500"}`} />
+                    </span>
+                    <span className={`text-xs font-bold ${qrSecondsLeft > 0 ? "text-amber-600" : "text-rose-600"}`}>
+                      {qrSecondsLeft > 0
+                        ? `${localizedText("Thời gian còn lại", "Time remaining")}: ${qrTimeLabel}`
+                        : localizedText("Link đã hết hạn", "Link expired")}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-3">
-                  {checkoutReturnTarget.current && (
+                  {qrSecondsLeft > 0 && checkoutReturnTarget.current && (
                     <button
                       type="button"
                       onClick={returnToCheckout}
@@ -1905,18 +2055,6 @@ export default function BookingListWorkspace() {
                       {localizedText("Đã thanh toán, quay lại checkout", "Paid, return to checkout")}
                     </button>
                   )}
-                  <a
-                    href={checkoutUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={() => {
-                      setShowQrModal(false);
-                      if (!checkoutReturnTarget.current) setSelectedBooking(null);
-                    }}
-                    className="text-xs font-semibold text-blue-600 underline hover:text-blue-800 transition-colors"
-                  >
-                    {localizedText("Mở trang thanh toán trong tab mới", "Open payment page in a new tab")}
-                  </a>
                 </div>
               </div>
             </div>

@@ -181,7 +181,6 @@
     "selecting": "Selecting",
     "dragToSelect": "Drag / click to select",
     "today": "Today",
-    "holdRooms": "Hold rooms",
     "viewBookedRooms": "View selected rooms",
     "paymentMethod": "Select payment method",
     "paymentRequired": "Please select a payment method to continue.",
@@ -240,8 +239,8 @@
     ,"estimatedTotal": "Estimated total"
     ,"selectDateToAddRoom": "Select dates on the calendar to add another room."
     ,"guestSearchLoading": "Searching..."
-    ,"emailConfirmation": "Booking confirmation email"
-    ,"emailConfirmationHelp": "This email will be saved to the guest profile and used to send the booking confirmation."
+    ,"emailConfirmation": "Booking notification email (optional)"
+    ,"emailConfirmationHelp": "If provided, the guest will receive a booking confirmation email. This can be left blank."
     ,"createCustomer": "Create customer"
     ,"creatingCustomer": "Creating customer..."
     ,"customerCreated": "Customer profile created"
