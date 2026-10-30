@@ -12,6 +12,7 @@ import {
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
   type NotificationRecord,
+  type NotificationType,
 } from "../services/notificationApi";
 import { bindHotelSocketEvents, joinHotelRoom } from "../lib/socket";
 import {
@@ -34,49 +35,17 @@ const isNullableString = (value: unknown): value is string | null =>
 const toLiveNotification = (payload: unknown): NotificationRecord | null => {
   if (!payload || typeof payload !== "object") return null;
 
-  const {
-    id,
-    hotelId,
-    type,
-    title,
-    description,
-    createdAt,
-    referenceType,
-    referenceId,
-  } = payload as Record<string, unknown>;
-  const isHousekeepingNotification = referenceType === "HOUSEKEEPING_TASK"
-    || type === "HOUSEKEEPING_TASK_ASSIGNED"
-    || type === "HOUSEKEEPING_TASK_REASSIGNED"
-    || type === "HOUSEKEEPING_TASK_COMPLETED";
-  if (
-    type !== "BOOKING_CREATED"
-    && type !== "BOOKING_UPDATED"
-    && type !== "BOOKING_CANCELLED"
-    && type !== "BOOKING_REFUND_REQUESTED"
-    && type !== "BOOKING_REFUND_COMPLETED"
-    && type !== "PAYMENT_RECEIVED"
-    && type !== "PROMOTION_CREATED"
-    && type !== "PROMOTION_UPDATED"
-    && type !== "SERVICE_CREATED"
-    && type !== "SERVICE_UPDATED"
-    && type !== "HOUSEKEEPING_TASK_ASSIGNED"
-    && type !== "HOUSEKEEPING_TASK_REASSIGNED"
-    && type !== "HOUSEKEEPING_TASK_COMPLETED"
-    && !(type === "SYSTEM" && isHousekeepingNotification)
-  ) {
-    return null;
-  }
-  if (
-    typeof id !== "number"
-    || !isNullableNumber(hotelId)
-    || typeof title !== "string"
-    || typeof description !== "string"
-    || typeof createdAt !== "string"
-    || !isNullableString(referenceType)
-    || !isNullableString(referenceId)
-  ) {
-    return null;
-  }
+  const raw = payload as Record<string, unknown>;
+  const id = Number(raw.id);
+  const hotelId = raw.hotelId != null ? Number(raw.hotelId) : null;
+  const type = String(raw.type || "") as NotificationType;
+  const title = String(raw.title || "");
+  const description = String(raw.description || "");
+  const createdAt = raw.createdAt ? String(raw.createdAt) : new Date().toISOString();
+  const referenceType = raw.referenceType ? String(raw.referenceType) : null;
+  const referenceId = raw.referenceId ? String(raw.referenceId) : null;
+
+  if (isNaN(id) || !title) return null;
 
   return {
     id,
@@ -119,6 +88,19 @@ export default function NotificationBell() {
   useEffect(() => {
     joinHotelRoom(hotelId);
   }, [hotelId]);
+
+  useEffect(() => {
+    const handleRealtimeTrigger = () => {
+      void refetchNotifications();
+      void refetchSummary();
+    };
+    window.addEventListener("senviet_socket_notification_created", handleRealtimeTrigger);
+    window.addEventListener("senviet_socket_new_booking", handleRealtimeTrigger);
+    return () => {
+      window.removeEventListener("senviet_socket_notification_created", handleRealtimeTrigger);
+      window.removeEventListener("senviet_socket_new_booking", handleRealtimeTrigger);
+    };
+  }, [refetchNotifications, refetchSummary]);
 
   useEffect(
     () => bindHotelSocketEvents({

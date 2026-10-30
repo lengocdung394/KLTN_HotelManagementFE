@@ -75,8 +75,8 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
       onRoomCreated: () => dispatch(baseApi.util.invalidateTags(["Room"])),
       onRoomMatrixUpdated: () => dispatch(baseApi.util.invalidateTags(["Room", "Booking"])),
       onBookingStateUpdated: () => dispatch(baseApi.util.invalidateTags(["Booking", "Room"])),
-      onNewBookingNotification: () => dispatch(baseApi.util.invalidateTags(["Booking", "Room"])),
-      onNotificationCreated: () => dispatch(baseApi.util.invalidateTags(["Room"])),
+      onNewBookingNotification: () => dispatch(baseApi.util.invalidateTags(["Booking", "Room", "Notification"])),
+      onNotificationCreated: () => dispatch(baseApi.util.invalidateTags(["Room", "Booking", "Notification"])),
     });
   }, [dispatch, hotelId]);
 
