@@ -47,11 +47,14 @@ interface ApiResponse<T> {
 export const orderApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getOrders: build.query<OrderResponse[], { status?: "OPEN" | "CLOSED" | "CANCELLED" } | void>({
-      query: (params) => ({
-        url: "/orders",
-        method: "GET",
-        params: params?.status ? { status: params.status } : {},
-      }),
+      query: (params) => {
+        const queryParams = params && typeof params === "object" && "status" in params && params.status ? { status: params.status } : {};
+        return {
+          url: "/orders",
+          method: "GET",
+          params: queryParams,
+        };
+      },
       transformResponse: (response: ApiResponse<OrderResponse[]>) => response?.result ?? [],
       providesTags: ["Booking"],
     }),

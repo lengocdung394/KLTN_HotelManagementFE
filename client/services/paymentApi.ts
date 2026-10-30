@@ -36,8 +36,8 @@ export const paymentApi = baseApi.injectEndpoints({
         method: "POST",
         data: request,
       }),
-      transformResponse: (response: PaymentTransactionResponse | { result?: PaymentTransactionResponse }) =>
-        "result" in response && response.result ? response.result : response as PaymentTransactionResponse,
+      transformResponse: (response: PaymentTransactionResponse | { result?: PaymentTransactionResponse }): PaymentTransactionResponse =>
+        (("result" in response && response.result ? response.result : response) as PaymentTransactionResponse),
     }),
   }),
 });

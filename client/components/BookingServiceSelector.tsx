@@ -19,6 +19,7 @@ export type BookingServiceSelectorProps = {
   setRoomServices: React.Dispatch<React.SetStateAction<Record<string, ServiceSelection[]>>>;
   roomRanges: Record<string, { checkIn: string; checkOut: string }>;
   fallbackRange: { checkIn: string; checkOut: string };
+  nightsForRoom?: (room: ServiceRoom | any) => number;
   language: string;
   onContinue: () => void;
   onSkip: () => void;
