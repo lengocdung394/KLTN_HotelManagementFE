@@ -670,7 +670,7 @@ export default function ChatWidget() {
         if (!session) return prev;
         const exists = session.messages.some((m) => {
           if (payload.msgId && String(m.id) === String(payload.msgId)) return true;
-          return m.sender === "staff" && m.message === payload.message;
+          return false;
         });
         if (exists) return prev;
 
@@ -722,7 +722,7 @@ export default function ChatWidget() {
             serverSessions.forEach((s: any) => {
               const cId = s.customerId;
               const msgs: CustomerLiveMessage[] = (s.messages || []).map((m: any) => ({
-                id: m.id || m.msgId,
+                id: m.msgId || m.id,
                 sender: m.senderType === "CUSTOMER" ? "customer" : "staff",
                 senderName: m.senderName,
                 message: m.message,
@@ -1279,6 +1279,7 @@ export default function ChatWidget() {
               ].map((q, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => setCustomerReplyInput(q)}
                   className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition"
                 >
