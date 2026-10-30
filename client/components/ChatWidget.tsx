@@ -530,9 +530,13 @@ export default function ChatWidget() {
   ];
 
   const [activeTab, setActiveTab] = useState<"ai" | "customer">("customer");
+  const isSuperAdmin = (auth?.roles || []).includes("ROLE_SUPER_ADMIN");
+  const staffHotelId = auth?.hotelId;
+  const staffStorageKey = `senviet_staff_customer_sessions_${staffHotelId || (isSuperAdmin ? "all" : "default")}`;
+
   const [customerSessions, setCustomerSessions] = useState<Record<string, CustomerLiveSession>>(() => {
     try {
-      const saved = localStorage.getItem("senviet_staff_customer_sessions");
+      const saved = localStorage.getItem(staffStorageKey);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -557,6 +561,11 @@ export default function ChatWidget() {
       const hId = payload.hotelId;
       const msg = payload.message;
       const time = payload.timestamp || new Date().toISOString();
+
+      // Chỉ nhân viên thuộc đúng chi nhánh (hoặc Super Admin) mới tiếp nhận tin nhắn này
+      if (!isSuperAdmin && staffHotelId && hId && String(staffHotelId) !== String(hId)) {
+        return;
+      }
 
       const msgId = String(payload.msgId || `${cId}_${time}_${msg}`);
 
@@ -619,7 +628,7 @@ export default function ChatWidget() {
         };
 
         try {
-          localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updatedSessions));
+          localStorage.setItem(staffStorageKey, JSON.stringify(updatedSessions));
         } catch {}
 
         if (!isCurrentActive) {
@@ -665,6 +674,10 @@ export default function ChatWidget() {
       const cId = String(payload.customerId || "");
       if (!cId) return;
 
+      if (!isSuperAdmin && staffHotelId && payload.hotelId && String(staffHotelId) !== String(payload.hotelId)) {
+        return;
+      }
+
       setCustomerSessions((prev) => {
         const session = prev[cId];
         if (!session) return prev;
@@ -693,7 +706,7 @@ export default function ChatWidget() {
           },
         };
         try {
-          localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updated));
+          localStorage.setItem(staffStorageKey, JSON.stringify(updated));
         } catch {}
         return updated;
       });
@@ -711,15 +724,27 @@ export default function ChatWidget() {
   useEffect(() => {
     const fetchSessionsFromDb = async () => {
       try {
-        const hotelQuery = auth?.hotelId ? `?hotelId=${auth.hotelId}` : "";
+        const hotelQuery = !isSuperAdmin && staffHotelId ? `?hotelId=${staffHotelId}` : "";
         const res = await fetch(`/live-chat/sessions${hotelQuery}`);
         if (!res.ok) return;
         const data = await res.json();
         const serverSessions = data.result;
-        if (Array.isArray(serverSessions) && serverSessions.length > 0) {
+        if (Array.isArray(serverSessions)) {
           setCustomerSessions((prev) => {
-            const merged = { ...prev };
+            const merged: Record<string, CustomerLiveSession> = {};
+            if (isSuperAdmin) {
+              Object.assign(merged, prev);
+            } else if (staffHotelId) {
+              Object.entries(prev).forEach(([key, s]) => {
+                if (!s.hotelId || String(s.hotelId) === String(staffHotelId)) {
+                  merged[key] = s;
+                }
+              });
+            }
             serverSessions.forEach((s: any) => {
+              if (!isSuperAdmin && staffHotelId && s.hotelId && String(s.hotelId) !== String(staffHotelId)) {
+                return;
+              }
               const cId = s.customerId;
               const msgs: CustomerLiveMessage[] = (s.messages || []).map((m: any) => ({
                 id: m.msgId || m.id,
@@ -835,7 +860,7 @@ export default function ChatWidget() {
         },
       };
       try {
-        localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updated));
+        localStorage.setItem(staffStorageKey, JSON.stringify(updated));
       } catch {}
       return updated;
     });
