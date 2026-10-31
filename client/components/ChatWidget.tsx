@@ -583,7 +583,43 @@ export default function ChatWidget() {
   });
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerReplyInput, setCustomerReplyInput] = useState("");
-  const [unreadTotal, setUnreadTotal] = useState(0);
+  const [unreadTotal, setUnreadTotal] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(staffStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return Object.values(parsed as Record<string, CustomerLiveSession>).reduce(
+            (sum, item) => sum + (item.unreadCount || 0),
+            0
+          );
+        }
+      }
+    } catch {}
+    return 0;
+  });
+
+  const markSessionAsRead = useCallback((cId: string) => {
+    if (!cId) return;
+    setCustomerSessions((prev) => {
+      const current = prev[cId];
+      if (!current || !current.unreadCount) return prev;
+      const updated = {
+        ...prev,
+        [cId]: { ...current, unreadCount: 0 },
+      };
+      try {
+        localStorage.setItem(staffStorageKey, JSON.stringify(updated));
+      } catch {}
+      const newTotal = Object.values(updated).reduce((sum, s) => sum + (s.unreadCount || 0), 0);
+      setUnreadTotal(newTotal);
+      return updated;
+    });
+
+    fetch(`/live-chat/sessions/mark-read?customerId=${encodeURIComponent(cId)}${staffHotelId ? `&hotelId=${staffHotelId}` : ""}`, {
+      method: "PATCH",
+    }).catch(() => {});
+  }, [staffStorageKey, staffHotelId]);
   const customerScrollRef = useRef<HTMLDivElement>(null);
   const processedMsgIdsRef = useRef<Set<string>>(new Set());
 
@@ -687,6 +723,10 @@ export default function ChatWidget() {
 
         if (!isCurrentActive) {
           setUnreadTotal((u) => u + 1);
+        } else {
+          fetch(`/live-chat/sessions/mark-read?customerId=${encodeURIComponent(cId)}${staffHotelId ? `&hotelId=${staffHotelId}` : ""}`, {
+            method: "PATCH",
+          }).catch(() => {});
         }
 
         return updatedSessions;
@@ -825,6 +865,10 @@ export default function ChatWidget() {
                 branchName: s.branchName,
               }));
 
+              const dbUnread = s.unreadCount != null
+                ? s.unreadCount
+                : (s.messages || []).filter((m: any) => (m.senderType === "CUSTOMER" || m.sender === "customer") && !m.isRead).length;
+
               if (!merged[cId]) {
                 merged[cId] = {
                   customerId: cId,
@@ -834,7 +878,7 @@ export default function ChatWidget() {
                   hotelId: s.hotelId,
                   lastMessage: s.lastMessage || "",
                   lastTimestamp: s.lastMessageAt || s.createdAt,
-                  unreadCount: 0,
+                  unreadCount: dbUnread,
                   messages: msgs,
                 };
               } else {
@@ -846,11 +890,15 @@ export default function ChatWidget() {
                 });
                 merged[cId].customerName = s.customerName || merged[cId].customerName;
                 merged[cId].customerPhone = s.customerPhone || merged[cId].customerPhone;
+                merged[cId].unreadCount = dbUnread;
               }
             });
             try {
               localStorage.setItem(staffStorageKey, JSON.stringify(merged));
             } catch {}
+
+            const totalUnread = Object.values(merged).reduce((sum, item) => sum + (item.unreadCount || 0), 0);
+            setUnreadTotal(totalUnread);
             return merged;
           });
         }
@@ -972,11 +1020,16 @@ export default function ChatWidget() {
       {/* Floating toggle button */}
       <button
         onClick={() => {
-          setOpen((o) => !o);
-          if (!open && unreadTotal > 0) {
-            setActiveTab("customer");
-            setUnreadTotal(0);
-          }
+          setOpen((o) => {
+            const nextOpen = !o;
+            if (nextOpen && unreadTotal > 0) {
+              setActiveTab("customer");
+              if (selectedCustomerId) {
+                markSessionAsRead(selectedCustomerId);
+              }
+            }
+            return nextOpen;
+          });
         }}
         aria-label="Staff Assistant & Customer Chat"
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 transition-all duration-200 hover:scale-105 hover:from-blue-700 hover:to-indigo-700 active:scale-95"
@@ -1067,12 +1120,8 @@ export default function ChatWidget() {
               type="button"
               onClick={() => {
                 setActiveTab("customer");
-                setUnreadTotal(0);
-                if (selectedCustomerId && customerSessions[selectedCustomerId]) {
-                  setCustomerSessions((prev) => ({
-                    ...prev,
-                    [selectedCustomerId]: { ...prev[selectedCustomerId], unreadCount: 0 },
-                  }));
+                if (selectedCustomerId) {
+                  markSessionAsRead(selectedCustomerId);
                 }
               }}
               className={`relative flex flex-1 items-center justify-center gap-1.5 py-2.5 transition ${
@@ -1310,18 +1359,15 @@ export default function ChatWidget() {
                   onChange={(e) => {
                     const id = e.target.value;
                     setSelectedCustomerId(id);
-                    if (id && customerSessions[id]) {
-                      setCustomerSessions((prev) => ({
-                        ...prev,
-                        [id]: { ...prev[id], unreadCount: 0 },
-                      }));
+                    if (id) {
+                      markSessionAsRead(id);
                     }
                   }}
                   className="truncate flex-1 max-w-[280px] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500"
                 >
                   {Object.values(customerSessions).map((s) => (
                     <option key={s.customerId} value={s.customerId}>
-                      👤 {s.customerName} {s.customerPhone ? `(${s.customerPhone})` : ""} - {s.branchName}
+                      {s.unreadCount && s.unreadCount > 0 ? `🔴 [${s.unreadCount} tin mới] ` : ""}👤 {s.customerName} {s.customerPhone ? `(${s.customerPhone})` : ""} - {s.branchName}
                     </option>
                   ))}
                 </select>
