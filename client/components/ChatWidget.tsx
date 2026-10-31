@@ -486,8 +486,9 @@ export default function ChatWidget() {
           "6": "Sen Việt Gò Công",
           "7": "Sen Việt An Nhơn",
         };
-        const currentHotelId = auth?.hotelId;
-        const currentHotelName = auth?.hotelName || (currentHotelId ? HOTEL_NAMES[String(currentHotelId)] : null) || "Sen Việt Đà Nẵng";
+        const isSuperAdminUser = (auth?.roles || []).includes("ROLE_SUPER_ADMIN") || (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+        const currentHotelId = isSuperAdminUser ? undefined : auth?.hotelId;
+        const currentHotelName = isSuperAdminUser ? "Toàn hệ thống Sen Việt" : (auth?.hotelName || (currentHotelId ? HOTEL_NAMES[String(currentHotelId)] : null) || "Sen Việt Đà Nẵng");
 
         const result = await sendChatMessage({
           message: text,
@@ -543,17 +544,32 @@ export default function ChatWidget() {
   };
   const branchShortName = auth?.hotelName?.replace("Sen Việt ", "") || (auth?.hotelId ? BRANCH_SHORT_NAMES[String(auth.hotelId)] : "Đà Nẵng") || "Đà Nẵng";
 
-  const quickReplies = [
-    `🛎️ Hôm nay ai trực lễ tân ${branchShortName}?`,
-    `🏨 Hôm nay CN ${branchShortName} còn phòng trống không?`,
-    "📊 Báo cáo doanh thu & công suất phòng",
-    "📋 Danh sách khách check-in & phòng chờ dọn",
-    "⭐ Phân tích đánh giá của khách hàng",
-    "🤖 Xếp lịch ca trực tuần mới bằng AI",
-  ];
+  const isSuperAdmin = (auth?.roles || []).includes("ROLE_SUPER_ADMIN") || (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+  const quickReplies = isSuperAdmin
+    ? [
+        "📊 Báo cáo doanh thu & công suất toàn hệ thống",
+        "🏨 So sánh phòng trống các chi nhánh hôm nay",
+        "🛎️ Danh sách ca trực lễ tân toàn chuỗi hôm nay",
+        "📋 Tổng hợp booking & khách lưu trú toàn hệ thống",
+        "⭐ Phân tích đánh giá khách hàng các chi nhánh",
+        "📝 Hướng dẫn quy trình chuẩn SOP hệ thống",
+      ]
+    : [
+        `🛎️ Hôm nay ai trực lễ tân ${branchShortName}?`,
+        `🏨 Hôm nay CN ${branchShortName} còn phòng trống không?`,
+        "📊 Báo cáo doanh thu & công suất phòng",
+        "📋 Danh sách khách check-in & phòng chờ dọn",
+        "⭐ Phân tích đánh giá của khách hàng",
+        "🤖 Xếp lịch ca trực tuần mới bằng AI",
+      ];
 
-  const [activeTab, setActiveTab] = useState<"ai" | "customer">("customer");
-  const isSuperAdmin = (auth?.roles || []).includes("ROLE_SUPER_ADMIN");
+  const [activeTab, setActiveTab] = useState<"ai" | "customer">(isSuperAdmin ? "ai" : "customer");
+
+  useEffect(() => {
+    if (isSuperAdmin && activeTab !== "ai") {
+      setActiveTab("ai");
+    }
+  }, [isSuperAdmin, activeTab]);
   const staffHotelId = auth?.hotelId;
   const staffStorageKey = `senviet_staff_customer_sessions_${staffHotelId || (isSuperAdmin ? "all" : "default")}`;
 
@@ -597,11 +613,12 @@ export default function ChatWidget() {
         else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
       }
 
-      // Chỉ nhân viên thuộc đúng chi nhánh (hoặc Super Admin) mới tiếp nhận tin nhắn này
-      if (!isSuperAdmin && staffHotelId) {
-        if (resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
-          return;
-        }
+      // Chỉ nhân viên thuộc đúng chi nhánh mới tiếp nhận tin nhắn này (Super Admin không nhận chat chi nhánh)
+      if (isSuperAdmin || !staffHotelId) {
+        return;
+      }
+      if (resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
+        return;
       }
 
       const msgId = String(payload.msgId || `${cId}_${time}_${msg}`);
@@ -723,7 +740,10 @@ export default function ChatWidget() {
         else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
       }
 
-      if (!isSuperAdmin && staffHotelId && resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
+      if (isSuperAdmin || !staffHotelId) {
+        return;
+      }
+      if (resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
         return;
       }
 
@@ -772,8 +792,9 @@ export default function ChatWidget() {
   // Tự động tải tất cả phiên chat và lịch sử từ PostgreSQL vào giao diện Nhân viên
   useEffect(() => {
     const fetchSessionsFromDb = async () => {
+      if (isSuperAdmin || !staffHotelId) return;
       try {
-        const hotelQuery = !isSuperAdmin && staffHotelId ? `?hotelId=${staffHotelId}` : "";
+        const hotelQuery = `?hotelId=${staffHotelId}`;
         const res = await fetch(`/live-chat/sessions${hotelQuery}`);
         if (!res.ok) return;
         const data = await res.json();
@@ -992,7 +1013,7 @@ export default function ChatWidget() {
                 <div className="text-base font-semibold leading-tight flex items-center gap-2">
                   <span>{activeTab === "ai" ? "Trợ lý AI Quản trị" : "Tư vấn Khách hàng (Live)"}</span>
                   <span className="rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
-                    {auth?.hotelName || "Chi nhánh Sen Việt"}
+                    {isSuperAdmin ? "Toàn hệ thống Sen Việt" : (auth?.hotelName || "Chi nhánh Sen Việt")}
                   </span>
                 </div>
                 <div className="text-[11px] text-blue-100/80">
@@ -1041,6 +1062,7 @@ export default function ChatWidget() {
               <Bot className="h-4 w-4" />
               <span>Trợ lý AI Quản trị</span>
             </button>
+            {!isSuperAdmin && (
             <button
               type="button"
               onClick={() => {
@@ -1067,6 +1089,7 @@ export default function ChatWidget() {
                 </span>
               )}
             </button>
+            )}
           </div>
 
           {activeTab === "ai" && (
