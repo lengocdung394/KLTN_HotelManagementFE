@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, Check, LoaderCircle, LockKeyhole, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, ChevronRight, LoaderCircle, LockKeyhole, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { localizedText } from "../i18n";
 import {
   useGetSuperAdminRolePermissionsQuery,
@@ -24,6 +24,7 @@ const categoryOf = (category?: string) =>
 export default function PermissionsWorkspace() {
   const [search, setSearch] = useState("");
   const [selectedRoleCode, setSelectedRoleCode] = useState("");
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set());
   const {
     data: roles = [],
     isLoading: isRolesLoading,
@@ -42,7 +43,8 @@ export default function PermissionsWorkspace() {
   const isError = isRolesError || isPermissionsError;
   const error = isRolesError ? rolesError : permissionsError;
 
-  const selectedRole = roles.find((role) => role.code === selectedRoleCode) ?? roles[0];
+  const branchRoles = roles.filter((role) => role.code.trim().toLocaleUpperCase() !== "ROLE_SUPER_ADMIN");
+  const selectedRole = branchRoles.find((role) => role.code === selectedRoleCode) ?? branchRoles[0];
   const permissionCategories = useMemo(() => {
     if (!selectedRole) return [];
     const query = search.trim().toLocaleLowerCase();
@@ -101,7 +103,7 @@ export default function PermissionsWorkspace() {
       {!isLoading && !isError && roles.length > 0 && (
         <div className="border-b border-slate-100 bg-slate-50/60 px-4 pt-3">
           <div className="flex flex-wrap gap-2" role="tablist" aria-label={localizedText("Vai trò", "Roles")}>
-            {roles.map((role) => {
+            {branchRoles.map((role) => {
               const isSelected = role.code === selectedRole?.code;
               return (
                 <button
@@ -177,24 +179,47 @@ export default function PermissionsWorkspace() {
                 </div>
               ) : (
                 <div className="mt-4 space-y-4">
-                  {permissionCategories.map(({ category, permissions }) => (
-                    <section key={category} aria-label={category}>
-                      <h5 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                        {category}
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                          {permissions.length}
-                        </span>
-                      </h5>
-                      <div className="flex flex-wrap gap-2">
-                        {permissions.map((permission) => (
-                          <span key={permission.code} title={permission.description || permission.code} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-800">
-                            <Check size={13} />
-                            <span>{permission.name}</span>
+                  {permissionCategories.map(({ category, permissions }, index) => {
+                    const categoryKey = `${selectedRole.code}:${category}`;
+                    const isExpanded = expandedCategories.has(categoryKey);
+                    const contentId = `permission-category-${selectedRole.code}-${index}`;
+                    return (
+                    <section key={category} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        aria-controls={contentId}
+                        onClick={() => setExpandedCategories((current) => {
+                          const next = new Set(current);
+                          if (next.has(categoryKey)) next.delete(categoryKey);
+                          else next.add(categoryKey);
+                          return next;
+                        })}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+                      >
+                        <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-700">
+                          {category}
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                            {permissions.length}
                           </span>
-                        ))}
-                      </div>
+                        </span>
+                        {isExpanded
+                          ? <ChevronDown size={16} className="shrink-0 text-slate-500" />
+                          : <ChevronRight size={16} className="shrink-0 text-slate-500" />}
+                      </button>
+                      {isExpanded && (
+                        <div id={contentId} className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">
+                          {permissions.map((permission) => (
+                            <span key={permission.code} title={permission.description || permission.code} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-800">
+                              <Check size={13} />
+                              <span>{permission.name}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </section>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
           </article>
