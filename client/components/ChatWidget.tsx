@@ -477,8 +477,17 @@ export default function ChatWidget() {
       ].slice(-10);
 
       try {
+        const HOTEL_NAMES: Record<string, string> = {
+          "1": "Sen Việt Sài Gòn",
+          "2": "Sen Việt Hà Nội",
+          "3": "Sen Việt Đà Nẵng",
+          "4": "Sen Việt Nha Trang",
+          "5": "Sen Việt Đà Lạt",
+          "6": "Sen Việt Gò Công",
+          "7": "Sen Việt An Nhơn",
+        };
         const currentHotelId = auth?.hotelId;
-        const currentHotelName = auth?.hotelName || (String(currentHotelId) === "3" ? "Sen Việt Đà Nẵng" : String(currentHotelId) === "2" ? "Sen Việt Hà Nội" : String(currentHotelId) === "1" ? "Sen Việt Sài Gòn" : "Sen Việt Đà Nẵng");
+        const currentHotelName = auth?.hotelName || (currentHotelId ? HOTEL_NAMES[String(currentHotelId)] : null) || "Sen Việt Đà Nẵng";
 
         const result = await sendChatMessage({
           message: text,
@@ -523,7 +532,16 @@ export default function ChatWidget() {
     [isTyping, sendChatMessage, sessionKey]
   );
 
-  const branchShortName = auth?.hotelName?.replace("Sen Việt ", "") || (String(auth?.hotelId) === "3" ? "Đà Nẵng" : String(auth?.hotelId) === "2" ? "Hà Nội" : String(auth?.hotelId) === "1" ? "Sài Gòn" : "Đà Nẵng");
+  const BRANCH_SHORT_NAMES: Record<string, string> = {
+    "1": "Sài Gòn",
+    "2": "Hà Nội",
+    "3": "Đà Nẵng",
+    "4": "Nha Trang",
+    "5": "Đà Lạt",
+    "6": "Gò Công",
+    "7": "An Nhơn",
+  };
+  const branchShortName = auth?.hotelName?.replace("Sen Việt ", "") || (auth?.hotelId ? BRANCH_SHORT_NAMES[String(auth.hotelId)] : "Đà Nẵng") || "Đà Nẵng";
 
   const quickReplies = [
     `🛎️ Hôm nay ai trực lễ tân ${branchShortName}?`,
@@ -567,9 +585,23 @@ export default function ChatWidget() {
       const msg = payload.message;
       const time = payload.timestamp || new Date().toISOString();
 
+      let resolvedHId = hId;
+      if (!resolvedHId && bName) {
+        const lower = bName.toLowerCase();
+        if (lower.includes("sài gòn") || lower.includes("sai gon")) resolvedHId = 1;
+        else if (lower.includes("hà nội") || lower.includes("ha noi")) resolvedHId = 2;
+        else if (lower.includes("đà nẵng") || lower.includes("da nang")) resolvedHId = 3;
+        else if (lower.includes("nha trang")) resolvedHId = 4;
+        else if (lower.includes("đà lạt") || lower.includes("da lat")) resolvedHId = 5;
+        else if (lower.includes("gò công") || lower.includes("go cong")) resolvedHId = 6;
+        else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
+      }
+
       // Chỉ nhân viên thuộc đúng chi nhánh (hoặc Super Admin) mới tiếp nhận tin nhắn này
-      if (!isSuperAdmin && staffHotelId && hId && String(staffHotelId) !== String(hId)) {
-        return;
+      if (!isSuperAdmin && staffHotelId) {
+        if (resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
+          return;
+        }
       }
 
       const msgId = String(payload.msgId || `${cId}_${time}_${msg}`);
@@ -679,7 +711,19 @@ export default function ChatWidget() {
       const cId = String(payload.customerId || "");
       if (!cId) return;
 
-      if (!isSuperAdmin && staffHotelId && payload.hotelId && String(staffHotelId) !== String(payload.hotelId)) {
+      let resolvedHId = payload.hotelId;
+      if (!resolvedHId && payload.branchName) {
+        const lower = payload.branchName.toLowerCase();
+        if (lower.includes("sài gòn") || lower.includes("sai gon")) resolvedHId = 1;
+        else if (lower.includes("hà nội") || lower.includes("ha noi")) resolvedHId = 2;
+        else if (lower.includes("đà nẵng") || lower.includes("da nang")) resolvedHId = 3;
+        else if (lower.includes("nha trang")) resolvedHId = 4;
+        else if (lower.includes("đà lạt") || lower.includes("da lat")) resolvedHId = 5;
+        else if (lower.includes("gò công") || lower.includes("go cong")) resolvedHId = 6;
+        else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
+      }
+
+      if (!isSuperAdmin && staffHotelId && resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
         return;
       }
 
@@ -723,7 +767,7 @@ export default function ChatWidget() {
       window.removeEventListener("customer_staff_chat_message", handleCustomerMessage);
       window.removeEventListener("staff_customer_chat_reply", handleStaffReplyBroadcast);
     };
-  }, [activeTab, selectedCustomerId, open]);
+  }, [activeTab, selectedCustomerId, open, isSuperAdmin, staffHotelId, staffStorageKey]);
 
   // Tự động tải tất cả phiên chat và lịch sử từ PostgreSQL vào giao diện Nhân viên
   useEffect(() => {
@@ -833,7 +877,16 @@ export default function ChatWidget() {
 
     const currentSession = customerSessions[selectedCustomerId];
     const staffHotelId = auth?.hotelId;
-    const staffHotelName = auth?.hotelName || (String(staffHotelId) === "3" ? "Sen Việt Đà Nẵng" : String(staffHotelId) === "2" ? "Sen Việt Hà Nội" : String(staffHotelId) === "1" ? "Sen Việt Sài Gòn" : null);
+    const HOTEL_NAMES_MAP: Record<string, string> = {
+      "1": "Sen Việt Sài Gòn",
+      "2": "Sen Việt Hà Nội",
+      "3": "Sen Việt Đà Nẵng",
+      "4": "Sen Việt Nha Trang",
+      "5": "Sen Việt Đà Lạt",
+      "6": "Sen Việt Gò Công",
+      "7": "Sen Việt An Nhơn",
+    };
+    const staffHotelName = auth?.hotelName || (staffHotelId ? HOTEL_NAMES_MAP[String(staffHotelId)] : null);
     const staffName = auth?.fullName || (staffHotelName ? `Lễ tân (${staffHotelName})` : "Lễ tân Sen Việt");
     const staffId = auth?.employeeId ? String(auth.employeeId) : "staff_1";
     const hotelId = staffHotelId || currentSession?.hotelId || null;
