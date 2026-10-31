@@ -10,6 +10,8 @@ export interface ChatRequest {
   message: string;
   sessionId: string;
   history: ChatMessage[];
+  hotelId?: number | string | null;
+  hotelName?: string | null;
 }
 
 export interface ChatResponse {

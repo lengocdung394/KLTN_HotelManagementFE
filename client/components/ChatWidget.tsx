@@ -477,10 +477,15 @@ export default function ChatWidget() {
       ].slice(-10);
 
       try {
+        const currentHotelId = auth?.hotelId;
+        const currentHotelName = auth?.hotelName || (String(currentHotelId) === "3" ? "Sen Việt Đà Nẵng" : String(currentHotelId) === "2" ? "Sen Việt Hà Nội" : String(currentHotelId) === "1" ? "Sen Việt Sài Gòn" : "Sen Việt Đà Nẵng");
+
         const result = await sendChatMessage({
           message: text,
           sessionId: sessionIdRef.current,
           history: historyRef.current.slice(0, -1),
+          hotelId: currentHotelId,
+          hotelName: currentHotelName,
         });
 
         const reply = result.result?.reply || "Dạ em đã nhận được yêu cầu của Anh/Chị.";
@@ -518,14 +523,14 @@ export default function ChatWidget() {
     [isTyping, sendChatMessage, sessionKey]
   );
 
+  const branchShortName = auth?.hotelName?.replace("Sen Việt ", "") || (String(auth?.hotelId) === "3" ? "Đà Nẵng" : String(auth?.hotelId) === "2" ? "Hà Nội" : String(auth?.hotelId) === "1" ? "Sài Gòn" : "Đà Nẵng");
+
   const quickReplies = [
-    "🛎️ Hôm nay ai trực lễ tân Sài Gòn?",
-    "🏨 Hôm nay CN Sài Gòn còn phòng trống không?",
+    `🛎️ Hôm nay ai trực lễ tân ${branchShortName}?`,
+    `🏨 Hôm nay CN ${branchShortName} còn phòng trống không?`,
     "📊 Báo cáo doanh thu & công suất phòng",
     "📋 Danh sách khách check-in & phòng chờ dọn",
-    "🔍 Kiểm tra đặt phòng BKG_601",
     "⭐ Phân tích đánh giá của khách hàng",
-    "📝 Quy trình xử lý khách đòi hoàn tiền (SOP)",
     "🤖 Xếp lịch ca trực tuần mới bằng AI",
   ];
 
@@ -778,6 +783,9 @@ export default function ChatWidget() {
                 merged[cId].customerPhone = s.customerPhone || merged[cId].customerPhone;
               }
             });
+            try {
+              localStorage.setItem(staffStorageKey, JSON.stringify(merged));
+            } catch {}
             return merged;
           });
         }
@@ -786,7 +794,22 @@ export default function ChatWidget() {
       }
     };
     fetchSessionsFromDb();
-  }, [auth?.hotelId]);
+  }, [auth?.hotelId, staffStorageKey, isSuperAdmin, staffHotelId]);
+
+  // Đồng bộ lại tin nhắn từ local storage khi staffStorageKey (chi nhánh) thay đổi
+  useEffect(() => {
+    if (staffStorageKey) {
+      try {
+        const saved = localStorage.getItem(staffStorageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+            setCustomerSessions((prev) => ({ ...parsed, ...prev }));
+          }
+        }
+      } catch {}
+    }
+  }, [staffStorageKey]);
 
   useEffect(() => {
     const keys = Object.keys(customerSessions);
