@@ -646,9 +646,9 @@ export default function BookingListWorkspace() {
       }
 
       if (!qrUrl) {
-        const bankId = "BIDV";
-        const accountNo = "V3CAS6811679267";
-        const accountName = "NGUYEN LE ANH PHONG";
+        const bankId = "MB";
+        const accountNo = "6172155164659";
+        const accountName = "HUYNH VAN HIEU";
         const addInfo = encodeURIComponent(`CSNH0USH216 Thanh toan HD${id}`);
         qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${addInfo}&accountName=${encodeURIComponent(accountName)}`;
       }
