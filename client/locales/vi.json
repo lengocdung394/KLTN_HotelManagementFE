@@ -123,7 +123,7 @@
   },
   "customer": {
     "listTitle": "Danh sách khách hàng",
-    "listDescription": "Lưu trữ thông tin, lịch sử lưu trú và chăm sóc khách quay lại.",
+    "listDescription": "Chỉ hiển thị khách đã đặt phòng tại bất kỳ chi nhánh nào; thống kê tính theo chi nhánh hiện tại.",
     "add": "Thêm khách hàng",
     "total": "Tổng khách hàng",
     "loyal": "Khách thân thiết",
@@ -155,6 +155,36 @@
     "notUpdated": "Chưa cập nhật",
     "noStay": "Chưa lưu trú",
     "noNote": "Chưa có ghi chú.",
+    "bookingHistory": "Danh sách booking tại khách sạn này",
+    "viewBookings": "Xem booking",
+    "hideBookings": "Ẩn booking",
+    "bookingsLoading": "Đang tải booking...",
+    "bookingsLoadError": "Không tải được danh sách booking. Vui lòng thử lại.",
+    "noBookings": "Khách hàng chưa có booking nào tại khách sạn này.",
+    "bookingCode": "Mã booking",
+    "bookingAmount": "Tổng tiền",
+    "roomCharge": "Tiền phòng",
+    "serviceCharge": "Tiền dịch vụ",
+    "appliedPromotion": "Mã khuyến mãi",
+    "promotionDiscount": "Được giảm",
+    "actualCheckIn": "Check-in thực tế",
+    "actualCheckOut": "Check-out thực tế",
+    "notCheckedIn": "Chưa nhận phòng",
+    "notCheckedOut": "Chưa trả phòng",
+    "room": "Phòng",
+    "bookingStatuses": {
+      "pending": "Đang chờ",
+      "confirmed": "Đã xác nhận",
+      "inHouse": "Đang lưu trú",
+      "checkedIn": "Đã nhận phòng",
+      "checkedOut": "Đã trả phòng",
+      "paid": "Đã thanh toán",
+      "cancelled": "Đã hủy",
+      "cancelledByCustomer": "Khách hàng hủy",
+      "cancelledByStaff": "Nhân viên hủy",
+      "cancelledPaymentTimeout": "Hết hạn thanh toán",
+      "completed": "Hoàn thành"
+    },
     "tiers": { "loyal": "Thân thiết", "potential": "Tiềm năng", "new": "Mới" }
   },
   "pages": {
@@ -245,11 +275,22 @@
     ,"estimatedTotal": "Tạm tính"
     ,"selectDateToAddRoom": "Chọn ngày trên lịch để thêm phòng khác."
     ,"guestSearchLoading": "Đang tìm..."
+    ,"customerListLoading": "Đang tải danh sách khách hàng..."
+    ,"customerListError": "Không tải được danh sách khách hàng. Vui lòng thử lại."
+    ,"customerListEmpty": "Chưa có khách hàng nào từng đặt phòng."
+    ,"customerListNoMatches": "Không tìm thấy khách hàng phù hợp."
+    ,"registeredCustomer": "Đã đăng ký"
+    ,"walkInCustomer": "Khách vãng lai"
     ,"emailConfirmation": "Email nhận thông báo booking (không bắt buộc)"
     ,"emailConfirmationHelp": "Nếu nhập email, khách sẽ nhận được email xác nhận booking. Có thể để trống."
     ,"createCustomer": "Tạo khách hàng"
     ,"creatingCustomer": "Đang tạo khách hàng..."
     ,"customerCreated": "Đã có mã khách hàng"
+    ,"existingCustomerSelectedTitle": "Khách hàng đã tồn tại"
+    ,"existingCustomerSelectedDescription": "Đã chọn hồ sơ khách hàng {{name}} cho đặt phòng này."
+    ,"customerCreateFailedTitle": "Không thể tạo khách hàng"
+    ,"customerIdentityConflict": "Số điện thoại và CCCD đang thuộc về hai hồ sơ khác nhau. Thông tin vừa nhập đã được xóa; vui lòng tìm và chọn đúng hồ sơ khách hàng."
+    ,"customerProfileRequired": "Vui lòng tạo khách hàng hoặc chọn hồ sơ khách hàng đã lưu trước khi tiếp tục."
     ,"guestStayingInRoom": "Khách lưu trú phòng {{room}}"
     ,"roomGuestPolicy": "Quy định khách và phụ thu"
     ,"standardCapacity": "Tiêu chuẩn:"
@@ -836,6 +877,14 @@
     "pendingCount": "{{count}} dịch vụ chờ",
     "collapse": "Thu gọn",
     "actions": "Thao tác",
+    "serviceName": "Tên dịch vụ",
+    "quantity": "Số lượng",
+    "confirmQuantity": "Số lượng xác nhận",
+    "remainingQuantity": "Còn {{count}}",
+    "roomDetails": "Phòng / thời gian",
+    "booking": "Booking",
+    "usedAt": "Thời gian sử dụng",
+    "confirmedByLabel": "Người xác nhận",
     "bookedAt": "Đặt:",
     "room": "Phòng {{room}}",
     "checkIn": "Nhận phòng:",

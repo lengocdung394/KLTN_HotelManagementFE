@@ -123,7 +123,7 @@
   },
   "customer": {
     "listTitle": "Customer list",
-    "listDescription": "Store profiles, stay history, and returning guest care.",
+    "listDescription": "Shows guests with bookings at any branch; statistics are scoped to the current branch.",
     "add": "Add customer",
     "total": "Total customers",
     "loyal": "Loyal customers",
@@ -155,6 +155,36 @@
     "notUpdated": "Not updated",
     "noStay": "No stays yet",
     "noNote": "No notes.",
+    "bookingHistory": "Bookings at this hotel",
+    "viewBookings": "View bookings",
+    "hideBookings": "Hide bookings",
+    "bookingsLoading": "Loading bookings...",
+    "bookingsLoadError": "Could not load bookings. Please try again.",
+    "noBookings": "This customer has no bookings at this hotel.",
+    "bookingCode": "Booking ID",
+    "bookingAmount": "Total",
+    "roomCharge": "Room charges",
+    "serviceCharge": "Service charges",
+    "appliedPromotion": "Promotion code",
+    "promotionDiscount": "Discount",
+    "actualCheckIn": "Actual check-in",
+    "actualCheckOut": "Actual check-out",
+    "notCheckedIn": "Not checked in",
+    "notCheckedOut": "Not checked out",
+    "room": "Room",
+    "bookingStatuses": {
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "inHouse": "In house",
+      "checkedIn": "Checked in",
+      "checkedOut": "Checked out",
+      "paid": "Paid",
+      "cancelled": "Cancelled",
+      "cancelledByCustomer": "Cancelled by customer",
+      "cancelledByStaff": "Cancelled by staff",
+      "cancelledPaymentTimeout": "Payment timed out",
+      "completed": "Completed"
+    },
     "tiers": { "loyal": "Loyal", "potential": "Potential", "new": "New" }
   },
   "pages": {
@@ -245,11 +275,22 @@
     ,"estimatedTotal": "Estimated total"
     ,"selectDateToAddRoom": "Select dates on the calendar to add another room."
     ,"guestSearchLoading": "Searching..."
+    ,"customerListLoading": "Loading customers..."
+    ,"customerListError": "Could not load customers. Please try again."
+    ,"customerListEmpty": "No customers with previous bookings were found."
+    ,"customerListNoMatches": "No matching customers found."
+    ,"registeredCustomer": "Registered"
+    ,"walkInCustomer": "Walk-in"
     ,"emailConfirmation": "Booking notification email (optional)"
     ,"emailConfirmationHelp": "If provided, the guest will receive a booking confirmation email. This can be left blank."
     ,"createCustomer": "Create customer"
     ,"creatingCustomer": "Creating customer..."
     ,"customerCreated": "Customer profile created"
+    ,"existingCustomerSelectedTitle": "Customer already exists"
+    ,"existingCustomerSelectedDescription": "The existing profile for {{name}} has been selected for this booking."
+    ,"customerCreateFailedTitle": "Could not create customer"
+    ,"customerIdentityConflict": "The phone number and citizen ID belong to different customer profiles. The entered details were cleared; search for and select the correct customer profile."
+    ,"customerProfileRequired": "Create a customer or select a saved customer profile before continuing."
     ,"guestStayingInRoom": "Guest staying in room {{room}}"
     ,"roomGuestPolicy": "Guest policy and surcharges"
     ,"standardCapacity": "Standard capacity:"
@@ -836,6 +877,14 @@
     "pendingCount": "{{count}} pending services",
     "collapse": "Collapse",
     "actions": "Actions",
+    "serviceName": "Service",
+    "quantity": "Quantity",
+    "confirmQuantity": "Quantity to confirm",
+    "remainingQuantity": "{{count}} remaining",
+    "roomDetails": "Room / time",
+    "booking": "Booking",
+    "usedAt": "Used at",
+    "confirmedByLabel": "Confirmed by",
     "bookedAt": "Booked:",
     "room": "Room {{room}}",
     "checkIn": "Check-in:",
