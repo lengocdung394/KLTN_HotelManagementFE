@@ -62,13 +62,17 @@ const serviceDetailIdOf = (service: BookingDetail) => String(
   ?? service.serviceId
   ?? "",
 );
+const booleanValueOf = (value: unknown) =>
+  value === true || String(value).trim().toLowerCase() === "true";
+const usedQuantityOf = (service: BookingDetail, quantity: number) => {
+  const rawUsedQuantity = service.usedQuantity ?? service.quantityUsed;
+  const parsedUsedQuantity = Number(rawUsedQuantity ?? 0);
+  const usedQuantity = Number.isFinite(parsedUsedQuantity) ? parsedUsedQuantity : 0;
+  return Math.min(quantity, Math.max(0, usedQuantity === 0 && booleanValueOf(service.used) ? quantity : usedQuantity));
+};
 const canCancelUnusedServiceQuantity = (service: BookingDetail) => {
   const quantity = Number(service.quantity ?? service.amount ?? 0);
-  const hasUsedQuantity = service.usedQuantity !== undefined && service.usedQuantity !== null;
-  const usedQuantity = hasUsedQuantity
-    ? Number(service.usedQuantity)
-    : service.used === true ? quantity : 0;
-  return quantity > usedQuantity && !(Boolean(service.used) && usedQuantity === 0);
+  return quantity > usedQuantityOf(service, quantity);
 };
 
 const servicesOf = (detail: BookingDetail) => {
@@ -189,20 +193,22 @@ export default function BookingEditWorkspace() {
       const price = rawPrice == null ? undefined : Number(rawPrice);
       const name = String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? "");
 
-      const isUsed = Boolean(service.used) || Number(service.usedQuantity ?? 0) > 0;
-      const isPaid = Boolean(service.isPaid ?? service.paid);
-      if (isUsed || isPaid) return;
+      const usedQuantity = usedQuantityOf(service, qty);
+      const isUsed = usedQuantity > 0;
+      const isPaid = booleanValueOf(service.isPaid ?? service.paid);
       selections.push({
         serviceId: sId,
         quantity: qty,
         originalQuantity: qty,
+        usedQuantity,
         detailId: dId,
         name,
         price,
         usedAt: service.usedAt == null ? undefined : String(service.usedAt),
         detailIds: dId ? [dId] : [],
-        isUsed: false,
-        isPaid: false,
+        isUsed,
+        isPaid,
+        isLocked: !dId,
         isExisting: true,
         applyToRoom: false,
       });

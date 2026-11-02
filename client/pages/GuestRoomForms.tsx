@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, UserRound } from "lucide-react";
+import { RefreshCw, Search, UserRound } from "lucide-react";
 import { emitCustomerCreated } from "../lib/socket";
 import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazyGetCustomerByIdQuery, type CustomerResponse } from "../services/customerApi";
 import { useAppSelector } from "../store/hooks";
@@ -87,9 +87,18 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerListOpen, setCustomerListOpen] = useState(false);
   const customerListCloseTimeout = useRef<number | null>(null);
+  const customerSearchInputRef = useRef<HTMLInputElement>(null);
+  const [focusCustomerSearch, setFocusCustomerSearch] = useState(false);
   const [localRoomGuests, setLocalRoomGuests] = useState<Record<string, RoomGuestCounts>>({});
   const [createWalkInCustomer, { isLoading: isCreatingCustomer }] = useCreateWalkInCustomerMutation();
   const guestFieldsLocked = customerLocked || Boolean(guest.customerId);
+  useEffect(() => {
+    if (focusCustomerSearch && !guestFieldsLocked) {
+      customerSearchInputRef.current?.focus();
+      setCustomerListOpen(true);
+      setFocusCustomerSearch(false);
+    }
+  }, [focusCustomerSearch, guestFieldsLocked]);
   const cancelCustomerListClose = () => {
     if (customerListCloseTimeout.current !== null) {
       window.clearTimeout(customerListCloseTimeout.current);
@@ -138,6 +147,14 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, email, emailOnFile: Boolean(email), customerId: customer.id });
     setCustomerQuery("");
     setCustomerListOpen(false);
+  };
+  const resetCustomerSelection = () => {
+    if (customerLocked || !guest.customerId) return;
+    cancelCustomerListClose();
+    onGuestChange({ name: "", phone: "", identityNumber: "", email: "", emailOnFile: false, customerId: undefined });
+    setCustomerQuery("");
+    setCustomerListOpen(true);
+    setFocusCustomerSearch(true);
   };
   const findCustomerByCode = async () => {
     if (customerLocked) return;
@@ -247,11 +264,25 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
           }, 180);
         }}
       >
-        <label className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer")}</label>
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor="booking-customer-search" className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer")}</label>
+          {!customerLocked && guest.customerId && (
+            <button
+              type="button"
+              onClick={resetCustomerSelection}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-2.5 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+            >
+              <RefreshCw size={13} />
+              {t("booking.changeCustomer")}
+            </button>
+          )}
+        </div>
         {customerLocked && <p className="mt-1 text-xs text-slate-500">{t("booking.customerCreated")}</p>}
         <div className="relative mt-1.5">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
+            id="booking-customer-search"
+            ref={customerSearchInputRef}
             value={customerQuery}
             disabled={customerLocked}
             onFocus={() => setCustomerListOpen(true)}

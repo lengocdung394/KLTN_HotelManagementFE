@@ -62,7 +62,7 @@ export default function CustomerWorkspace() {
   const [identityCheck, setIdentityCheck] = useState("");
   const [identityError, setIdentityError] = useState(false);
   const [form, setForm] = useState<Form>(blankForm);
-  const customers = apiCustomers;
+  const customers = apiCustomers.filter((customer) => customer.visits > 0);
   const customerBookings = useMemo(() => {
     if (!selected) return [];
     return hotelBookings

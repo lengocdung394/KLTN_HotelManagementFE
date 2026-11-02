@@ -86,6 +86,14 @@ const servicesOf = (detail: Record<string, unknown>) => {
   };
   return serviceValues.flatMap(collect).filter((service) => !isCancelledService(service));
 };
+const booleanValueOf = (value: unknown) =>
+  value === true || String(value).trim().toLowerCase() === "true";
+const usedQuantityOf = (service: Record<string, unknown>, quantity: number) => {
+  const parsedUsedQuantity = Number(service.usedQuantity ?? service.quantityUsed ?? 0);
+  const usedQuantity = Number.isFinite(parsedUsedQuantity) ? parsedUsedQuantity : 0;
+  const consumedQuantity = usedQuantity === 0 && booleanValueOf(service.used) ? quantity : usedQuantity;
+  return Math.min(quantity, Math.max(0, consumedQuantity));
+};
 
 const allFloorsLabel = "Tất cả các tầng";
 const allBuildingsLabel = "Tất cả các tòa";
@@ -1242,15 +1250,21 @@ export default function BookingWorkspace() {
           ? service.unitPrice === undefined || service.unitPrice === null ? undefined : Number(service.unitPrice)
           : Number(service.price);
         const dId = serviceDetailIdOf(service);
+        const usedQuantity = usedQuantityOf(service, qty);
+        const isPaid = booleanValueOf(service.isPaid ?? service.paid);
 
         selections.push({
           serviceId: sId,
           name: String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? ""),
           quantity: qty,
           originalQuantity: qty,
+          usedQuantity,
           detailId: dId,
           price,
           usedAt: service.usedAt === undefined && service.usedAtTime === undefined ? undefined : String(service.usedAt ?? service.usedAtTime),
+          isUsed: usedQuantity > 0,
+          isPaid,
+          isLocked: !dId,
           isExisting: true,
           applyToRoom: false,
         });
@@ -1876,7 +1890,14 @@ export default function BookingWorkspace() {
         }
 
         const currentSelections = getRoomServiceSelections(room);
-        const origSelections: { serviceId: string; originalQuantity: number; detailId: string }[] = [];
+        const origSelections: {
+          serviceId: string;
+          originalQuantity: number;
+          usedQuantity: number;
+          isPaid: boolean;
+          minimumQuantity: number;
+          detailId: string;
+        }[] = [];
         (servicesOf(initialDetail) ?? []).forEach((srv) => {
           const nestedService = srv.service && typeof srv.service === "object" ? srv.service as Record<string, unknown> : undefined;
           const rawServiceName = String(srv.name ?? srv.serviceName ?? srv.nameService ?? nestedService?.name ?? nestedService?.serviceName ?? "").trim().toLowerCase();
@@ -1886,7 +1907,16 @@ export default function BookingWorkspace() {
           const dId = serviceDetailIdOf(srv);
           const qty = Number(srv.quantity ?? srv.serviceQuantity ?? srv.quantityService ?? srv.amount ?? 0);
           if (!dId) return;
-          origSelections.push({ serviceId: sId, originalQuantity: qty, detailId: dId });
+          const usedQuantity = usedQuantityOf(srv, qty);
+          const isPaid = booleanValueOf(srv.isPaid ?? srv.paid);
+          origSelections.push({
+            serviceId: sId,
+            originalQuantity: qty,
+            usedQuantity,
+            isPaid,
+            minimumQuantity: isPaid ? qty : usedQuantity,
+            detailId: dId,
+          });
         });
 
         const additionsForRoom: { serviceId: string; quantity: number }[] = [];
@@ -1894,16 +1924,20 @@ export default function BookingWorkspace() {
 
         currentSelections.forEach((current) => {
           const serviceId = current.serviceId.trim();
-          const currentQuantity = Math.max(0, Number(current.quantity) || 0);
-          if (!serviceId || currentQuantity === 0) return;
+          if (!serviceId) return;
 
           if (!current.isExisting) {
+            const currentQuantity = Math.max(0, Number(current.quantity) || 0);
+            if (currentQuantity === 0) return;
             additionsForRoom.push({ serviceId, quantity: currentQuantity });
             return;
           }
 
           const original = origSelections.find((service) => service.detailId === current.detailId);
-          if (!original || currentQuantity >= original.originalQuantity) return;
+          if (!original) return;
+          const requestedQuantity = Math.max(0, Number(current.quantity) || 0);
+          const currentQuantity = Math.max(original.minimumQuantity, requestedQuantity);
+          if (currentQuantity >= original.originalQuantity) return;
           quantityUpdatesForRoom.push({
             serviceId,
             bookingServiceDetailId: original.detailId,
@@ -1916,12 +1950,15 @@ export default function BookingWorkspace() {
             selection.isExisting && selection.detailId === original.detailId,
           );
           if (current) {
-            const currentQuantity = Math.max(0, Number(current.quantity) || 0);
-            if (currentQuantity === 0) {
+            const currentQuantity = Math.max(
+              original.minimumQuantity,
+              Math.max(0, Number(current.quantity) || 0),
+            );
+            if (currentQuantity < original.originalQuantity) {
               quantityUpdatesForRoom.push({
                 serviceId: original.serviceId,
                 bookingServiceDetailId: original.detailId,
-                quantity: 0,
+                quantity: currentQuantity,
               });
             }
             return;
@@ -1930,7 +1967,7 @@ export default function BookingWorkspace() {
           quantityUpdatesForRoom.push({
             serviceId: original.serviceId,
             bookingServiceDetailId: original.detailId,
-            quantity: 0,
+            quantity: original.minimumQuantity,
           });
         });
 

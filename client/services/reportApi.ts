@@ -48,6 +48,7 @@ export type HotelReport = {
   cashRefunded?: number;
   cashChangeReturned?: number;
   netCashReceived?: number;
+  roomRevenue: number;
   serviceRevenue: number;
   serviceUsageCount: number;
   dailyServiceRevenue: DailyServiceRevenue[];

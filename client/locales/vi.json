@@ -123,7 +123,7 @@
   },
   "customer": {
     "listTitle": "Danh sách khách hàng",
-    "listDescription": "Chỉ hiển thị khách đã đặt phòng tại bất kỳ chi nhánh nào; thống kê tính theo chi nhánh hiện tại.",
+    "listDescription": "Chỉ hiển thị khách đã đặt phòng tại chi nhánh hiện tại.",
     "add": "Thêm khách hàng",
     "total": "Tổng khách hàng",
     "loyal": "Khách thân thiết",
@@ -266,6 +266,7 @@
     ,"searchRooms": "Tìm số hoặc loại phòng"
     ,"searchCustomer": "Tìm khách hàng đã lưu"
     ,"searchCustomerPlaceholder": "Tìm theo tên hoặc số điện thoại"
+    ,"changeCustomer": "Đổi khách hàng"
     ,"unavailable": "Đã đặt / không thể chọn"
     ,"dragToSelectRooms": "Kéo dọc để chọn nhiều phòng"
     ,"showFullRooms": "Hiện cả phòng đã kín"

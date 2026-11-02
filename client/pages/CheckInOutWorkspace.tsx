@@ -223,6 +223,12 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     const rawPrice = service.price ?? service.unitPrice ?? service.servicePrice ?? nestedService.price ?? 0;
     const parsedPrice = Number(rawPrice);
     const price = Number.isFinite(parsedPrice) ? parsedPrice : 0;
+    const rawUsedQuantity = service.usedQuantity ?? service.quantityUsed;
+    const parsedUsedQuantity = Number(rawUsedQuantity ?? 0);
+    const usedQuantity = Number.isFinite(parsedUsedQuantity) ? parsedUsedQuantity : 0;
+    const used = service.used === true
+      || String(service.used).toLowerCase() === "true"
+      || usedQuantity > 0;
     return [{
       serviceId,
       serviceDetailId: String(service.bookingServiceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailId ?? service.serviceDetailID ?? ""),
@@ -230,7 +236,12 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
       quantity,
       amount: price * quantity,
       usedAt: typeof service.usedAt === "string" ? service.usedAt : undefined,
-      used: service.used === true || String(service.used).toLowerCase() === "true",
+      used,
+      usedQuantity,
+      isPaid: service.isPaid === true
+        || String(service.isPaid).toLowerCase() === "true"
+        || service.paid === true
+        || String(service.paid).toLowerCase() === "true",
     }];
   });
   const rawPaymentStatus = detail.paymentStatus ?? detail.bookingPaymentStatus ?? detail.paymentStatusType;
@@ -1498,29 +1509,33 @@ export default function CheckInOutWorkspace() {
 
   const serviceSelectionsForRecord = (record: DailyRecord) => {
     const currentServices = recordServices[record.id] ?? record.services ?? [];
-    const selectionsByServiceId = new Map<string, ServiceSelection>();
-    currentServices.forEach((service) => {
+    return currentServices.flatMap((service) => {
       const serviceName = service.name.trim().toLocaleLowerCase();
       const catalogService = services.find((item) => item.name.trim().toLocaleLowerCase() === serviceName);
-      const serviceId = String(service.serviceId ?? catalogService?.id ?? "");
-      if (!serviceId) return;
+      const serviceId = String(service.serviceId ?? catalogService?.id ?? "").trim();
+      const detailId = String(service.serviceDetailId ?? "").trim();
+      const usedQuantity = Number(service.usedQuantity ?? (service.used ? service.quantity : 0));
+      if (!serviceId) return [];
+      const isPaid = service.isPaid === true;
+      const isUsed = service.used === true || usedQuantity > 0;
       const price = service.quantity > 0 ? service.amount / service.quantity : 0;
-      const existing = selectionsByServiceId.get(serviceId);
-      if (existing) {
-        existing.quantity += service.quantity;
-        existing.originalQuantity = (existing.originalQuantity ?? 0) + service.quantity;
-      } else {
-        selectionsByServiceId.set(serviceId, {
-          serviceId,
-          quantity: service.quantity,
-          originalQuantity: service.quantity,
-          isExisting: true,
-          name: service.name,
-          price,
-        });
-      }
+      return [{
+        serviceId,
+        quantity: service.quantity,
+        originalQuantity: service.quantity,
+        usedQuantity,
+        detailId,
+        detailIds: [detailId],
+        isExisting: true,
+        isUsed,
+        isPaid,
+        isLocked: isUsed || isPaid || !detailId,
+        name: service.name,
+        price,
+        usedAt: service.usedAt,
+        applyToRoom: false,
+      }];
     });
-    return [...selectionsByServiceId.values()];
   };
 
   const openServiceSelector = (record: DailyRecord) => {
@@ -1639,40 +1654,65 @@ export default function CheckInOutWorkspace() {
       const selectedForRoom = serviceModalMode === "all"
         ? serviceRoomSelections[room.id] ?? serviceAllSelections.map((selection) => ({ ...selection, quantity: room.guests }))
         : serviceRoomSelections[room.id] ?? [];
-      const currentByServiceId = new Map<string, ServiceSelection>();
+      const selectedExistingByDetailId = new Map<string, ServiceSelection>();
       selectedForRoom.forEach((selection) => {
-        const serviceId = String(selection.serviceId ?? "").trim();
-        if (!serviceId || selection.quantity <= 0) return;
-        const existing = currentByServiceId.get(serviceId);
-        if (existing) existing.quantity += selection.quantity;
-        else currentByServiceId.set(serviceId, { ...selection, serviceId });
+        if (selection.isExisting && selection.detailId) {
+          selectedExistingByDetailId.set(selection.detailId, selection);
+        }
       });
-      const originalByServiceId = new Map(originalSelections.map((selection) => [selection.serviceId, selection]));
+      const additionsByServiceId = new Map<string, ServiceSelection>();
+      selectedForRoom.filter((selection) => !selection.isExisting && selection.quantity > 0).forEach((selection) => {
+        const serviceId = String(selection.serviceId ?? "").trim();
+        if (!serviceId) return;
+        const existing = additionsByServiceId.get(serviceId);
+        additionsByServiceId.set(serviceId, existing
+          ? { ...existing, quantity: existing.quantity + selection.quantity }
+          : { ...selection, serviceId });
+      });
 
-      currentByServiceId.forEach((selection, serviceId) => {
-        const originalQuantity = originalByServiceId.get(serviceId)?.quantity ?? 0;
-        const addedQuantity = selection.quantity - originalQuantity;
-        if (addedQuantity <= 0) return;
+      originalSelections.forEach((original) => {
+        const detailId = original.detailId;
+        if (!detailId) return;
+        const currentQuantity = selectedExistingByDetailId.get(detailId)?.quantity ?? 0;
+        if (currentQuantity >= original.quantity) return;
+        const updates = quantityUpdatesByDetail.get(bookingDetailId) ?? [];
+        updates.push({
+          serviceId: original.serviceId,
+          bookingServiceDetailId: detailId,
+          quantity: currentQuantity,
+        });
+        quantityUpdatesByDetail.set(bookingDetailId, updates);
+      });
+
+      additionsByServiceId.forEach((selection, serviceId) => {
         const catalogService = services.find((service) => String(service.id) === serviceId);
         const additions = additionsByDetail.get(bookingDetailId) ?? [];
         additions.push({
           serviceId,
-          quantity: addedQuantity,
+          quantity: selection.quantity,
           name: selection.name ?? catalogService?.name,
           price: selection.price ?? catalogService?.price,
         });
         additionsByDetail.set(bookingDetailId, additions);
       });
 
-      originalByServiceId.forEach((original, serviceId) => {
-        const currentQuantity = currentByServiceId.get(serviceId)?.quantity ?? 0;
-        if (currentQuantity >= original.quantity) return;
-        const updates = quantityUpdatesByDetail.get(bookingDetailId) ?? [];
-        updates.push({ serviceId, quantity: currentQuantity });
-        quantityUpdatesByDetail.set(bookingDetailId, updates);
+      const quantitiesByDetailId = new Map<string, number>();
+      selectedExistingByDetailId.forEach((selection, detailId) => {
+        quantitiesByDetailId.set(detailId, selection.quantity);
       });
-
-      updatedServicesByRecordId[bookingDetailId] = toServiceCharges([...currentByServiceId.values()]);
+      const originalServices = recordServices[bookingDetailId] ?? originalRecord.services ?? [];
+      const updatedServices = originalServices.flatMap((service) => {
+        const detailId = String(service.serviceDetailId ?? "");
+        const quantity = quantitiesByDetailId.get(detailId);
+        if (quantity === undefined) return [service];
+        if (quantity <= 0) return [];
+        const unitPrice = service.quantity > 0 ? service.amount / service.quantity : 0;
+        return [{ ...service, quantity, amount: unitPrice * quantity }];
+      });
+      updatedServicesByRecordId[bookingDetailId] = [
+        ...updatedServices,
+        ...toServiceCharges([...additionsByServiceId.values()]),
+      ];
     });
 
     const servicesToAddForExistingRooms = [...additionsByDetail].map(([bookingDetailId, roomServices]) => ({ bookingDetailId, services: roomServices }));

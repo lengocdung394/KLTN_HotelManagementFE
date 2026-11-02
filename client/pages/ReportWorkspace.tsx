@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, CalendarDays, Tag, TrendingUp, XCircle } from "lucide-react";
+import { BarChart3, BedDouble, CalendarDays, Tag, TrendingUp, XCircle } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -290,7 +290,9 @@ export default function ReportWorkspace() {
 
           <div className="min-w-0 space-y-5">
           <section id="report-overview" data-report-section className="scroll-mt-24 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-slate-700">{localizedText("Hoạt động", "Activity")}</h3>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-blue-600">
                 <BarChart3 size={16} />
@@ -299,6 +301,66 @@ export default function ReportWorkspace() {
               <p className="mt-2 text-xl font-bold text-slate-900">{totalBookingCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
               <p className="mt-1 text-xs text-slate-500">{localizedText("Số booking được tạo trong kỳ, gồm cả booking hủy", "Bookings created during this period, including cancellations")}</p>
             </article>
+            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-rose-600">
+                <XCircle size={16} />
+                <p className="text-xs font-semibold">{localizedText("Booking đã hủy", "Cancelled bookings")}</p>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900">{cancelledBookingCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Trong khoảng ngày đã chọn", "During the selected date range")}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-violet-600">
+                <BedDouble size={16} />
+                <p className="text-xs font-semibold">{localizedText("Tổng số phòng", "Total rooms")}</p>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900">{report.totalRoomCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Theo trạng thái hiện tại", "By current status")}</p>
+            </article>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-slate-700">{localizedText("Doanh thu vận hành", "Operating revenue")}</h3>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-blue-600">
+                <BedDouble size={16} />
+                <p className="text-xs font-semibold">{localizedText("Tiền phòng", "Room revenue")}</p>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.roomRevenue)}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Theo các đêm lưu trú trong khoảng ngày đã chọn", "Based on stay nights within the selected date range")}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-blue-600">
+                <TrendingUp size={16} />
+                <p className="text-xs font-semibold">{localizedText("Doanh thu dịch vụ", "Service revenue")}</p>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.serviceRevenue)}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText(`Từ ${report.serviceUsageCount} dịch vụ đã sử dụng`, `From ${report.serviceUsageCount} services used`)}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-amber-600">
+                <Tag size={16} />
+                <p className="text-xs font-semibold">{localizedText("Giá trị khuyến mãi", "Promotion savings")}</p>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.promotionSavings)}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Tổng tiền giảm trên booking", "Total discounts applied to bookings")}</p>
+            </article>
+            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <Tag size={16} />
+                <p className="text-xs font-semibold">{localizedText("Lượt sử dụng khuyến mãi", "Promotion uses")}</p>
+              </div>
+              <p className="mt-2 text-xl font-bold text-slate-900">{report.promotionUsageCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Trong khoảng ngày đã chọn", "During the selected date range")}</p>
+            </article>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-slate-700">{localizedText("Dòng tiền", "Cash flow")}</h3>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-emerald-600">
                 <TrendingUp size={16} />
@@ -335,49 +397,7 @@ export default function ReportWorkspace() {
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(netCashReceived)}</p>
               <p className="mt-1 text-xs text-slate-500">{localizedText("Thu vào − hoàn tiền − tiền thừa trả khách", "Received − refunded − change returned")}</p>
             </article>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-blue-600">
-                <TrendingUp size={16} />
-                <p className="text-xs font-semibold">{localizedText("Doanh thu dịch vụ", "Service revenue")}</p>
-              </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.serviceRevenue)}</p>
-              <p className="mt-1 text-xs text-slate-500">{localizedText(`Từ ${report.serviceUsageCount} dịch vụ đã sử dụng`, `From ${report.serviceUsageCount} services used`)}</p>
-            </article>
-            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-emerald-600">
-                <Tag size={16} />
-                <p className="text-xs font-semibold">{localizedText("Lượt sử dụng khuyến mãi", "Promotion uses")}</p>
-              </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{report.promotionUsageCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
-              <p className="mt-1 text-xs text-slate-500">{localizedText("Trong khoảng ngày đã chọn", "During the selected date range")}</p>
-            </article>
-            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-amber-600">
-                <Tag size={16} />
-                <p className="text-xs font-semibold">{localizedText("Giá trị khuyến mãi", "Promotion savings")}</p>
-              </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.promotionSavings)}</p>
-              <p className="mt-1 text-xs text-slate-500">{localizedText("Tổng tiền giảm trên booking", "Total discounts applied to bookings")}</p>
-            </article>
-            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-violet-600">
-                <BarChart3 size={16} />
-                <p className="text-xs font-semibold">{localizedText("Tổng số phòng", "Total rooms")}</p>
-              </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{report.totalRoomCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
-              <p className="mt-1 text-xs text-slate-500">{localizedText("Theo trạng thái hiện tại", "By current status")}</p>
-            </article>
-            <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-rose-600">
-                <XCircle size={16} />
-                <p className="text-xs font-semibold">{localizedText("Booking đã hủy", "Cancelled bookings")}</p>
-              </div>
-              <p className="mt-2 text-xl font-bold text-slate-900">{cancelledBookingCount.toLocaleString(localizedText("vi-VN", "en-US"))}</p>
-              <p className="mt-1 text-xs text-slate-500">{localizedText("Trong khoảng ngày đã chọn", "During the selected date range")}</p>
-            </article>
+            </div>
           </div>
           </section>
 

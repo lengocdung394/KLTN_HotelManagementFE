@@ -4,7 +4,7 @@ import { Ban, Check, ChevronRight, CreditCard, DoorOpen, ListChecks, ReceiptText
 import type { HotelService } from "../services/serviceApi";
 import { getServicePriceBreakdown } from "../lib/bookingPricing";
 
-export type ServiceSelection = { serviceId: string; quantity: number; originalQuantity?: number; price?: number; name?: string; usedAt?: string; detailId?: string; detailIds?: string[]; isExisting?: boolean; isUsed?: boolean; isPaid?: boolean; applyToRoom?: boolean };
+export type ServiceSelection = { serviceId: string; quantity: number; originalQuantity?: number; usedQuantity?: number; price?: number; name?: string; usedAt?: string; detailId?: string; detailIds?: string[]; isExisting?: boolean; isUsed?: boolean; isPaid?: boolean; isLocked?: boolean; applyToRoom?: boolean };
 export type ServiceRoom = { id: string; databaseId?: string; type: string; guests: number; price: number; roomTotal?: number; dailyPrices?: Record<string, number>; nightlySurcharge?: number };
 type ExistingServiceGroup = {
   key: string;
@@ -43,8 +43,13 @@ const shiftDay = (dateStr: string, delta: number) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 const minimumSelectionQuantity = (selection: ServiceSelection) =>
-  selection.isExisting && (selection.isUsed || selection.isPaid)
-    ? Number(selection.originalQuantity ?? selection.quantity)
+  selection.isExisting
+    ? selection.isPaid || selection.isLocked
+      ? Number(selection.originalQuantity ?? selection.quantity)
+      : Math.min(
+        Number(selection.originalQuantity ?? selection.quantity),
+        Math.max(0, Number(selection.usedQuantity ?? (selection.isUsed ? selection.quantity : 0))),
+      )
     : 0;
 
 export default function BookingServiceSelector({ rooms, services, servicesLoading = false, servicesError = false, serviceMode, setServiceMode, allRoomServices: selectedAllRoomServices, setAllRoomServices, roomServices, setRoomServices, roomRanges, fallbackRange, language, onContinue, onSkip, isSubmitting = false, submittingLabel = "Đang xử lý...", continueLabel = "Tiếp tục thanh toán", skipLabel = "Bỏ qua dịch vụ" }: BookingServiceSelectorProps) {
@@ -315,6 +320,7 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
                             min={group.minimumQuantity}
                             max={group.selection.originalQuantity}
                             value={group.selection.quantity}
+                            disabled={group.minimumQuantity >= Number(group.selection.originalQuantity ?? group.selection.quantity)}
                             aria-label={`${serviceName(group.selection)} ${money(Number(group.selection.price ?? servicePrice(group.selection)))}`}
                             onChange={(event) => updateExistingServiceGroupQuantity(
                               room.id,

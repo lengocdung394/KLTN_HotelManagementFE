@@ -17,6 +17,7 @@ import DatePickerPopover from "../components/DatePickerPopover";
 import { localizedText } from "../i18n";
 import {
   useApproveBookingRefundMutation,
+  useConfirmBookingRefundMutation,
   useGetBookingCancellationsQuery,
   useGetCheckoutRefundsQuery,
   useLazyGetCancellationBankDetailsQuery,
@@ -26,10 +27,11 @@ import {
   type BookingChannel,
   type BookingCancellation,
   type BookingCancellationStatus,
+  type BookingRefundTransferMethod,
   type PayOSPayoutState,
 } from "../services/managementBookingApi";
 
-type CancellationAction = "approve" | "reject" | "payout" | "bank-details";
+type CancellationAction = "approve" | "reject" | "payout" | "manual-confirm" | "bank-details";
 type CancellationFilter = "ALL" | BookingCancellationStatus;
 type BookingChannelFilter = "ALL" | BookingChannel;
 type RefundAccountChoice = "saved" | "alternate";
@@ -93,6 +95,7 @@ const actionTitle: Record<CancellationAction, [string, string]> = {
   approve: ["Duyệt hoàn tiền", "Approve refund"],
   reject: ["Từ chối hoàn tiền", "Reject refund"],
   payout: ["Gửi payout hoàn tiền", "Send refund payout"],
+  "manual-confirm": ["Hoàn tiền thủ công", "Manual bank refund"],
   "bank-details": ["Nhập tài khoản nhận hoàn", "Enter refund recipient account"],
 };
 
@@ -100,6 +103,7 @@ const actionDescription: Record<CancellationAction, [string, string]> = {
   approve: ["Đối chiếu chính sách và số tiền hoàn, xác nhận với khách tài khoản nhận tiền rồi mới duyệt.", "Review the refund policy and amount, confirm the recipient account with the guest, then approve."],
   reject: ["Yêu cầu hoàn tiền sẽ bị từ chối. Vui lòng ghi rõ lý do.", "The refund request will be rejected. Please provide a reason."],
   payout: ["PayOS sẽ nhận lệnh chuyển tiền thật. Chỉ tiếp tục sau khi đã kiểm tra đúng số tiền và tài khoản khách.", "PayOS will receive a real money-transfer request. Continue only after verifying the amount and guest account."],
+  "manual-confirm": ["Xác nhận đã hoàn tiền bên ngoài hệ thống. Mã giao dịch có thể nhập để đối soát, không bắt buộc.", "Confirm that the refund was completed outside the system. A transaction reference is optional."],
   "bank-details": ["Nhập thông tin khách cung cấp. Khách không cần có tài khoản trên website.", "Enter the details provided by the guest. The guest does not need a website account."],
 };
 
@@ -111,6 +115,7 @@ export default function RefundApprovalWorkspace() {
     useGetBookingCancellationsQuery();
   const { data: surplusRefunds = [] } = useGetCheckoutRefundsQuery();
   const [approveRefund, { isLoading: isApproving }] = useApproveBookingRefundMutation();
+  const [confirmBookingRefund, { isLoading: isConfirmingManualRefund }] = useConfirmBookingRefundMutation();
   const [rejectRefund, { isLoading: isRejecting }] = useRejectBookingRefundMutation();
   const [requestPayout, { isLoading: isRequestingPayout }] = useRequestBookingPayoutMutation();
   const [loadBankDetails, { isFetching: isLoadingBankDetails, reset: resetBankDetailsQuery }] = useLazyGetCancellationBankDetailsQuery();
@@ -129,8 +134,10 @@ export default function RefundApprovalWorkspace() {
     bankAccountNumber: "",
   });
   const [refundAccountChoice, setRefundAccountChoice] = useState<RefundAccountChoice>("saved");
+  const [refundTransferMethod, setRefundTransferMethod] = useState<BookingRefundTransferMethod>("PAYOS");
   const [refundAmountVerified, setRefundAmountVerified] = useState(false);
   const [refundAccountConfirmed, setRefundAccountConfirmed] = useState(false);
+  const [refundCompletedConfirmed, setRefundCompletedConfirmed] = useState(false);
   const [refundEmail, setRefundEmail] = useState("");
   const [actionError, setActionError] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -210,7 +217,7 @@ export default function RefundApprovalWorkspace() {
     );
   }, [cancellations, channelFilter, filter, selectedRequestDate]);
 
-  const isSubmitting = isApproving || isRejecting || isRequestingPayout || isSavingBankDetails || isLoadingBankDetails;
+  const isSubmitting = isApproving || isConfirmingManualRefund || isRejecting || isRequestingPayout || isSavingBankDetails || isLoadingBankDetails;
   const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending;
 
   const openAction = (cancellation: BookingCancellation, action: CancellationAction) => {
@@ -221,8 +228,10 @@ export default function RefundApprovalWorkspace() {
     setBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
     setRefundEmail(cancellation.refundEmail ?? "");
     setRefundAccountChoice(cancellation.hasRefundBankDetails ? "saved" : "alternate");
+    setRefundTransferMethod("PAYOS");
     setRefundAmountVerified(false);
     setRefundAccountConfirmed(false);
+    setRefundCompletedConfirmed(false);
     setActionError("");
     if ((action === "approve" || action === "payout") && cancellation.hasRefundBankDetails) {
       void loadBankDetails(cancellation.id)
@@ -240,6 +249,7 @@ export default function RefundApprovalWorkspace() {
     setActionNote("");
     setBankDetails({ bankName: "", bankCode: "", bankAccountName: "", bankAccountNumber: "" });
     setRefundEmail("");
+    setRefundCompletedConfirmed(false);
     setActionError("");
   };
 
@@ -285,6 +295,16 @@ export default function RefundApprovalWorkspace() {
         return;
       }
     }
+    if (activeAction === "manual-confirm") {
+      if (!refundCompletedConfirmed) {
+        setActionError(localizedText("Vui lòng xác nhận khoản hoàn tiền đã được chuyển cho khách.", "Confirm that the refund has already been transferred to the guest."));
+        return;
+      }
+      if (actionNote.trim().length > 120) {
+        setActionError(localizedText("Mã giao dịch không được vượt quá 120 ký tự.", "The transaction reference must be 120 characters or fewer."));
+        return;
+      }
+    }
     if (activeAction === "bank-details"
       && (!bankDetails.bankName.trim()
         || !/^[0-9]{6}$/.test(bankDetails.bankCode.trim())
@@ -325,8 +345,11 @@ export default function RefundApprovalWorkspace() {
           note: actionNote.trim() || undefined,
           refundAmountVerified,
           refundAccountConfirmed,
+          refundTransferMethod,
         }).unwrap();
-        setFeedback(localizedText(`Đã duyệt yêu cầu hoàn ${money(activeCancellation.refundAmount)} cho booking ${activeCancellation.bookingId}. Quản lý phụ trách gửi và theo dõi payout qua PayOS.`, `Refund of ${money(activeCancellation.refundAmount)} approved for booking ${activeCancellation.bookingId}. The manager handles and tracks the PayOS payout.`));
+        setFeedback(refundTransferMethod === "PAYOS"
+          ? localizedText(`Đã duyệt hoàn tiền cho booking ${activeCancellation.bookingId}. Có thể gửi lệnh tự động qua PayOS.`, `Refund for booking ${activeCancellation.bookingId} approved. The automatic PayOS payout can now be sent.`)
+          : localizedText(`Đã duyệt hoàn tiền cho booking ${activeCancellation.bookingId}. Hãy chuyển khoản bên ngoài rồi xác nhận giao dịch trên hệ thống.`, `Refund for booking ${activeCancellation.bookingId} approved. Transfer externally, then confirm the transaction in the system.`));
       } else if (activeAction === "reject") {
         await rejectRefund({
           cancellationId: activeCancellation.id,
@@ -341,6 +364,13 @@ export default function RefundApprovalWorkspace() {
           : payoutStatus === "PAYOUT_FAILED"
           ? localizedText(`PayOS báo payout thất bại cho booking ${activeCancellation.bookingId}. Kiểm tra tài khoản và thử lại.`, `PayOS reported a failed payout for booking ${activeCancellation.bookingId}. Review the account and try again.`)
           : localizedText(`Payout cho booking ${activeCancellation.bookingId} đang được PayOS xử lý.`, `The payout for booking ${activeCancellation.bookingId} is being processed by PayOS.`));
+      } else if (activeAction === "manual-confirm") {
+        await confirmBookingRefund({
+          cancellationId: activeCancellation.id,
+          transactionReference: actionNote.trim() || undefined,
+          refundCompletedConfirmed,
+        }).unwrap();
+        setFeedback(localizedText(`Đã ghi nhận chuyển khoản hoàn ${money(activeCancellation.refundAmount)} cho booking ${activeCancellation.bookingId}.`, `Manual refund transfer of ${money(activeCancellation.refundAmount)} for booking ${activeCancellation.bookingId} was recorded.`));
       }
       resetBankDetailsQuery();
       setActiveCancellation(null);
@@ -350,6 +380,7 @@ export default function RefundApprovalWorkspace() {
       setRefundEmail("");
       setRefundAmountVerified(false);
       setRefundAccountConfirmed(false);
+      setRefundCompletedConfirmed(false);
     } catch (submitError: unknown) {
       setActionError(errorMessage(submitError));
     }
@@ -624,11 +655,31 @@ export default function RefundApprovalWorkspace() {
                         <span className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-700">
                           {localizedText("Hoàn tiền mặt tại khách sạn", "Cash refund at hotel")}
                         </span>
+                      ) : cancellation.status === "REFUNDED" ? (
+                        <div className="space-y-1">
+                          <span className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-700">
+                            {localizedText("Đã hoàn qua ngân hàng", "Refunded by bank transfer")}
+                          </span>
+                          {cancellation.refundTransferMethod && (
+                            <span className="block text-xs font-medium text-slate-600">
+                              {cancellation.refundTransferMethod === "MANUAL_BANK"
+                                ? localizedText("Chuyển khoản thủ công", "Manual bank transfer")
+                                : localizedText("Tự động qua PayOS", "Automatic via PayOS")}
+                            </span>
+                          )}
+                        </div>
                       ) : cancellation.hasRefundBankDetails ? (
                         <div className="space-y-2">
                           <span className="inline-flex rounded-lg bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700">
                             {localizedText("Thông tin tài khoản đã được mã hóa", "Recipient details are encrypted")}
                           </span>
+                          {cancellation.refundTransferMethod && (
+                            <span className="block text-xs font-medium text-slate-600">
+                              {cancellation.refundTransferMethod === "MANUAL_BANK"
+                                ? localizedText("Chuyển khoản thủ công", "Manual bank transfer")
+                                : localizedText("Tự động qua PayOS", "Automatic via PayOS")}
+                            </span>
+                          )}
                           {cancellation.refundEmail && (
                             <p className="truncate border-t border-slate-100 pt-2 text-xs text-slate-500" title={cancellation.refundEmail}>{cancellation.refundEmail}</p>
                           )}
@@ -680,6 +731,13 @@ export default function RefundApprovalWorkspace() {
                           {localizedText(...payoutStateLabels[cancellation.payoutState])}
                         </span>
                       )}
+                      {cancellation.status === "REFUNDED"
+                        && cancellation.refundTransferMethod === "MANUAL_BANK"
+                        && cancellation.refundReference && (
+                        <p className="mt-2 break-all text-xs text-slate-600" title={cancellation.refundReference}>
+                          {localizedText("Mã giao dịch:", "Transaction reference:")} {cancellation.refundReference}
+                        </p>
+                      )}
                       {cancellation.reviewNote && (
                         <p className="mt-2 line-clamp-2 text-xs leading-4 text-slate-500" title={cancellation.reviewNote}>
                           {localizedText("Ghi chú:", "Note:")} {cancellation.reviewNote}
@@ -709,8 +767,29 @@ export default function RefundApprovalWorkspace() {
                             </button>
                           </>
                         )}
-                        {canApproveRefund && (cancellation.status === "REFUND_APPROVED"
-                          || cancellation.status === "PAYOUT_PROCESSING") && (
+                        {canApproveRefund && cancellation.status === "REFUND_APPROVED"
+                          && cancellation.refundTransferMethod === "MANUAL_BANK" && (
+                          <button
+                            type="button"
+                            onClick={() => openAction(cancellation, "manual-confirm")}
+                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                          >
+                            <Check size={14} /> {localizedText("Xác nhận đã chuyển khoản", "Confirm transfer")}
+                          </button>
+                        )}
+                        {canApproveRefund && cancellation.status === "REFUND_APPROVED"
+                          && cancellation.refundTransferMethod !== "MANUAL_BANK" && (
+                          <button
+                            type="button"
+                            onClick={() => openAction(cancellation, "manual-confirm")}
+                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <Banknote size={14} /> {localizedText("Hoàn thủ công", "Manual refund")}
+                          </button>
+                        )}
+                        {canApproveRefund && (cancellation.status === "PAYOUT_PROCESSING"
+                          || (cancellation.status === "REFUND_APPROVED"
+                            && cancellation.refundTransferMethod !== "MANUAL_BANK")) && (
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "payout")}
@@ -875,6 +954,35 @@ export default function RefundApprovalWorkspace() {
 
                 {activeAction === "approve" ? (
                   <div className="mt-4 space-y-3">
+                    <fieldset className="space-y-2">
+                      <legend className="font-semibold text-slate-900">{localizedText("Phương thức chuyển tiền", "Transfer method")}</legend>
+                      <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-3">
+                        <input
+                          type="radio"
+                          name="refund-transfer-method"
+                          checked={refundTransferMethod === "PAYOS"}
+                          onChange={() => setRefundTransferMethod("PAYOS")}
+                          className="mt-1 accent-blue-600"
+                        />
+                        <span className="text-sm">
+                          <span className="block font-semibold text-slate-800">{localizedText("Tự động qua PayOS", "Automatic via PayOS")}</span>
+                          <span className="mt-1 block text-xs text-slate-500">{localizedText("Hệ thống gửi lệnh chuyển tiền và cập nhật trạng thái từ PayOS.", "The system sends the transfer and tracks its PayOS status.")}</span>
+                        </span>
+                      </label>
+                      <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-3">
+                        <input
+                          type="radio"
+                          name="refund-transfer-method"
+                          checked={refundTransferMethod === "MANUAL_BANK"}
+                          onChange={() => setRefundTransferMethod("MANUAL_BANK")}
+                          className="mt-1 accent-blue-600"
+                        />
+                        <span className="text-sm">
+                          <span className="block font-semibold text-slate-800">{localizedText("Chuyển khoản thủ công", "Manual bank transfer")}</span>
+                          <span className="mt-1 block text-xs text-slate-500">{localizedText("Nhân viên tự chuyển khoản ngoài hệ thống, sau đó xác nhận giao dịch tại đây.", "Transfer outside the system, then confirm the transaction here.")}</span>
+                        </span>
+                      </label>
+                    </fieldset>
                     <div>
                       <h4 className="font-semibold text-slate-900">{localizedText("Tài khoản thụ hưởng", "Recipient account")}</h4>
                       <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -963,6 +1071,33 @@ export default function RefundApprovalWorkspace() {
                   </label>
                 )}
               </>
+            )}
+
+            {activeAction === "manual-confirm" && (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                <p className="text-sm text-emerald-900">
+                  {localizedText("Thao tác này chỉ ghi nhận khoản hoàn đã chuyển bên ngoài hệ thống; không gửi lệnh qua PayOS.", "This only records a refund transferred outside the system; it does not send a PayOS payout.")}
+                </p>
+                <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={refundCompletedConfirmed}
+                    onChange={(event) => setRefundCompletedConfirmed(event.target.checked)}
+                    className="mt-0.5 accent-emerald-600"
+                  />
+                  <span>{localizedText("Tôi xác nhận khoản hoàn tiền này đã được chuyển cho khách.", "I confirm that this refund has already been transferred to the guest.")}</span>
+                </label>
+                <label className="mt-3 block text-sm font-semibold text-slate-700">
+                  {localizedText("Mã giao dịch (không bắt buộc)", "Transaction reference (optional)")}
+                  <input
+                    value={actionNote}
+                    onChange={(event) => setActionNote(event.target.value)}
+                    maxLength={120}
+                    placeholder={localizedText("Nhập mã giao dịch nếu có", "Enter a transaction reference if available")}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-emerald-400"
+                  />
+                </label>
+              </div>
             )}
 
             {activeAction === "bank-details" ? (
