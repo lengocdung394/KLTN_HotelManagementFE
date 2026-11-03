@@ -37,6 +37,7 @@ export type BookingServiceUsage = {
   bookingServiceDetailId: string;
   name?: string;
   quantity?: number;
+  usedQuantity?: number;
   used?: boolean | null;
   usedAt?: string | null;
   usedBy?: string | null;
@@ -65,6 +66,8 @@ export type BookingListItem = {
   discountRoomAmount?: number;
   discountServiceAmount?: number;
   discountAmountTotal?: number;
+  estimatedDiscountAmount?: number;
+  applyAmount?: number;
   paidAmount?: number;
   collectedAmount?: number;
   refundedAmount?: number;
@@ -80,6 +83,7 @@ export type RoomMatrixSchedule = {
   bookingId?: string;
   customerName?: string;
   checkinTime?: string;
+  actualCheckInTime?: string;
   checkoutTime?: string;
   bookingStatus?: string;
   roomStatus?: string;
@@ -144,10 +148,11 @@ export const bookingApi = baseApi.injectEndpoints({
       transformResponse: extractBookingList,
       providesTags: ["Booking"],
     }),
-    confirmServiceUsed: builder.mutation<BookingServiceUsage, { bookingId: string; serviceDetailId: string }>({
-      query: ({ bookingId, serviceDetailId }) => ({
+    confirmServiceUsed: builder.mutation<BookingServiceUsage, { bookingId: string; serviceDetailId: string; quantity: number }>({
+      query: ({ bookingId, serviceDetailId, quantity }) => ({
         url: `/management-bookings/${encodeURIComponent(bookingId)}/service-details/${encodeURIComponent(serviceDetailId)}/confirm-use`,
         method: "PATCH",
+        data: { quantity },
       }),
       transformResponse: (response: { result: BookingServiceUsage }) => response.result,
       invalidatesTags: ["Booking"],

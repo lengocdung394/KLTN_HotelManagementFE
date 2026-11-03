@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, UserRound } from "lucide-react";
+import { RefreshCw, Search, UserRound } from "lucide-react";
 import { emitCustomerCreated } from "../lib/socket";
 import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazyGetCustomerByIdQuery, type CustomerResponse } from "../services/customerApi";
 import { useAppSelector } from "../store/hooks";
+import { toast } from "@/components/ui/use-toast";
 
 type GuestRoom = {
   id: string;
@@ -21,11 +22,18 @@ type GuestRoom = {
 export type BookingGuest = { name: string; phone: string; identityNumber: string; email: string; emailOnFile?: boolean; customerId?: string };
 export type RoomGuestCounts = { adults: number; children: number; infants: number };
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-export const isBookingGuestValid = (guest: BookingGuest, requireEmail = true) => Boolean(
+const normalizeSearchText = (value: string) => value
+  .trim()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase()
+  .replace(/đ/g, "d")
+  .replace(/\s+/g, " ");
+export const isBookingGuestValid = (guest: BookingGuest) => Boolean(
   guest.name.trim()
   && /^\d{10}$/.test(guest.phone)
   && /^\d{12}$/.test(guest.identityNumber)
-  && (!requireEmail || guest.emailOnFile || isValidEmail(guest.email)),
+  && (!guest.email.trim() || guest.emailOnFile || isValidEmail(guest.email)),
 );
 type Customer = CustomerResponse;
 
@@ -38,6 +46,12 @@ const getCustomerErrorMessage = (error: any) => {
   if (data?.result?.error) return String(data.result.error);
   if (Array.isArray(data?.errors)) return data.errors.map((item: any) => item?.message || item).join(", ");
   return error?.message || "Không thể tạo khách hàng. Vui lòng kiểm tra lại thông tin.";
+};
+const isCustomerIdentityConflict = (error: unknown) => {
+  if (!error || typeof error !== "object" || !("data" in error)) return false;
+  const data = error.data;
+  if (!data || typeof data !== "object" || !("code" in data)) return false;
+  return Number(data.code) === 2015;
 };
 const roomGuestCache: Record<string, RoomGuestCounts> = {};
 export const bookingCache = { roomTotal: 0 };
@@ -61,24 +75,60 @@ export const setRoomGuestCache = (values: Record<string, RoomGuestCounts>) => {
   });
 };
 
-export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange, requireEmail = true }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void; requireEmail?: boolean }) {
+export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange, customerLocked = false }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void; customerLocked?: boolean }) {
   const { t } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
-  const { data: customers = [] } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const {
+    data: customers = [],
+    isLoading: isCustomersLoading,
+    isError: isCustomersError,
+  } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const [getCustomerById, { isFetching: isFindingCustomer }] = useLazyGetCustomerByIdQuery();
   const [customerQuery, setCustomerQuery] = useState("");
+  const [customerListOpen, setCustomerListOpen] = useState(false);
+  const customerListCloseTimeout = useRef<number | null>(null);
+  const customerSearchInputRef = useRef<HTMLInputElement>(null);
+  const [focusCustomerSearch, setFocusCustomerSearch] = useState(false);
   const [localRoomGuests, setLocalRoomGuests] = useState<Record<string, RoomGuestCounts>>({});
   const [createWalkInCustomer, { isLoading: isCreatingCustomer }] = useCreateWalkInCustomerMutation();
+  const guestFieldsLocked = customerLocked || Boolean(guest.customerId);
+  useEffect(() => {
+    if (focusCustomerSearch && !guestFieldsLocked) {
+      customerSearchInputRef.current?.focus();
+      setCustomerListOpen(true);
+      setFocusCustomerSearch(false);
+    }
+  }, [focusCustomerSearch, guestFieldsLocked]);
+  const cancelCustomerListClose = () => {
+    if (customerListCloseTimeout.current !== null) {
+      window.clearTimeout(customerListCloseTimeout.current);
+      customerListCloseTimeout.current = null;
+    }
+  };
 
   useEffect(() => {
     const clearCache = () => clearRoomGuestCache();
     window.addEventListener("booking-workspace-left", clearCache);
-    return () => window.removeEventListener("booking-workspace-left", clearCache);
+    return () => {
+      window.removeEventListener("booking-workspace-left", clearCache);
+      if (customerListCloseTimeout.current !== null) {
+        window.clearTimeout(customerListCloseTimeout.current);
+      }
+    };
   }, []);
 
-  const search = customerQuery.trim().toLowerCase();
-  const matches = search ? customers.filter((customer) => `${customer.name} ${customer.phone} ${customer.email} ${customer.identityNumber}`.toLowerCase().includes(search)).slice(0, 5) : [];
+  const search = normalizeSearchText(customerQuery);
+  const phoneSearch = customerQuery.replace(/\D/g, "");
+  const matches = search
+    ? customers.filter((customer) => (
+      normalizeSearchText(customer.name).includes(search)
+      || (phoneSearch.length > 0
+        && /^[+\d\s()-]+$/.test(customerQuery)
+        && customer.phone.replace(/\D/g, "").includes(phoneSearch))
+    ))
+    : customers;
   const updateGuest = (field: keyof BookingGuest, value: string) => {
+    if (guestFieldsLocked) return;
     const normalizedValue = field === "phone"
       ? value.replace(/\D/g, "").slice(0, 10)
       : field === "identityNumber"
@@ -92,11 +142,22 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     });
   };
   const chooseCustomer = (customer: Customer) => {
+    if (customerLocked) return;
     const email = customer.email.trim();
     onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, email, emailOnFile: Boolean(email), customerId: customer.id });
     setCustomerQuery("");
+    setCustomerListOpen(false);
+  };
+  const resetCustomerSelection = () => {
+    if (customerLocked || !guest.customerId) return;
+    cancelCustomerListClose();
+    onGuestChange({ name: "", phone: "", identityNumber: "", email: "", emailOnFile: false, customerId: undefined });
+    setCustomerQuery("");
+    setCustomerListOpen(true);
+    setFocusCustomerSearch(true);
   };
   const findCustomerByCode = async () => {
+    if (customerLocked) return;
     const code = customerQuery.trim();
     if (!code) return;
     console.log("[booking] customer code:", code);
@@ -109,22 +170,46 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     }
   };
   const createCustomer = async () => {
-    if (!isBookingGuestValid(guest, requireEmail) || guest.customerId || isCreatingCustomer) return;
+    if (customerLocked || !isBookingGuestValid(guest) || guest.customerId || isCreatingCustomer) return;
     try {
-      const customer = await createWalkInCustomer({ fullName: guest.name.trim(), phone: guest.phone.trim(), cccd: guest.identityNumber.trim(), email: guest.email.trim() }).unwrap();
-      onGuestChange({ ...guest, email: customer.email || guest.email.trim(), emailOnFile: Boolean(customer.email || guest.email.trim()), customerId: String(customer.id) });
-      emitCustomerCreated(hotelId, {
-        id: customer.id,
-        name: customer.name,
-        phone: customer.phone,
-        email: customer.email,
-        identityNumber: customer.identityNumber,
-        tier: customer.tier,
-      });
+      const email = guest.email.trim();
+      const customer = await createWalkInCustomer({
+        fullName: guest.name.trim(),
+        phone: guest.phone.trim(),
+        cccd: guest.identityNumber.trim(),
+        ...(email ? { email } : {}),
+      }).unwrap();
+      chooseCustomer({ ...customer, email: customer.email || email });
+      if (customer.alreadyExists) {
+        toast({
+          title: t("booking.existingCustomerSelectedTitle"),
+          description: t("booking.existingCustomerSelectedDescription", { name: customer.name }),
+        });
+      } else {
+        emitCustomerCreated(hotelId, {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+          identityNumber: customer.identityNumber,
+          tier: customer.tier,
+        });
+      }
     } catch (error) {
       const message = getCustomerErrorMessage(error);
       console.error("[booking] create walk-in customer failed", error);
-      window.alert(`Tạo khách hàng thất bại: ${message}`);
+      toast({
+        variant: "destructive",
+        title: t("booking.customerCreateFailedTitle"),
+        description: isCustomerIdentityConflict(error)
+          ? t("booking.customerIdentityConflict")
+          : message,
+      });
+      if (isCustomerIdentityConflict(error)) {
+        onGuestChange({ name: "", phone: "", identityNumber: "", email: "", emailOnFile: false, customerId: undefined });
+        setCustomerQuery("");
+        setCustomerListOpen(false);
+      }
     }
   };
   const totalCapacityFor = (room: GuestRoom) => Math.max(0, Number(room.guests ?? 0) + Number(room.maxExtraGuests ?? 0));
@@ -168,13 +253,43 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
           <p className="mt-0.5 text-xs text-slate-500">{rooms.length} {t("booking.rooms")}</p>
         </div>
       </div>
-      <div className="relative mb-4">
-        <label className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer")}</label>
+      <div
+        className="relative z-20 mb-4"
+        onMouseEnter={cancelCustomerListClose}
+        onMouseLeave={() => {
+          cancelCustomerListClose();
+          customerListCloseTimeout.current = window.setTimeout(() => {
+            setCustomerListOpen(false);
+            customerListCloseTimeout.current = null;
+          }, 180);
+        }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor="booking-customer-search" className="text-sm font-semibold text-slate-700">{t("booking.searchCustomer")}</label>
+          {!customerLocked && guest.customerId && (
+            <button
+              type="button"
+              onClick={resetCustomerSelection}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 px-2.5 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+            >
+              <RefreshCw size={13} />
+              {t("booking.changeCustomer")}
+            </button>
+          )}
+        </div>
+        {customerLocked && <p className="mt-1 text-xs text-slate-500">{t("booking.customerCreated")}</p>}
         <div className="relative mt-1.5">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
+            id="booking-customer-search"
+            ref={customerSearchInputRef}
             value={customerQuery}
-            onChange={(event) => setCustomerQuery(event.target.value)}
+            disabled={customerLocked}
+            onFocus={() => setCustomerListOpen(true)}
+            onChange={(event) => {
+              setCustomerQuery(event.target.value);
+              setCustomerListOpen(true);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
@@ -188,41 +303,66 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{t("booking.guestSearchLoading")}</span>
           )}
         </div>
-        {matches.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-            {matches.map((customer) => (
-              <button type="button" key={customer.id} onClick={() => chooseCustomer(customer)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-violet-50">
-                <span className="font-semibold text-slate-700">{customer.name}</span>
-                <span className="text-xs text-slate-400">{customer.phone}</span>
-              </button>
-            ))}
+        {customerListOpen && !customerLocked && (
+          <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+            {isCustomersLoading ? (
+              <p className="px-3 py-3 text-sm text-slate-500">{t("booking.customerListLoading")}</p>
+            ) : isCustomersError ? (
+              <p className="px-3 py-3 text-sm text-rose-600">{t("booking.customerListError")}</p>
+            ) : matches.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-slate-500">{t(search ? "booking.customerListNoMatches" : "booking.customerListEmpty")}</p>
+            ) : (
+              <>
+                {matches.map((customer) => (
+                  <button
+                    type="button"
+                    key={customer.id}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      cancelCustomerListClose();
+                      chooseCustomer(customer);
+                    }}
+                    onClick={() => chooseCustomer(customer)}
+                    className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2.5 text-left text-sm last:border-b-0 hover:bg-violet-50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-slate-700">{customer.name}</span>
+                      <span className="mt-0.5 block text-xs text-slate-400">{customer.phone}</span>
+                    </span>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${customer.registered ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>
+                      {t(customer.registered ? "booking.registeredCustomer" : "booking.walkInCustomer")}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         )}
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.fullName")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.name} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.name)}`} />
+          <input value={guest.name} disabled={guestFieldsLocked} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.name)}`} />
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.phone")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.phone} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.phone)}`} />
+          <input value={guest.phone} disabled={guestFieldsLocked} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.phone)}`} />
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.identityNumber")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.identityNumber} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(guest.identityNumber)}`} />
+          <input value={guest.identityNumber} disabled={guestFieldsLocked} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.identityNumber)}`} />
         </label>
       </div>
-      {requireEmail && !guest.emailOnFile && (
+      {!guest.emailOnFile && (
         <label className="mt-4 block text-sm font-semibold text-slate-700">
-          {t("booking.emailConfirmation")}<span className="ml-1 text-red-500">*</span>
-          <input type="email" autoComplete="email" required value={guest.email} onChange={(event) => updateGuest("email", event.target.value)} placeholder="name@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 ${requiredGuestField(isValidEmail(guest.email) ? guest.email : "")}`} />
+          {t("booking.emailConfirmation")}
+          <input type="email" autoComplete="email" value={guest.email} disabled={guestFieldsLocked} onChange={(event) => updateGuest("email", event.target.value)} placeholder="name@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${guest.email.trim() && !isValidEmail(guest.email) ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-violet-400 focus:ring-violet-100"}`} />
           <span className="mt-1 block text-xs font-normal text-slate-500">{t("booking.emailConfirmationHelp")}</span>
         </label>
       )}
       <div className="mt-4 flex justify-end">
-        <button type="button" disabled={!isBookingGuestValid(guest, requireEmail) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
-          {isCreatingCustomer ? t("booking.creatingCustomer") : guest.customerId ? t("booking.customerCreated") : t("booking.createCustomer")}
+        <button type="button" disabled={customerLocked || !isBookingGuestValid(guest) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
+          {customerLocked || guest.customerId ? t("booking.customerCreated") : isCreatingCustomer ? t("booking.creatingCustomer") : t("booking.createCustomer")}
         </button>
       </div>
     </div>

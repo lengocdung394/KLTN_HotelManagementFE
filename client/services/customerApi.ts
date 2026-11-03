@@ -6,9 +6,14 @@ export type CustomerResponse = {
 	phone: string;
 	email: string;
 	identityNumber: string;
+	alreadyExists: boolean;
+	registered: boolean;
 	visits: number;
+	cancelledBookings: number;
+	latestBookingAt: string | null;
 	lastStay: string;
 	totalSpend: number;
+	totalRoomAmount: number;
 	tier: "loyal" | "new" | "potential";
 	note: string;
 };
@@ -53,9 +58,16 @@ const normalizeCustomer = (item: ApiCustomer): CustomerResponse => {
 		phone: String(valueOf(item, ["phone", "phoneNumber", "customerPhone", "mobile", "mobileNumber"]) ?? ""),
 		email: String(valueOf(item, ["email", "emailAddress"]) ?? ""),
 		identityNumber: String(valueOf(item, ["identityNumber", "identityCard", "identityCardNumber", "citizenId", "citizenNumber", "cccd"]) ?? ""),
+		alreadyExists: valueOf(item, ["alreadyExists"]) === true,
+		registered: valueOf(item, ["registered", "isRegistered"]) === true,
 		visits,
+		cancelledBookings: numberOf(valueOf(item, ["cancelledBookings", "cancelledBookingCount"])),
+		latestBookingAt: valueOf(item, ["latestBookingAt", "lastBookingAt"]) == null
+			? null
+			: String(valueOf(item, ["latestBookingAt", "lastBookingAt"])),
 		lastStay: String(valueOf(item, ["lastStay", "lastBookingDate", "lastCheckOut", "updatedAt"]) ?? "Chưa lưu trú"),
 		totalSpend,
+		totalRoomAmount: numberOf(valueOf(item, ["totalRoomAmount", "roomTotalAmount"])),
 		tier,
 		note: String(valueOf(item, ["note", "remark", "description"]) ?? "Chưa có ghi chú."),
 	};

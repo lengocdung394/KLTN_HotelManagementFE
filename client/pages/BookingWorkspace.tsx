@@ -16,7 +16,7 @@ import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrix
 import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { sumRoomPriceForRange } from "../lib/bookingPricing";
+import { getServicePriceBreakdown, sumRoomPriceForRange } from "../lib/bookingPricing";
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
 import { calculatePromotionDiscount } from "../lib/promotionPricing";
 import { bindHotelSocketEvents } from "../lib/socket";
@@ -85,6 +85,14 @@ const servicesOf = (detail: Record<string, unknown>) => {
     return Object.values(item).flatMap(collect);
   };
   return serviceValues.flatMap(collect).filter((service) => !isCancelledService(service));
+};
+const booleanValueOf = (value: unknown) =>
+  value === true || String(value).trim().toLowerCase() === "true";
+const usedQuantityOf = (service: Record<string, unknown>, quantity: number) => {
+  const parsedUsedQuantity = Number(service.usedQuantity ?? service.quantityUsed ?? 0);
+  const usedQuantity = Number.isFinite(parsedUsedQuantity) ? parsedUsedQuantity : 0;
+  const consumedQuantity = usedQuantity === 0 && booleanValueOf(service.used) ? quantity : usedQuantity;
+  return Math.min(quantity, Math.max(0, consumedQuantity));
 };
 
 const allFloorsLabel = "Tất cả các tầng";
@@ -954,7 +962,7 @@ function DesktopCalendar({
                         : "bg-slate-100 text-slate-700"
                     }`}
                   >
-                    {room.id}
+                    {room.roomNumber}
                   </span>
                   <span className="min-w-0 flex-1 text-left">
                     <strong className="block truncate text-xs font-bold text-slate-800">{room.type}</strong>
@@ -977,7 +985,7 @@ function DesktopCalendar({
                     </button>
                   )}
                   <button type="button" title={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} aria-label={`Xem chi tiết phòng ${room.roomNumber ?? room.id}`} onClick={() => setRoomDetails({
-                  id: room.id,
+                  id: room.roomNumber,
                   name: room.type,
                   images: room.images ?? [],
                   floor: room.floor ?? roomFloor(room),
@@ -1230,39 +1238,38 @@ export default function BookingWorkspace() {
       const serviceRequests = servicesOf(detail);
       const detailRoomKey = roomKey(detail);
       const matchedRoom = matchedRooms.find((room) => String(room.databaseId ?? room.id) === detailRoomKey || room.id === detailRoomKey);
-      const groupedMap = new Map<string, ServiceSelection>();
+      const selections: ServiceSelection[] = [];
       serviceRequests.forEach((service) => {
         const nestedService = service.service && typeof service.service === "object" ? service.service as Record<string, unknown> : undefined;
         const rawServiceName = String(service.name ?? service.serviceName ?? service.nameService ?? nestedService?.name ?? nestedService?.serviceName ?? "").trim().toLowerCase();
         const catalogService = services.find((item) => rawServiceName && item.name.trim().toLowerCase() === rawServiceName);
         const sId = String(catalogService?.id ?? service.serviceId ?? service.serviceID ?? service.service_id ?? nestedService?.serviceId ?? nestedService?.id ?? service.id ?? "");
         if (!sId) return;
-          const qty = Number(service.quantity ?? service.serviceQuantity ?? service.quantityService ?? service.amount ?? 0);
+        const qty = Number(service.quantity ?? service.serviceQuantity ?? service.quantityService ?? service.amount ?? 0);
         const price = service.price === undefined || service.price === null
           ? service.unitPrice === undefined || service.unitPrice === null ? undefined : Number(service.unitPrice)
           : Number(service.price);
         const dId = serviceDetailIdOf(service);
+        const usedQuantity = usedQuantityOf(service, qty);
+        const isPaid = booleanValueOf(service.isPaid ?? service.paid);
 
-        const existing = groupedMap.get(sId);
-        if (existing) {
-          existing.quantity += qty;
-          existing.originalQuantity = (existing.originalQuantity ?? 0) + qty;
-        } else {
-          groupedMap.set(sId, {
-            serviceId: sId,
-            name: String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? ""),
-            quantity: qty,
-            originalQuantity: qty,
-            detailId: dId,
-            price,
-            usedAt: service.usedAt === undefined && service.usedAtTime === undefined ? undefined : String(service.usedAt ?? service.usedAtTime),
-            isExisting: true,
-            applyToRoom: false,
-          });
-        }
+        selections.push({
+          serviceId: sId,
+          name: String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? ""),
+          quantity: qty,
+          originalQuantity: qty,
+          usedQuantity,
+          detailId: dId,
+          price,
+          usedAt: service.usedAt === undefined && service.usedAtTime === undefined ? undefined : String(service.usedAt ?? service.usedAtTime),
+          isUsed: usedQuantity > 0,
+          isPaid,
+          isLocked: !dId,
+          isExisting: true,
+          applyToRoom: false,
+        });
       });
 
-      const selections = Array.from(groupedMap.values());
       const keys = matchedRoom && matchedRoom.id !== detailRoomKey ? [detailRoomKey, matchedRoom.id] : [detailRoomKey];
       return keys.map((key) => [key, selections]);
     }));
@@ -1655,7 +1662,11 @@ export default function BookingWorkspace() {
   const roomTotal = initialBooking && selectedRooms.length === 0 && Number.isFinite(persistedRoomTotal) ? persistedRoomTotal : calculatedRoomTotal;
   const getServiceTotal = (selections: ServiceSelection[], room?: BookingRoom) => selections.reduce((sum, selection) => {
     const qty = selection.applyToRoom !== false && room ? selectedGuestsForRoom(room) : selection.quantity;
-    return sum + (selection.price ?? services.find((service) => String(service.id) === selection.serviceId)?.price ?? 0) * qty;
+    const currentPrice = services.find((service) => String(service.id) === selection.serviceId)?.price
+      ?? selection.price
+      ?? 0;
+    return sum + getServicePriceBreakdown({ ...selection, quantity: qty }, currentPrice)
+      .reduce((serviceSum, line) => serviceSum + line.quantity * line.unitPrice, 0);
   }, 0);
   const selectedGuestsForRoom = (room: BookingRoom) => roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
   const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections, room);
@@ -1735,7 +1746,7 @@ export default function BookingWorkspace() {
       customerName: bookingGuest.name.trim(),
       customerPhone: bookingGuest.phone.trim(),
       customerIdentityNumber: bookingGuest.identityNumber.trim(),
-      customerEmail: bookingGuest.email.trim(),
+      customerEmail: bookingGuest.email.trim() || undefined,
       employeeId: counterEmployeeId,
       bookingChannel: "OFFLINE" as const,
       customerPromotionId: promotionEligible && isCustomerPromotion ? appliedPromotion?.id ?? null : null,
@@ -1879,7 +1890,14 @@ export default function BookingWorkspace() {
         }
 
         const currentSelections = getRoomServiceSelections(room);
-        const origServicesMap = new Map<string, { serviceId: string; originalQuantity: number; quantity: number; serviceDetailIds: string[] }>();
+        const origSelections: {
+          serviceId: string;
+          originalQuantity: number;
+          usedQuantity: number;
+          isPaid: boolean;
+          minimumQuantity: number;
+          detailId: string;
+        }[] = [];
         (servicesOf(initialDetail) ?? []).forEach((srv) => {
           const nestedService = srv.service && typeof srv.service === "object" ? srv.service as Record<string, unknown> : undefined;
           const rawServiceName = String(srv.name ?? srv.serviceName ?? srv.nameService ?? nestedService?.name ?? nestedService?.serviceName ?? "").trim().toLowerCase();
@@ -1888,57 +1906,79 @@ export default function BookingWorkspace() {
           if (!sId) return;
           const dId = serviceDetailIdOf(srv);
           const qty = Number(srv.quantity ?? srv.serviceQuantity ?? srv.quantityService ?? srv.amount ?? 0);
-          const existing = origServicesMap.get(sId);
-          if (existing) {
-            existing.originalQuantity += qty;
-            existing.quantity += qty;
-            if (dId && !existing.serviceDetailIds.includes(dId)) existing.serviceDetailIds.push(dId);
-          } else {
-            origServicesMap.set(sId, { serviceId: sId, originalQuantity: qty, quantity: qty, serviceDetailIds: dId ? [dId] : [] });
-          }
+          if (!dId) return;
+          const usedQuantity = usedQuantityOf(srv, qty);
+          const isPaid = booleanValueOf(srv.isPaid ?? srv.paid);
+          origSelections.push({
+            serviceId: sId,
+            originalQuantity: qty,
+            usedQuantity,
+            isPaid,
+            minimumQuantity: isPaid ? qty : usedQuantity,
+            detailId: dId,
+          });
         });
-        const origSelections = Array.from(origServicesMap.values());
 
-        const additionsForRoom: { serviceId: string; quantity: number; name?: string; price?: number }[] = [];
-        const quantityUpdatesForRoom: { serviceId: string; quantity: number }[] = [];
-        const serviceIds = new Set([
-          ...origSelections.map((service) => service.serviceId),
-          ...currentSelections.map((service) => service.serviceId.trim()).filter(Boolean),
-        ]);
+        const additionsForRoom: { serviceId: string; quantity: number }[] = [];
+        const quantityUpdatesForRoom: { serviceId: string; bookingServiceDetailId?: string; quantity: number }[] = [];
 
-        serviceIds.forEach((serviceId) => {
-          const original = origSelections.find((service) => service.serviceId === serviceId);
-          const current = currentSelections.find((service) => service.serviceId === serviceId);
-          const originalQuantity = Number(original?.originalQuantity ?? 0);
-          const currentQuantity = Number(current?.quantity ?? 0);
-          console.log("[booking-edit] service compare:", { bookingDetailId, serviceId, originalQuantity, currentQuantity });
-          if (currentQuantity === originalQuantity) return;
+        currentSelections.forEach((current) => {
+          const serviceId = current.serviceId.trim();
+          if (!serviceId) return;
 
-          if (currentQuantity > originalQuantity) {
-            const serviceObj = services.find((item) => String(item.id) === serviceId);
-            additionsForRoom.push({
-              serviceId,
-              quantity: currentQuantity - originalQuantity,
-              name: current?.name ?? serviceObj?.name,
-              price: current?.price ?? serviceObj?.price,
-            });
+          if (!current.isExisting) {
+            const currentQuantity = Math.max(0, Number(current.quantity) || 0);
+            if (currentQuantity === 0) return;
+            additionsForRoom.push({ serviceId, quantity: currentQuantity });
             return;
           }
 
-          if (currentQuantity === 0 && original?.serviceDetailIds.length) {
-            const cancelledIds = servicesToCancelMap[bookingDetailId] ?? [];
-            servicesToCancelMap[bookingDetailId] = [...new Set([...cancelledIds, ...original.serviceDetailIds])];
+          const original = origSelections.find((service) => service.detailId === current.detailId);
+          if (!original) return;
+          const requestedQuantity = Math.max(0, Number(current.quantity) || 0);
+          const currentQuantity = Math.max(original.minimumQuantity, requestedQuantity);
+          if (currentQuantity >= original.originalQuantity) return;
+          quantityUpdatesForRoom.push({
+            serviceId,
+            bookingServiceDetailId: original.detailId,
+            quantity: currentQuantity,
+          });
+        });
+
+        origSelections.forEach((original) => {
+          const current = currentSelections.find((selection) =>
+            selection.isExisting && selection.detailId === original.detailId,
+          );
+          if (current) {
+            const currentQuantity = Math.max(
+              original.minimumQuantity,
+              Math.max(0, Number(current.quantity) || 0),
+            );
+            if (currentQuantity < original.originalQuantity) {
+              quantityUpdatesForRoom.push({
+                serviceId: original.serviceId,
+                bookingServiceDetailId: original.detailId,
+                quantity: currentQuantity,
+              });
+            }
             return;
           }
 
-          quantityUpdatesForRoom.push({ serviceId, quantity: currentQuantity });
+          quantityUpdatesForRoom.push({
+            serviceId: original.serviceId,
+            bookingServiceDetailId: original.detailId,
+            quantity: original.minimumQuantity,
+          });
         });
 
         if (additionsForRoom.length > 0) {
           servicesToAddForExistingRooms.push({ bookingDetailId, services: additionsForRoom });
         }
         if (quantityUpdatesForRoom.length > 0) {
-          serviceQuantityUpdates.push({ bookingDetailId, services: quantityUpdatesForRoom });
+          const uniqueQuantityUpdates = Array.from(new Map(
+            quantityUpdatesForRoom.map((update) => [update.bookingServiceDetailId, update]),
+          ).values());
+          serviceQuantityUpdates.push({ bookingDetailId, services: uniqueQuantityUpdates });
         }
       });
 
@@ -1993,7 +2033,7 @@ export default function BookingWorkspace() {
       }
       return;
     }
-    const hasGuestDetails = isBookingGuestValid(bookingGuest, !initialBooking);
+    const hasGuestDetails = isBookingGuestValid(bookingGuest);
     if (!hasGuestDetails || (!initialBooking && !customerId) || !counterEmployeeId.trim()) {
       console.warn("[booking] blocked: guest details, customer id, or employeeId are incomplete", { guest: bookingGuest, employeeId: counterEmployeeId });
       return;
@@ -2029,13 +2069,21 @@ export default function BookingWorkspace() {
   };
   const storedEmployeeId = localStorage.getItem("id");
   const bookingEmployeeId = storedEmployeeId ?? employeeId ?? "";
-  const hasGuestDetails = isBookingGuestValid(bookingGuest, !initialBooking);
+  const hasGuestDetails = isBookingGuestValid(bookingGuest);
   const goToServices = () => {
     if (!hasGuestDetails) {
       toast({
         variant: "destructive",
         title: "Thiếu thông tin khách hàng",
-        description: "Vui lòng nhập đủ họ tên, số điện thoại, CCCD và email nhận xác nhận của khách hàng.",
+        description: t("booking.guestDetailsRequired"),
+      });
+      return;
+    }
+    if (!initialBooking && !bookingGuest.customerId) {
+      toast({
+        variant: "destructive",
+        title: t("booking.customerCreateFailedTitle"),
+        description: t("booking.customerProfileRequired"),
       });
       return;
     }
@@ -2052,7 +2100,7 @@ export default function BookingWorkspace() {
       toast({
         variant: "destructive",
         title: "Thiếu thông tin khách hàng",
-        description: "Vui lòng nhập đủ họ tên, số điện thoại, CCCD và email nhận xác nhận của khách hàng.",
+        description: t("booking.guestDetailsRequired"),
       });
     }
   }, [step, hasGuestDetails]);
@@ -2302,7 +2350,7 @@ export default function BookingWorkspace() {
               const selections = getRoomServiceSelections(room);
               return <div key={room.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                 <button type="button" onClick={() => setExpandedServiceRoom(isExpanded ? null : room.id)} className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-slate-50">
-                  <span className="min-w-0"><strong className="block text-sm text-slate-900">Phòng {room.id} · {room.type}</strong><span className="mt-1 block truncate text-xs text-slate-500">{selections.length > 0 ? formatRoomServices(room, selections) : "Chưa chọn dịch vụ"}</span></span>
+                  <span className="min-w-0"><strong className="block text-sm text-slate-900">Phòng {room.roomNumber} · {room.type}</strong><span className="mt-1 block truncate text-xs text-slate-500">{selections.length > 0 ? formatRoomServices(room, selections) : "Chưa chọn dịch vụ"}</span></span>
                   <span className="flex shrink-0 items-center gap-3"><strong className="text-xs text-blue-700">{money(getServiceTotal(selections))}</strong><ChevronRight size={16} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} /></span>
                 </button>
                 {isExpanded && <div className="border-t border-slate-100 bg-slate-50 p-3"><p className="mb-2 text-xs font-semibold text-slate-500">Chọn dịch vụ và số lượng</p><div className="grid gap-2 sm:grid-cols-2">
@@ -2318,7 +2366,7 @@ export default function BookingWorkspace() {
                 const roomSelections = getRoomServiceSelections(room);
                 const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
                 return <div key={room.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 text-xs">
-                  <span className="min-w-0"><strong className="block text-slate-800">Phòng {room.id} · {room.type}</strong><span className="mt-1 block text-slate-500">Check-in: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkIn, "", i18n.language)}</span><span className="block text-slate-500">Check-out: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkOut, "", i18n.language)}</span><span className="mt-1 block text-blue-700">{selections.length > 0 ? formatRoomServices(room, selections) : "Chưa chọn dịch vụ"}</span></span>
+                  <span className="min-w-0"><strong className="block text-slate-800">Phòng {room.roomNumber} · {room.type}</strong><span className="mt-1 block text-slate-500">Check-in: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkIn, "", i18n.language)}</span><span className="block text-slate-500">Check-out: {formatDateLabel((selectedRanges[room.id] ?? { checkIn, checkOut }).checkOut, "", i18n.language)}</span><span className="mt-1 block text-blue-700">{selections.length > 0 ? formatRoomServices(room, selections) : "Chưa chọn dịch vụ"}</span></span>
                   <span className="shrink-0 text-right font-bold text-slate-800">{money(getRoomRangeTotal(room, selectedRanges[room.id] ?? { checkIn, checkOut }) + getRoomServiceTotal(room, selections))}</span>
                 </div>;
               })}
@@ -2331,7 +2379,7 @@ export default function BookingWorkspace() {
           {step === "promotion" && <PromotionSelector customerId={bookingGuest.customerId} initialPromotionId={initialBooking?.promotionId} initialCustomerPromotionId={initialBooking?.customerPromotionId} initialPromotionApplyAt={bookingPromotionApplyAt(initialBooking)} orderTotal={subtotal} roomTotal={roomTotal} serviceTotal={serviceTotal} onApply={setAppliedPromotion} onEligibilityChange={setPromotionBlocked} />}
           <div className={step === "promotion" ? "hidden" : "payment-column"}>
             {false && <div className="payment-heading flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3"><CreditCard size={16} className="text-blue-600" /><div><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-0.5 text-xs text-slate-500">{t("booking.paymentRequired")}</p></div></div>}
-            {step === "guest" ? <><div className="mb-4 grid gap-2 sm:grid-cols-2">{selectedRooms.map((room) => <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600"><strong className="text-blue-700">Phòng {room.id}</strong><span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span></div>)}</div><GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} requireEmail={!initialBooking} /></> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
+            {step === "guest" ? <><div className="mb-4 grid gap-2 sm:grid-cols-2">{selectedRooms.map((room) => <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600"><strong className="text-blue-700">Phòng {room.roomNumber}</strong><span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span></div>)}</div><GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} customerLocked={Boolean(initialBooking)} /></> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
             <p className="text-center text-xs font-bold uppercase tracking-wider text-blue-600">{t("booking.bookingSummary")}</p>
@@ -2362,7 +2410,7 @@ export default function BookingWorkspace() {
                   <button type="button" onClick={() => setCollapsedSummaryRooms((current) => isSummaryRoomCollapsed ? current.filter((id) => id !== room.id) : [...current, room.id])} aria-expanded={!isSummaryRoomCollapsed} className="flex w-full items-start justify-between gap-3 border-b border-blue-100 bg-white/70 px-3 py-3 text-left transition hover:bg-white">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600">{room.type}</p>
-                      <strong className="mt-1 block text-base font-bold text-blue-700">{room.id}</strong>
+                      <strong className="mt-1 block text-base font-bold text-blue-700">{room.roomNumber}</strong>
                     </div>
                     <span className="flex shrink-0 items-center gap-2"><strong className="text-sm text-blue-700">{money(roomSubtotal)}</strong><ChevronDown size={16} className={`text-blue-500 transition-transform ${isSummaryRoomCollapsed ? "-rotate-90" : ""}`} /></span>
                   </button>
@@ -2400,7 +2448,7 @@ export default function BookingWorkspace() {
               <p className="mt-0.5 text-xs text-violet-600">Số tiền cần thanh toán: {money(bookingEstimate.total)}</p>
               </div>
             </>}
-            {step === "guest" ? <button disabled={!hasGuestDetails} onClick={goToServices} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{t("booking.continueToServices")}</button> : <>
+            {step === "guest" ? <><button disabled={!hasGuestDetails || !customerReady} onClick={goToServices} className="mt-5 w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{t("booking.continueToServices")}</button>{hasGuestDetails && !customerReady && <p className="mt-2 text-center text-xs text-amber-700">{t("booking.customerProfileRequired")}</p>}</> : <>
               {step === "promotion" && !hasGuestDetails && <p className="mt-3 text-xs text-amber-600">{t("booking.guestDetailsRequired")}</p>}
               {step === "promotion" && hasGuestDetails && !customerReady && <p className="mt-3 text-xs text-amber-600">{t("booking.creatingGuestProfile")}</p>}
               {step === "promotion" && !String(bookingEmployeeId).trim() && <p className="mt-1 text-xs text-amber-600">{t("booking.employeeIdMissing")}</p>}

@@ -50,6 +50,8 @@ const bookingDetailHasCheckedIn = (detail: BookingDetail) => {
   return statusIsCheckedIn || checkedInFlag || actualCheckIn;
 };
 const canModifyBookingDetailRoom = (detail: BookingDetail) => bookingDetailStatusOf(detail) === "PENDING" && !bookingDetailHasCheckedIn(detail);
+const canModifyBookingDetailServices = (detail: BookingDetail) =>
+  ["PENDING", "CHECKED_IN", "CHECKED_OUT"].includes(bookingDetailStatusOf(detail));
 
 const serviceDetailIdOf = (service: BookingDetail) => String(
   service.bookingServiceDetailId
@@ -60,9 +62,22 @@ const serviceDetailIdOf = (service: BookingDetail) => String(
   ?? service.serviceId
   ?? "",
 );
+const booleanValueOf = (value: unknown) =>
+  value === true || String(value).trim().toLowerCase() === "true";
+const usedQuantityOf = (service: BookingDetail, quantity: number) => {
+  const rawUsedQuantity = service.usedQuantity ?? service.quantityUsed;
+  const parsedUsedQuantity = Number(rawUsedQuantity ?? 0);
+  const usedQuantity = Number.isFinite(parsedUsedQuantity) ? parsedUsedQuantity : 0;
+  return Math.min(quantity, Math.max(0, usedQuantity === 0 && booleanValueOf(service.used) ? quantity : usedQuantity));
+};
+const canCancelUnusedServiceQuantity = (service: BookingDetail) => {
+  const quantity = Number(service.quantity ?? service.amount ?? 0);
+  return quantity > usedQuantityOf(service, quantity);
+};
 
 const servicesOf = (detail: BookingDetail) => {
   const services = ([
+    detail.bookingServiceResponsForHotels,
     detail.bookingServiceResponsesForHotels,
     detail.bookingServiceResponseForHotels,
     detail.bookingServiceDetails,
@@ -154,11 +169,20 @@ export default function BookingEditWorkspace() {
     };
   }), [activeDetails]);
 
+  const editableServiceRooms = useMemo(
+    () => editRooms.filter((_, index) => {
+      const detail = activeDetails[index];
+      return canModifyBookingDetailServices(detail)
+        && !cancelledDetailIds.includes(detailIdOf(detail));
+    }),
+    [editRooms, activeDetails, cancelledDetailIds],
+  );
+
   const initialServices = useMemo(() => Object.fromEntries(details.flatMap((detail) => {
     const roomId = roomIdOf(detail);
     const detailId = detailIdOf(detail);
     const rawServices = servicesOf(detail);
-    const groupedMap = new Map<string, ServiceSelection>();
+    const selections: ServiceSelection[] = [];
 
     rawServices.forEach((service) => {
       const sId = String(service.serviceId ?? service.serviceID ?? service.id ?? "");
@@ -169,26 +193,27 @@ export default function BookingEditWorkspace() {
       const price = rawPrice == null ? undefined : Number(rawPrice);
       const name = String(service.name ?? service.serviceName ?? service.nameService ?? service.service_name ?? "");
 
-      const existing = groupedMap.get(sId);
-      if (existing) {
-        existing.quantity += qty;
-        existing.originalQuantity = (existing.originalQuantity ?? 0) + qty;
-      } else {
-        groupedMap.set(sId, {
-          serviceId: sId,
-          quantity: qty,
-          originalQuantity: qty,
-          detailId: dId,
-          name,
-          price,
-          usedAt: service.usedAt == null ? undefined : String(service.usedAt),
-          isExisting: true,
-          applyToRoom: false,
-        });
-      }
+      const usedQuantity = usedQuantityOf(service, qty);
+      const isUsed = usedQuantity > 0;
+      const isPaid = booleanValueOf(service.isPaid ?? service.paid);
+      selections.push({
+        serviceId: sId,
+        quantity: qty,
+        originalQuantity: qty,
+        usedQuantity,
+        detailId: dId,
+        name,
+        price,
+        usedAt: service.usedAt == null ? undefined : String(service.usedAt),
+        detailIds: dId ? [dId] : [],
+        isUsed,
+        isPaid,
+        isLocked: !dId,
+        isExisting: true,
+        applyToRoom: false,
+      });
     });
 
-    const selections = Array.from(groupedMap.values());
     return [
       [String(roomId), selections],
       [String(detailId), selections],
@@ -280,7 +305,11 @@ export default function BookingEditWorkspace() {
 
     const roomUpdatesByDetailId = new Map<string, ManagementBookingModificationRequest["roomsToChange"][number]>();
     Object.entries(roomChanges)
-      .filter(([detailIdStr, newRoomId]) => Boolean(newRoomId) && !cancelledDetailIds.includes(detailIdStr))
+      .filter(([detailIdStr, newRoomId]) => {
+        const detail = details.find((item) => detailIdOf(item) === detailIdStr);
+        return Boolean(newRoomId) && !cancelledDetailIds.includes(detailIdStr)
+          && detail !== undefined && canModifyBookingDetailRoom(detail);
+      })
       .forEach(([bookingDetailId, newRoomId]) => {
         roomUpdatesByDetailId.set(bookingDetailId, {
           bookingDetailId,
@@ -295,19 +324,20 @@ export default function BookingEditWorkspace() {
 
     Object.entries(dateUpdates)
       .filter(([detailIdStr, dates]) => Boolean(dates.checkIn || dates.checkOut) && !cancelledDetailIds.includes(detailIdStr))
-      .map(([detailIdStr, dates]) => {
+      .flatMap(([detailIdStr, dates]) => {
         const detailId = detailIdStr;
         const detail = details.find((d) => detailIdOf(d) === detailId);
+        if (!detail || !canModifyBookingDetailRoom(detail)) return [];
         const originalCheckIn = String(detail?.checkInTime ?? "").slice(0, 10);
         const originalCheckOut = String(detail?.checkOutTime ?? "").slice(0, 10);
-        return {
+        return [{
           bookingDetailId: detailId,
           newCheckInTime: dates.checkIn && dates.checkIn !== originalCheckIn ? `${dates.checkIn}T14:00:00` : null,
           newCheckoutTime: dates.checkOut && dates.checkOut !== originalCheckOut ? `${dates.checkOut}T12:00:00` : null,
           numAdults: null,
           numChildren: null,
           numInfants: null,
-        };
+        }];
       })
       .forEach((dateUpdate) => {
         if (!dateUpdate.newCheckInTime && !dateUpdate.newCheckoutTime) return;
@@ -326,48 +356,45 @@ export default function BookingEditWorkspace() {
     const roomsToChangeFormatted = Array.from(roomUpdatesByDetailId.values());
 
     const servicesToAddForExistingRoomsFormatted: { bookingDetailId: string; services: any[] }[] = [];
-    const serviceQuantityUpdatesFormatted: { bookingDetailId: string; services: { serviceId: string; quantity: number }[] }[] = [];
+    const serviceQuantityUpdatesFormatted: { bookingDetailId: string; services: { serviceId: string; bookingServiceDetailId?: string; quantity: number }[] }[] = [];
     const servicesToCancelMap: Record<string, string[]> = { ...cancelledServiceDetailIds };
 
     editRooms.forEach((room, index) => {
       const detail = activeDetails[index];
       const bookingDetailId = detailIdOf(detail);
-      if (!bookingDetailId) return;
+      if (!bookingDetailId || !canModifyBookingDetailServices(detail) || cancelledDetailIds.includes(bookingDetailId)) return;
 
       const currentSelections = roomServices[room.id] ?? roomServices[String(room.databaseId)] ?? [];
       const origSelections = initialServices[room.id] ?? initialServices[String(room.databaseId)] ?? initialServices[String(roomIdOf(detail))] ?? [];
 
       const additionsForRoom: any[] = [];
-      const quantityUpdatesForRoom: { serviceId: string; quantity: number }[] = [];
+      const quantityUpdatesForRoom: { serviceId: string; bookingServiceDetailId?: string; quantity: number }[] = [];
 
       currentSelections.forEach((curr) => {
         const serviceId = String(curr.serviceId ?? "").trim();
-        if (!serviceId || curr.quantity <= 0) return;
-
-        const orig = origSelections.find((o) => String(o.serviceId) === String(curr.serviceId));
+        if (!serviceId) return;
+        const orig = curr.isExisting
+          ? origSelections.find((item) => item.detailId && item.detailId === curr.detailId)
+          : undefined;
         const currentQty = Number(curr.quantity) || 0;
         const origQty = orig ? Number(orig.originalQuantity ?? orig.quantity ?? 0) : 0;
 
         if (origQty === 0) {
-          const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
+          if (currentQty <= 0) return;
           additionsForRoom.push({
             serviceId,
             quantity: currentQty,
-            name: curr.name ?? serviceObj?.name,
-            price: curr.price ?? serviceObj?.price,
           });
         } else if (currentQty > origQty) {
           const extraQty = currentQty - origQty;
-          const serviceObj = services.find((item) => String(item.id) === curr.serviceId);
           additionsForRoom.push({
             serviceId,
             quantity: extraQty,
-            name: curr.name ?? serviceObj?.name,
-            price: curr.price ?? serviceObj?.price,
           });
         } else if (currentQty < origQty) {
           quantityUpdatesForRoom.push({
             serviceId,
+            bookingServiceDetailId: orig?.detailId,
             quantity: currentQty,
           });
         }
@@ -375,20 +402,17 @@ export default function BookingEditWorkspace() {
 
       origSelections.forEach((orig) => {
         const serviceId = String(orig.serviceId ?? "").trim();
-        if (!serviceId) return;
+        if (!serviceId || !orig.detailId) return;
         const origQty = Number(orig.originalQuantity ?? orig.quantity ?? 0);
         if (origQty <= 0) return;
 
-        const curr = currentSelections.find((c) => String(c.serviceId) === String(orig.serviceId));
-        const currentQty = curr ? Number(curr.quantity) || 0 : 0;
-
-        if (currentQty === 0) {
-          if (!quantityUpdatesForRoom.some((q) => q.serviceId === serviceId)) {
-            quantityUpdatesForRoom.push({
-              serviceId,
-              quantity: 0,
-            });
-          }
+        const curr = currentSelections.find((item) => item.isExisting && item.detailId === orig.detailId);
+        if (!curr) {
+          quantityUpdatesForRoom.push({
+            serviceId,
+            bookingServiceDetailId: orig.detailId,
+            quantity: 0,
+          });
         }
       });
 
@@ -401,7 +425,9 @@ export default function BookingEditWorkspace() {
     });
 
     const servicesToCancelFormatted = Object.entries(servicesToCancelMap)
-      .filter(([_, serviceIds]) => serviceIds.length > 0)
+      .filter(([detailId, serviceIds]) => serviceIds.length > 0
+        && !cancelledDetailIds.includes(detailId)
+        && details.some((detail) => detailIdOf(detail) === detailId && canModifyBookingDetailServices(detail)))
       .map(([detailIdStr, serviceDetailIds]) => ({
         bookingDetailId: detailIdStr,
         serviceDetailIds,
@@ -619,6 +645,7 @@ export default function BookingEditWorkspace() {
             const isCancelled = cancelledDetailIds.includes(detailId);
             const existingServicesList = servicesOf(detail);
             const cancelledServiceIdsForThisDetail = cancelledServiceDetailIds[detailId] ?? [];
+            const canModifyServices = canModifyBookingDetailServices(detail) && !isCancelled;
             const currentDateUpdate = dateUpdates[detailId] ?? {
               checkIn: String(detail.checkInTime ?? "").slice(0, 10),
               checkOut: String(detail.checkOutTime ?? "").slice(0, 10),
@@ -641,6 +668,14 @@ export default function BookingEditWorkspace() {
                     {isCancelled && (
                       <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
                         {localizedText("Đã đánh dấu Hủy", "Marked for cancellation")}
+                      </span>
+                    )}
+                    {!canModifyBookingDetailRoom(detail) && (
+                      <span className="text-xs font-medium text-slate-500">
+                        {localizedText(
+                          "Chỉ đổi/hủy phòng khi đang chờ nhận; dịch vụ được chỉnh khi booking chưa hoàn tất.",
+                          "Room changes require pending check-in; services can be edited until the booking is complete.",
+                        )}
                       </span>
                     )}
                   </div>
@@ -672,8 +707,9 @@ export default function BookingEditWorkspace() {
                           <input
                             type="date"
                             value={currentDateUpdate.checkIn}
+                            disabled={!canModifyBookingDetailRoom(detail)}
                             onChange={(e) => handleDateChange(detailId, "checkIn", e.target.value)}
-                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                           />
                         </div>
                         <div>
@@ -681,8 +717,9 @@ export default function BookingEditWorkspace() {
                           <input
                             type="date"
                             value={currentDateUpdate.checkOut}
+                            disabled={!canModifyBookingDetailRoom(detail)}
                             onChange={(e) => handleDateChange(detailId, "checkOut", e.target.value)}
-                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+                            className="mt-0.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                           />
                         </div>
                       </div>
@@ -725,20 +762,48 @@ export default function BookingEditWorkspace() {
                             const sDetailId = serviceDetailIdOf(srv);
                             const isSrvCancelled = cancelledServiceIdsForThisDetail.includes(sDetailId);
                             const srvName = String(srv.name ?? srv.serviceName ?? srv.nameService ?? `Dịch vụ #${sIdx + 1}`);
+                            const usedQuantity = Number(srv.usedQuantity ?? (srv.used ? srv.quantity : 0) ?? 0);
+                            const hasUnusedQuantity = canCancelUnusedServiceQuantity(srv);
+                            const serviceQuantity = Number(srv.quantity ?? 1);
+                            const serviceUnitPrice = Number(srv.price ?? srv.unitPrice ?? 0);
+                            const serviceSubtotal = serviceQuantity * serviceUnitPrice;
+                            const isFullyCancelled = isSrvCancelled && usedQuantity === 0;
+                            const currencyLocale = i18n.language.startsWith("en") ? "en-US" : "vi-VN";
 
                             return (
                               <div
                                 key={sDetailId || sIdx}
-                                className={`flex items-center justify-between text-xs rounded px-2 py-1 ${
-                                  isSrvCancelled ? "bg-rose-50 text-rose-500 line-through" : "bg-slate-100 text-slate-700"
+                                className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-xs ${
+                                  isFullyCancelled
+                                    ? "border-rose-200 bg-rose-50 text-rose-500"
+                                    : isSrvCancelled
+                                      ? "border-amber-200 bg-amber-50 text-slate-700"
+                                      : "border-slate-200 bg-slate-50 text-slate-700"
                                 }`}
                               >
-                                <span>{srvName} (x{Number(srv.quantity ?? 1)})</span>
+                                <span className="min-w-0">
+                                  <span className={`block truncate font-semibold ${isFullyCancelled ? "line-through" : ""}`}>
+                                    {srvName}
+                                  </span>
+                                  <span className="mt-0.5 block text-[11px] text-slate-500">
+                                    {localizedText("SL", "Qty")}: {serviceQuantity}
+                                    {" · "}
+                                    {localizedText("Đơn giá", "Unit price")}: {serviceUnitPrice.toLocaleString(currencyLocale)}{i18n.language.startsWith("en") ? " VND" : "đ"}
+                                  </span>
+                                  <span className="mt-0.5 block text-[11px] text-slate-500">
+                                    {localizedText("Thành tiền", "Subtotal")}: {serviceSubtotal.toLocaleString(currencyLocale)}{i18n.language.startsWith("en") ? " VND" : "đ"}
+                                    {usedQuantity > 0 && ` · ${localizedText(`Đã dùng ${usedQuantity}`, `Used ${usedQuantity}`)}`}
+                                    {isSrvCancelled && usedQuantity > 0 && ` · ${localizedText("đã bỏ phần chưa dùng", "unused portion removed")}`}
+                                  </span>
+                                </span>
                                 <button
                                   type="button"
+                                  disabled={!canModifyServices || (!isSrvCancelled && !hasUnusedQuantity)}
                                   onClick={() => handleToggleCancelService(detailId, sDetailId)}
-                                  className="text-slate-400 hover:text-rose-600"
-                                  title={isSrvCancelled ? localizedText("Khôi phục dịch vụ", "Restore service") : localizedText("Hủy dịch vụ này", "Cancel this service")}
+                                  className="shrink-0 rounded px-1.5 py-1 text-slate-400 hover:bg-white hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                  title={isSrvCancelled
+                                    ? localizedText("Khôi phục dịch vụ", "Restore service")
+                                    : localizedText("Hủy phần dịch vụ chưa sử dụng", "Cancel unused service quantity")}
                                 >
                                   {isSrvCancelled ? <RefreshCw size={12} /> : <X size={12} />}
                                 </button>
@@ -901,7 +966,7 @@ export default function BookingEditWorkspace() {
         <p className="mt-1 text-xs text-slate-500">{localizedText("Chọn dịch vụ mới bổ sung cho các phòng còn hoạt động trong booking.", "Select additional services for active rooms in this booking.")}</p>
         <div className="mt-4">
           <BookingServiceSelector
-            rooms={editRooms}
+            rooms={editableServiceRooms}
             services={services}
             servicesLoading={isServicesLoading}
             servicesError={isServicesError}

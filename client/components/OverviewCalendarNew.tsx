@@ -27,13 +27,20 @@ const formatDate = (value: string, language: string) =>
     year: "numeric",
   });
 
+const getEffectiveCheckInDate = (schedule: RoomMatrixSchedule) => {
+  const scheduledCheckIn = schedule.checkinTime?.slice(0, 10);
+  const actualCheckIn = schedule.actualCheckInTime?.slice(0, 10);
+  if (actualCheckIn && (!scheduledCheckIn || actualCheckIn < scheduledCheckIn)) return actualCheckIn;
+  return scheduledCheckIn;
+};
+
 const getScheduleStatusForDate = (schedule: RoomMatrixSchedule, date: string) => {
   const roomStatus = schedule.roomStatus?.toUpperCase();
   if (roomStatus === "CANCELLED") return undefined;
   const isInHouse = roomStatus === "CHECKED_IN"
     || (!roomStatus && schedule.bookingStatus?.toUpperCase() === "IN_HOUSE");
 
-  const checkIn = schedule.checkinTime?.slice(0, 10);
+  const checkIn = getEffectiveCheckInDate(schedule);
   const checkOut = schedule.checkoutTime?.slice(0, 10);
   if (checkOut && date === checkOut) return "CHECK_OUT";
   if (checkIn && checkOut && date >= checkIn && date < checkOut) {
@@ -83,7 +90,7 @@ export default function OverviewCalendarNew() {
       room.schedules?.forEach((schedule) => {
         if (schedule.bookingId && days.some((day) => getScheduleStatusForDate(schedule, day.date))) {
           const bookingId = String(schedule.bookingId);
-          const checkIn = schedule.checkinTime?.slice(0, 10) ?? "";
+          const checkIn = getEffectiveCheckInDate(schedule) ?? "";
           const current = bookings.get(bookingId);
           if (current === undefined || checkIn < current) bookings.set(bookingId, checkIn);
         }

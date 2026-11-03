@@ -6,8 +6,12 @@ export interface PaymentTransactionResponse {
   amount?: number;
   paymentType?: string;
   cashFlowType?: string;
+  paymentSource?: "FRONT_DESK" | "CUSTOMER" | "ONLINE_GATEWAY" | "UNKNOWN";
   note?: string;
   createdAt?: string;
+  transactionDate?: string;
+  processorEmployeeId?: string;
+  processorEmployeeName?: string;
 }
 
 export interface OrderResponse {
