@@ -3,7 +3,17 @@ import { localizedText } from "../i18n";
 import { AlertTriangle, Clock3, Eye, LogIn, LogOut } from "lucide-react";
 import BatchStayCard from "./BatchStayCard";
 
-export type ServiceCharge = { serviceId?: string; serviceDetailId?: string; name: string; quantity: number; amount: number; usedAt?: string; used?: boolean };
+export type ServiceCharge = {
+  serviceId?: string;
+  serviceDetailId?: string;
+  name: string;
+  quantity: number;
+  amount: number;
+  usedAt?: string;
+  used?: boolean;
+  usedQuantity?: number;
+  isPaid?: boolean;
+};
 
 export type DailyRecord = {
   id: string;

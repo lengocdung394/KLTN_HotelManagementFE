@@ -118,6 +118,8 @@ export type BookingCancellationStatus =
   | "REFUNDED"
   | "NO_REFUND_REQUIRED";
 
+export type BookingRefundTransferMethod = "PAYOS" | "MANUAL_BANK";
+
 export type PayOSPayoutState =
   | "PROCESSING"
   | "TRANSFERRED"
@@ -156,6 +158,7 @@ export type BookingCancellation = {
   customerPhone?: string | null;
   status: BookingCancellationStatus;
   refundMethod?: "CASH" | "BANK" | null;
+  refundTransferMethod?: BookingRefundTransferMethod | null;
   hasRefundBankDetails?: boolean;
   payoutReference?: string | null;
   payoutState?: PayOSPayoutState | null;
@@ -262,12 +265,13 @@ export const managementBookingApi = baseApi.injectEndpoints({
         note?: string;
         refundAmountVerified: boolean;
         refundAccountConfirmed: boolean;
+        refundTransferMethod: BookingRefundTransferMethod;
       }
     >({
-      query: ({ cancellationId, note, refundAmountVerified, refundAccountConfirmed }) => ({
+      query: ({ cancellationId, note, refundAmountVerified, refundAccountConfirmed, refundTransferMethod }) => ({
         url: `/management-bookings/cancellations/${cancellationId}/approve`,
         method: "PATCH",
-        data: { note, refundAmountVerified, refundAccountConfirmed },
+        data: { note, refundAmountVerified, refundAccountConfirmed, refundTransferMethod },
       }),
       invalidatesTags: ["RefundCancellation"],
     }),
@@ -284,14 +288,18 @@ export const managementBookingApi = baseApi.injectEndpoints({
     }),
     confirmBookingRefund: builder.mutation<
       BookingCancellationApiResponse,
-      { cancellationId: string; note?: string }
+      {
+        cancellationId: string;
+        transactionReference?: string;
+        refundCompletedConfirmed: boolean;
+      }
     >({
-      query: ({ cancellationId, note }) => ({
+      query: ({ cancellationId, transactionReference, refundCompletedConfirmed }) => ({
         url: `/management-bookings/cancellations/${cancellationId}/confirm-refund`,
         method: "PATCH",
-        data: note ? { note } : {},
+        data: { transactionReference, refundCompletedConfirmed },
       }),
-      invalidatesTags: ["RefundCancellation"],
+      invalidatesTags: ["RefundCancellation", "Booking"],
     }),
     requestBookingPayout: builder.mutation<
       BookingCancellationApiResponse,

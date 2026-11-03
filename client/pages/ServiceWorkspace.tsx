@@ -35,10 +35,13 @@ type ServiceUsageRow = {
   bookingDetailId: string;
   serviceDetailId: string;
   serviceName: string;
+  price: number | null;
   quantity: number;
+  usedQuantity: number;
   customerName: string;
   roomNumber: string;
   bookingCreatedAt: string;
+  actualCheckInTime: string;
   checkInTime: string;
   usedAt: string | null;
   usedBy: string | null;
@@ -53,6 +56,24 @@ type BookingServiceUsageGroup = {
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? value as Record<string, unknown> : null;
+
+const getServiceUsedQuantity = (service: Record<string, unknown>) => {
+  const totalQuantity = Number(service.quantity ?? 1);
+  const rawUsedQuantity = service.usedQuantity ?? service.quantityUsed;
+  if (rawUsedQuantity !== undefined && rawUsedQuantity !== null && rawUsedQuantity !== "") {
+    const usedQuantity = Number(rawUsedQuantity);
+    if (Number.isFinite(usedQuantity) && usedQuantity > 0) {
+      return Math.min(usedQuantity, Math.max(totalQuantity, 0));
+    }
+  }
+  return service.used === true || typeof service.usedAt === "string" ? Math.max(totalQuantity, 0) : 0;
+};
+
+const getServicePrice = (service: Record<string, unknown>) => {
+  const nestedService = asRecord(service.service);
+  const value = Number(service.price ?? service.unitPrice ?? service.servicePrice ?? nestedService?.price);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+};
 
 const getServiceUsageRows = (bookings: BookingListItem[]): ServiceUsageRow[] => {
   return bookings.flatMap((bookingItem) => {
@@ -75,22 +96,28 @@ const getServiceUsageRows = (bookings: BookingListItem[]): ServiceUsageRow[] => 
       return services.flatMap((serviceValue) => {
         const service = asRecord(serviceValue);
         const serviceDetailId = service?.bookingServiceDetailId ?? service?.id;
+        const totalQuantity = Number(service?.quantity ?? 1);
+        const usedQuantity = service ? getServiceUsedQuantity(service) : 0;
+        const remainingQuantity = totalQuantity - usedQuantity;
         if (
           !service
           || !serviceDetailId
           || service.cancelled === true
           || Boolean(service.cancelledAt)
-          || service.used === true
+          || remainingQuantity <= 0
         ) return [];
         return [{
           bookingId,
           bookingDetailId: String(detail.bookingDetailId ?? detail.id ?? ""),
           serviceDetailId: String(serviceDetailId),
           serviceName: String(service.name ?? service.serviceName ?? "Dịch vụ"),
-          quantity: Number(service.quantity ?? 1),
+          price: getServicePrice(service),
+          quantity: remainingQuantity,
+          usedQuantity,
           customerName: String(booking.customerName ?? detail.customerName ?? detail.nameCustomer ?? "Khách lưu trú"),
           roomNumber: String(detail.roomNumber ?? detail.roomName ?? "—"),
           bookingCreatedAt: String(booking.createdAt ?? ""),
+          actualCheckInTime: String(detail.actualCheckInTime ?? ""),
           checkInTime: String(detail.checkInTime ?? ""),
           usedAt: typeof service.usedAt === "string" ? service.usedAt : null,
           usedBy: typeof service.usedBy === "string" ? service.usedBy : null,
@@ -104,6 +131,15 @@ const formatUsageDateTime = (value: string | null | undefined, locale: string) =
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
+};
+
+const formatServicePrice = (price: number | null, locale: string) => {
+  if (price === null) return "—";
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(price);
 };
 
 const toLocalDateInputValue = (date: Date) => {
@@ -151,14 +187,15 @@ const getTodayServiceStats = (bookings: BookingListItem[]) => {
         const validQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
         if (isBookingToday) bookedToday += validQuantity;
 
-        if (service.used !== true || typeof service.usedAt !== "string") return;
+        const usedQuantity = getServiceUsedQuantity(service);
+        if (usedQuantity <= 0 || typeof service.usedAt !== "string") return;
         const usedAt = new Date(service.usedAt);
         if (Number.isNaN(usedAt.getTime()) || usedAt.toDateString() !== today) return;
 
-        usedToday += validQuantity;
+        usedToday += usedQuantity;
         const nestedService = asRecord(service.service);
         const price = Number(service.price ?? service.unitPrice ?? service.servicePrice ?? nestedService?.price ?? 0);
-        if (Number.isFinite(price) && price > 0) estimatedRevenue += price * validQuantity;
+        if (Number.isFinite(price) && price > 0) estimatedRevenue += price * usedQuantity;
       });
     });
   });
@@ -190,6 +227,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [expandedUsageBookingIds, setExpandedUsageBookingIds] = useState<Set<string>>(() => new Set());
+  const [usageQuantities, setUsageQuantities] = useState<Record<string, string>>({});
   const [activeUsageTab, setActiveUsageTab] = useState<"pending" | "used-today">("pending");
   const [usageDateFrom, setUsageDateFrom] = useState(() => toLocalDateInputValue(new Date()));
   const [usageDateTo, setUsageDateTo] = useState(() => toLocalDateInputValue(new Date()));
@@ -233,7 +271,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         });
       }
     });
-    return [...groups.values()];
+    return [...groups.values()].sort((left, right) => {
+      const leftCreatedAt = new Date(left.bookingCreatedAt).getTime();
+      const rightCreatedAt = new Date(right.bookingCreatedAt).getTime();
+      const leftTimestamp = Number.isFinite(leftCreatedAt) ? leftCreatedAt : Number.NEGATIVE_INFINITY;
+      const rightTimestamp = Number.isFinite(rightCreatedAt) ? rightCreatedAt : Number.NEGATIVE_INFINITY;
+      return rightTimestamp - leftTimestamp;
+    });
   }, [pendingUsageRows]);
   const filteredPendingUsageGroups = useMemo(() => pendingUsageGroups.filter((group) => {
     if (!usageDateFrom && !usageDateTo) return true;
@@ -259,17 +303,21 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         if (!Array.isArray(services)) return [];
         return services.flatMap((serviceValue) => {
           const service = asRecord(serviceValue);
-          if (!service || service.used !== true || typeof service.usedAt !== "string" || service.cancelled === true || Boolean(service.cancelledAt)) return [];
+          const usedQuantity = service ? getServiceUsedQuantity(service) : 0;
+          if (!service || usedQuantity <= 0 || typeof service.usedAt !== "string" || service.cancelled === true || Boolean(service.cancelledAt)) return [];
           if (Number.isNaN(new Date(service.usedAt).getTime())) return [];
           return [{
             bookingId: String(booking.bookingId ?? booking.id ?? ""),
             bookingDetailId: String(detail?.bookingDetailId ?? detail?.id ?? ""),
             serviceDetailId: String(service.bookingServiceDetailId ?? service.id ?? ""),
             serviceName: String(service.name ?? service.serviceName ?? "Dịch vụ"),
-            quantity: Number(service.quantity ?? 1),
+            price: getServicePrice(service),
+            quantity: usedQuantity,
+            usedQuantity,
             customerName: String(booking.customerName ?? detail?.customerName ?? detail?.nameCustomer ?? "Khách lưu trú"),
             roomNumber: String(detail?.roomNumber ?? detail?.roomName ?? "—"),
             bookingCreatedAt: String(booking.createdAt ?? ""),
+            actualCheckInTime: String(detail?.actualCheckInTime ?? ""),
             checkInTime: String(detail?.checkInTime ?? ""),
             usedAt: service.usedAt,
             usedBy: typeof service.usedBy === "string" ? service.usedBy : null,
@@ -298,13 +346,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   }, [allServices, searchQuery, statusFilter]);
   const isSaving = isCreating || isUpdating;
 
-  const handleConfirmServiceUsed = async (row: ServiceUsageRow) => {
+  const handleConfirmServiceUsed = async (row: ServiceUsageRow, quantity: number) => {
     try {
-      await confirmServiceUsed({ bookingId: row.bookingId, serviceDetailId: row.serviceDetailId }).unwrap();
+      await confirmServiceUsed({ bookingId: row.bookingId, serviceDetailId: row.serviceDetailId, quantity }).unwrap();
       toast({
         variant: "checkin",
         title: "Đã xác nhận sử dụng dịch vụ",
-        description: `${row.serviceName} · Phòng ${row.roomNumber}`,
+        description: `${row.serviceName} × ${quantity} · Phòng ${row.roomNumber}`,
       });
     } catch (error) {
       toast({
@@ -670,15 +718,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noPendingInRange")}</p>
               )}
               {!isLoadingUsage && !isUsageError && filteredPendingUsageGroups.length > 0 && (
-                <div className="grid gap-3 lg:grid-cols-2">
+                <div className="flex flex-col gap-2">
                   {filteredPendingUsageGroups.map((group) => (
                     <article key={group.bookingId} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <header className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-3 py-2.5">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-900">Booking {group.bookingId}</p>
-                            <p className="mt-0.5 text-xs text-slate-600">{group.customerName}</p>
-                          </div>
+                      <header className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+                          <p className="font-semibold text-slate-900">Booking {group.bookingId}</p>
+                          <p className="text-xs text-slate-600">{group.customerName}</p>
                           <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-blue-700">{t("serviceWorkspace.pendingCount", { count: group.services.length })}</span>
                         </div>
                         <button
@@ -690,31 +736,69 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                             return next;
                           })}
                           aria-expanded={expandedUsageBookingIds.has(group.bookingId)}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                          className="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 sm:self-auto"
                         >
                           {expandedUsageBookingIds.has(group.bookingId) ? t("serviceWorkspace.collapse") : t("serviceWorkspace.actions")}
                         </button>
                       </header>
                       {expandedUsageBookingIds.has(group.bookingId) && <div className="px-3">
                         <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />{t("serviceWorkspace.bookedAt")} {formatUsageDateTime(group.bookingCreatedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</p>
-                        <div className="divide-y divide-slate-100">
-                          {group.services.map((row) => (
-                            <div key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                              <div className="min-w-0">
-                                <p className="font-semibold text-slate-900">{row.serviceName} <span className="font-normal text-slate-500">× {row.quantity}</span></p>
-                                <p className="mt-1 text-xs text-slate-600">{t("serviceWorkspace.room", { room: row.roomNumber })}</p>
-                                {row.checkInTime && <p className="mt-1 text-[11px] text-slate-500">{t("serviceWorkspace.checkIn")} {formatUsageDateTime(row.checkInTime, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</p>}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => void handleConfirmServiceUsed(row)}
-                                disabled={isConfirmingService}
-                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
-                              >
-                                <CheckCircle2 size={14} />{t("serviceWorkspace.confirmUsed")}
-                              </button>
-                            </div>
-                          ))}
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[760px] text-left text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-100 text-xs font-semibold text-slate-500">
+                                <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.serviceName")}</th>
+                                <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.unitPrice")}</th>
+                                <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.confirmQuantity")}</th>
+                                <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.roomDetails")}</th>
+                                <th scope="col" className="px-3 py-2.5 text-right">{t("serviceWorkspace.actions")}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {group.services.map((row) => (
+                                <tr key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="text-slate-700">
+                                  <td className="px-3 py-3 font-semibold text-slate-900">{row.serviceName}</td>
+                                  <td className="px-3 py-3 whitespace-nowrap">{formatServicePrice(row.price, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
+                                  <td className="px-3 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={row.quantity}
+                                        step={1}
+                                        required
+                                        value={usageQuantities[row.serviceDetailId] ?? "1"}
+                                        onChange={(event) => setUsageQuantities((current) => ({ ...current, [row.serviceDetailId]: event.target.value }))}
+                                        aria-label={t("serviceWorkspace.confirmQuantity")}
+                                        className="h-9 w-20 rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-blue-400"
+                                      />
+                                      <span className="text-xs text-slate-500">{t("serviceWorkspace.remainingQuantity", { count: row.quantity })}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <p>{t("serviceWorkspace.room", { room: row.roomNumber })}</p>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      {row.actualCheckInTime
+                                        ? `${t("serviceWorkspace.actualCheckIn")} ${formatUsageDateTime(row.actualCheckInTime, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}`
+                                        : row.checkInTime
+                                          ? `${t("serviceWorkspace.expectedCheckIn")} ${formatUsageDateTime(row.checkInTime, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}`
+                                          : t("serviceWorkspace.notCheckedIn")}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-3 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleConfirmServiceUsed(row, Number(usageQuantities[row.serviceDetailId] ?? 1))}
+                                      disabled={isConfirmingService || !Number.isInteger(Number(usageQuantities[row.serviceDetailId] ?? 1)) || Number(usageQuantities[row.serviceDetailId] ?? 1) < 1 || Number(usageQuantities[row.serviceDetailId] ?? 1) > row.quantity}
+                                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                                    >
+                                      <CheckCircle2 size={14} />{t("serviceWorkspace.confirmUsed")}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       </div>}
                     </article>
@@ -732,13 +816,36 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noUsedInRange")}</p>
               )}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length > 0 && (
-                <div className="grid gap-2 lg:grid-cols-2">
-                  {filteredUsedServiceRows.map((row) => (
-                    <p key={`${row.bookingId}-${row.serviceDetailId}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600 shadow-sm">
-                      <span className="font-semibold text-slate-800">{row.serviceName} × {row.quantity}</span> · {row.customerName} · {t("serviceWorkspace.room", { room: row.roomNumber })}
-                      <span className="block mt-1 text-[11px] text-slate-500">{formatUsageDateTime(row.usedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{row.usedBy ? ` · ${t("serviceWorkspace.confirmedBy", { name: row.usedBy })}` : ""}</span>
-                    </p>
-                  ))}
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                  <table className="w-full min-w-[900px] text-left text-sm">
+                    <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
+                      <tr>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.serviceName")}</th>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.unitPrice")}</th>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.quantity")}</th>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.booking")}</th>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.roomDetails")}</th>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.usedAt")}</th>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.confirmedByLabel")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredUsedServiceRows.map((row) => (
+                        <tr key={`${row.bookingId}-${row.serviceDetailId}`} className="text-slate-700">
+                          <td className="px-4 py-3 font-semibold text-slate-900">{row.serviceName}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatServicePrice(row.price, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
+                          <td className="px-4 py-3">{row.quantity}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-800">{row.bookingId}</p>
+                            <p className="mt-1 text-xs text-slate-500">{row.customerName}</p>
+                          </td>
+                          <td className="px-4 py-3">{t("serviceWorkspace.room", { room: row.roomNumber })}</td>
+                          <td className="px-4 py-3">{formatUsageDateTime(row.usedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
+                          <td className="px-4 py-3">{row.usedBy || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

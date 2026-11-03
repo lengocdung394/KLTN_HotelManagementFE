@@ -2,13 +2,20 @@ import { baseApi } from "./baseApi";
 
 export type CheckInOutService = {
   bookingServiceDetailId?: string;
+  bookingServiceDetailID?: string;
+  serviceDetailId?: string;
+  serviceDetailID?: string;
   serviceId?: string;
   price?: number;
   quantity?: number;
+  usedQuantity?: number;
   usedAt?: string;
   name?: string;
   serviceName?: string;
   nameService?: string;
+  used?: boolean;
+  isPaid?: boolean;
+  paid?: boolean;
   cancelled?: boolean;
   cancelledAt?: string;
 };

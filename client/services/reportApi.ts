@@ -38,6 +38,15 @@ export type BookingCancellationReport = {
   cancelledAt: string | null;
 };
 
+export type RefundActivityReport = {
+  bookingId: string;
+  amount: number;
+  paymentMethod: "CASH" | "BANK" | "EWALLET" | string | null;
+  status: string | null;
+  requestedAt: string | null;
+  refundedAt: string | null;
+};
+
 export type HotelReport = {
   startDate: string;
   endDate: string;
@@ -48,6 +57,7 @@ export type HotelReport = {
   cashRefunded?: number;
   cashChangeReturned?: number;
   netCashReceived?: number;
+  roomRevenue: number;
   serviceRevenue: number;
   serviceUsageCount: number;
   dailyServiceRevenue: DailyServiceRevenue[];
@@ -58,6 +68,8 @@ export type HotelReport = {
   onlineCancelledBookingCount?: number;
   offlineCancelledBookingCount?: number;
   cancelledBookings?: BookingCancellationReport[];
+  checkoutSurplusRefunds?: RefundActivityReport[];
+  bookingCancellationRefunds?: RefundActivityReport[];
   totalRoomCount: number;
   roomStatuses: RoomStatusReport[];
   roomTypeBookings: RoomTypeBookingReport[];

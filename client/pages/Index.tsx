@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  ArrowRight,
+  ConciergeBell,
   Download,
   Plus,
   UserRound,
@@ -68,6 +70,48 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const housekeepingTasks = isEmployee ? employeeTasks : managementTasks;
   const tasksLoading = isEmployee ? employeeTasksLoading : managementTasksLoading;
   const tasksError = isEmployee ? employeeTasksError : managementTasksError;
+  const pendingServiceConfirmations = useMemo(() => bookings.flatMap((booking) => {
+    if (String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return [];
+    const bookingId = String(booking.bookingId ?? booking.id ?? "");
+    const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
+
+    return details.flatMap((detail) => {
+      if (String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").toUpperCase() === "CANCELLED") return [];
+      const serviceList = [
+        detail.bookingServiceResponsForHotels,
+        detail.bookingServiceResponseForHotel,
+        detail.bookingServiceResponsesForHotels,
+        detail.bookingServiceDetails,
+        detail.services,
+      ].find(Array.isArray);
+      if (!Array.isArray(serviceList)) return [];
+
+      return serviceList.flatMap((service) => {
+        if (!service || typeof service !== "object") return [];
+        const serviceRecord = service as Record<string, unknown>;
+        if (serviceRecord.cancelled === true || Boolean(serviceRecord.cancelledAt)) return [];
+        const quantity = Math.max(0, Number(serviceRecord.quantity ?? 1) || 0);
+        const rawUsedQuantity = serviceRecord.usedQuantity ?? serviceRecord.quantityUsed;
+        const parsedUsedQuantity = Number(rawUsedQuantity);
+        const usedQuantity = rawUsedQuantity !== undefined && rawUsedQuantity !== null && Number.isFinite(parsedUsedQuantity)
+          ? Math.min(Math.max(parsedUsedQuantity, 0), quantity)
+          : serviceRecord.used === true || typeof serviceRecord.usedAt === "string"
+            ? quantity
+            : 0;
+        const remainingQuantity = quantity - usedQuantity;
+        if (remainingQuantity <= 0) return [];
+
+        return [{
+          key: `${bookingId}-${String(detail.bookingDetailId ?? detail.id ?? "")}-${String(serviceRecord.bookingServiceDetailId ?? serviceRecord.id ?? serviceRecord.name ?? "")}`,
+          bookingId,
+          customerName: String(booking.customerName ?? detail.customerName ?? detail.nameCustomer ?? "—"),
+          roomNumber: String(detail.roomNumber ?? detail.roomName ?? "—"),
+          serviceName: String(serviceRecord.name ?? serviceRecord.serviceName ?? "Dịch vụ"),
+          quantity: remainingQuantity,
+        }];
+      });
+    });
+  }), [bookings]);
   useEffect(() => {
     if (!hotelId) return;
     return bindHotelSocketEvents({
@@ -227,6 +271,68 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
             </div>
           </section>
           <DashboardCheckInOut />
+          <section className="mt-7 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <ConciergeBell size={17} className="text-blue-600" />
+                  <h3 className="font-bold text-slate-900">{t("dashboard.servicesToConfirm")}</h3>
+                  {!bookingsLoading && !bookingsError && (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      {pendingServiceConfirmations.length}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-400">{t("dashboard.servicesToConfirmDescription")}</p>
+              </div>
+              <Link
+                to="/services/usage"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                {t("dashboard.confirmServices")}
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+            {bookingsLoading ? (
+              <p className="rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-500">{t("dashboard.loadingServicesToConfirm")}</p>
+            ) : bookingsError ? (
+              <p role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{t("dashboard.servicesToConfirmError")}</p>
+            ) : pendingServiceConfirmations.length === 0 ? (
+              <p className="rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-500">{t("dashboard.noServicesToConfirm")}</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingServiceConfirmations.slice(0, 5).map((service) => (
+                  <Link
+                    key={service.key}
+                    to="/services/usage"
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3 transition hover:border-blue-200 hover:bg-blue-50/60"
+                  >
+                    <span className="flex min-w-0 flex-1 items-start gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-600">
+                        <ConciergeBell size={16} />
+                      </span>
+                      <span className="min-w-0">
+                        <strong className="block truncate text-sm text-slate-800">{service.serviceName}</strong>
+                        <span className="mt-1 block truncate text-xs text-slate-500">
+                          {t("dashboard.serviceBooking", { bookingId: service.bookingId })}
+                          {" · "}{service.customerName}
+                          {" · "}{t("dashboard.serviceRoom", { room: service.roomNumber })}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      {t("dashboard.serviceQuantityToConfirm", { count: service.quantity })}
+                    </span>
+                  </Link>
+                ))}
+                {pendingServiceConfirmations.length > 5 && (
+                  <p className="pt-1 text-center text-xs text-slate-500">
+                    {t("dashboard.moreServicesToConfirm", { count: pendingServiceConfirmations.length - 5 })}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
           <OverviewCalendar />
           <div className="mt-7 grid gap-5 xl:grid-cols-[1.35fr_1fr]">
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5">

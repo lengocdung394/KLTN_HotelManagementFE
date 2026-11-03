@@ -2,9 +2,16 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Ban, Check, ChevronRight, CreditCard, DoorOpen, ListChecks, ReceiptText, Search } from "lucide-react";
 import type { HotelService } from "../services/serviceApi";
+import { getServicePriceBreakdown } from "../lib/bookingPricing";
 
-export type ServiceSelection = { serviceId: string; quantity: number; originalQuantity?: number; price?: number; name?: string; usedAt?: string; detailId?: string; isExisting?: boolean; applyToRoom?: boolean };
+export type ServiceSelection = { serviceId: string; quantity: number; originalQuantity?: number; usedQuantity?: number; price?: number; name?: string; usedAt?: string; detailId?: string; detailIds?: string[]; isExisting?: boolean; isUsed?: boolean; isPaid?: boolean; isLocked?: boolean; applyToRoom?: boolean };
 export type ServiceRoom = { id: string; databaseId?: string; type: string; guests: number; price: number; roomTotal?: number; dailyPrices?: Record<string, number>; nightlySurcharge?: number };
+type ExistingServiceGroup = {
+  key: string;
+  selection: ServiceSelection;
+  members: ServiceSelection[];
+  minimumQuantity: number;
+};
 
 export type BookingServiceSelectorProps = {
   rooms: ServiceRoom[];
@@ -35,6 +42,15 @@ const shiftDay = (dateStr: string, delta: number) => {
   date.setDate(date.getDate() + delta);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
+const minimumSelectionQuantity = (selection: ServiceSelection) =>
+  selection.isExisting
+    ? selection.isPaid || selection.isLocked
+      ? Number(selection.originalQuantity ?? selection.quantity)
+      : Math.min(
+        Number(selection.originalQuantity ?? selection.quantity),
+        Math.max(0, Number(selection.usedQuantity ?? (selection.isUsed ? selection.quantity : 0))),
+      )
+    : 0;
 
 export default function BookingServiceSelector({ rooms, services, servicesLoading = false, servicesError = false, serviceMode, setServiceMode, allRoomServices: selectedAllRoomServices, setAllRoomServices, roomServices, setRoomServices, roomRanges, fallbackRange, language, onContinue, onSkip, isSubmitting = false, submittingLabel = "Đang xử lý...", continueLabel = "Tiếp tục thanh toán", skipLabel = "Bỏ qua dịch vụ" }: BookingServiceSelectorProps) {
   const { t } = useTranslation();
@@ -46,9 +62,15 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
     setRoomServices((current) => {
       let changed = false;
       const next = Object.fromEntries(Object.entries(current).map(([roomId, selections]) => {
-        const filtered = selections.filter((selection) => !(selection.isExisting && selection.quantity === 0));
-        if (filtered.length !== selections.length) changed = true;
-        return [roomId, filtered];
+        const normalized = selections.map((selection) => {
+          const minimum = minimumSelectionQuantity(selection);
+          if (selection.quantity < minimum) {
+            changed = true;
+            return { ...selection, quantity: minimum };
+          }
+          return selection;
+        });
+        return [roomId, normalized];
       }));
       return changed ? next : current;
     });
@@ -57,9 +79,45 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
   const uniqueServices = services.filter((service, index, source) => source.findIndex((candidate) => candidate.id === service.id) === index);
   const visibleServices = (search: string) => uniqueServices.filter((service) => service.name.toLowerCase().includes(search.trim().toLowerCase()));
   const getSelectionQuantity = (room: ServiceRoom, selection: ServiceSelection) => selection.quantity;
-  const servicePrice = (selection: ServiceSelection) => selection.price ?? services.find((service) => String(service.id) === selection.serviceId)?.price ?? 0;
+  const servicePrice = (selection: ServiceSelection) => services.find((service) => String(service.id) === selection.serviceId)?.price ?? selection.price ?? 0;
   const serviceName = (selection: ServiceSelection) => selection.name ?? services.find((service) => String(service.id) === selection.serviceId)?.name ?? t("booking.service");
-  const roomServiceTotal = (room: ServiceRoom, selections: ServiceSelection[]) => selections.reduce((sum, selection) => sum + servicePrice(selection) * getSelectionQuantity(room, selection), 0);
+  const getExistingServiceGroups = (room: ServiceRoom): ExistingServiceGroup[] => {
+    const groups = new Map<string, ExistingServiceGroup>();
+    getRoomSelections(room).filter((selection) => selection.isExisting).forEach((selection, index) => {
+      const price = Number(selection.price ?? servicePrice(selection));
+      const key = `${selection.serviceId}:${price}`;
+      const group = groups.get(key);
+      if (group) {
+        group.members.push(selection);
+        group.selection.quantity += selection.quantity;
+        group.selection.originalQuantity = Number(group.selection.originalQuantity ?? 0)
+          + Number(selection.originalQuantity ?? selection.quantity);
+        group.minimumQuantity += minimumSelectionQuantity(selection);
+        group.selection.detailIds = [
+          ...(group.selection.detailIds ?? (group.selection.detailId ? [group.selection.detailId] : [])),
+          ...(selection.detailId ? [selection.detailId] : []),
+        ];
+      } else {
+        groups.set(key, {
+          key,
+          selection: {
+            ...selection,
+            quantity: selection.quantity,
+            originalQuantity: Number(selection.originalQuantity ?? selection.quantity),
+            detailIds: selection.detailId ? [selection.detailId] : [],
+          },
+          members: [selection],
+          minimumQuantity: minimumSelectionQuantity(selection),
+        });
+      }
+    });
+    return Array.from(groups.values());
+  };
+  const servicePriceBreakdown = (selection: ServiceSelection) =>
+    getServicePriceBreakdown(selection, servicePrice(selection));
+  const roomServiceTotal = (room: ServiceRoom, selections: ServiceSelection[]) =>
+    selections.reduce((sum, selection) => sum + servicePriceBreakdown(selection)
+      .reduce((serviceSum, line) => serviceSum + line.quantity * line.unitPrice, 0), 0);
   const roomRangeTotal = (room: ServiceRoom) => {
     if (typeof room.roomTotal === "number" && Number.isFinite(room.roomTotal)) return room.roomTotal;
     const range = roomRanges[room.id] ?? fallbackRange;
@@ -69,14 +127,18 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
     return total;
   };
   const serviceUnit = (selection: ServiceSelection) => services.find((service) => String(service.id) === selection.serviceId)?.unit ?? t("booking.service");
-  const formatServices = (room: ServiceRoom, selections: ServiceSelection[]) => selections.map((selection) => `${t("booking.name")}: ${serviceName(selection)} · ${money(servicePrice(selection))}/${serviceUnit(selection)} × ${getSelectionQuantity(room, selection)}`).join(", ");
+  const formatServices = (room: ServiceRoom, selections: ServiceSelection[]) => [
+    ...getExistingServiceGroups(room)
+      .filter((group) => group.selection.quantity > 0)
+      .map((group) => group.selection),
+    ...selections.filter((selection) => !selection.isExisting),
+  ].flatMap((selection) =>
+    servicePriceBreakdown(selection).map((line) =>
+      `${t("booking.name")}: ${serviceName(selection)} · ${money(line.unitPrice)}/${serviceUnit(selection)} × ${line.quantity}${line.isAdditional ? ` (${language.startsWith("en") ? "new" : "mới"})` : ""}`,
+    ),
+  ).join(", ");
   const getRoomSelections = (room: ServiceRoom) => {
-    const selections = roomServices[room.id] ?? (room.databaseId === undefined ? undefined : roomServices[String(room.databaseId)]) ?? [];
-    return selections.map((selection) => {
-      if (selection.quantity !== 0 || !selection.isExisting) return selection;
-      const { quantity: _zeroQuantity, ...selectionWithoutQuantity } = selection;
-      return selectionWithoutQuantity as ServiceSelection;
-    });
+    return roomServices[room.id] ?? (room.databaseId === undefined ? undefined : roomServices[String(room.databaseId)]) ?? [];
   };
 
   const updateAllRoomService = (serviceId: string, checked: boolean) => {
@@ -89,7 +151,7 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
       if (!checked) {
         const existing = selections.find((item) => item.serviceId === serviceId);
         return [room.id, existing?.isExisting
-          ? [...selections.filter((item) => item.serviceId !== serviceId), { ...existing, quantity: 0 }]
+          ? [...selections.filter((item) => item.serviceId !== serviceId), { ...existing, quantity: minimumSelectionQuantity(existing) }]
           : selections.filter((item) => item.serviceId !== serviceId)];
       }
       const existing = selections.find((item) => item.serviceId === serviceId);
@@ -116,6 +178,72 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
         [roomId]: updatedList.filter((item) => item.quantity > 0 || item.isExisting),
       };
     });
+  };
+
+  const updateExistingServiceGroupQuantity = (roomId: string, group: ExistingServiceGroup, quantity: number) => {
+    const targetQuantity = Math.min(
+      Number(group.selection.originalQuantity ?? group.selection.quantity),
+      Math.max(group.minimumQuantity, quantity),
+    );
+    const quantitiesByDetailId = new Map<string, number>();
+    let remainingAdditionalQuantity = targetQuantity - group.minimumQuantity;
+    group.members.forEach((member) => {
+      const minimum = minimumSelectionQuantity(member);
+      const originalQuantity = Number(member.originalQuantity ?? member.quantity);
+      const additionalQuantity = Math.min(
+        Math.max(0, originalQuantity - minimum),
+        remainingAdditionalQuantity,
+      );
+      const nextQuantity = minimum + additionalQuantity;
+      if (member.detailId) quantitiesByDetailId.set(member.detailId, nextQuantity);
+      remainingAdditionalQuantity -= additionalQuantity;
+    });
+    setRoomServices((current) => ({
+      ...current,
+      [roomId]: (current[roomId] ?? []).map((selection) => {
+        const nextQuantity = selection.detailId ? quantitiesByDetailId.get(selection.detailId) : undefined;
+        return nextQuantity === undefined ? selection : { ...selection, quantity: nextQuantity };
+      }),
+    }));
+  };
+
+  const toggleAdditionalService = (roomId: string, serviceId: string, checked: boolean, defaultQuantity: number) => {
+    setRoomServices((current) => {
+      const selections = current[roomId] ?? [];
+      const existingAddition = selections.find((selection) =>
+        !selection.isExisting && selection.serviceId === serviceId,
+      );
+      if (!checked) {
+        return {
+          ...current,
+          [roomId]: selections.filter((selection) =>
+            selection.isExisting || selection.serviceId !== serviceId,
+          ),
+        };
+      }
+
+      const newAddition: ServiceSelection = existingAddition
+        ? { ...existingAddition, quantity: existingAddition.quantity || defaultQuantity }
+        : { serviceId, quantity: defaultQuantity };
+      return {
+        ...current,
+        [roomId]: [
+          ...selections.filter((selection) => selection.isExisting || selection.serviceId !== serviceId),
+          newAddition,
+        ],
+      };
+    });
+  };
+
+  const updateAdditionalServiceQuantity = (roomId: string, serviceId: string, quantity: number) => {
+    setRoomServices((current) => ({
+      ...current,
+      [roomId]: (current[roomId] ?? []).map((selection) =>
+        !selection.isExisting && selection.serviceId === serviceId
+          ? { ...selection, quantity }
+          : selection,
+      ),
+    }));
   };
 
   const scrollToServiceSection = (section: "services" | "rooms" | "summary", childIndex: number) => {
@@ -146,11 +274,124 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
       <div className="mb-2 flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{t("booking.servicesByRoom")}</p><span className="text-xs font-semibold text-slate-500">{t("booking.roomCount", { count: rooms.length })}</span></div>
       {rooms.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">{t("booking.noRoomsSelected")}</div> : <div className="space-y-2">{rooms.map((room, index) => { const selections = getRoomSelections(room).filter((sel) => sel.quantity > 0); const expanded = expandedRoom === room.id; return <div key={`room-${room.id}-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <button type="button" onClick={() => setExpandedRoom(expanded ? null : room.id)} className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-slate-50"><span className="min-w-0"><strong className="block text-sm text-slate-900">{t("booking.roomWithNumber", { room: room.id })} · {room.type}</strong><span className="mt-1 block truncate text-xs text-slate-500">{selections.length > 0 ? formatServices(room, selections) : t("booking.noServiceSelected")}</span></span><span className="flex shrink-0 items-center gap-3"><strong className="text-xs text-blue-700">{money(roomServiceTotal(room, getRoomSelections(room)))}</strong><ChevronRight size={16} className={`text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} /></span></button>
-        {expanded && <div className="border-t border-slate-100 bg-slate-50 p-3"><p className="mb-2 text-xs font-semibold text-slate-500">{t("booking.guestCountAndSelectServices", { count: room.guests })}</p><label className="relative mb-3 block"><Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="search" value={roomServiceSearch[room.id] ?? ""} onChange={(event) => setRoomServiceSearch((current) => ({ ...current, [room.id]: event.target.value }))} placeholder={t("booking.searchServicesForRoom", { room: room.id })} aria-label={t("booking.searchServicesForRoom", { room: room.id })} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label><div className="grid gap-2 sm:grid-cols-2">{visibleServices(roomServiceSearch[room.id] ?? "").map((service, sIndex) => { const storedSelection = getRoomSelections(room).find((item) => item.serviceId === service.id); const selection = storedSelection && storedSelection.quantity > 0 ? storedSelection : undefined; const isSelected = Boolean(selection); return <div key={`room-${room.id}-svc-${service.id}-${sIndex}`} className={`flex items-center justify-between gap-3 rounded-lg border-2 px-3 py-2 transition-colors ${isSelected ? "border-blue-500 bg-blue-50" : "border-blue-200 bg-white hover:border-blue-400"}`}><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={isSelected} onChange={(event) => setRoomServices((current) => { const currentSelections = current[room.id] ?? []; const existing = currentSelections.find((item) => item.serviceId === service.id); if (event.target.checked) { const initQty = existing?.originalQuantity && existing.originalQuantity > 0 ? existing.originalQuantity : room.guests; return { ...current, [room.id]: [...currentSelections.filter((item) => item.serviceId !== service.id), { serviceId: service.id, quantity: initQty, ...(existing ?? {}) }] }; } return { ...current, [room.id]: existing?.isExisting ? [...currentSelections.filter((item) => item.serviceId !== service.id), { ...existing, quantity: 0 }] : currentSelections.filter((item) => item.serviceId !== service.id) }; })} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="truncate text-xs font-semibold text-slate-700">{service.name} · {money(service.price)}/{t("booking.people")}</span></label>{isSelected && <input type="number" min="0" value={selection.quantity} onChange={(event) => { const newQty = Math.max(0, Number(event.target.value) || 0); setRoomServices((current) => { const currentSelections = current[room.id] ?? []; const existing = currentSelections.find((item) => item.serviceId === service.id); if (newQty === 0 && existing?.isExisting) return { ...current, [room.id]: currentSelections.map((item) => item.serviceId === service.id ? { ...item, quantity: 0 } : item) }; if (newQty === 0) return { ...current, [room.id]: currentSelections.filter((item) => item.serviceId !== service.id) }; return { ...current, [room.id]: currentSelections.map((item) => item.serviceId === service.id ? { ...item, quantity: newQty } : item) }; }); }} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" />}</div>; })}</div></div>}
+        {expanded && (
+          <div className="border-t border-slate-100 bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-semibold text-slate-500">
+              {t("booking.guestCountAndSelectServices", { count: room.guests })}
+            </p>
+            <label className="relative mb-3 block">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={roomServiceSearch[room.id] ?? ""}
+                onChange={(event) => setRoomServiceSearch((current) => ({ ...current, [room.id]: event.target.value }))}
+                placeholder={t("booking.searchServicesForRoom", { room: room.id })}
+                aria-label={t("booking.searchServicesForRoom", { room: room.id })}
+                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            {getExistingServiceGroups(room).length > 0 && (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-semibold text-slate-600">
+                  {language.startsWith("en") ? "Booked services by price" : "Dịch vụ đã đặt (gộp theo giá)"}
+                </p>
+                <div className="space-y-2">
+                  {getExistingServiceGroups(room).map((group) => (
+                      <div
+                        key={group.key}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                      >
+                        <span className="min-w-0">
+                          <strong className="block truncate text-xs text-slate-700">
+                            {serviceName(group.selection)}
+                          </strong>
+                          <span className="mt-0.5 block text-[11px] text-slate-500">
+                            {money(Number(group.selection.price ?? servicePrice(group.selection)))}/{serviceUnit(group.selection)}
+                            {" · "}
+                            {language.startsWith("en") ? "Subtotal" : "Thành tiền"}:{" "}
+                            {money(Number(group.selection.price ?? servicePrice(group.selection)) * group.selection.quantity)}
+                          </span>
+                        </span>
+                        <label className="flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+                          {language.startsWith("en") ? "Qty" : "SL"}
+                          <input
+                            type="number"
+                            min={group.minimumQuantity}
+                            max={group.selection.originalQuantity}
+                            value={group.selection.quantity}
+                            disabled={group.minimumQuantity >= Number(group.selection.originalQuantity ?? group.selection.quantity)}
+                            aria-label={`${serviceName(group.selection)} ${money(Number(group.selection.price ?? servicePrice(group.selection)))}`}
+                            onChange={(event) => updateExistingServiceGroupQuantity(
+                              room.id,
+                              group,
+                              Number(event.target.value) || 0,
+                            )}
+                            className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs"
+                          />
+                        </label>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            <p className="mb-2 text-xs font-semibold text-slate-600">
+              {language.startsWith("en") ? "Add services at current price" : "Thêm dịch vụ theo giá hiện tại"}
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {visibleServices(roomServiceSearch[room.id] ?? "").map((service, serviceIndex) => {
+                const selection = getRoomSelections(room).find(
+                  (item) => !item.isExisting && item.serviceId === service.id,
+                );
+                const isSelected = Boolean(selection && selection.quantity > 0);
+                return (
+                  <div
+                    key={`room-${room.id}-svc-${service.id}-${serviceIndex}`}
+                    className={`flex items-center justify-between gap-3 rounded-lg border-2 px-3 py-2 transition-colors ${
+                      isSelected ? "border-blue-500 bg-blue-50" : "border-blue-200 bg-white hover:border-blue-400"
+                    }`}
+                  >
+                    <label className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(event) => toggleAdditionalService(
+                          room.id,
+                          service.id,
+                          event.target.checked,
+                          room.guests,
+                        )}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600"
+                      />
+                      <span className="truncate text-xs font-semibold text-slate-700">
+                        {service.name} · {money(service.price)}/{t("booking.people")}
+                      </span>
+                    </label>
+                    {selection && (
+                      <input
+                        type="number"
+                        min="0"
+                        value={selection.quantity}
+                        aria-label={`${service.name} ${language.startsWith("en") ? "new quantity" : "số lượng mới"}`}
+                        onChange={(event) => updateAdditionalServiceQuantity(
+                          room.id,
+                          service.id,
+                          Math.max(0, Number(event.target.value) || 0),
+                        )}
+                        className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>; })}</div>}
     </div>}
     <div className="mt-5 rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.roomInfo")}</p><div className="mt-3 space-y-2">{rooms.map((room, index) => { const selections = roomServices[room.id] ?? []; const range = roomRanges[room.id] ?? fallbackRange; const displaySelections = serviceMode === "all" ? allRoomServices.map((item) => selections.find((selection) => selection.serviceId === item.serviceId) ?? { ...item, quantity: room.guests, applyToRoom: true }) : selections; return <div key={`info-room-${room.id}-${index}`} className="rounded-lg border border-slate-200 bg-white p-3 text-xs"><div className="flex items-start justify-between gap-3"><span className="min-w-0"><strong className="block text-slate-800">{t("booking.roomWithNumber", { room: room.id })} · {room.type}</strong><span className="mt-1 block text-slate-500">{t("booking.guestCount", { count: room.guests })}</span><span className="mt-1 block text-slate-500">{t("booking.checkInLabel")}: {formatDate(range.checkIn, language)}</span><span className="block text-slate-500">{t("booking.checkOutLabel")}: {formatDate(range.checkOut, language)}</span></span><span className="shrink-0 text-right font-bold text-slate-800">{money(roomRangeTotal(room) + roomServiceTotal(room, displaySelections))}</span></div>{serviceMode === "all" && allRoomServices.length > 0 && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">{allRoomServices.map((serviceSelection, sIndex) => { const service = services.find((item) => String(item.id) === serviceSelection.serviceId); const selection = selections.find((item) => item.serviceId === serviceSelection.serviceId) ?? { serviceId: serviceSelection.serviceId, quantity: room.guests, applyToRoom: true }; return <div key={`info-svc-${serviceSelection.serviceId}-${sIndex}`} className="flex items-center justify-between gap-3"><span className="min-w-0 truncate font-semibold text-blue-700">{service?.name} · {money(service?.price ?? 0)} / {t("booking.people")}</span><div className="flex shrink-0 items-center gap-2"><label className="flex items-center gap-1 text-[11px] text-slate-500"><input type="checkbox" checked={selection.applyToRoom !== false} onChange={(event) => updateRoomService(room.id, serviceSelection.serviceId, { applyToRoom: event.target.checked, quantity: event.target.checked ? room.guests : selection.quantity })} />{t("booking.applyToWholeRoom")}</label><label className="flex items-center gap-1 text-[11px] text-slate-500">{t("booking.people")}<input aria-label={t("booking.peopleUsingService", { service: service?.name ?? t("booking.service"), room: room.id })} type="number" min="1" value={selection.quantity} onChange={(event) => updateRoomService(room.id, serviceSelection.serviceId, { quantity: Math.max(1, Number(event.target.value) || 1), applyToRoom: false })} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" /></label></div></div>; })}</div>}{serviceMode !== "all" && <span className="mt-1 block text-blue-700">{selections.length > 0 ? formatServices(room, selections) : t("booking.noServiceSelected")}</span>}</div>; })}</div></div>
-    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.roomDetails")}</div><div className="divide-y divide-slate-100">{rooms.map((room, index) => { const selections = serviceMode === "all" ? roomServices[room.id] ?? allRoomServices.map((item) => ({ ...item, quantity: room.guests })) : roomServices[room.id] ?? []; const roomAmount = roomRangeTotal(room); return <div key={`detail-room-${room.id}-${index}`} className="px-4 py-3 text-xs"><div className="flex items-center justify-between gap-3"><strong className="text-slate-800">{t("booking.roomWithNumber", { room: room.id })} · {room.type}</strong><strong className="text-slate-800">{t("booking.roomRate")}: {money(roomAmount)}</strong></div><div className="mt-2 space-y-1 border-t border-slate-100 pt-2">{selections.length > 0 ? selections.map((selection, sIndex) => { const service = services.find((item) => String(item.id) === selection.serviceId); const unitPrice = servicePrice(selection); const amount = unitPrice * selection.quantity; return <div key={`detail-svc-${selection.serviceId}-${sIndex}`} className="flex items-center justify-between gap-3 text-slate-500"><span>{service?.name ?? t("booking.service")} · {money(unitPrice)}/{t("booking.service")} × {selection.quantity}</span><strong className="shrink-0 text-blue-700">{money(amount)}</strong></div>; }) : <span className="text-slate-400">{t("booking.noServiceSelected")}</span>}</div></div>; })}</div></div>
+    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.roomDetails")}</div><div className="divide-y divide-slate-100">{rooms.map((room, index) => { const selections = serviceMode === "all" ? roomServices[room.id] ?? allRoomServices.map((item) => ({ ...item, quantity: room.guests })) : roomServices[room.id] ?? []; const roomAmount = roomRangeTotal(room); return <div key={`detail-room-${room.id}-${index}`} className="px-4 py-3 text-xs"><div className="flex items-center justify-between gap-3"><strong className="text-slate-800">{t("booking.roomWithNumber", { room: room.id })} · {room.type}</strong><strong className="text-slate-800">{t("booking.roomRate")}: {money(roomAmount)}</strong></div><div className="mt-2 space-y-1 border-t border-slate-100 pt-2">{selections.length > 0 ? selections.flatMap((selection, sIndex) => { const service = services.find((item) => String(item.id) === selection.serviceId); return servicePriceBreakdown(selection).map((line, priceIndex) => <div key={`detail-svc-${selection.serviceId}-${sIndex}-${priceIndex}`} className="flex items-center justify-between gap-3 text-slate-500"><span>{service?.name ?? t("booking.service")} · {money(line.unitPrice)}/{t("booking.service")} × {line.quantity}{line.isAdditional ? ` (${language.startsWith("en") ? "new" : "mới"})` : ""}</span><strong className="shrink-0 text-blue-700">{money(line.unitPrice * line.quantity)}</strong></div>); }) : <span className="text-slate-400">{t("booking.noServiceSelected")}</span>}</div></div>; })}</div></div>
     <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">{t("booking.costSummary")}</div><div className="divide-y divide-slate-100">{rooms.map((room, index) => { const selections = serviceMode === "all" ? roomServices[room.id] ?? allRoomServices.map((item) => ({ ...item, quantity: room.guests })) : roomServices[room.id] ?? []; const roomAmount = roomRangeTotal(room); const serviceAmount = roomServiceTotal(room, selections); return <div key={`summary-room-${room.id}-${index}`} className="grid gap-2 px-4 py-3 text-xs sm:grid-cols-[1.5fr_1fr_1fr_1fr] sm:items-center"><strong className="text-slate-800">{t("booking.roomWithNumber", { room: room.id })}</strong><span className="text-slate-500">{t("booking.roomRate")}: <strong className="text-slate-700">{money(roomAmount)}</strong></span><span className="text-slate-500">{t("booking.serviceFee")}: <strong className="text-blue-700">{money(serviceAmount)}</strong></span><span className="text-left font-bold text-slate-800 sm:text-right">{t("booking.total")}: {money(roomAmount + serviceAmount)}</span></div>; })}</div></div>
     <div className="mt-5 flex flex-col-reverse justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center"><button type="button" onClick={onSkip} className="text-sm font-semibold text-slate-500 hover:text-slate-800">{skipLabel}</button><button type="button" onClick={onContinue} className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">{continueLabel} <ChevronRight size={16} className="ml-1 inline" /></button></div>
   </div>;

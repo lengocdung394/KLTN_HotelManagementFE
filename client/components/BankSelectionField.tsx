@@ -18,10 +18,8 @@ export default function BankSelectionField({
   const [otherSelected, setOtherSelected] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const selectedBank = vietnameseBanks.find((bank) =>
-    bank.bin === bankCode
-    || bank.shortName.toLocaleLowerCase() === bankName.toLocaleLowerCase(),
-  );
+  const selectedBank = vietnameseBanks.find((bank) => bank.bin === bankCode)
+    ?? vietnameseBanks.find((bank) => bank.shortName.toLocaleLowerCase() === bankName.toLocaleLowerCase());
   const isOtherSelected = !selectedBank && (otherSelected || Boolean(bankName || bankCode));
   const filteredBanks = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();

@@ -48,9 +48,9 @@ export default function CheckoutRefundApprovalsPanel() {
             <Banknote size={20} />
           </span>
           <div>
-            <h3 className="font-bold text-slate-900">{localizedText("Hoàn tiền do khách thanh toán dư", "Refunds for guest overpayment")}</h3>
+            <h3 className="font-bold text-slate-900">{localizedText("Hoàn tiền sau khi checkout dư", "Checkout surplus refund")}</h3>
             <p className="mt-1 text-sm text-slate-600">
-              {localizedText("Theo dõi từng khoản hoàn theo booking, số tiền, hình thức và trạng thái.", "Review each refund by booking, amount, method, and status.")}
+              {localizedText("Theo dõi khoản thanh toán dư sau khi toàn bộ booking checkout, theo số tiền, hình thức và trạng thái hoàn.", "Track overpayments after every room in the booking has checked out, including the amount, method, and refund status.")}
             </p>
             <p className="mt-2 text-xs font-medium text-slate-500">
               {pendingCashRefunds.length} {localizedText("chờ xác nhận tiền mặt", "cash refunds to confirm")} · {pending.length - pendingCashRefunds.length} {localizedText("chờ duyệt hoàn online", "online refunds to review")} · {approved.length} {localizedText("chờ hoàn online", "awaiting online refund")} · {refunded.length} {localizedText("đã hoàn", "refunded")}
