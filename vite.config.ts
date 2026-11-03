@@ -49,8 +49,19 @@ function expressPlugin(): Plugin {
     configureServer(server) {
       const app = createServer();
 
-      // Add Express app as middleware to Vite dev server
-      server.middlewares.use(app);
+      // Skip Express middleware for proxied routes (/ai, /api/admin-ai, etc.)
+      // to avoid express.json() consuming the body stream before Vite proxy forwards it
+      server.middlewares.use((req, res, next) => {
+        if (
+          req.url &&
+          (req.url.startsWith("/ai") ||
+            req.url.startsWith("/api/admin-ai") ||
+            req.url.startsWith("/live-chat"))
+        ) {
+          return next();
+        }
+        app(req, res, next);
+      });
     },
   };
 }
