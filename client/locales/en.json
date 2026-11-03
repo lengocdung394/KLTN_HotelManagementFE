@@ -86,8 +86,8 @@
     "contactAdmin": "Contact administrator",
     "requiredFields": "Please enter both your email and password.",
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
-    ,"logout": "Log out"
+    "hidePassword": "Hide password",
+    "logout": "Log out"
   },
   "dashboard": {
     "branchOverview": "Branch overview",
@@ -99,6 +99,16 @@
     "todayCheckInOut": "Today's check-in / check-out",
     "upcomingCheckIns": "Upcoming check-ins",
     "upcomingCheckOuts": "Upcoming check-outs",
+    "servicesToConfirm": "Services to confirm",
+    "servicesToConfirmDescription": "Booked services with quantities that have not yet been confirmed as used.",
+    "confirmServices": "Confirm services",
+    "loadingServicesToConfirm": "Loading services to confirm...",
+    "servicesToConfirmError": "Could not load services to confirm.",
+    "noServicesToConfirm": "There are no services to confirm.",
+    "serviceBooking": "Booking {{bookingId}}",
+    "serviceRoom": "Room {{room}}",
+    "serviceQuantityToConfirm": "{{count}} remaining to confirm",
+    "moreServicesToConfirm": "{{count}} more services",
     "roomStatus": "Room status",
     "tasksToHandle": "Tasks to handle",
     "viewAll": "View all"
@@ -163,6 +173,28 @@
     "noBookings": "This customer has no bookings at this hotel.",
     "bookingCode": "Booking ID",
     "bookingAmount": "Total",
+    "paymentHistory": "Payment history",
+    "paymentCount": "Number of payments",
+    "noPayments": "No payment transactions yet.",
+    "paymentsLoadError": "Could not load payment history.",
+    "paymentTime": "Time",
+    "paymentAmount": "Payment amount",
+    "paymentMethod": "Method",
+    "paymentSource": "Payment source",
+    "paymentSources": {
+      "frontDesk": "Recorded by front desk",
+      "customer": "Paid by customer",
+      "onlineGateway": "Online payment",
+      "unknown": "Payment source unknown"
+    },
+    "paymentStaff": "Front desk staff",
+    "paymentStaffNotRecorded": "Staff information not recorded",
+    "paymentMethods": {
+      "cash": "Cash",
+      "bank": "Bank transfer",
+      "payos": "PayOS / QR",
+      "ewallet": "E-wallet"
+    },
     "roomCharge": "Room charges",
     "serviceCharge": "Service charges",
     "appliedPromotion": "Promotion code",
@@ -188,20 +220,115 @@
     "tiers": { "loyal": "Loyal", "potential": "Potential", "new": "New" }
   },
   "pages": {
-    "bookings": { "eyebrow": "Hotel operations", "title": "Bookings", "description": "Manage reservations, staying guests, and check-in / check-out schedules.", "stats": ["Today's bookings", "Pending confirmation", "Today's check-ins", "Expected revenue"] },
-    "customers": { "eyebrow": "Customer relations", "title": "Customer management", "description": "Manage profiles, stay history, and returning guest care.", "stats": ["Total customers", "Loyal customers", "Returning this month", "Average spending"] },
-    "refundApprovals": { "eyebrow": "Branch finance", "title": "Refund approvals", "description": "Review checkout surplus refunds, confirm cash refunds at the front desk, and process bank transfer requests.", "stats": ["Pending refunds", "In progress", "Refunded", "Total refunded"] },
-    "hotelRules": { "eyebrow": "Hotel operations", "title": "Hotel rules", "description": "Review booking, check-in / check-out, cancellation, and service guidelines.", "stats": [] },
-    "checkInOut": { "eyebrow": "Front desk operations", "title": "Check-in / Check-out", "description": "Manage arrivals, departures, and guest stay status for today.", "stats": ["Waiting for check-in", "Currently staying", "Waiting for check-out", "Completed"] },
-    "promotions": { "eyebrow": "Sales & guest care", "title": "Promotions", "description": "Create offers and manage discount codes for guests at Sen Viet.", "stats": ["Currently active", "Uses this month", "Guest savings", "Expiring soon"] },
-    "rooms": { "eyebrow": "Asset management", "title": "Room management", "description": "Track room status, room types, and housekeeping assignments.", "stats": ["Total rooms", "Ready", "In use", "Maintenance"] },
-    "invoices": { "eyebrow": "Branch finance", "title": "Invoices", "description": "Review invoices, payments, and guest transaction reconciliation.", "stats": ["This month's revenue", "Paid", "Pending payment", "Refunded"] },
-    "staff": { "eyebrow": "People management", "title": "Staff & shifts", "description": "Manage employees, roles, schedules, and branch assignments.", "stats": ["Total staff", "Currently working", "Today's shifts", "On leave"] },
-    "permissions": { "eyebrow": "System administration", "title": "Permissions", "description": "Set roles and access permissions for each staff group.", "stats": ["Roles", "Staff", "Access permissions", "Last updated"] },
-    "reports": { "eyebrow": "Business analytics", "title": "Revenue reports", "description": "Track occupancy, ADR, RevPAR, and business performance over time.", "stats": ["Monthly revenue", "Room occupancy", "ADR", "RevPAR"] },
-    "settings": { "eyebrow": "System setup", "title": "Settings", "description": "Configure your branch, room types, notifications, and account access.", "stats": ["Branch", "Time zone", "Language", "Role"] }
-    ,"serviceUsage": { "eyebrow": "Hotel operations", "title": "Customer service operations", "description": "Track booked services and confirm them after guests use them.", "stats": [] }
-    ,"serviceCatalog": { "eyebrow": "Service catalog", "title": "Service catalog management", "description": "Add, edit, and manage the status of hotel services.", "stats": [] }
+    "bookings": {
+      "eyebrow": "Hotel operations",
+      "title": "Bookings",
+      "description": "Manage reservations, staying guests, and check-in / check-out schedules.",
+      "stats": [
+        "Today's bookings",
+        "Pending confirmation",
+        "Today's check-ins",
+        "Expected revenue"
+      ]
+    },
+    "customers": {
+      "eyebrow": "Customer relations",
+      "title": "Customer management",
+      "description": "Manage profiles, stay history, and returning guest care.",
+      "stats": [
+        "Total customers",
+        "Loyal customers",
+        "Returning this month",
+        "Average spending"
+      ]
+    },
+    "refundApprovals": {
+      "eyebrow": "Branch finance",
+      "title": "Refund approvals",
+      "description": "Review checkout surplus refunds, confirm cash refunds at the front desk, and process bank transfer requests.",
+      "stats": ["Pending refunds", "In progress", "Refunded", "Total refunded"]
+    },
+    "hotelRules": {
+      "eyebrow": "Hotel operations",
+      "title": "Hotel rules",
+      "description": "Review booking, check-in / check-out, cancellation, and service guidelines.",
+      "stats": []
+    },
+    "checkInOut": {
+      "eyebrow": "Front desk operations",
+      "title": "Check-in / Check-out",
+      "description": "Manage arrivals, departures, and guest stay status for today.",
+      "stats": [
+        "Waiting for check-in",
+        "Currently staying",
+        "Waiting for check-out",
+        "Completed"
+      ]
+    },
+    "promotions": {
+      "eyebrow": "Sales & guest care",
+      "title": "Promotions",
+      "description": "Create offers and manage discount codes for guests at Sen Viet.",
+      "stats": [
+        "Currently active",
+        "Uses this month",
+        "Guest savings",
+        "Expiring soon"
+      ]
+    },
+    "rooms": {
+      "eyebrow": "Asset management",
+      "title": "Room management",
+      "description": "Track room status, room types, and housekeeping assignments.",
+      "stats": ["Total rooms", "Ready", "In use", "Maintenance"]
+    },
+    "invoices": {
+      "eyebrow": "Branch finance",
+      "title": "Invoices",
+      "description": "Review invoices, payments, and guest transaction reconciliation.",
+      "stats": ["This month's revenue", "Paid", "Pending payment", "Refunded"]
+    },
+    "staff": {
+      "eyebrow": "People management",
+      "title": "Staff & shifts",
+      "description": "Manage employees, roles, schedules, and branch assignments.",
+      "stats": [
+        "Total staff",
+        "Currently working",
+        "Today's shifts",
+        "On leave"
+      ]
+    },
+    "permissions": {
+      "eyebrow": "System administration",
+      "title": "Permissions",
+      "description": "Set roles and access permissions for each staff group.",
+      "stats": ["Roles", "Staff", "Access permissions", "Last updated"]
+    },
+    "reports": {
+      "eyebrow": "Business analytics",
+      "title": "Revenue reports",
+      "description": "Track occupancy, ADR, RevPAR, and business performance over time.",
+      "stats": ["Monthly revenue", "Room occupancy", "ADR", "RevPAR"]
+    },
+    "settings": {
+      "eyebrow": "System setup",
+      "title": "Settings",
+      "description": "Configure your branch, room types, notifications, and account access.",
+      "stats": ["Branch", "Time zone", "Language", "Role"]
+    },
+    "serviceUsage": {
+      "eyebrow": "Hotel operations",
+      "title": "Customer service operations",
+      "description": "Track booked services and confirm them after guests use them.",
+      "stats": []
+    },
+    "serviceCatalog": {
+      "eyebrow": "Service catalog",
+      "title": "Service catalog management",
+      "description": "Add, edit, and manage the status of hotel services.",
+      "stats": []
+    }
   },
   "booking": {
     "adults": "Adults",
@@ -254,102 +381,102 @@
     "createAnother": "Create another booking",
     "available": "Available",
     "occupied": "Occupied",
-    "pendingConfirmation": "Pending confirmation"
-    ,"dateAndRooms": "Dates & rooms"
-    ,"payment": "Payment"
-    ,"selectDateAndRoom": "Select dates and rooms"
-    ,"bookingInformation": "Booking information"
-    ,"changeRoom": "Change room"
-    ,"addAnotherRoom": "Add another room"
-    ,"nights": "nights"
-    ,"noDateSelected": "No dates selected"
-    ,"searchRooms": "Search room number or type"
-    ,"searchCustomer": "Find saved customer"
-    ,"searchCustomerPlaceholder": "Search by name or phone number"
-    ,"changeCustomer": "Change customer"
-    ,"unavailable": "Booked / unavailable"
-    ,"dragToSelectRooms": "Drag vertically to select rooms"
-    ,"showFullRooms": "Show fully booked rooms"
-    ,"selectedRooms": "Selected"
-    ,"showAllRooms": "Show all rooms"
-    ,"rooms": "rooms"
-    ,"estimatedTotal": "Estimated total"
-    ,"selectDateToAddRoom": "Select dates on the calendar to add another room."
-    ,"guestSearchLoading": "Searching..."
-    ,"customerListLoading": "Loading customers..."
-    ,"customerListError": "Could not load customers. Please try again."
-    ,"customerListEmpty": "No customers with previous bookings were found."
-    ,"customerListNoMatches": "No matching customers found."
-    ,"registeredCustomer": "Registered"
-    ,"walkInCustomer": "Walk-in"
-    ,"emailConfirmation": "Booking notification email (optional)"
-    ,"emailConfirmationHelp": "If provided, the guest will receive a booking confirmation email. This can be left blank."
-    ,"createCustomer": "Create customer"
-    ,"creatingCustomer": "Creating customer..."
-    ,"customerCreated": "Customer profile created"
-    ,"existingCustomerSelectedTitle": "Customer already exists"
-    ,"existingCustomerSelectedDescription": "The existing profile for {{name}} has been selected for this booking."
-    ,"customerCreateFailedTitle": "Could not create customer"
-    ,"customerIdentityConflict": "The phone number and citizen ID belong to different customer profiles. The entered details were cleared; search for and select the correct customer profile."
-    ,"customerProfileRequired": "Create a customer or select a saved customer profile before continuing."
-    ,"guestStayingInRoom": "Guest staying in room {{room}}"
-    ,"roomGuestPolicy": "Guest policy and surcharges"
-    ,"standardCapacity": "Standard capacity:"
-    ,"maxAdditionalGuests": "Maximum additional guests:"
-    ,"adultAgeRange": "Adults (12 and older)"
-    ,"childAgeRange": "Children (2 to under 12)"
-    ,"infantAgeRange": "Infants (under 2)"
-    ,"infantFree": "free"
-    ,"privateRoomNote": "Private note for room {{room}}"
-    ,"roomGuestCount": "{{count}} guests · {{nights}} nights"
-    ,"adultSurcharge": "Adult surcharge"
-    ,"childSurcharge": "Child surcharge"
-    ,"noServiceSelected": "None selected"
-    ,"roomSubtotal": "Room subtotal"
-    ,"removeSelectedRoom": "Remove room"
-    ,"roomCancelledOnSave": "This room will be cancelled when the booking is saved."
-    ,"cannotRemoveRoom": "Cannot remove a room after check-in or when its booking detail is no longer pending."
-    ,"guestInfo": "Guest information"
-    ,"roomInfo": "Room information"
-    ,"multipleSchedules": "Multiple schedules"
-    ,"selected": "Selected"
-    ,"enterGuestDetailsForSummary": "Enter the guest's full name, phone number, and citizen ID to show their details."
-    ,"promoSelected": "Promotion applied: {{code}}"
-    ,"people": "people"
-    ,"currencyPerPerson": "₫/person"
-    ,"specialGuestRequests": "Special guest requests..."
-    ,"continueToServices": "Continue to select services"
-    ,"guestDetailsRequired": "Enter the guest's full name, phone number, and citizen ID."
-    ,"creatingGuestProfile": "Creating guest profile. Please wait..."
-    ,"employeeIdMissing": "Employee ID not found in the signed-in session."
-    ,"updatingBooking": "Updating booking..."
-    ,"creatingBooking": "Creating booking..."
-    ,"updateBooking": "Update booking"
-    ,"cancelRoomChange": "Cancel room change"
-    ,"onlyChangePendingRoom": "Rooms can only be changed while the booking detail is pending and before check-in."
-    ,"selectForAllRooms": "Select for all rooms"
-    ,"selectPerRoom": "Select individually by room"
-    ,"serviceNavigation": "Service page navigation"
-    ,"selectServices": "Select services"
-    ,"costSummary": "Cost summary"
-    ,"searchServices": "Search services..."
-    ,"loadingServices": "Loading services..."
-    ,"servicesLoadError": "Could not load services."
-    ,"noServicesAvailable": "No services available."
-    ,"servicesByRoom": "Services by room"
-    ,"roomCount": "{{count}} rooms"
-    ,"noRoomsSelected": "No rooms selected."
-    ,"roomWithNumber": "Room {{room}}"
-    ,"guestCountAndSelectServices": "{{count}} guests · Select services and quantities"
-    ,"searchServicesForRoom": "Search services for room {{room}}..."
-    ,"guestCount": "{{count}} guests"
-    ,"checkInLabel": "Check-in"
-    ,"checkOutLabel": "Check-out"
-    ,"applyToWholeRoom": "Apply to the whole room"
-    ,"peopleUsingService": "People using {{service}} in room {{room}}"
-    ,"roomDetails": "Room details"
-    ,"service": "service"
-    ,"name": "Name"
+    "pendingConfirmation": "Pending confirmation",
+    "dateAndRooms": "Dates & rooms",
+    "payment": "Payment",
+    "selectDateAndRoom": "Select dates and rooms",
+    "bookingInformation": "Booking information",
+    "changeRoom": "Change room",
+    "addAnotherRoom": "Add another room",
+    "nights": "nights",
+    "noDateSelected": "No dates selected",
+    "searchRooms": "Search room number or type",
+    "searchCustomer": "Find saved customer",
+    "searchCustomerPlaceholder": "Search by name or phone number",
+    "changeCustomer": "Change customer",
+    "unavailable": "Booked / unavailable",
+    "dragToSelectRooms": "Drag vertically to select rooms",
+    "showFullRooms": "Show fully booked rooms",
+    "selectedRooms": "Selected",
+    "showAllRooms": "Show all rooms",
+    "rooms": "rooms",
+    "estimatedTotal": "Estimated total",
+    "selectDateToAddRoom": "Select dates on the calendar to add another room.",
+    "guestSearchLoading": "Searching...",
+    "customerListLoading": "Loading customers...",
+    "customerListError": "Could not load customers. Please try again.",
+    "customerListEmpty": "No customers with previous bookings were found.",
+    "customerListNoMatches": "No matching customers found.",
+    "registeredCustomer": "Registered",
+    "walkInCustomer": "Walk-in",
+    "emailConfirmation": "Booking notification email (optional)",
+    "emailConfirmationHelp": "If provided, the guest will receive a booking confirmation email. This can be left blank.",
+    "createCustomer": "Create customer",
+    "creatingCustomer": "Creating customer...",
+    "customerCreated": "Customer profile created",
+    "existingCustomerSelectedTitle": "Customer already exists",
+    "existingCustomerSelectedDescription": "The existing profile for {{name}} has been selected for this booking.",
+    "customerCreateFailedTitle": "Could not create customer",
+    "customerIdentityConflict": "The phone number and citizen ID belong to different customer profiles. The entered details were cleared; search for and select the correct customer profile.",
+    "customerProfileRequired": "Create a customer or select a saved customer profile before continuing.",
+    "guestStayingInRoom": "Guest staying in room {{room}}",
+    "roomGuestPolicy": "Guest policy and surcharges",
+    "standardCapacity": "Standard capacity:",
+    "maxAdditionalGuests": "Maximum additional guests:",
+    "adultAgeRange": "Adults (12 and older)",
+    "childAgeRange": "Children (2 to under 12)",
+    "infantAgeRange": "Infants (under 2)",
+    "infantFree": "free",
+    "privateRoomNote": "Private note for room {{room}}",
+    "roomGuestCount": "{{count}} guests · {{nights}} nights",
+    "adultSurcharge": "Adult surcharge",
+    "childSurcharge": "Child surcharge",
+    "noServiceSelected": "None selected",
+    "roomSubtotal": "Room subtotal",
+    "removeSelectedRoom": "Remove room",
+    "roomCancelledOnSave": "This room will be cancelled when the booking is saved.",
+    "cannotRemoveRoom": "Cannot remove a room after check-in or when its booking detail is no longer pending.",
+    "guestInfo": "Guest information",
+    "roomInfo": "Room information",
+    "multipleSchedules": "Multiple schedules",
+    "selected": "Selected",
+    "enterGuestDetailsForSummary": "Enter the guest's full name, phone number, and citizen ID to show their details.",
+    "promoSelected": "Promotion applied: {{code}}",
+    "people": "people",
+    "currencyPerPerson": "₫/person",
+    "specialGuestRequests": "Special guest requests...",
+    "continueToServices": "Continue to select services",
+    "guestDetailsRequired": "Enter the guest's full name, phone number, and citizen ID.",
+    "creatingGuestProfile": "Creating guest profile. Please wait...",
+    "employeeIdMissing": "Employee ID not found in the signed-in session.",
+    "updatingBooking": "Updating booking...",
+    "creatingBooking": "Creating booking...",
+    "updateBooking": "Update booking",
+    "cancelRoomChange": "Cancel room change",
+    "onlyChangePendingRoom": "Rooms can only be changed while the booking detail is pending and before check-in.",
+    "selectForAllRooms": "Select for all rooms",
+    "selectPerRoom": "Select individually by room",
+    "serviceNavigation": "Service page navigation",
+    "selectServices": "Select services",
+    "costSummary": "Cost summary",
+    "searchServices": "Search services...",
+    "loadingServices": "Loading services...",
+    "servicesLoadError": "Could not load services.",
+    "noServicesAvailable": "No services available.",
+    "servicesByRoom": "Services by room",
+    "roomCount": "{{count}} rooms",
+    "noRoomsSelected": "No rooms selected.",
+    "roomWithNumber": "Room {{room}}",
+    "guestCountAndSelectServices": "{{count}} guests · Select services and quantities",
+    "searchServicesForRoom": "Search services for room {{room}}...",
+    "guestCount": "{{count}} guests",
+    "checkInLabel": "Check-in",
+    "checkOutLabel": "Check-out",
+    "applyToWholeRoom": "Apply to the whole room",
+    "peopleUsingService": "People using {{service}} in room {{room}}",
+    "roomDetails": "Room details",
+    "service": "service",
+    "name": "Name"
   },
   "room": {
     "ready": "Ready",
@@ -396,71 +523,71 @@
     "details": "Details",
     "assign": "Assign",
     "noRooms": "No rooms found",
-    "changeFilters": "Try changing the keyword or status filter."
-    ,"buildingPrefix": "Building"
-    ,"buildingNotUpdated": "Building not updated"
-    ,"standardCapacitySummary": "Standard: {{count}} guests"
-    ,"adultSurcharge": "Adult surcharge"
-    ,"childSurcharge": "Child surcharge"
-    ,"capacityUnit": "guests"
-    ,"areaNotUpdated": "Not updated"
-    ,"bedNotUpdated": "Bed type not updated"
-    ,"noAmenitiesUpdated": "Amenities have not been updated."
-    ,"perPersonSuffix": "/person"
-    ,"infantFreeNotice": "Infants under 2 stay free."
-    ,"paginationSummary": "Showing {{from}}-{{to}} of {{total}} rooms"
-    ,"rowsPerPage": "Rows"
-    ,"singleBed": "single bed"
-    ,"doubleSingleBeds": "2 single beds"
-    ,"kingBed": "King-size bed"
-    ,"housekeepingReady": "Ready to work"
-    ,"floorLabel": "Floor: {{floor}}"
-    ,"photoCount": "{{count}} photos"
-    ,"maxGuestsLabel": "Up to {{count}} guests"
-    ,"airConditioning": "Air conditioning"
-    ,"privateBathroom": "Private bathroom"
-    ,"wifi": "WiFi"
-    ,"minibar": "Minibar"
-    ,"workDesk": "Work desk"
-    ,"television": "Television"
-    ,"hotWater": "Hot water"
-    ,"generatedCode": "Generated room code"
-    ,"pricePerNight": "Price / night"
-    ,"guestCapacity": "Guest capacity"
-    ,"area": "Area"
-    ,"buildingLabel": "Building"
-    ,"searchAmenities": "Search and select amenities..."
-    ,"noMatchingAmenities": "No matching amenities"
-    ,"description": "Room description"
-    ,"descriptionPlaceholder": "Enter a short room description"
-    ,"images": "Room images"
-    ,"uploadImages": "Click to upload images"
-    ,"imageLimit": "Multiple images supported, up to 8 images"
-    ,"defaultImages": "If no images are added, the system will use default images."
-    ,"saveChanges": "Save changes"
-    ,"createRoom": "Create room"
-    ,"editRoomBadge": "EDIT ROOM"
-    ,"editRoomTitle": "Edit room {{room}}"
-    ,"editRoomDescription": "Update room information and save changes to the list."
-    ,"createRoomBadge": "NEW ROOM SETUP"
-    ,"createRoomTitle": "Create new room"
-    ,"createRoomDescription": "Quickly add the key details, amenities, and images for this room."
-    ,"importRooms": "Import rooms from Excel/CSV"
-    ,"readingFile": "Reading file..."
-    ,"floorOption": "Floor {{floor}}"
-    ,"roomLabel": "Room"
-    ,"roomInformation": "Room information"
-    ,"currentStatus": "Current status"
-    ,"housekeepingStaff": "Housekeeping staff:"
-    ,"roomSpecifications": "Room specifications"
-    ,"maximumGuests": "Maximum guests:"
-    ,"bedLabel": "Bed:"
-    ,"areaLabel": "Area:"
-    ,"locationLabel": "Location:"
-    ,"amenitiesLabel": "Amenities"
-    ,"gallery": "Photo gallery"
-    ,"viewAllPhotos": "View all photos"
-    ,"createForm": {
+    "changeFilters": "Try changing the keyword or status filter.",
+    "buildingPrefix": "Building",
+    "buildingNotUpdated": "Building not updated",
+    "standardCapacitySummary": "Standard: {{count}} guests",
+    "adultSurcharge": "Adult surcharge",
+    "childSurcharge": "Child surcharge",
+    "capacityUnit": "guests",
+    "areaNotUpdated": "Not updated",
+    "bedNotUpdated": "Bed type not updated",
+    "noAmenitiesUpdated": "Amenities have not been updated.",
+    "perPersonSuffix": "/person",
+    "infantFreeNotice": "Infants under 2 stay free.",
+    "paginationSummary": "Showing {{from}}-{{to}} of {{total}} rooms",
+    "rowsPerPage": "Rows",
+    "singleBed": "single bed",
+    "doubleSingleBeds": "2 single beds",
+    "kingBed": "King-size bed",
+    "housekeepingReady": "Ready to work",
+    "floorLabel": "Floor: {{floor}}",
+    "photoCount": "{{count}} photos",
+    "maxGuestsLabel": "Up to {{count}} guests",
+    "airConditioning": "Air conditioning",
+    "privateBathroom": "Private bathroom",
+    "wifi": "WiFi",
+    "minibar": "Minibar",
+    "workDesk": "Work desk",
+    "television": "Television",
+    "hotWater": "Hot water",
+    "generatedCode": "Generated room code",
+    "pricePerNight": "Price / night",
+    "guestCapacity": "Guest capacity",
+    "area": "Area",
+    "buildingLabel": "Building",
+    "searchAmenities": "Search and select amenities...",
+    "noMatchingAmenities": "No matching amenities",
+    "description": "Room description",
+    "descriptionPlaceholder": "Enter a short room description",
+    "images": "Room images",
+    "uploadImages": "Click to upload images",
+    "imageLimit": "Multiple images supported, up to 8 images",
+    "defaultImages": "If no images are added, the system will use default images.",
+    "saveChanges": "Save changes",
+    "createRoom": "Create room",
+    "editRoomBadge": "EDIT ROOM",
+    "editRoomTitle": "Edit room {{room}}",
+    "editRoomDescription": "Update room information and save changes to the list.",
+    "createRoomBadge": "NEW ROOM SETUP",
+    "createRoomTitle": "Create new room",
+    "createRoomDescription": "Quickly add the key details, amenities, and images for this room.",
+    "importRooms": "Import rooms from Excel/CSV",
+    "readingFile": "Reading file...",
+    "floorOption": "Floor {{floor}}",
+    "roomLabel": "Room",
+    "roomInformation": "Room information",
+    "currentStatus": "Current status",
+    "housekeepingStaff": "Housekeeping staff:",
+    "roomSpecifications": "Room specifications",
+    "maximumGuests": "Maximum guests:",
+    "bedLabel": "Bed:",
+    "areaLabel": "Area:",
+    "locationLabel": "Location:",
+    "amenitiesLabel": "Amenities",
+    "gallery": "Photo gallery",
+    "viewAllPhotos": "View all photos",
+    "createForm": {
       "basicInformation": "Basic information",
       "roomDetails": "Room details",
       "floor": "Floor",
@@ -666,38 +793,38 @@
       "importAmenities": "Import amenities",
       "uploading": "Uploading...",
       "uploadFailed": "Could not upload the data.",
-      "progressLabel": "Import progress"
-      ,"loadingBedTypesTitle": "Loading bed types"
-      ,"loadingBedTypesDescription": "Wait for the bed list to finish loading before generating the template."
-      ,"bedTypesErrorTitle": "Could not load bed types"
-      ,"serverRetry": "Check the server connection and try again."
-      ,"loadingBuildingsFloorsTitle": "Loading buildings and floors"
-      ,"loadingTemplateWait": "Please wait a moment, then download the Excel template."
-      ,"buildingsFloorsErrorTitle": "Could not load buildings and floors"
-      ,"templateErrorTitle": "Could not create the Excel template"
-      ,"unknownError": "An unknown error occurred."
-      ,"importFailedTitle": "Room import failed"
-      ,"importCompletedTitle": "Room import completed"
-      ,"importFailedDescription": "The server reported that the room import failed."
-      ,"importUpdatedDescription": "The room list has been updated from the server."
-      ,"retryingStatus": "Retrying status request from the server: {{message}}"
-      ,"readingAmenityFile": "Reading amenity file..."
-      ,"emptyFile": "The file contains no data rows."
-      ,"amenityRowInvalid": "Row {{row}} must have a valid amenity name and a non-negative price."
-      ,"noValidAmenities": "The file contains no valid amenities to import."
-      ,"missingTaskId": "The server did not return an amenity import task ID."
-      ,"processingAmenities": "The server is processing amenity data..."
-      ,"amenityRowsChecked": "Validated {{count}} rows. Sending data to the server..."
-      ,"amenitiesSaved": "Completed: saved {{saved}} amenities{{skipped}}."
-      ,"amenitiesNoneSaved": "Completed: no new amenities; skipped {{count}} duplicate rows."
-      ,"skippedDuplicateRows": ", skipped {{count}} duplicate rows"
-      ,"amenityImportSuccess": "Amenities imported successfully"
-      ,"noNewAmenities": "No new amenities"
-      ,"amenitiesSavedDescription": "Saved {{count}} amenities to the database.{{skipped}}"
-      ,"amenitiesSkippedDescription": "All {{count}} amenities already exist, so no new data was saved."
-      ,"skippedDuplicateNames": " Skipped {{count}} duplicate rows."
-      ,"importDataError": "Could not import data"
-      ,"couldNotReadFile": "Could not read the file."
+      "progressLabel": "Import progress",
+      "loadingBedTypesTitle": "Loading bed types",
+      "loadingBedTypesDescription": "Wait for the bed list to finish loading before generating the template.",
+      "bedTypesErrorTitle": "Could not load bed types",
+      "serverRetry": "Check the server connection and try again.",
+      "loadingBuildingsFloorsTitle": "Loading buildings and floors",
+      "loadingTemplateWait": "Please wait a moment, then download the Excel template.",
+      "buildingsFloorsErrorTitle": "Could not load buildings and floors",
+      "templateErrorTitle": "Could not create the Excel template",
+      "unknownError": "An unknown error occurred.",
+      "importFailedTitle": "Room import failed",
+      "importCompletedTitle": "Room import completed",
+      "importFailedDescription": "The server reported that the room import failed.",
+      "importUpdatedDescription": "The room list has been updated from the server.",
+      "retryingStatus": "Retrying status request from the server: {{message}}",
+      "readingAmenityFile": "Reading amenity file...",
+      "emptyFile": "The file contains no data rows.",
+      "amenityRowInvalid": "Row {{row}} must have a valid amenity name and a non-negative price.",
+      "noValidAmenities": "The file contains no valid amenities to import.",
+      "missingTaskId": "The server did not return an amenity import task ID.",
+      "processingAmenities": "The server is processing amenity data...",
+      "amenityRowsChecked": "Validated {{count}} rows. Sending data to the server...",
+      "amenitiesSaved": "Completed: saved {{saved}} amenities{{skipped}}.",
+      "amenitiesNoneSaved": "Completed: no new amenities; skipped {{count}} duplicate rows.",
+      "skippedDuplicateRows": ", skipped {{count}} duplicate rows",
+      "amenityImportSuccess": "Amenities imported successfully",
+      "noNewAmenities": "No new amenities",
+      "amenitiesSavedDescription": "Saved {{count}} amenities to the database.{{skipped}}",
+      "amenitiesSkippedDescription": "All {{count}} amenities already exist, so no new data was saved.",
+      "skippedDuplicateNames": " Skipped {{count}} duplicate rows.",
+      "importDataError": "Could not import data",
+      "couldNotReadFile": "Could not read the file."
     },
     "importProgress": {
       "importing": "Importing rooms",
@@ -751,7 +878,7 @@
     "frontDesk": "Front desk",
     "housekeeping": "Housekeeping",
     "dailySchedule": "Daily schedule",
-    "todayShifts": "Today's shifts",
+    "todayShifts": "Shifts",
     "employeeList": "Employee directory",
     "assignShifts": "Assign shifts",
     "assignTasks": "Assign tasks",
@@ -837,10 +964,22 @@
     "role": "Role",
     "notice": "Only the branch manager can change access permissions. Changes apply immediately to staff accounts.",
     "roles": {
-      "branchManager": { "name": "Branch manager", "description": "Full access to the branch" },
-      "receptionist": { "name": "Receptionist", "description": "Bookings and guest reception" },
-      "housekeeping": { "name": "Housekeeping", "description": "Clean rooms and update status" },
-      "accountant": { "name": "Accountant", "description": "Invoices and revenue reports" }
+      "branchManager": {
+        "name": "Branch manager",
+        "description": "Full access to the branch"
+      },
+      "receptionist": {
+        "name": "Receptionist",
+        "description": "Bookings and guest reception"
+      },
+      "housekeeping": {
+        "name": "Housekeeping",
+        "description": "Clean rooms and update status"
+      },
+      "accountant": {
+        "name": "Accountant",
+        "description": "Invoices and revenue reports"
+      }
     },
     "permissions": {
       "overview": "View overview",
@@ -889,6 +1028,9 @@
     "bookedAt": "Booked:",
     "room": "Room {{room}}",
     "checkIn": "Check-in:",
+    "actualCheckIn": "Actual check-in:",
+    "expectedCheckIn": "Scheduled check-in:",
+    "notCheckedIn": "Not checked in",
     "confirmUsed": "Confirm as used",
     "loadingHistory": "Loading service activity history...",
     "historyLoadError": "Could not load service activity history. Please reload the page.",
@@ -950,14 +1092,14 @@
     "importSucceeded": "Services imported successfully",
     "bulkImportFinished": "The import completed. {{passed}} rows passed validation and {{failed}} rows need review in the bottom-right notification.",
     "servicesAdded": "Successfully added {{count}} services.",
-    "dateLocale": "en-US"
-    ,"bulkImportDescription": "Upload the service images from the selected branch folder to Cloudinary. The server stores the image URLs and service details."
-    ,"downloadTemplate": "Download Excel template"
-    ,"zipFileLabel": "Service data ZIP file (.zip)"
-    ,"unitOnce": "time"
-    ,"unitHour": "hour"
-    ,"unitDay": "day"
-    ,"spa": "Spa"
+    "dateLocale": "en-US",
+    "bulkImportDescription": "Upload the service images from the selected branch folder to Cloudinary. The server stores the image URLs and service details.",
+    "downloadTemplate": "Download Excel template",
+    "zipFileLabel": "Service data ZIP file (.zip)",
+    "unitOnce": "time",
+    "unitHour": "hour",
+    "unitDay": "day",
+    "spa": "Spa"
   },
   "promotion": {
     "bookingTitle": "Promotion",
@@ -1178,28 +1320,28 @@
     "selectDaysDescription": "Drag across empty cells to select multiple days · Gray cells are occupied",
     "selectedRoom": "Room {{room}} selected · {{days}} days",
     "continueBooking": "Continue booking",
-    "chooseDate": "Choose date"
-    ,"sunShort": "Sun"
-    ,"monShort": "Mon"
-    ,"tueShort": "Tue"
-    ,"wedShort": "Wed"
-    ,"thuShort": "Thu"
-    ,"friShort": "Fri"
-    ,"satShort": "Sat"
-    ,"legend": "Legend"
-    ,"waitingCheckIn": "Booked · awaiting check-in"
-    ,"inHouse": "Currently staying"
-    ,"checkedIn": "Checked in · currently staying"
-    ,"checkOut": "Check-out day"
-    ,"noBookingsThisWeek": "No rooms are booked this week."
-    ,"previousWeek": "Previous week"
-    ,"nextWeek": "Next week"
-    ,"branchUnavailable": "Branch could not be identified."
-    ,"loadError": "Could not load the booking calendar. Please try again."
-    ,"bookingCount": "bookings"
-    ,"guestNotProvided": "Guest name unavailable"
-    ,"sameBookingMarker": "Same marker = same booking"
-    ,"bookingMarker": "Booking"
+    "chooseDate": "Choose date",
+    "sunShort": "Sun",
+    "monShort": "Mon",
+    "tueShort": "Tue",
+    "wedShort": "Wed",
+    "thuShort": "Thu",
+    "friShort": "Fri",
+    "satShort": "Sat",
+    "legend": "Legend",
+    "waitingCheckIn": "Booked · awaiting check-in",
+    "inHouse": "Currently staying",
+    "checkedIn": "Checked in · currently staying",
+    "checkOut": "Check-out day",
+    "noBookingsThisWeek": "No rooms are booked this week.",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week",
+    "branchUnavailable": "Branch could not be identified.",
+    "loadError": "Could not load the booking calendar. Please try again.",
+    "bookingCount": "bookings",
+    "guestNotProvided": "Guest name unavailable",
+    "sameBookingMarker": "Same marker = same booking",
+    "bookingMarker": "Booking"
   },
   "status": {
     "active": "Active",

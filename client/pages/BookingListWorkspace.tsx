@@ -1363,13 +1363,16 @@ export default function BookingListWorkspace() {
                 </div>
 
                 {/* Booking Room Details */}
-                {selectedBooking.bookingDetails && selectedBooking.bookingDetails.filter((detail) => !isCancelledBookingDetail(detail)).length > 0 && (
+                {selectedBooking.bookingDetails && selectedBooking.bookingDetails.length > 0 && (
                   <div className="booking-room-details order-2">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">{localizedText("Chi tiết phòng lưu trú", "Stay room details")}</h4>
                     <div className="space-y-2">
-                      {selectedBooking.bookingDetails.filter((detail) => !isCancelledBookingDetail(detail)).map((detail, idx) => {
+                      {selectedBooking.bookingDetails.map((detail, idx) => {
                         const serviceRequests = bookingServices(detail);
                         const roomName = String(detail.roomName ?? detail.roomTypeName ?? detail.roomType ?? "");
+                        const numAdults = Number(detail.numAdults ?? 0);
+                        const numChildren = Number(detail.numChildren ?? 0);
+                        const numInfants = Number(detail.numInfants ?? 0);
                         const roomSubtotal = Number(detail.roomSubTotal ?? detail.roomSubtotal ?? 0);
                         const roomPricePerNight = detail.baseRoomPricePerNight ?? detail.roomPrice;
                         const actualCheckInTime = detail.actualCheckInTime ?? detail.actualCheckIn ?? detail.realCheckInTime ?? detail.checkInActualTime ?? null;
@@ -1405,6 +1408,9 @@ export default function BookingListWorkspace() {
                         const hasOtherSurchargesValue = Number.isFinite(otherSurcharges) && otherSurcharges > 0;
                         const roomStatus = String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").trim().toUpperCase();
                         const isRoomStayCompleted = roomStatus === "CHECKED_OUT";
+                        const isRoomCancelled = roomStatus === "CANCELLED";
+                        const cancelledAt = detail.cancelledAt ?? detail.canceledAt ?? null;
+                        const cancelledBy = detail.cancelledBy ?? detail.canceledBy ?? null;
                         return <div key={idx} className="rounded-lg border border-slate-200 p-3 text-xs text-slate-700 bg-white">
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -1416,8 +1422,24 @@ export default function BookingListWorkspace() {
                                     {localizedText("Đã hoàn thành", "Completed")}
                                   </span>
                                 )}
+                                {isRoomCancelled && (
+                                  <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                                    {localizedText("Đã hủy", "Cancelled")}
+                                  </span>
+                                )}
                               </div>
                               {roomName && <p className="mt-0.5 text-slate-500">{localizedText("Loại phòng", "Room type")}: {roomName}</p>}
+                              <div className="mt-1 flex flex-wrap gap-1.5">
+                                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                                  {localizedText("Người lớn", "Adults")}: {numAdults}
+                                </span>
+                                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                                  {localizedText("Trẻ em", "Children")}: {numChildren}
+                                </span>
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                  {localizedText("Trẻ sơ sinh", "Infants")}: {numInfants}
+                                </span>
+                              </div>
                             </div>
                             {(detail.roomSubTotal !== undefined || detail.roomSubtotal !== undefined || hasEarlyCheckinFeeValue || hasLateCheckoutFeeValue || hasOtherSurchargesValue || serviceRequests.length > 0) && (
                               <div className="shrink-0 text-right">
@@ -1432,6 +1454,16 @@ export default function BookingListWorkspace() {
                             {hasBookingCheckInValue && <span>{localizedText("Nhận", "Check-in")}: {formatDate(bookingCheckInTime)}</span>}
                             {hasBookingCheckOutValue && <span>{localizedText("Trả", "Check-out")}: {formatDate(bookingCheckOutTime)}</span>}
                           </div>
+                          {isRoomCancelled && (
+                            <div className="mt-1 grid gap-1 text-rose-700">
+                              {cancelledAt && (
+                                <p>{localizedText("Thời gian hủy", "Cancelled at")}: {formatDate(cancelledAt)}</p>
+                              )}
+                              {cancelledBy && (
+                                <p>{localizedText("Người hủy", "Cancelled by")}: {String(cancelledBy)}</p>
+                              )}
+                            </div>
+                          )}
                           {(hasActualCheckInValue || hasActualCheckOutValue || Number(extraFeeValue) > 0 || hasEarlyCheckinFeeValue || hasLateCheckoutFeeValue || hasOtherSurchargesValue) && (
                             <div className="mt-1 grid gap-1 text-slate-500">
                               {hasActualCheckInValue && <div className="flex justify-between gap-3"><span>{localizedText("Check-in thực tế", "Actual check-in")}: {formatDate(actualCheckInTime)}</span></div>}

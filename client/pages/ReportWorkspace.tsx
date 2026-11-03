@@ -51,6 +51,28 @@ const roomTypeLabel = (type: string) => {
   return type;
 };
 
+const refundStatusLabel = (status: string | null) => {
+  const labels: Record<string, string> = {
+    PENDING: localizedText("Chờ xử lý", "Pending"),
+    APPROVED: localizedText("Đã duyệt", "Approved"),
+    REFUNDED: localizedText("Đã hoàn", "Refunded"),
+    REFUND_BANK_DETAILS_REQUIRED: localizedText("Chờ thông tin ngân hàng", "Bank details required"),
+    REFUND_REVIEW_PENDING: localizedText("Chờ duyệt", "Pending review"),
+    REFUND_APPROVED: localizedText("Đã duyệt", "Approved"),
+    REFUND_REJECTED: localizedText("Từ chối", "Rejected"),
+    PAYOUT_PROCESSING: localizedText("Đang chuyển khoản", "Payout processing"),
+    PAYOUT_FAILED: localizedText("Chuyển khoản thất bại", "Payout failed"),
+  };
+  return status ? labels[status] ?? status : localizedText("Không xác định", "Unknown");
+};
+
+const paymentMethodLabel = (method: string | null) => {
+  if (method === "CASH") return localizedText("Tiền mặt", "Cash");
+  if (method === "BANK") return localizedText("Chuyển khoản", "Bank transfer");
+  if (method === "EWALLET") return localizedText("Ví điện tử", "E-wallet");
+  return localizedText("Không xác định", "Unknown");
+};
+
 export default function ReportWorkspace() {
   const { t } = useTranslation();
   const { hotelId, roles } = useAppSelector((state) => state.auth);
@@ -104,6 +126,8 @@ export default function ReportWorkspace() {
     ?? cancelledBookings.filter((booking) => booking.bookingChannel === "ONLINE").length;
   const offlineCancelledBookingCount = report?.offlineCancelledBookingCount
     ?? cancelledBookings.filter((booking) => booking.bookingChannel === "OFFLINE").length;
+  const checkoutSurplusRefunds = report?.checkoutSurplusRefunds ?? [];
+  const bookingCancellationRefunds = report?.bookingCancellationRefunds ?? [];
   const totalBookingCount = report?.totalBookingCount ?? 0;
   const cashReceived = report?.cashReceived ?? 0;
   const cashReceivedCash = report?.cashReceivedCash ?? 0;
@@ -542,6 +566,83 @@ export default function ReportWorkspace() {
                 </span>
               </div>
             </div>
+            {!isSystemAdmin && (
+              <div className="mb-6 border-b border-slate-100 pb-6">
+                <h4 className="mb-3 text-sm font-bold text-slate-800">{localizedText("Theo dõi hoàn tiền", "Refund tracking")}</h4>
+                <div className="grid grid-cols-1 gap-4">
+                  {[
+                    {
+                      title: localizedText("Hoàn dư khi checkout", "Checkout surplus refunds"),
+                      refunds: checkoutSurplusRefunds,
+                    },
+                    {
+                      title: localizedText("Hoàn tiền booking bị hủy", "Cancelled booking refunds"),
+                      refunds: bookingCancellationRefunds,
+                    },
+                  ].map(({ title, refunds }) => {
+                    const refunded = refunds.filter((refund) => refund.status === "REFUNDED");
+                    const notCompletedCount = refunds.length - refunded.length;
+                    const refundedAmount = refunded.reduce((sum, refund) => sum + Number(refund.amount ?? 0), 0);
+
+                    return (
+                      <div key={title} className="min-w-0 rounded-xl border border-slate-200/80 p-4">
+                        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                          <h5 className="text-sm font-semibold text-slate-800">{title}</h5>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
+                              {localizedText("Đã hoàn", "Refunded")}: {refunded.length} · {formatMoney(refundedAmount)}
+                            </span>
+                            <span className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700">
+                              {localizedText("Chưa hoàn tất", "Not completed")}: {notCompletedCount}
+                            </span>
+                          </div>
+                        </div>
+                        {refunds.length === 0 ? (
+                          <p className="py-6 text-center text-xs text-slate-400">
+                            {localizedText("Không có khoản hoàn tiền trong khoảng ngày này.", "No refunds during this date range.")}
+                          </p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[660px] text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-100 text-slate-500">
+                                  <th className="px-2 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
+                                  <th className="px-2 py-2 font-semibold">{localizedText("Số tiền", "Amount")}</th>
+                                  <th className="px-2 py-2 font-semibold">{localizedText("Phương thức", "Method")}</th>
+                                  <th className="px-2 py-2 font-semibold">{localizedText("Trạng thái", "Status")}</th>
+                                  <th className="px-2 py-2 font-semibold">{localizedText("Yêu cầu lúc", "Requested at")}</th>
+                                  <th className="px-2 py-2 font-semibold">{localizedText("Hoàn lúc", "Refunded at")}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {refunds.map((refund) => (
+                                  <tr key={refund.bookingId} className="border-b border-slate-50 last:border-0">
+                                    <td className="whitespace-nowrap px-2 py-2.5 font-semibold text-slate-800">{refund.bookingId}</td>
+                                    <td className="whitespace-nowrap px-2 py-2.5 text-slate-700">{formatMoney(refund.amount)}</td>
+                                    <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">{paymentMethodLabel(refund.paymentMethod)}</td>
+                                    <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">{refundStatusLabel(refund.status)}</td>
+                                    <td className="whitespace-nowrap px-2 py-2.5 text-slate-500">
+                                      {refund.requestedAt
+                                        ? new Date(refund.requestedAt).toLocaleString(localizedText("vi-VN", "en-US"))
+                                        : "—"}
+                                    </td>
+                                    <td className="whitespace-nowrap px-2 py-2.5 text-slate-500">
+                                      {refund.refundedAt
+                                        ? new Date(refund.refundedAt).toLocaleString(localizedText("vi-VN", "en-US"))
+                                        : localizedText("Chưa hoàn", "Not refunded")}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {cancelledBookings.length === 0 ? (
               <p className="py-10 text-center text-sm text-slate-400">{localizedText("Không có booking bị hủy trong khoảng ngày này.", "No bookings were cancelled during this date range.")}</p>
             ) : (

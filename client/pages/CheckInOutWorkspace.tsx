@@ -225,10 +225,15 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     const price = Number.isFinite(parsedPrice) ? parsedPrice : 0;
     const rawUsedQuantity = service.usedQuantity ?? service.quantityUsed;
     const parsedUsedQuantity = Number(rawUsedQuantity ?? 0);
-    const usedQuantity = Number.isFinite(parsedUsedQuantity) ? parsedUsedQuantity : 0;
-    const used = service.used === true
-      || String(service.used).toLowerCase() === "true"
-      || usedQuantity > 0;
+    const hasUsedQuantity = rawUsedQuantity !== undefined && rawUsedQuantity !== null && rawUsedQuantity !== "";
+    const effectiveUsedQuantity = hasUsedQuantity && Number.isFinite(parsedUsedQuantity) && parsedUsedQuantity > 0
+      ? Math.min(parsedUsedQuantity, Math.max(quantity, 0))
+      : service.used === true
+        || String(service.used).toLowerCase() === "true"
+        || typeof service.usedAt === "string"
+          ? Math.max(quantity, 0)
+          : 0;
+    const used = quantity > 0 && effectiveUsedQuantity >= quantity;
     return [{
       serviceId,
       serviceDetailId: String(service.bookingServiceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailId ?? service.serviceDetailID ?? ""),
@@ -237,7 +242,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
       amount: price * quantity,
       usedAt: typeof service.usedAt === "string" ? service.usedAt : undefined,
       used,
-      usedQuantity,
+      usedQuantity: effectiveUsedQuantity,
       isPaid: service.isPaid === true
         || String(service.isPaid).toLowerCase() === "true"
         || service.paid === true
@@ -1197,13 +1202,18 @@ export default function CheckInOutWorkspace() {
   function unusedCheckoutServicesForRecords(records: DailyRecord[]): CheckoutUnusedService[] {
     return records.flatMap((record) =>
       (recordServices[record.id] ?? record.services ?? [])
-        .filter((service) => service.used !== true && !service.usedAt)
-        .map((service) => ({
-          room: record.room.split(" · ")[0],
-          name: service.name,
-          quantity: service.quantity,
-          amount: service.amount,
-        })),
+        .flatMap((service) => {
+          const usedQuantity = Math.min(Math.max(Number(service.usedQuantity ?? 0), 0), Math.max(service.quantity, 0));
+          const remainingQuantity = service.quantity - usedQuantity;
+          if (service.used === true || remainingQuantity <= 0) return [];
+          const unitPrice = service.quantity > 0 ? service.amount / service.quantity : 0;
+          return [{
+            room: record.room.split(" · ")[0],
+            name: service.name,
+            quantity: remainingQuantity,
+            amount: unitPrice * remainingQuantity,
+          }];
+        })
     );
   }
 
@@ -1236,7 +1246,10 @@ export default function CheckInOutWorkspace() {
       const currentRecords = latestRecords.filter((record): record is DailyRecord => Boolean(record));
       const serviceEntries = currentRecords.flatMap((record) =>
         (record.services ?? [])
-          .filter((service) => service.used !== true && !service.usedAt)
+          .filter((service) => {
+            const usedQuantity = Math.min(Math.max(Number(service.usedQuantity ?? 0), 0), Math.max(service.quantity, 0));
+            return service.used !== true && service.quantity - usedQuantity > 0;
+          })
           .map((service) => ({ record, service })),
       );
       if (serviceEntries.length === 0) {
@@ -1514,10 +1527,13 @@ export default function CheckInOutWorkspace() {
       const catalogService = services.find((item) => item.name.trim().toLocaleLowerCase() === serviceName);
       const serviceId = String(service.serviceId ?? catalogService?.id ?? "").trim();
       const detailId = String(service.serviceDetailId ?? "").trim();
-      const usedQuantity = Number(service.usedQuantity ?? (service.used ? service.quantity : 0));
+      const usedQuantity = Math.min(
+        Math.max(Number(service.usedQuantity ?? (service.used ? service.quantity : 0)), 0),
+        Math.max(service.quantity, 0),
+      );
       if (!serviceId) return [];
       const isPaid = service.isPaid === true;
-      const isUsed = service.used === true || usedQuantity > 0;
+      const isUsed = service.used === true || usedQuantity >= service.quantity;
       const price = service.quantity > 0 ? service.amount / service.quantity : 0;
       return [{
         serviceId,

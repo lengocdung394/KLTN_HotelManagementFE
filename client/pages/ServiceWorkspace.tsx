@@ -35,11 +35,13 @@ type ServiceUsageRow = {
   bookingDetailId: string;
   serviceDetailId: string;
   serviceName: string;
+  price: number | null;
   quantity: number;
   usedQuantity: number;
   customerName: string;
   roomNumber: string;
   bookingCreatedAt: string;
+  actualCheckInTime: string;
   checkInTime: string;
   usedAt: string | null;
   usedBy: string | null;
@@ -56,9 +58,21 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? value as Record<string, unknown> : null;
 
 const getServiceUsedQuantity = (service: Record<string, unknown>) => {
-  if (service.used === true) return Number(service.quantity ?? 1);
-  const quantity = Number(service.usedQuantity ?? 0);
-  return Number.isFinite(quantity) && quantity > 0 ? quantity : 0;
+  const totalQuantity = Number(service.quantity ?? 1);
+  const rawUsedQuantity = service.usedQuantity ?? service.quantityUsed;
+  if (rawUsedQuantity !== undefined && rawUsedQuantity !== null && rawUsedQuantity !== "") {
+    const usedQuantity = Number(rawUsedQuantity);
+    if (Number.isFinite(usedQuantity) && usedQuantity > 0) {
+      return Math.min(usedQuantity, Math.max(totalQuantity, 0));
+    }
+  }
+  return service.used === true || typeof service.usedAt === "string" ? Math.max(totalQuantity, 0) : 0;
+};
+
+const getServicePrice = (service: Record<string, unknown>) => {
+  const nestedService = asRecord(service.service);
+  const value = Number(service.price ?? service.unitPrice ?? service.servicePrice ?? nestedService?.price);
+  return Number.isFinite(value) && value >= 0 ? value : null;
 };
 
 const getServiceUsageRows = (bookings: BookingListItem[]): ServiceUsageRow[] => {
@@ -97,11 +111,13 @@ const getServiceUsageRows = (bookings: BookingListItem[]): ServiceUsageRow[] => 
           bookingDetailId: String(detail.bookingDetailId ?? detail.id ?? ""),
           serviceDetailId: String(serviceDetailId),
           serviceName: String(service.name ?? service.serviceName ?? "Dịch vụ"),
+          price: getServicePrice(service),
           quantity: remainingQuantity,
           usedQuantity,
           customerName: String(booking.customerName ?? detail.customerName ?? detail.nameCustomer ?? "Khách lưu trú"),
           roomNumber: String(detail.roomNumber ?? detail.roomName ?? "—"),
           bookingCreatedAt: String(booking.createdAt ?? ""),
+          actualCheckInTime: String(detail.actualCheckInTime ?? ""),
           checkInTime: String(detail.checkInTime ?? ""),
           usedAt: typeof service.usedAt === "string" ? service.usedAt : null,
           usedBy: typeof service.usedBy === "string" ? service.usedBy : null,
@@ -115,6 +131,15 @@ const formatUsageDateTime = (value: string | null | undefined, locale: string) =
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
+};
+
+const formatServicePrice = (price: number | null, locale: string) => {
+  if (price === null) return "—";
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(price);
 };
 
 const toLocalDateInputValue = (date: Date) => {
@@ -246,7 +271,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         });
       }
     });
-    return [...groups.values()];
+    return [...groups.values()].sort((left, right) => {
+      const leftCreatedAt = new Date(left.bookingCreatedAt).getTime();
+      const rightCreatedAt = new Date(right.bookingCreatedAt).getTime();
+      const leftTimestamp = Number.isFinite(leftCreatedAt) ? leftCreatedAt : Number.NEGATIVE_INFINITY;
+      const rightTimestamp = Number.isFinite(rightCreatedAt) ? rightCreatedAt : Number.NEGATIVE_INFINITY;
+      return rightTimestamp - leftTimestamp;
+    });
   }, [pendingUsageRows]);
   const filteredPendingUsageGroups = useMemo(() => pendingUsageGroups.filter((group) => {
     if (!usageDateFrom && !usageDateTo) return true;
@@ -280,11 +311,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             bookingDetailId: String(detail?.bookingDetailId ?? detail?.id ?? ""),
             serviceDetailId: String(service.bookingServiceDetailId ?? service.id ?? ""),
             serviceName: String(service.name ?? service.serviceName ?? "Dịch vụ"),
+            price: getServicePrice(service),
             quantity: usedQuantity,
             usedQuantity,
             customerName: String(booking.customerName ?? detail?.customerName ?? detail?.nameCustomer ?? "Khách lưu trú"),
             roomNumber: String(detail?.roomNumber ?? detail?.roomName ?? "—"),
             bookingCreatedAt: String(booking.createdAt ?? ""),
+            actualCheckInTime: String(detail?.actualCheckInTime ?? ""),
             checkInTime: String(detail?.checkInTime ?? ""),
             usedAt: service.usedAt,
             usedBy: typeof service.usedBy === "string" ? service.usedBy : null,
@@ -711,10 +744,11 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                       {expandedUsageBookingIds.has(group.bookingId) && <div className="px-3">
                         <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />{t("serviceWorkspace.bookedAt")} {formatUsageDateTime(group.bookingCreatedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</p>
                         <div className="overflow-x-auto">
-                          <table className="w-full min-w-[640px] text-left text-sm">
+                          <table className="w-full min-w-[760px] text-left text-sm">
                             <thead>
                               <tr className="border-b border-slate-100 text-xs font-semibold text-slate-500">
                                 <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.serviceName")}</th>
+                                <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.unitPrice")}</th>
                                 <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.confirmQuantity")}</th>
                                 <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.roomDetails")}</th>
                                 <th scope="col" className="px-3 py-2.5 text-right">{t("serviceWorkspace.actions")}</th>
@@ -724,6 +758,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                               {group.services.map((row) => (
                                 <tr key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="text-slate-700">
                                   <td className="px-3 py-3 font-semibold text-slate-900">{row.serviceName}</td>
+                                  <td className="px-3 py-3 whitespace-nowrap">{formatServicePrice(row.price, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
                                   <td className="px-3 py-3">
                                     <div className="flex items-center gap-2">
                                       <input
@@ -742,7 +777,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                                   </td>
                                   <td className="px-3 py-3">
                                     <p>{t("serviceWorkspace.room", { room: row.roomNumber })}</p>
-                                    {row.checkInTime && <p className="mt-1 text-xs text-slate-500">{t("serviceWorkspace.checkIn")} {formatUsageDateTime(row.checkInTime, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</p>}
+                                    <p className="mt-1 text-xs text-slate-500">
+                                      {row.actualCheckInTime
+                                        ? `${t("serviceWorkspace.actualCheckIn")} ${formatUsageDateTime(row.actualCheckInTime, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}`
+                                        : row.checkInTime
+                                          ? `${t("serviceWorkspace.expectedCheckIn")} ${formatUsageDateTime(row.checkInTime, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}`
+                                          : t("serviceWorkspace.notCheckedIn")}
+                                    </p>
                                   </td>
                                   <td className="px-3 py-3 text-right">
                                     <button
@@ -776,10 +817,11 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               )}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                  <table className="w-full min-w-[760px] text-left text-sm">
+                  <table className="w-full min-w-[900px] text-left text-sm">
                     <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
                       <tr>
                         <th scope="col" className="px-4 py-3">{t("serviceWorkspace.serviceName")}</th>
+                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.unitPrice")}</th>
                         <th scope="col" className="px-4 py-3">{t("serviceWorkspace.quantity")}</th>
                         <th scope="col" className="px-4 py-3">{t("serviceWorkspace.booking")}</th>
                         <th scope="col" className="px-4 py-3">{t("serviceWorkspace.roomDetails")}</th>
@@ -791,6 +833,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                       {filteredUsedServiceRows.map((row) => (
                         <tr key={`${row.bookingId}-${row.serviceDetailId}`} className="text-slate-700">
                           <td className="px-4 py-3 font-semibold text-slate-900">{row.serviceName}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatServicePrice(row.price, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
                           <td className="px-4 py-3">{row.quantity}</td>
                           <td className="px-4 py-3">
                             <p className="font-medium text-slate-800">{row.bookingId}</p>
