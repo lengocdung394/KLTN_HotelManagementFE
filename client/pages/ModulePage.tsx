@@ -16,6 +16,7 @@ import PromotionWorkspace from "./PromotionWorkspace";
 import ServiceWorkspace from "./ServiceWorkspace";
 import CustomerWorkspace from "./CustomerWorkspace";
 import HotelRulesWorkspace from "./HotelRulesWorkspace";
+import BranchHotelImagesSettings from "../components/BranchHotelImagesSettings";
 import AppHeader from "../components/AppHeader";
 import AppSidebar from "../components/AppSidebar";
 import EmployeeShiftSessionGuard from "../components/EmployeeShiftSessionGuard";
@@ -204,7 +205,7 @@ function LanguageSettings({ onLogout }: { onLogout: () => void }) {
     localStorage.setItem("language", language);
   };
 
-  return <><PersonalInfoSettings fullName={fullName} email={email} position={position} hotelName={hotelName} onLogout={onLogout} /><PasswordGate /><section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-bold text-slate-900">{t("settings.languageTitle", "Ngôn ngữ")}</h3><p className="mt-1 text-sm text-slate-500">{t("settings.languageDescription", "Chọn ngôn ngữ hiển thị cho giao diện.")}</p></div><div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("settings.languageTitle", "Ngôn ngữ")}><button type="button" onClick={() => changeLanguage("vi")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "vi" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Tiếng Việt</button><button type="button" onClick={() => changeLanguage("en")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "en" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>English</button></div></div></section></>;
+  return <><PersonalInfoSettings fullName={fullName} email={email} position={position} hotelName={hotelName} onLogout={onLogout} /><PasswordGate /><BranchHotelImagesSettings /><section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-bold text-slate-900">{t("settings.languageTitle", "Ngôn ngữ")}</h3><p className="mt-1 text-sm text-slate-500">{t("settings.languageDescription", "Chọn ngôn ngữ hiển thị cho giao diện.")}</p></div><div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("settings.languageTitle", "Ngôn ngữ")}><button type="button" onClick={() => changeLanguage("vi")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "vi" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>Tiếng Việt</button><button type="button" onClick={() => changeLanguage("en")} className={`rounded-md px-3 py-2 text-sm font-semibold transition ${currentLanguage === "en" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>English</button></div></div></section></>;
 }
 
 function PersonalInfoSettingsLegacy({ fullName, email, position, hotelName }: { fullName: string | null; email: string | null; position: string | null; hotelName: string | null }) {

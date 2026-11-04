@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import OverviewCalendar from "../components/OverviewCalendarNew";
 import DashboardCheckInOut from "../components/DashboardCheckInOut";
+import BranchHotelPhotoPanel from "../components/BranchHotelPhotoPanel";
 import { useGetCheckInOutSummaryQuery } from "../services/checkInOutApi";
 import { useGetBookingsByHotelQuery } from "../services/bookingApi";
 import AppHeader from "../components/AppHeader";
@@ -34,7 +35,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const { t } = useTranslation();
   const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
   const dispatch = useAppDispatch();
-  const { fullName, email, position, hotelId, roles } = useAppSelector((state) => state.auth);
+  const { fullName, email, position, hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
   const isEmployee = isEmployeePortalUser(roles);
   const { data: rooms = [], isLoading: roomsLoading, isError: roomsError } = useGetRoomsByCurrentHotelQuery(undefined, {
     skip: !hotelId,
@@ -185,7 +186,8 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
       <main className={`min-w-0 transition-[padding] duration-300 ease-in-out ${collapsed ? "lg:pl-0" : "lg:pl-72"}`}>
         <AppHeader onMenuClick={toggleSidebar} fullName={fullName || email} collapsed={collapsed} />
         <div className={`mx-auto min-w-0 px-4 py-6 sm:px-6 lg:px-8 transition-[max-width] duration-300 ease-in-out ${collapsed ? "max-w-[1650px]" : "max-w-7xl"}`}>
-          <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <BranchHotelPhotoPanel hotelId={hotelId} hotelName={hotelName} />
+        <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <p className="mb-1 text-sm font-semibold text-blue-600">
                 {t("dashboard.branchOverview")}
