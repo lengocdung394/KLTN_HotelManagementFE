@@ -910,11 +910,8 @@ export default function CheckInOutWorkspace() {
   };
 
   const undoRecordAction = (record: DailyRecord) => {
-    if (record.flow === "check-in") {
-      setArrivalState((current) => current.map((item) => item.id === record.id ? { ...item, status: "Chờ check-in" } : item));
-    } else {
-      setDepartureState((current) => current.map((item) => item.id === record.id ? { ...item, status: "Đang ở" } : item));
-    }
+    if (record.flow !== "check-in") return;
+    setArrivalState((current) => current.map((item) => item.id === record.id ? { ...item, status: "Chờ check-in" } : item));
   };
 
   const normalizeDetailId = (value: string | number | undefined) => {

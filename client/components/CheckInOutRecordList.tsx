@@ -81,7 +81,7 @@ export default function CheckInOutRecordList({
   const renderRecord = (record: DailyRecord) => {
     const isCheckIn = record.flow === "check-in";
     const canComplete = (isCheckIn && record.status === "Chờ check-in") || (!isCheckIn && record.status === "Đang ở");
-    const canUndo = !record.historical && ((isCheckIn && record.status === "Đã check-in") || (!isCheckIn && record.status === "Đã trả phòng"));
+    const canUndo = !record.historical && isCheckIn && record.status === "Đã check-in";
     const services = recordServices[record.id] ?? record.services ?? [];
     const serviceTotal = services.reduce((total, service) => total + service.amount, 0) + (record.lateFee || 0);
     const totalAmount = Number(record.roomAmount ?? 0) + serviceTotal + Number(record.earlyCheckInFee ?? 0);
@@ -158,7 +158,7 @@ export default function CheckInOutRecordList({
             </button>
           )}
           {(record.status === "Chờ check-in" || record.status === "Đang ở" || record.status === "Đã check-in") && <button type="button" onClick={() => onAddService(record)} className="inline-flex h-10 w-36 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-blue-200 px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-50">{localizedText("Thêm dịch vụ", "Add service")}</button>}
-          {canUndo && <button type="button" onClick={() => onUndo(record)} className={`inline-flex h-10 w-36 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border px-3 text-xs font-bold transition ${isCheckIn ? "border-blue-200 text-blue-700 hover:bg-blue-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}>{isCheckIn ? localizedText("Bỏ check-in", "Undo check-in") : localizedText("Bỏ check-out", "Undo check-out")}</button>}
+          {canUndo && <button type="button" onClick={() => onUndo(record)} className="inline-flex h-10 w-36 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-blue-200 px-3 text-xs font-bold text-blue-700 transition hover:bg-blue-50">{localizedText("Bỏ check-in", "Undo check-in")}</button>}
           </div>
         </div>
       </article>

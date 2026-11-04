@@ -1894,7 +1894,6 @@ export default function BookingWorkspace() {
           serviceId: string;
           originalQuantity: number;
           usedQuantity: number;
-          isPaid: boolean;
           minimumQuantity: number;
           detailId: string;
         }[] = [];
@@ -1908,13 +1907,11 @@ export default function BookingWorkspace() {
           const qty = Number(srv.quantity ?? srv.serviceQuantity ?? srv.quantityService ?? srv.amount ?? 0);
           if (!dId) return;
           const usedQuantity = usedQuantityOf(srv, qty);
-          const isPaid = booleanValueOf(srv.isPaid ?? srv.paid);
           origSelections.push({
             serviceId: sId,
             originalQuantity: qty,
             usedQuantity,
-            isPaid,
-            minimumQuantity: isPaid ? qty : usedQuantity,
+            minimumQuantity: usedQuantity,
             detailId: dId,
           });
         });

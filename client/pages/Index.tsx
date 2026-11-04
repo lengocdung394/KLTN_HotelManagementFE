@@ -216,7 +216,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {t("dashboard.todayRevenue")}
               </p>
               <p className="mt-4 text-[26px] font-bold">
-                {reportLoading ? "—" : reportError ? "Lỗi" : `${Number(dailyReport?.netCashReceived ?? 0).toLocaleString("vi-VN")}đ`}
+                {reportLoading ? "—" : reportError ? "Lỗi" : `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(dailyReport?.netCashReceived ?? 0))}đ`}
               </p>
               <p className="mt-1 text-xs text-blue-100">
                 {reportError ? "Không tải được doanh thu hôm nay" : "Thu vào − hoàn tiền − tiền thừa trả khách"}

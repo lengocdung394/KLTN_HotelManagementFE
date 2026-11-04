@@ -245,7 +245,8 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     }));
   });
   const formatCount = (value: number) => new Intl.NumberFormat("vi-VN").format(value);
-  const formatMoney = (value: number) => `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
+  const formatMoney = (value: number) =>
+    `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)}đ`;
   const displayCount = (value: number) => isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatCount(value);
 
   return (
