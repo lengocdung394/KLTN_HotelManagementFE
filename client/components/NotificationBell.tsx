@@ -48,6 +48,7 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
     || type === "HOUSEKEEPING_TASK_ASSIGNED"
     || type === "HOUSEKEEPING_TASK_REASSIGNED"
     || type === "HOUSEKEEPING_TASK_COMPLETED";
+  const isHotelClosureNotification = type === "SYSTEM" && referenceType === "HOTEL_CLOSURE";
   if (
     type !== "BOOKING_CREATED"
     && type !== "BOOKING_UPDATED"
@@ -62,7 +63,7 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
     && type !== "HOUSEKEEPING_TASK_ASSIGNED"
     && type !== "HOUSEKEEPING_TASK_REASSIGNED"
     && type !== "HOUSEKEEPING_TASK_COMPLETED"
-    && !(type === "SYSTEM" && isHousekeepingNotification)
+    && !(type === "SYSTEM" && (isHousekeepingNotification || isHotelClosureNotification))
   ) {
     return null;
   }
@@ -173,7 +174,27 @@ export default function NotificationBell() {
         void refetchNotifications();
         void refetchSummary();
         if (payload && typeof payload === "object") {
-          const notification = payload as { type?: unknown; title?: unknown; description?: unknown };
+          const notification = payload as {
+            type?: unknown;
+            title?: unknown;
+            description?: unknown;
+            referenceType?: unknown;
+          };
+          if (notification.type === "SYSTEM" && notification.referenceType === "HOTEL_CLOSURE") {
+            dispatch(baseApi.util.invalidateTags(["HotelClosure"]));
+            toast({
+              title: typeof notification.title === "string" ? notification.title : "Lịch tạm đóng khách sạn",
+              description: typeof notification.description === "string" ? notification.description : "",
+              action: (
+                <ToastAction
+                  altText="Mở lịch tạm đóng khách sạn"
+                  onClick={() => navigate("/hotel-closures")}
+                >
+                  Xem lịch
+                </ToastAction>
+              ),
+            });
+          }
           if (notification.type === "PROMOTION_CREATED" || notification.type === "PROMOTION_UPDATED") {
             dispatch(baseApi.util.invalidateTags(["Promotion"]));
           }
