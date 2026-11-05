@@ -530,6 +530,13 @@ export const emitStaffSendCustomerChat = (payload: {
   }
 };
 
+export const sendStaffMarkCustomerRead = (payload: { customerId: string; hotelId?: number | string | null }) => {
+  if (socket && socket.connected) {
+    socket.emit("staff_mark_customer_read", payload);
+    console.log("👀 [Socket] staff_mark_customer_read emitted:", payload);
+  }
+};
+
 export const disconnectSocket = () => {
   if (socket) {
     socket.disconnect();

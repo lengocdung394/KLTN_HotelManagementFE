@@ -30,7 +30,7 @@ import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useSendChatMessageMutation, useLazyGetChatHistoryQuery, type ChatMessage as ChatMessageType } from "@/services/chatApi";
 import { useAppSelector } from "@/store/hooks";
-import { emitStaffSendCustomerChat } from "@/lib/socket";
+import { emitStaffSendCustomerChat, sendStaffMarkCustomerRead } from "@/lib/socket";
 
 export interface CustomerLiveMessage {
   id: string | number;
@@ -496,6 +496,8 @@ export default function ChatWidget() {
           history: historyRef.current.slice(0, -1),
           hotelId: currentHotelId,
           hotelName: currentHotelName,
+          roles: auth?.roles || [],
+          userRole: auth?.position || (auth?.roles || [])[0] || 'Nhân viên',
         });
 
         const reply = result.result?.reply || "Dạ em đã nhận được yêu cầu của Anh/Chị.";
@@ -616,6 +618,7 @@ export default function ChatWidget() {
       return updated;
     });
 
+    sendStaffMarkCustomerRead({ customerId: cId, hotelId: staffHotelId });
     fetch(`/live-chat/sessions/mark-read?customerId=${encodeURIComponent(cId)}${staffHotelId ? `&hotelId=${staffHotelId}` : ""}`, {
       method: "PATCH",
     }).catch(() => {});
@@ -832,9 +835,9 @@ export default function ChatWidget() {
   // Tự động tải tất cả phiên chat và lịch sử từ PostgreSQL vào giao diện Nhân viên
   useEffect(() => {
     const fetchSessionsFromDb = async () => {
-      if (isSuperAdmin || !staffHotelId) return;
+      if (!staffHotelId && !isSuperAdmin) return;
       try {
-        const hotelQuery = `?hotelId=${staffHotelId}`;
+        const hotelQuery = staffHotelId ? `?hotelId=${staffHotelId}` : "";
         const res = await fetch(`/live-chat/sessions${hotelQuery}`);
         if (!res.ok) return;
         const data = await res.json();

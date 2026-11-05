@@ -60,7 +60,7 @@ function expressPlugin(): Plugin {
         ) {
           return next();
         }
-        app(req, res, next);
+        app(req as any, res as any, next as any);
       });
     },
   };

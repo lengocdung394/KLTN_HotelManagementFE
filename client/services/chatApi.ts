@@ -12,6 +12,8 @@ export interface ChatRequest {
   history: ChatMessage[];
   hotelId?: number | string | null;
   hotelName?: string | null;
+  roles?: string[];
+  userRole?: string;
 }
 
 export interface ChatResponse {
