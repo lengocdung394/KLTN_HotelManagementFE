@@ -414,11 +414,9 @@ function BookingPaymentHistory({ bookingId }: { bookingId: string }) {
                 <strong className="mt-0.5 block text-slate-700">
                   {transaction.paymentSource === "FRONT_DESK"
                     ? `${t("customer.paymentSources.frontDesk")}${transaction.processorEmployeeName || transaction.processorEmployeeId ? ` · ${transaction.processorEmployeeName || transaction.processorEmployeeId}` : ` · ${t("customer.paymentStaffNotRecorded")}`}`
-                    : transaction.paymentSource === "ONLINE_GATEWAY"
-                      ? t("customer.paymentSources.onlineGateway")
-                      : transaction.paymentSource === "CUSTOMER"
-                        ? t("customer.paymentSources.customer")
-                        : t("customer.paymentSources.unknown")}
+                    : transaction.paymentSource === "ONLINE_BOOKING"
+                      ? t("customer.paymentSources.onlineBooking")
+                      : t("customer.paymentSources.unknown")}
                 </strong>
               </div>
             </div>;

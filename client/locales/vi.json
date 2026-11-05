@@ -183,8 +183,7 @@
     "paymentSource": "Nguồn thanh toán",
     "paymentSources": {
       "frontDesk": "Nhân viên ghi nhận tại quầy",
-      "customer": "Khách hàng thanh toán",
-      "onlineGateway": "Thanh toán trực tuyến",
+      "onlineBooking": "Khách đặt phòng trực tuyến",
       "unknown": "Chưa xác định nguồn thanh toán"
     },
     "paymentStaff": "Nhân viên thu tại quầy",

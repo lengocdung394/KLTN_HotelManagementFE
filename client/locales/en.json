@@ -183,8 +183,7 @@
     "paymentSource": "Payment source",
     "paymentSources": {
       "frontDesk": "Recorded by front desk",
-      "customer": "Paid by customer",
-      "onlineGateway": "Online payment",
+      "onlineBooking": "Customer online booking",
       "unknown": "Payment source unknown"
     },
     "paymentStaff": "Front desk staff",
