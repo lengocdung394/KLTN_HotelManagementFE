@@ -26,7 +26,8 @@ const errorMessage = (error: unknown) => {
 };
 
 export default function BranchHotelImagesSettings() {
-  const { hotelId, hotelName } = useAppSelector((state) => state.auth);
+  const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
+  const canEditImages = roles.includes("ROLE_ADMIN") || roles.includes("ROLE_MANAGER");
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     data: savedImages = [],
@@ -116,7 +117,7 @@ export default function BranchHotelImagesSettings() {
             )}
           </p>
         </div>
-        <div className="flex gap-2">
+        {canEditImages && <div className="flex gap-2">
           <input
             ref={inputRef}
             type="file"
@@ -147,7 +148,7 @@ export default function BranchHotelImagesSettings() {
               ? localizedText("Đang lưu...", "Saving...")
               : localizedText("Lưu thay đổi", "Save changes")}
           </button>
-        </div>
+        </div>}
       </div>
 
       {isLoading && <p className="mt-5 text-sm text-slate-500">{localizedText("Đang tải ảnh...", "Loading photos...")}</p>}
@@ -158,7 +159,9 @@ export default function BranchHotelImagesSettings() {
       )}
       {!isLoading && images.length === 0 && (
         <div className="mt-5 rounded-xl border border-dashed border-slate-300 py-10 text-center text-sm text-slate-500">
-          {localizedText("Chi nhánh chưa có ảnh. Hãy thêm ảnh để bắt đầu.", "No branch photos yet. Add photos to get started.")}
+          {canEditImages
+            ? localizedText("Chi nhánh chưa có ảnh. Hãy thêm ảnh để bắt đầu.", "No branch photos yet. Add photos to get started.")
+            : localizedText("Chi nhánh hiện chưa có ảnh.", "This branch does not have any photos yet.")}
         </div>
       )}
       {images.length > 0 && (
@@ -166,7 +169,7 @@ export default function BranchHotelImagesSettings() {
           {images.map((url, index) => (
             <figure key={`${url}-${index}`} className="group relative overflow-hidden rounded-xl border border-slate-200">
               <img src={url} alt={`${hotelName || "Chi nhánh"} ${index + 1}`} className="h-40 w-full object-cover" />
-              <button
+              {canEditImages && <button
                 type="button"
                 onClick={() => {
                   setImages((current) => current.filter((_, itemIndex) => itemIndex !== index));
@@ -176,7 +179,7 @@ export default function BranchHotelImagesSettings() {
                 className="absolute right-2 top-2 rounded-lg bg-white/95 p-2 text-red-600 shadow hover:bg-red-50"
               >
                 <Trash2 className="h-4 w-4" />
-              </button>
+              </button>}
               <figcaption className="px-3 py-2 text-xs text-slate-500">
                 {index + 1} / {images.length}
               </figcaption>
@@ -184,7 +187,7 @@ export default function BranchHotelImagesSettings() {
           ))}
         </div>
       )}
-      {error && <p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}
+      {canEditImages && error && <p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}
       {saved && <p role="status" className="mt-4 text-sm font-medium text-emerald-600">{localizedText("Đã lưu hình ảnh chi nhánh.", "Branch photos saved.")}</p>}
     </section>
   );

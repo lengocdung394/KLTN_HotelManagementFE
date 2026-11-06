@@ -188,6 +188,7 @@ export default function NotificationBell() {
               action: (
                 <ToastAction
                   altText="Mở lịch tạm đóng khách sạn"
+                  className="border-blue-700 bg-blue-700 text-white hover:bg-blue-800 focus:ring-blue-500/50"
                   onClick={() => navigate("/hotel-closures")}
                 >
                   Xem lịch
@@ -245,6 +246,7 @@ export default function NotificationBell() {
                 <ToastAction
                   altText={localizedText("Mở trang phân công dọn phòng", "Open housekeeping assignments")}
                   onClick={() => navigate("/staff?tab=tasks")}
+                  className="h-9 border border-amber-950 bg-amber-900 px-3 text-xs font-bold text-white shadow-sm hover:bg-amber-950 focus:ring-amber-800"
                 >
                   {localizedText("Mở phân công", "View assignments")}
                 </ToastAction>

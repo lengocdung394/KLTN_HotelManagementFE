@@ -51,6 +51,19 @@ const adminItems = [
   ["/reports", "reports", FileText],
   ["/settings", "settings", Settings],
 ] as const;
+const sidebarOrder: Record<string, string> = {
+  "/overview": "order-1",
+  "/bookings": "order-2",
+  "/check-in-out": "order-3",
+  "/rooms": "order-4",
+  "/services": "order-5",
+  "/customers": "order-6",
+  "/invoices": "order-7",
+  "/refund-approvals": "order-8",
+  "/promotions": "order-9",
+  "/hotel-rules": "order-10",
+  "/hotel-closures": "order-11",
+};
 
 export default function AppSidebar({
   mobile,
@@ -132,13 +145,13 @@ export default function AppSidebar({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-        <nav className="mt-8 space-y-1">
+        <nav className="mt-8 flex flex-col gap-1">
           {items.slice(0, 2).map(([href, label, Icon]) => (
             <Link
               key={href}
               to={href}
               onClick={onCloseMobile}
-              className={`flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+              className={`${sidebarOrder[href]} flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
             >
               <span className="flex shrink-0 items-center gap-3 whitespace-nowrap">
                 <Icon size={17} />
@@ -147,7 +160,7 @@ export default function AppSidebar({
             </Link>
           ))}
           <div
-            className={`rounded-xl ${bookingActive ? "bg-blue-900/50" : ""}`}
+            className={`order-2 rounded-xl ${bookingActive ? "bg-blue-900/50" : ""}`}
           >
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${bookingActive ? "text-white" : "text-slate-400"}`}
@@ -194,7 +207,7 @@ export default function AppSidebar({
           <Link
             to="/refund-approvals"
             onClick={onCloseMobile}
-            className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+            className={`order-8 flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
           >
             <ClipboardCheck size={17} />
             {t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}
@@ -202,12 +215,12 @@ export default function AppSidebar({
           <Link
             to="/hotel-rules"
             onClick={onCloseMobile}
-            className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/hotel-rules" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+            className={`order-10 flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/hotel-rules" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
           >
             <ClipboardList size={17} />
             {t("navigation.hotelRules", "Nội quy khách sạn")}
           </Link>
-          <div className={`rounded-xl ${roomsActive ? "bg-blue-900/50" : ""}`}>
+          <div className={`order-4 rounded-xl ${roomsActive ? "bg-blue-900/50" : ""}`}>
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${roomsActive ? "text-white" : "text-slate-400"}`}
             >
@@ -261,7 +274,7 @@ export default function AppSidebar({
                 key={href}
                 to={href}
                 onClick={onCloseMobile}
-                className={`flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                className={`${sidebarOrder[href]} flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
               >
                 <span className="flex shrink-0 items-center gap-3 whitespace-nowrap">
                   <Icon size={17} />
@@ -270,7 +283,7 @@ export default function AppSidebar({
               </Link>
             ))}
           <div
-            className={`rounded-xl ${servicesActive ? "bg-blue-900/50" : ""}`}
+            className={`order-5 rounded-xl ${servicesActive ? "bg-blue-900/50" : ""}`}
           >
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${servicesActive ? "text-white" : "text-slate-400"}`}

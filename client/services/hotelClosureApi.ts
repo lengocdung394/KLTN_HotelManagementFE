@@ -15,18 +15,42 @@ export type HotelClosure = {
   allHotels: boolean;
   hotelIds: number[];
   createdAt: string;
+  active?: boolean;
 };
 
 export type AffectedClosureBooking = {
   bookingId: string;
   guestName: string;
   bookingStatus: string;
+  cancellationRefundAmount?: number;
+  cancellationRoomRefundAmount?: number;
+  cancellationServiceRefundAmount?: number;
+  cancellationRoomPenaltyAmount?: number;
+  cancellationRefundPolicy?: string;
+  earlyCheckoutRefundAmount?: number;
+  earlyCheckoutOriginalRoomAmount?: number;
+  earlyCheckoutOriginalRoomNights?: number;
+  earlyCheckoutUsedRoomNights?: number;
+  earlyCheckoutRoomAmount?: number;
+  earlyCheckoutEarlyCheckInFeeAmount?: number;
+  earlyCheckoutUnpaidBeforeCheckoutAmount?: number;
+  earlyCheckoutOutstandingAmount?: number;
+  earlyCheckoutBookingTotalAmount?: number;
+  earlyCheckoutPaidAmount?: number;
+  earlyCheckoutProjectedTotalAmount?: number;
   roomStays: {
     bookingDetailId: string;
     roomNumber: string | null;
     checkinDate: string | null;
     checkoutDate: string | null;
     status: string | null;
+    services?: {
+      name: string | null;
+      quantity: number;
+      usedQuantity: number;
+      refundableQuantity: number;
+      refundableAmount: number;
+    }[];
   }[];
   resolutionAction: string | null;
 };
@@ -42,10 +66,19 @@ export type CreateHotelClosure = {
 
 export type ResolveHotelClosure = {
   action: "CANCEL_FULL_REFUND" | "EARLY_CHECKOUT";
-  cancellation?: { reason: string; refundMethod: "BANK" };
+  cancellation?: {
+    reason: string;
+    refundMethod?: "CASH" | "BANK";
+    cashRefundConfirmed?: boolean;
+    confirmedRefundAmount?: number;
+    confirmedRoomRefundAmount?: number;
+    confirmedServiceRefundAmount?: number;
+    confirmedRoomPenaltyAmount?: number;
+    confirmedRefundPolicy?: string;
+  };
   checkout?: {
     bookingDetailIds: string[];
-    surplusRefundMethod: "BANK";
+    surplusRefundMethod?: "CASH" | "BANK";
     refundNote: string;
   };
 };
