@@ -165,6 +165,7 @@ export type SuperAdminAccountUpdateRequest = {
   phone?: string;
   address?: string;
   position?: string;
+  password?: string;
   role?: "ROLE_ADMIN" | "ROLE_MANAGER" | "ROLE_EMPLOYEE";
 };
 

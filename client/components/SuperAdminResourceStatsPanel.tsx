@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Building2, CalendarDays, ConciergeBell, PanelLeftClose, PanelLeftOpen, Search, Tag, Wallet, XCircle } from "lucide-react";
+import { BarChart3, BedDouble, Building2, CalendarDays, Check, ChevronDown, ConciergeBell, PanelLeftClose, PanelLeftOpen, Tag, Wallet, XCircle } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Bar,
   BarChart,
@@ -83,7 +92,8 @@ const StatCard = ({
 );
 
 export default function SuperAdminResourceStatsPanel({ branches, isLoading, isError, onRetry }: Props) {
-  const [search, setSearch] = useState("");
+  const [selectedBranchId, setSelectedBranchId] = useState("all");
+  const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
   const today = localDateString(new Date());
   const [startDate, setStartDate] = useState(() => `${today.slice(0, 7)}-01`);
   const [endDate, setEndDate] = useState(today);
@@ -92,7 +102,6 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const [retryCount, setRetryCount] = useState(0);
   const [isReportTocVisible, setIsReportTocVisible] = useState(true);
   const dispatch = useAppDispatch();
-  const normalizedSearch = search.trim().toLocaleLowerCase("vi-VN");
   const hasValidDateRange = Boolean(startDate && endDate && startDate <= endDate);
   const reportSections = [
     { id: "super-admin-stats-overview", label: "Tổng quan" },
@@ -146,15 +155,21 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   }, [branches, dispatch, endDate, hasValidDateRange, retryCount, startDate]);
 
   const visibleBranches = useMemo(
-    () => branches.filter((branch) =>
-      `${branch.name} ${branch.address} ${branch.provinceName ?? ""}`.toLocaleLowerCase("vi-VN").includes(normalizedSearch),
-    ),
-    [branches, normalizedSearch],
+    () => selectedBranchId === "all"
+      ? branches
+      : branches.filter((branch) => String(branch.id) === selectedBranchId),
+    [branches, selectedBranchId],
   );
-  const reports = Object.values(branchReports).flatMap(({ report }) => report ? [report] : []);
-  const hasReportErrors = Object.values(branchReports).some(({ hasError }) => hasError);
-  const isStatsLoading = isLoading || isLoadingReports || (hasValidDateRange && branches.length > 0 && reports.length === 0 && !hasReportErrors);
-  const allReportsLoaded = branches.length > 0 && reports.length === branches.length && !hasReportErrors;
+  const reports = visibleBranches.flatMap((branch) => {
+    const report = branchReports[branch.id]?.report;
+    return report ? [report] : [];
+  });
+  const hasReportErrors = visibleBranches.some((branch) => branchReports[branch.id]?.hasError);
+  const isStatsLoading = isLoading || isLoadingReports
+    || (hasValidDateRange && visibleBranches.length > 0 && reports.length === 0 && !hasReportErrors);
+  const allReportsLoaded = visibleBranches.length > 0
+    && reports.length === visibleBranches.length
+    && !hasReportErrors;
 
   useEffect(() => {
     const reportElements = document.querySelectorAll<HTMLElement>("[data-super-admin-report-section]");
@@ -174,6 +189,10 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   }, [allReportsLoaded, branches.length, hasValidDateRange]);
 
   const totalBookings = reports.reduce((total, report) => total + (report.totalBookingCount ?? 0), 0);
+  const totalRooms = reports.reduce((total, report) => total + (report.totalRoomCount ?? 0), 0);
+  const totalRoomRevenue = reports.reduce((total, report) => total + Number(report.roomRevenue ?? 0), 0);
+  const totalServiceRevenue = reports.reduce((total, report) => total + Number(report.serviceRevenue ?? 0), 0);
+  const totalPromotionSavings = reports.reduce((total, report) => total + Number(report.promotionSavings ?? 0), 0);
   const totalRevenue = reports.reduce((total, report) => total + Number(report.cashReceived ?? 0), 0);
   const totalCashReceived = reports.reduce((total, report) => total + Number(report.cashReceivedCash ?? 0), 0);
   const totalBankReceived = reports.reduce((total, report) => total + Number(report.cashReceivedBank ?? 0), 0);
@@ -248,6 +267,8 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const formatMoney = (value: number) =>
     `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)}đ`;
   const displayCount = (value: number) => isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatCount(value);
+  const selectedBranchName = visibleBranches.length === 1 ? visibleBranches[0].name : null;
+  const reportScopeLabel = selectedBranchName ? `chi nhánh ${selectedBranchName}` : "toàn bộ chi nhánh";
 
   return (
     <section className="mt-2 space-y-5" aria-labelledby="resource-stats-title">
@@ -257,13 +278,66 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             <BarChart3 size={21} />
           </span>
           <div>
-            <h2 id="resource-stats-title" className="text-lg font-bold text-slate-900">Thống kê toàn hệ thống</h2>
+            <h2 id="resource-stats-title" className="text-lg font-bold text-slate-900">
+              {selectedBranchName ? `Thống kê ${selectedBranchName}` : "Thống kê toàn hệ thống"}
+            </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-              Tổng hợp booking, doanh thu, dịch vụ và khuyến mãi tại các chi nhánh trong khoảng ngày đã chọn.
+              Tổng hợp booking, doanh thu, dịch vụ và khuyến mãi tại {reportScopeLabel} trong khoảng ngày đã chọn.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          <div className="text-xs font-semibold text-slate-500">
+            <span>Chi nhánh</span>
+            <Popover open={isBranchPickerOpen} onOpenChange={setIsBranchPickerOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={isLoading || isError}
+                  aria-label="Tìm và chọn chi nhánh"
+                  className="mt-1 flex h-10 min-w-52 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                >
+                  <span className="truncate">
+                    {selectedBranchName ?? "Tất cả chi nhánh"}
+                  </span>
+                  <ChevronDown size={15} className="shrink-0 text-slate-400" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64 p-0">
+                <Command>
+                  <CommandInput placeholder="Tìm chi nhánh..." />
+                  <CommandList>
+                    <CommandEmpty>Không tìm thấy chi nhánh.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="Tất cả chi nhánh"
+                        onSelect={() => {
+                          setSelectedBranchId("all");
+                          setIsBranchPickerOpen(false);
+                        }}
+                      >
+                        <Check className={`mr-2 h-4 w-4 ${selectedBranchId === "all" ? "opacity-100" : "opacity-0"}`} />
+                        Tất cả chi nhánh
+                      </CommandItem>
+                      {branches.map((branch) => (
+                        <CommandItem
+                          key={branch.id}
+                          value={`${branch.name} ${branch.provinceName ?? ""}`}
+                          onSelect={() => {
+                            setSelectedBranchId(String(branch.id));
+                            setIsBranchPickerOpen(false);
+                          }}
+                        >
+                          <Check className={`mr-2 h-4 w-4 ${selectedBranchId === String(branch.id) ? "opacity-100" : "opacity-0"}`} />
+                          <span className="truncate">{branch.name}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
           <label className="block text-xs font-semibold text-slate-500">
             Từ ngày
             <input
@@ -380,73 +454,118 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
           </div>
         </nav>
 
-      <div id="super-admin-stats-overview" data-super-admin-report-section className="scroll-mt-24 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard
-          label="Chi nhánh"
-          value={isLoading || isError ? "—" : branches.length}
-          detail="Trong hệ thống"
-          icon={Building2}
-          color="bg-blue-50 text-blue-700"
-        />
-        <StatCard
-          label="Số lượt đặt phòng"
-          value={displayCount(totalBookings)}
-          detail="Trong khoảng ngày đã chọn"
-          icon={CalendarDays}
-          color="bg-cyan-50 text-cyan-700"
-        />
-        <StatCard
-          label="Tiền booking đã thu"
-          value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRevenue)}
-          detail={isStatsLoading || hasReportErrors || !allReportsLoaded
-            ? "Tiền mặt và chuyển khoản tại các chi nhánh"
-            : `Tiền mặt ${formatMoney(totalCashReceived)} · Chuyển khoản ${formatMoney(totalBankReceived)}`}
-          icon={Wallet}
-          color="bg-amber-50 text-amber-700"
-        />
-        <StatCard
-          label="Tổng tiền hoàn lại"
-          value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRefunded)}
-          detail="Giao dịch hoàn tiền trong kỳ"
-          icon={Wallet}
-          color="bg-rose-50 text-rose-700"
-        />
-        <StatCard
-          label="Tiền thừa trả khách"
-          value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalChangeReturned)}
-          detail="Tiền thừa từ giao dịch tiền mặt"
-          icon={Wallet}
-          color="bg-orange-50 text-orange-700"
-        />
-        <StatCard
-          label="Tiền thu ròng"
-          value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalNetReceived)}
-          detail="Tổng thu trừ hoàn tiền và tiền thừa"
-          icon={Wallet}
-          color="bg-violet-50 text-violet-700"
-        />
-        <StatCard
-          label="Booking đã hủy"
-          value={displayCount(totalCancelledBookings)}
-          detail="Trong khoảng ngày đã chọn"
-          icon={XCircle}
-          color="bg-rose-50 text-rose-700"
-        />
-        <StatCard
-          label="Lượt sử dụng dịch vụ"
-          value={displayCount(totalServiceUsage)}
-          detail="Tổng lượt dùng tại các chi nhánh"
-          icon={ConciergeBell}
-          color="bg-violet-50 text-violet-700"
-        />
-        <StatCard
-          label="Lượt dùng khuyến mãi"
-          value={displayCount(totalPromotionUsage)}
-          detail="Tổng lượt áp dụng tại các chi nhánh"
-          icon={Tag}
-          color="bg-emerald-50 text-emerald-700"
-        />
-      </div>
+      <section id="super-admin-stats-overview" data-super-admin-report-section className="scroll-mt-24 space-y-5">
+        <div>
+          <h3 className="mb-2 text-sm font-bold text-slate-700">Hoạt động</h3>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard
+              label="Chi nhánh"
+              value={isLoading || isError ? "—" : visibleBranches.length}
+              detail={selectedBranchName ? "Đang xem chi nhánh đã chọn" : "Tổng số chi nhánh trong hệ thống"}
+              icon={Building2}
+              color="bg-blue-50 text-blue-700"
+            />
+            <StatCard
+              label="Tổng lượt đặt phòng"
+              value={displayCount(totalBookings)}
+              detail={`Booking tạo trong kỳ · ${reportScopeLabel}`}
+              icon={CalendarDays}
+              color="bg-cyan-50 text-cyan-700"
+            />
+            <StatCard
+              label="Booking đã hủy"
+              value={displayCount(totalCancelledBookings)}
+              detail={`Trong khoảng ngày đã chọn · ${reportScopeLabel}`}
+              icon={XCircle}
+              color="bg-rose-50 text-rose-700"
+            />
+            <StatCard
+              label="Tổng số phòng"
+              value={displayCount(totalRooms)}
+              detail={`Theo trạng thái hiện tại · ${reportScopeLabel}`}
+              icon={BedDouble}
+              color="bg-cyan-50 text-cyan-700"
+            />
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-bold text-slate-700">Doanh thu vận hành</h3>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard
+              label="Tiền phòng"
+              value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRoomRevenue)}
+              detail={`Theo các đêm lưu trú · ${reportScopeLabel}`}
+              icon={Wallet}
+              color="bg-blue-50 text-blue-700"
+            />
+            <StatCard
+              label="Doanh thu dịch vụ"
+              value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalServiceRevenue)}
+              detail={`Từ ${displayCount(totalServiceUsage)} lượt dịch vụ · ${reportScopeLabel}`}
+              icon={ConciergeBell}
+              color="bg-violet-50 text-violet-700"
+            />
+            <StatCard
+              label="Giá trị khuyến mãi"
+              value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalPromotionSavings)}
+              detail={`Tổng tiền giảm trên booking · ${reportScopeLabel}`}
+              icon={Tag}
+              color="bg-amber-50 text-amber-700"
+            />
+            <StatCard
+              label="Lượt sử dụng dịch vụ"
+              value={displayCount(totalServiceUsage)}
+              detail={`Tổng lượt dùng · ${reportScopeLabel}`}
+              icon={ConciergeBell}
+              color="bg-violet-50 text-violet-700"
+            />
+            <StatCard
+              label="Lượt dùng khuyến mãi"
+              value={displayCount(totalPromotionUsage)}
+              detail={`Tổng lượt áp dụng · ${reportScopeLabel}`}
+              icon={Tag}
+              color="bg-emerald-50 text-emerald-700"
+            />
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-bold text-slate-700">Dòng tiền</h3>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard
+              label="Tổng tiền đã thu booking"
+              value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRevenue)}
+              detail={isStatsLoading || hasReportErrors || !allReportsLoaded
+                ? `Tiền mặt và chuyển khoản · ${reportScopeLabel}`
+                : `Tiền mặt ${formatMoney(totalCashReceived)} · Chuyển khoản ${formatMoney(totalBankReceived)}`}
+              icon={Wallet}
+              color="bg-amber-50 text-amber-700"
+            />
+            <StatCard
+              label="Tổng tiền hoàn lại"
+              value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRefunded)}
+              detail={`Giao dịch hoàn tiền trong kỳ · ${reportScopeLabel}`}
+              icon={Wallet}
+              color="bg-rose-50 text-rose-700"
+            />
+            <StatCard
+              label="Tiền thừa trả khách"
+              value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalChangeReturned)}
+              detail={`Tiền thừa từ giao dịch tiền mặt · ${reportScopeLabel}`}
+              icon={Wallet}
+              color="bg-orange-50 text-orange-700"
+            />
+            <StatCard
+              label="Tiền thu ròng"
+              value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalNetReceived)}
+              detail="Tổng thu trừ hoàn tiền và tiền thừa"
+              icon={Wallet}
+              color="bg-violet-50 text-violet-700"
+            />
+          </div>
+        </div>
+      </section>
 
       {allReportsLoaded && (
         <>
@@ -455,7 +574,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-slate-900">Doanh thu dịch vụ theo ngày</h3>
-                  <p className="mt-1 text-xs text-slate-400">Tổng hợp toàn bộ chi nhánh · VNĐ</p>
+                  <p className="mt-1 text-xs text-slate-400">Tổng hợp {reportScopeLabel} · VNĐ</p>
                 </div>
                 <ConciergeBell size={18} className="text-violet-600" />
               </div>
@@ -505,7 +624,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
                 <h3 className="font-bold text-slate-900">Tình trạng phòng hiện tại</h3>
-                <p className="mt-1 text-xs text-slate-400">Tổng số phòng theo trạng thái tại các chi nhánh</p>
+                <p className="mt-1 text-xs text-slate-400">Tổng số phòng theo trạng thái · {reportScopeLabel}</p>
               </div>
               {roomStatusBreakdown.length === 0 ? (
                 <p className="py-12 text-center text-sm text-slate-400">Chưa có dữ liệu trạng thái phòng.</p>
@@ -538,7 +657,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
                 <h3 className="font-bold text-slate-900">Booking theo loại phòng</h3>
-                <p className="mt-1 text-xs text-slate-400">Số lượt đặt theo loại phòng, tổng hợp từ các chi nhánh</p>
+                <p className="mt-1 text-xs text-slate-400">Số lượt đặt theo loại phòng · {reportScopeLabel}</p>
               </div>
               {roomTypeBreakdown.length === 0 ? (
                 <p className="py-12 text-center text-sm text-slate-400">Không có dữ liệu loại phòng trong kỳ.</p>
@@ -567,7 +686,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
           <section id="super-admin-stats-cancellations" data-super-admin-report-section className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h3 className="font-bold text-slate-900">Chi tiết booking đã hủy</h3>
-              <p className="mt-1 text-xs text-slate-400">Phân loại theo chi nhánh, kênh đặt và lý do hủy trong kỳ</p>
+              <p className="mt-1 text-xs text-slate-400">Phân loại theo {reportScopeLabel}, kênh đặt và lý do hủy trong kỳ</p>
             </div>
             {cancelledBookingDetails.length === 0 ? (
               <p className="py-10 text-center text-sm text-slate-400">Không có booking bị hủy trong khoảng ngày này.</p>
@@ -618,17 +737,9 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               Dữ liệu báo cáo từ {startDate} đến {endDate}.
             </p>
           </div>
-          <label className="relative block w-full sm:w-72">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Tìm chi nhánh..."
-              aria-label="Tìm chi nhánh trong thống kê"
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-            />
-          </label>
+          <p className="text-sm text-slate-500">
+            {selectedBranchName ? `Đang xem: ${selectedBranchName}` : "Tổng hợp tất cả chi nhánh"}
+          </p>
         </div>
 
         {isLoading ? (
@@ -641,7 +752,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
         ) : branches.length === 0 ? (
           <p className="p-10 text-center text-sm text-slate-500">Chưa có chi nhánh trong hệ thống.</p>
         ) : visibleBranches.length === 0 ? (
-          <p className="p-10 text-center text-sm text-slate-500">Không tìm thấy chi nhánh phù hợp.</p>
+          <p className="p-10 text-center text-sm text-slate-500">Không tìm thấy chi nhánh được chọn.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1120px] text-left">
