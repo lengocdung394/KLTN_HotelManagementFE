@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-labelledby="title">
+  <title id="title">Booking workflow guide illustration</title>
+  <rect width="960" height="420" rx="24" fill="#f1f5f9"/><rect x="20" y="20" width="920" height="380" rx="18" fill="white" stroke="#dbe3ef"/>
+  <text x="50" y="62" fill="#0f172a" font-family="Arial" font-size="19" font-weight="700">BOOKING WORKSPACE</text>
+  <g font-family="Arial" font-size="12" font-weight="700" text-anchor="middle">
+    <rect x="50" y="84" width="194" height="42" rx="12" fill="#dbeafe"/><text x="147" y="110" fill="#1d4ed8">1 · DATES</text>
+    <rect x="260" y="84" width="194" height="42" rx="12" fill="#e0e7ff"/><text x="357" y="110" fill="#4338ca">2 · ROOMS</text>
+    <rect x="470" y="84" width="194" height="42" rx="12" fill="#fef3c7"/><text x="567" y="110" fill="#b45309">3 · GUEST</text>
+    <rect x="680" y="84" width="230" height="42" rx="12" fill="#dcfce7"/><text x="795" y="110" fill="#15803d">4 · REVIEW &amp; SAVE</text>
+  </g>
+  <rect x="50" y="148" width="540" height="212" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="74" y="180" fill="#0f172a" font-family="Arial" font-size="14" font-weight="700">Booking details</text>
+  <g fill="white" stroke="#cbd5e1"><rect x="74" y="196" width="230" height="42" rx="8"/><rect x="320" y="196" width="244" height="42" rx="8"/><rect x="74" y="250" width="490" height="42" rx="8"/><rect x="74" y="304" width="490" height="36" rx="8"/></g>
+  <g fill="#94a3b8"><rect x="90" y="213" width="130" height="7" rx="3"/><rect x="337" y="213" width="120" height="7" rx="3"/><rect x="90" y="267" width="220" height="7" rx="3"/><rect x="90" y="319" width="160" height="7" rx="3"/></g>
+  <rect x="612" y="148" width="298" height="212" rx="14" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="636" y="180" fill="#1e3a8a" font-family="Arial" font-size="14" font-weight="700">Availability &amp; total</text>
+  <g fill="#64748b"><rect x="636" y="202" width="245" height="7" rx="3"/><rect x="636" y="224" width="220" height="7" rx="3"/><rect x="636" y="246" width="250" height="7" rx="3"/></g>
+  <path d="M636 270h250" stroke="#bfdbfe" stroke-width="2"/><rect x="636" y="292" width="250" height="42" rx="10" fill="#2563eb"/><text x="761" y="318" fill="white" font-family="Arial" font-size="12" font-weight="700" text-anchor="middle">CONFIRM AFTER REVIEW</text>
+  <text x="50" y="384" fill="#92400e" font-family="Arial" font-size="11">Busy dates or unavailable rooms? Choose another valid date/room.</text>
+</svg>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Images } from "lucide-react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useGetPublicBranchImagesQuery } from "../services/branchHotelApi";
 import { optimizeCloudinaryImage } from "../lib/cloudinaryImage";
 
@@ -11,6 +12,7 @@ export default function BranchHotelPhotoPanel({
   hotelId: string | null;
   hotelName: string | null;
 }) {
+  const { t } = useTranslation();
   const {
     currentData: images = [],
     isLoading,
@@ -42,16 +44,16 @@ export default function BranchHotelPhotoPanel({
           <Images size={19} />
         </span>
         <div>
-          <h3 className="font-bold text-slate-900">{hotelName || "Khách sạn"} · Hình ảnh</h3>
-          <p className="mt-0.5 text-xs text-slate-500">Ảnh đại diện chi nhánh</p>
+          <h3 className="font-bold text-slate-900">{hotelName || t("branchPhotos.hotelFallback")} · {t("branchPhotos.titleSuffix")}</h3>
+          <p className="mt-0.5 text-xs text-slate-500">{t("branchPhotos.subtitle")}</p>
         </div>
       </div>
       {isLoading ? (
-        <p className="px-5 py-7 text-sm text-slate-500">Đang tải hình ảnh khách sạn...</p>
+        <p className="px-5 py-7 text-sm text-slate-500">{t("branchPhotos.loading")}</p>
       ) : isError ? (
-        <p role="alert" className="px-5 py-7 text-sm text-rose-700">Không tải được hình ảnh khách sạn.</p>
+        <p role="alert" className="px-5 py-7 text-sm text-rose-700">{t("branchPhotos.loadError")}</p>
       ) : photos.length === 0 ? (
-        <p className="px-5 py-7 text-sm text-slate-500">Chi nhánh chưa có ảnh đại diện.</p>
+        <p className="px-5 py-7 text-sm text-slate-500">{t("branchPhotos.empty")}</p>
       ) : (
         <div className="p-4">
           <div className="group relative h-56 overflow-hidden rounded-xl bg-slate-100 sm:h-72">
@@ -59,7 +61,7 @@ export default function BranchHotelPhotoPanel({
               <img
                 key={`${image}-${index}`}
                 src={optimizeCloudinaryImage(image, 1920)}
-                alt={`${hotelName || "Khách sạn"} - ảnh ${index + 1}`}
+                alt={t("branchPhotos.imageAlt", { hotel: hotelName || t("branchPhotos.hotelFallback"), index: index + 1 })}
                 loading={index === activeIndex ? "eager" : "lazy"}
                 className={`absolute inset-0 h-full w-full bg-slate-100 object-contain transition-opacity duration-700 ${
                   index === activeIndex ? "opacity-100" : "opacity-0"
@@ -70,14 +72,14 @@ export default function BranchHotelPhotoPanel({
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent" />
             <div className="absolute inset-x-4 bottom-4 flex items-end justify-between text-white sm:inset-x-6 sm:bottom-5">
               <div>
-                <p className="text-lg font-semibold">{hotelName || "Khách sạn"}</p>
-                <p className="mt-1 text-xs text-white/80">Ảnh {activeIndex + 1} / {photos.length}</p>
+                <p className="text-lg font-semibold">{hotelName || t("branchPhotos.hotelFallback")}</p>
+                <p className="mt-1 text-xs text-white/80">{t("branchPhotos.imageCounter", { current: activeIndex + 1, total: photos.length })}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => showPhoto(activeIndex - 1)}
-                  aria-label="Ảnh trước"
+                  aria-label={t("branchPhotos.previousImage")}
                   className="grid h-9 w-9 place-items-center rounded-full bg-white/20 backdrop-blur transition hover:bg-white/35"
                 >
                   <ChevronLeft size={20} />
@@ -85,7 +87,7 @@ export default function BranchHotelPhotoPanel({
                 <button
                   type="button"
                   onClick={() => showPhoto(activeIndex + 1)}
-                  aria-label="Ảnh tiếp theo"
+                  aria-label={t("branchPhotos.nextImage")}
                   className="grid h-9 w-9 place-items-center rounded-full bg-white/20 backdrop-blur transition hover:bg-white/35"
                 >
                   <ChevronRight size={20} />

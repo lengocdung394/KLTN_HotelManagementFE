@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-labelledby="title">
+  <title id="title">Overview dashboard guide illustration</title>
+  <rect width="960" height="420" rx="24" fill="#f1f5f9"/>
+  <rect x="18" y="18" width="924" height="384" rx="18" fill="#fff" stroke="#dbe3ef"/>
+  <rect x="18" y="18" width="164" height="384" rx="18" fill="#172554"/>
+  <rect x="35" y="42" width="128" height="28" rx="8" fill="#1d4ed8"/>
+  <g fill="#94a3b8"><rect x="39" y="94" width="105" height="9" rx="4"/><rect x="39" y="124" width="105" height="9" rx="4"/><rect x="39" y="154" width="105" height="9" rx="4"/><rect x="39" y="184" width="105" height="9" rx="4"/><rect x="39" y="214" width="105" height="9" rx="4"/></g>
+  <rect x="202" y="42" width="706" height="38" rx="10" fill="#f8fafc"/>
+  <g font-family="Arial" font-weight="700" font-size="12" text-anchor="middle">
+    <rect x="202" y="98" width="164" height="72" rx="12" fill="#172554"/><text x="284" y="127" fill="#bfdbfe">1 · REVENUE</text><text x="284" y="151" fill="white">Today</text>
+    <rect x="378" y="98" width="164" height="72" rx="12" fill="#eff6ff"/><text x="460" y="127" fill="#1d4ed8">2 · OCCUPANCY</text><text x="460" y="151" fill="#0f172a">Rooms</text>
+    <rect x="554" y="98" width="164" height="72" rx="12" fill="#f0fdf4"/><text x="636" y="127" fill="#15803d">3 · GUESTS</text><text x="636" y="151" fill="#0f172a">In-house</text>
+    <rect x="730" y="98" width="178" height="72" rx="12" fill="#fff7ed"/><text x="819" y="127" fill="#c2410c">4 · ARRIVALS</text><text x="819" y="151" fill="#0f172a">Today</text>
+  </g>
+  <rect x="202" y="188" width="706" height="190" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="224" y="219" fill="#0f172a" font-family="Arial" font-size="14" font-weight="700">5 · Daily check-in / check-out schedule</text>
+  <rect x="224" y="236" width="310" height="54" rx="10" fill="#dbeafe"/><rect x="550" y="236" width="336" height="54" rx="10" fill="#fef3c7"/>
+  <g fill="#64748b"><rect x="242" y="253" width="150" height="7" rx="3"/><rect x="242" y="270" width="240" height="6" rx="3"/><rect x="570" y="253" width="150" height="7" rx="3"/><rect x="570" y="270" width="270" height="6" rx="3"/></g>
+  <rect x="224" y="306" width="310" height="52" rx="10" fill="#f0fdf4"/><rect x="550" y="306" width="336" height="52" rx="10" fill="#f1f5f9"/>
+  <g fill="#94a3b8"><rect x="242" y="326" width="240" height="7" rx="3"/><rect x="570" y="326" width="270" height="7" rx="3"/></g>
+</svg>

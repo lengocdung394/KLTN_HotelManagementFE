@@ -13,6 +13,7 @@ interface DatePickerPopoverProps {
   label?: string;
   highlightDates?: Array<Date | string>;
   highlightDateMarkers?: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">>;
+  blockedDateLabels?: Record<string, string[]>;
   iconOnly?: boolean;
 }
 
@@ -53,9 +54,10 @@ export default function DatePickerPopover({
   label,
   highlightDates = [],
   highlightDateMarkers = {},
+  blockedDateLabels = {},
   iconOnly = false,
 }: DatePickerPopoverProps) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const resolvedPlaceholder = placeholder ?? (i18n.language.startsWith("en") ? "Select date" : "Chọn ngày");
   const weekDays = i18n.language.startsWith("en")
     ? ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
@@ -184,6 +186,8 @@ export default function DatePickerPopover({
             const isSelected = value && date.toDateString() === value.toDateString();
             const isToday = date.toDateString() === today.toDateString();
             const markers = [...new Set(highlightDateMarkers[dateKey] ?? [])];
+            const blockedLabels = blockedDateLabels[dateKey] ?? [];
+            const isBlocked = blockedLabels.length > 0;
             const isHighlighted = highlightDateKeys.has(dateKey) || markers.length > 0;
             const markerColors = {
               ROOM: "bg-blue-600",
@@ -195,13 +199,18 @@ export default function DatePickerPopover({
               <button
                 key={day}
                 type="button"
+                disabled={isBlocked}
+                title={isBlocked ? `${t("booking.busyDate", "Ngày bận")}: ${blockedLabels.join(", ")}` : undefined}
+                aria-label={isBlocked ? `${day} - ${t("booking.busyDate", "Ngày bận")}: ${blockedLabels.join(", ")}` : undefined}
                 onClick={() => {
                   onChange(date);
                   setPickerMonth(new Date(date.getFullYear(), date.getMonth(), 1));
                   setOpen(false);
                 }}
                 className={`relative grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
-                  isSelected
+                  isBlocked
+                    ? "cursor-not-allowed border border-amber-300 bg-amber-100 font-bold text-amber-800"
+                    : isSelected
                     ? "bg-blue-600 text-white shadow-sm"
                     : isHighlighted
                       ? "border border-emerald-300 bg-emerald-100 font-bold text-emerald-800 shadow-sm"
@@ -222,6 +231,12 @@ export default function DatePickerPopover({
             );
           })}
         </div>
+
+        {Object.keys(blockedDateLabels).length > 0 && (
+          <p className="mt-2 text-center text-[10px] font-medium text-amber-800">
+            {t("booking.busyDateHint", "Ngày màu vàng: lịch bận")}
+          </p>
+        )}
 
         <button
           type="button"

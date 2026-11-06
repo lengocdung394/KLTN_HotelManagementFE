@@ -18,6 +18,7 @@ export type ServiceCharge = {
 export type DailyRecord = {
   id: string;
   bookingId?: string;
+  customerId?: string;
   guest: string;
   phone?: string;
   room: string;

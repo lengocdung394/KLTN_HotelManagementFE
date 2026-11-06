@@ -30,6 +30,7 @@ import { localizedText } from "../i18n";
 import { useGetBookingsByHotelQuery, useGetRoomMatrixQuery, type BookingListItem } from "../services/bookingApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
+import { useGetCustomersByHotelIdQuery } from "../services/customerApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import {
@@ -192,8 +193,12 @@ const extractMatrixBusyRanges = (matrix: unknown[]): MatrixBusyItem[] => {
 };
 
 const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord["flow"]): DailyRecord => {
+  const nestedCustomer = [detail.customer, detail.customerInfo, detail.guest]
+    .find((value) => value && typeof value === "object") as Record<string, unknown> | undefined;
   const roomNumber = String(detail.roomNumber ?? detail.roomId ?? "-");
   const customerName = String(detail.nameCustomer ?? detail.customerName ?? "Chưa cập nhật");
+  const customerIdValue = detail.customerId ?? detail.customerID ?? detail.idCustomer
+    ?? nestedCustomer?.customerId ?? nestedCustomer?.customerID ?? nestedCustomer?.id;
   const identityNumber = [
     detail.cccd,
     detail.customerCccd,
@@ -295,8 +300,21 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
   return {
     id: String(detail.bookingDetailId ?? `${detail.bookingId ?? "booking"}-${roomNumber}`),
     bookingId: detail.bookingId,
+    customerId: customerIdValue == null ? undefined : String(customerIdValue),
     guest: customerName,
-    phone: String(detail.phone ?? detail.phoneNumber ?? detail.customerPhone ?? ""),
+    phone: String(
+      detail.phone
+      ?? detail.phoneNumber
+      ?? detail.customerPhone
+      ?? detail.mobile
+      ?? detail.mobileNumber
+      ?? nestedCustomer?.phone
+      ?? nestedCustomer?.phoneNumber
+      ?? nestedCustomer?.customerPhone
+      ?? nestedCustomer?.mobile
+      ?? nestedCustomer?.mobileNumber
+      ?? "",
+    ),
     room: `${roomNumber} · ${detail.roomName ?? detail.roomTypeName ?? "Phòng"}`,
     time,
     checkInAt: detail.checkInTime,
@@ -379,6 +397,9 @@ export default function CheckInOutWorkspace() {
     { date, status: "CHECKED_IN", bookingStatus: "CONFIRMED" },
   );
   const { data: hotelBookings = [] } = useGetBookingsByHotelQuery(Number(hotelId), {
+    skip: !hotelId || Number.isNaN(Number(hotelId)),
+  });
+  const { data: hotelCustomers = [] } = useGetCustomersByHotelIdQuery(Number(hotelId), {
     skip: !hotelId || Number.isNaN(Number(hotelId)),
   });
   const completedInvoiceBookings = useMemo(() => hotelBookings.filter((booking) => {
@@ -2079,10 +2100,33 @@ export default function CheckInOutWorkspace() {
           onUndo={undoRecordAction}
           onViewBooking={(recordOrRecords) => {
             const records = Array.isArray(recordOrRecords) ? recordOrRecords : [recordOrRecords];
-            setBookingDetailRecords(records.map((record) => ({
-              ...record,
-              services: recordServices[record.id] ?? record.services,
-            })));
+            setBookingDetailRecords(records.map((record) => {
+              const booking = hotelBookings.find((item) =>
+                String(item.bookingId ?? item.id ?? item.orderId ?? "") === String(record.bookingId ?? ""),
+              );
+              const bookingCustomer = booking && typeof booking.customer === "object" && booking.customer
+                ? booking.customer as Record<string, unknown>
+                : {};
+              const customerId = record.customerId
+                ?? (booking?.customerId == null ? undefined : String(booking.customerId));
+              const customer = customerId
+                ? hotelCustomers.find((item) => item.id === customerId)
+                : undefined;
+              const bookingPhone = [
+                booking?.customerPhone,
+                booking?.phone,
+                booking?.phoneNumber,
+                bookingCustomer.phone,
+                bookingCustomer.phoneNumber,
+                bookingCustomer.customerPhone,
+              ].find((value) => typeof value === "string" && value.trim()) as string | undefined;
+              return {
+                ...record,
+                customerId,
+                phone: record.phone?.trim() || bookingPhone?.trim() || customer?.phone || "",
+                services: recordServices[record.id] ?? record.services,
+              };
+            }));
           }}
         />
       </div>

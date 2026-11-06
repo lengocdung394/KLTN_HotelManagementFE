@@ -19,6 +19,7 @@ import LoginPage from "./pages/LoginPage";
 import { disconnectSocket, initSocket } from "./lib/socket";
 import { useAppSelector } from "./store/hooks";
 import ChatWidget from "./components/ChatWidget";
+import UserGuideButton from "./components/UserGuideButton";
 import BranchPhotoLoginSplash from "./components/BranchPhotoLoginSplash";
 import HotelClosureWorkspace from "./pages/HotelClosureWorkspace";
 
@@ -200,7 +201,12 @@ const App = () => {
             onLogin={() => setAuthenticated(true)}
             onLogout={handleLogout}
           />
-          {authenticated && <ChatWidget />}
+          {authenticated && (
+            <>
+              <UserGuideButton />
+              <ChatWidget />
+            </>
+          )}
         </BrowserRouter>
       </TooltipProvider>
     </Provider>

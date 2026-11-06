@@ -31,8 +31,72 @@ const getLocalDateParam = () => {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 };
 
+const normalizeStatus = (value: unknown) => {
+  if (value && typeof value === "object") {
+    const status = value as Record<string, unknown>;
+    return String(status.code ?? status.name ?? status.status ?? "").trim().toUpperCase();
+  }
+  return String(value ?? "").trim().toUpperCase();
+};
+
+const valueOf = (item: Record<string, unknown>, keys: string[]) =>
+  keys.map((key) => item[key]).find((value) => value !== undefined && value !== null && value !== "");
+
+const guestCountOf = (detail: Record<string, unknown>) => {
+  const total = valueOf(detail, ["totalGuests", "guestCount", "numGuests", "numberOfGuests", "guestNumber"]);
+  const totalGuests = Number(total);
+  if (total !== undefined && Number.isFinite(totalGuests) && totalGuests >= 0) return totalGuests;
+
+  const adultValue = valueOf(detail, ["numAdults", "adults", "adultCount", "numberOfAdults"]);
+  const childValue = valueOf(detail, ["numChildren", "children", "childCount", "numberOfChildren"]);
+  const infantValue = valueOf(detail, ["numInfants", "infants", "infantCount", "numberOfInfants"]);
+  const values = [adultValue, childValue, infantValue].filter((value) => value !== undefined);
+  if (values.length === 0) return undefined;
+  const counts = values.map(Number);
+  if (counts.some((count) => !Number.isFinite(count))) return undefined;
+  return counts.reduce((totalCount, count) => totalCount + Math.max(0, count), 0);
+};
+
+const isCurrentlyCheckedIn = (detail: Record<string, unknown>) => {
+  const actualCheckOut = valueOf(detail, [
+    "actualCheckOutTime",
+    "actualCheckOut",
+    "realCheckOutTime",
+    "checkOutActualTime",
+    "checkedOutAt",
+  ]);
+  if (actualCheckOut) return false;
+
+  const status = normalizeStatus(valueOf(detail, [
+    "bookingDetailStatusType",
+    "bookingDetailsStatusType",
+    "bookingDetailStatus",
+    "bookingStatusType",
+    "detailStatus",
+    "checkInStatus",
+    "checkinStatus",
+    "arrivalStatus",
+    "status",
+  ]));
+  if (["CANCELLED", "CANCELED", "CHECKED_OUT", "CHECKED-OUT", "CHECKEDOUT", "COMPLETED"].includes(status)) {
+    return false;
+  }
+  if (["CHECKED_IN", "CHECKED-IN", "CHECKEDIN", "IN_HOUSE", "INHOUSE", "ARRIVED", "IN_PROGRESS"].includes(status)) {
+    return true;
+  }
+
+  const actualCheckIn = valueOf(detail, [
+    "actualCheckInTime",
+    "actualCheckIn",
+    "realCheckInTime",
+    "checkInActualTime",
+    "checkedInAt",
+  ]);
+  return Boolean(actualCheckIn) && !actualCheckOut;
+};
+
 export default function Index({ onLogout }: { onLogout: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { mobileOpen, collapsed, toggleSidebar, closeMobile } = useSidebar();
   const dispatch = useAppDispatch();
   const { fullName, email, position, hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
@@ -107,12 +171,12 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
           bookingId,
           customerName: String(booking.customerName ?? detail.customerName ?? detail.nameCustomer ?? "—"),
           roomNumber: String(detail.roomNumber ?? detail.roomName ?? "—"),
-          serviceName: String(serviceRecord.name ?? serviceRecord.serviceName ?? "Dịch vụ"),
+          serviceName: String(serviceRecord.name ?? serviceRecord.serviceName ?? t("dashboard.serviceFallback")),
           quantity: remainingQuantity,
         }];
       });
     });
-  }), [bookings]);
+  }), [bookings, t]);
   useEffect(() => {
     if (!hotelId) return;
     return bindHotelSocketEvents({
@@ -133,21 +197,25 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const occupancyRate = roomsAvailableForOccupancy > 0
     ? Math.round((occupiedRooms / roomsAvailableForOccupancy) * 100)
     : 0;
-  const currentGuestCount = bookings.reduce((guestCount, booking) => {
-    if (String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return guestCount;
+  const currentGuestCountResult = bookings.reduce((result, booking) => {
+    const bookingStatus = normalizeStatus(booking.bookingStatus ?? booking.status);
+    if (bookingStatus.startsWith("CANCEL") || ["CANCELED", "REFUNDED", "REJECTED"].includes(bookingStatus)) return result;
     const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
-    return guestCount + details.reduce((roomGuestCount, detail) => {
-      const status = String(detail.bookingStatusType ?? detail.status ?? "").toUpperCase();
-      if (status !== "CHECKED_IN") return roomGuestCount;
-      const adults = Number(detail.numAdults ?? 0);
-      const children = Number(detail.numChildren ?? 0);
-      const infants = Number(detail.numInfants ?? 0);
-      return roomGuestCount + adults + children + infants;
-    }, 0);
-  }, 0);
+    return details.reduce((current, detail) => {
+      if (!isCurrentlyCheckedIn(detail)) return current;
+      const count = guestCountOf(detail);
+      return count === undefined
+        ? { ...current, incomplete: true, checkedInDetails: current.checkedInDetails + 1 }
+        : { ...current, count: current.count + count, checkedInDetails: current.checkedInDetails + 1 };
+    }, result);
+  }, { count: 0, incomplete: false, checkedInDetails: 0 });
+  const currentGuestCount = currentGuestCountResult.incomplete
+    || (occupiedRooms > 0 && currentGuestCountResult.checkedInDetails === 0)
+    ? undefined
+    : currentGuestCountResult.count;
   const formatTaskStatus = (status: string) => status === "NEEDS_ASSIGNMENT"
     ? t("common.pendingTask")
-    : status === "REASSIGNED" ? "Đã phân công lại" : "Đã phân công";
+    : status === "REASSIGNED" ? t("dashboard.taskReassigned") : t("dashboard.taskAssigned");
   const roomStatusLabel = (value: unknown) => {
     const status = String(value ?? "").trim().toUpperCase();
     if (["READY", "AVAILABLE", "SẴN SÀNG"].includes(status)) return t("room.ready");
@@ -216,10 +284,14 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {t("dashboard.todayRevenue")}
               </p>
               <p className="mt-4 text-[26px] font-bold">
-                {reportLoading ? "—" : reportError ? "Lỗi" : `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(dailyReport?.netCashReceived ?? 0))}đ`}
+                {reportLoading ? "—" : reportError ? t("dashboard.error") : new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", {
+                  style: "currency",
+                  currency: "VND",
+                  maximumFractionDigits: 0,
+                }).format(Number(dailyReport?.netCashReceived ?? 0))}
               </p>
               <p className="mt-1 text-xs text-blue-100">
-                {reportError ? "Không tải được doanh thu hôm nay" : "Thu vào − hoàn tiền − tiền thừa trả khách"}
+                {reportError ? t("dashboard.revenueLoadError") : t("dashboard.netRevenueDescription")}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
@@ -227,10 +299,10 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {t("dashboard.roomOccupancy")}
               </p>
               <p className="mt-4 text-[26px] font-bold">
-                {roomsLoading ? "—" : roomsError ? "Lỗi" : `${occupancyRate}%`}
+                {roomsLoading ? "—" : roomsError ? t("dashboard.error") : `${occupancyRate}%`}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                {roomsError ? "Không tải được trạng thái phòng" : `${occupiedRooms}/${roomsAvailableForOccupancy} phòng có thể khai thác`}
+                {roomsError ? t("dashboard.roomStatusLoadError") : t("dashboard.roomsAvailableForOccupancy", { occupied: occupiedRooms, available: roomsAvailableForOccupancy })}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
@@ -238,16 +310,16 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {t("dashboard.currentGuests")}
               </p>
               <p className="mt-4 text-[26px] font-bold">
-                {bookingsLoading || roomsLoading ? "—" : bookingsError || roomsError ? "Lỗi" : currentGuestCount}{" "}
+                {bookingsLoading || roomsLoading ? "—" : bookingsError || roomsError ? t("dashboard.error") : currentGuestCount ?? "—"}{" "}
                 <span className="text-lg font-medium text-slate-400">
                   {t("common.guestCount")}
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
                 {bookingsError
-                  ? "Không tải được số khách lưu trú"
+                  ? t("dashboard.guestCountLoadError")
                   : roomsError
-                    ? "Không tải được trạng thái phòng"
+                    ? t("dashboard.roomStatusLoadError")
                     : `${occupiedRooms} ${t("common.roomsInUse")}`}
               </p>
             </div>
@@ -256,19 +328,19 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {t("dashboard.arrivalsDepartures")}
               </p>
               <p className="mt-4 text-[26px] font-bold">
-                {summaryLoading ? "—" : summaryError ? "Lỗi" : todaySummary?.waitingCheckIn ?? 0}{" "}
+                {summaryLoading ? "—" : summaryError ? t("dashboard.error") : todaySummary?.waitingCheckIn ?? 0}{" "}
                 <span className="text-lg font-medium text-slate-400">
                   {t("common.arrivals")}
                 </span>
-                {" · "}{summaryLoading ? "—" : summaryError ? "Lỗi" : todaySummary?.waitingCheckOut ?? 0}{" "}
+                {" · "}{summaryLoading ? "—" : summaryError ? t("dashboard.error") : todaySummary?.waitingCheckOut ?? 0}{" "}
                 <span className="text-lg font-medium text-slate-400">
                   {t("common.departures")}
                 </span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
                 {summaryError
-                  ? "Không tải được dữ liệu check-in/check-out"
-                  : "Phòng chờ xử lý hôm nay"}
+                  ? t("dashboard.checkInOutLoadError")
+                  : t("dashboard.roomsAwaitingToday")}
               </p>
             </div>
           </section>
@@ -356,11 +428,11 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
               </div>
               <div className="space-y-3">
                 {tasksLoading ? (
-                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Đang tải công việc...</p>
+                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{t("dashboard.loadingTasks")}</p>
                 ) : tasksError ? (
-                  <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">Không tải được danh sách công việc.</p>
+                  <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{t("dashboard.tasksLoadError")}</p>
                 ) : activeHousekeepingTasks.length === 0 ? (
-                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">Hiện không có công việc cần xử lý.</p>
+                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{t("dashboard.noTasks")}</p>
                 ) : (
                   activeHousekeepingTasks.slice(0, 4).map((task) => {
                       const needsAssignment = task.status.toUpperCase() === "NEEDS_ASSIGNMENT";
@@ -386,15 +458,15 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                   {t("dashboard.roomStatus")}
                 </h3>
                 <p className="mt-1 text-xs text-slate-400">
-                  {roomsLoading ? "Đang tải..." : roomsError ? "Không tải được trạng thái phòng" : `${rooms.length} ${t("room.roomsAtBranch")}`}
+                  {roomsLoading ? t("dashboard.loading") : roomsError ? t("dashboard.roomStatusLoadError") : `${rooms.length} ${t("room.roomsAtBranch")}`}
                 </p>
               </div>
               {roomsError ? (
-                <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">Không tải được trạng thái phòng. Vui lòng thử lại.</p>
+                <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{t("dashboard.roomStatusLoadError")}</p>
               ) : roomsLoading ? (
-                <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">Đang tải trạng thái phòng...</p>
+                <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">{t("dashboard.loadingRoomStatus")}</p>
               ) : rooms.length === 0 ? (
-                <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">Chưa có phòng tại chi nhánh.</p>
+                <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">{t("dashboard.noRooms")}</p>
               ) : (
               <div className="grid grid-cols-2 gap-3">
                 {visibleRooms.map((room) => (
