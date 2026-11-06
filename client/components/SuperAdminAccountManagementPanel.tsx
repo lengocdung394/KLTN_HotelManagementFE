@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, Eye, KeyRound, RefreshCw, Search, Users, X } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, KeyRound, RefreshCw, Search, Users, X } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -125,6 +125,10 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   const [isBranchFilterOpen, setIsBranchFilterOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<SuperAdminAccount | null>(null);
   const [form, setForm] = useState<AccountForm | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -182,6 +186,10 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
           : account;
       setSelectedAccount(details);
       setForm(toAccountForm(details));
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
     } catch (error) {
       setDetailError(getErrorMessage(error, "Không thể tải chi tiết tài khoản."));
     } finally {
@@ -192,6 +200,19 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   const submitUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedAccount || !form) return;
+    const isStaff = ["ADMIN", "MANAGER", "EMPLOYEE"].includes(getDisplayAccountType(selectedAccount));
+    if (isStaff && newPassword && newPassword.length < 8) {
+      setActionError("Mật khẩu mới phải có ít nhất 8 ký tự.");
+      return;
+    }
+    if (isStaff && newPassword && !newPassword.trim()) {
+      setActionError("Mật khẩu mới không thể chỉ chứa khoảng trắng.");
+      return;
+    }
+    if (isStaff && newPassword !== confirmPassword) {
+      setActionError("Mật khẩu xác nhận không khớp.");
+      return;
+    }
     setActionError("");
     setActionMessage("");
     try {
@@ -214,6 +235,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 phone: form.phone,
                 address: form.address,
                 position: form.position,
+                ...(isStaff && newPassword ? { password: newPassword } : {}),
                 role: selectedAccount.profileId !== selectedAccount.accountId && form.role
                   ? form.role as "ROLE_ADMIN" | "ROLE_MANAGER" | "ROLE_EMPLOYEE"
                   : undefined,
@@ -227,7 +249,13 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
       }
       setSelectedAccount(updated);
       setForm(toAccountForm(updated));
-      setActionMessage("Cập nhật thông tin thành công.");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+      setActionMessage(isStaff && newPassword
+        ? "Đã cập nhật thông tin và mật khẩu tài khoản."
+        : "Cập nhật thông tin thành công.");
       void refetch();
     } catch (error) {
       setActionError(getErrorMessage(error, "Không thể cập nhật thông tin tài khoản."));
@@ -247,6 +275,9 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   };
 
   const isCustomer = selectedAccount?.accountType === "CUSTOMER" || selectedAccount?.accountType === "WALK_IN_CUSTOMER";
+  const isStaff = selectedAccount
+    ? ["ADMIN", "MANAGER", "EMPLOYEE"].includes(getDisplayAccountType(selectedAccount))
+    : false;
   const hasEmployeeProfile = Boolean(
     selectedAccount && !isCustomer && selectedAccount.profileId !== selectedAccount.accountId,
   );
@@ -527,6 +558,57 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                       </label>
                     </>
                   )}
+                  {isStaff && (
+                    <>
+                      <label className="text-sm font-semibold text-slate-700">
+                        Mật khẩu mới
+                        <span className="relative mt-1.5 block">
+                          <input
+                            type={showNewPassword ? "text" : "password"}
+                            autoComplete="new-password"
+                            minLength={8}
+                            value={newPassword}
+                            disabled={!canEdit || isSaving}
+                            onChange={(event) => setNewPassword(event.target.value)}
+                            placeholder="Để trống nếu không đổi"
+                            className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 font-normal outline-none focus:border-blue-400 disabled:bg-slate-100"
+                          />
+                          <button
+                            type="button"
+                            disabled={!canEdit || isSaving}
+                            onClick={() => setShowNewPassword((visible) => !visible)}
+                            aria-label={showNewPassword ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"}
+                            className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-500 hover:text-blue-700"
+                          >
+                            {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </span>
+                      </label>
+                      <label className="text-sm font-semibold text-slate-700">
+                        Xác nhận mật khẩu mới
+                        <span className="relative mt-1.5 block">
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            autoComplete="new-password"
+                            value={confirmPassword}
+                            disabled={!canEdit || isSaving}
+                            onChange={(event) => setConfirmPassword(event.target.value)}
+                            placeholder="Nhập lại mật khẩu mới"
+                            className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 font-normal outline-none focus:border-blue-400 disabled:bg-slate-100"
+                          />
+                          <button
+                            type="button"
+                            disabled={!canEdit || isSaving}
+                            onClick={() => setShowConfirmPassword((visible) => !visible)}
+                            aria-label={showConfirmPassword ? "Ẩn mật khẩu xác nhận" : "Hiện mật khẩu xác nhận"}
+                            className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-500 hover:text-blue-700"
+                          >
+                            {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </span>
+                      </label>
+                    </>
+                  )}
                   {selectedAccount.accountId && (
                     <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                       Mã tài khoản
@@ -541,13 +623,17 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 </div>
 
                 <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                  Mật khẩu và mã hash không được hiển thị. Cấp lại mật khẩu sẽ gửi OTP tới email đang lưu trong tài khoản.
+                  {isStaff
+                    ? "Để trống mật khẩu mới nếu không muốn thay đổi. Mật khẩu mới cần ít nhất 8 ký tự."
+                    : isCustomer && selectedAccount.accountType === "CUSTOMER"
+                      ? "Mật khẩu và mã hash không được hiển thị. Cấp lại mật khẩu sẽ gửi OTP tới email đang lưu trong tài khoản."
+                      : "Mật khẩu và mã hash không được hiển thị."}
                 </p>
                 {actionError && <p role="alert" className="mt-3 text-sm text-rose-600">{actionError}</p>}
                 {actionMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{actionMessage}</p>}
 
                 <div className="mt-5 flex flex-wrap justify-between gap-2">
-                  {selectedAccount.accountId && selectedAccount.accountType !== "SUPER_ADMIN" && selectedAccount.email && (
+                  {selectedAccount.accountId && isCustomer && selectedAccount.email && (
                     <button
                       type="button"
                       onClick={() => void handlePasswordReset()}
@@ -555,7 +641,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                       className="inline-flex items-center gap-2 rounded-lg border border-amber-200 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50"
                     >
                       <KeyRound size={15} />
-                      {isRequestingReset ? "Đang gửi OTP..." : "Cấp lại mật khẩu"}
+                      {isRequestingReset ? "Đang gửi OTP..." : "Cấp lại mật khẩu qua OTP"}
                     </button>
                   )}
                   <div className="ml-auto flex gap-2">

@@ -548,6 +548,14 @@ export const initSocket = (token: string | null) => {
     console.log("💰 [Socket] room_policy_updated:", data);
   });
 
+  socket.on("amenity_catalog_updated", () => {
+    try {
+      store.dispatch(baseApi.util.invalidateTags(["Amenity", "Room", "Booking"]));
+    } catch (error) {
+      console.error("Could not refresh room prices after amenity update:", error);
+    }
+  });
+
   socket.on("new_booking_notification", (data) => {
     console.log("🔔 [Socket] new_booking_notification:", data);
     try {

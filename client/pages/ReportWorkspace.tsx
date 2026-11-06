@@ -24,7 +24,7 @@ const localDateString = (date: Date) =>
 
 const formatMoney = (amount: number) =>
   localizedText(
-    `${Number(amount ?? 0).toLocaleString("vi-VN")}đ`,
+    `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}đ`,
     new Intl.NumberFormat("en-US", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Number(amount ?? 0)),
   );
 

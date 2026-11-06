@@ -15,6 +15,7 @@ import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrixQuery, type RoomMatrixResponse } from "../services/bookingApi";
 import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
+import { useGetHotelClosuresQuery } from "../services/hotelClosureApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { getServicePriceBreakdown, sumRoomPriceForRange } from "../lib/bookingPricing";
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
@@ -343,7 +344,7 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
   };
 };
 
-function DatePicker({ label, value, min, onChange, hotelId }: { label: string; value: string; min?: string; onChange: (value: string) => void; hotelId?: string | number | null }) {
+function DatePicker({ label, value, min, onChange, hotelId, blockedDateLabels }: { label: string; value: string; min?: string; onChange: (value: string) => void; hotelId?: string | number | null; blockedDateLabels: Record<string, string[]> }) {
   const { t, i18n } = useTranslation();
   const [pickerMonth, setPickerMonth] = useState(() => value ? new Date(`${value}T00:00:00`) : new Date());
   const { data: monthlyRates } = useGetRoomSeasonalRatesByMonthQuery(
@@ -372,10 +373,11 @@ function DatePicker({ label, value, min, onChange, hotelId }: { label: string; v
           value={value ? new Date(`${value}T00:00:00`) : undefined}
           onMonthChange={setPickerMonth}
           highlightDates={eventDates}
+          blockedDateLabels={blockedDateLabels}
           onChange={(nextDate) => {
             if (!nextDate) return;
             const nextValue = formatDateForInput(nextDate);
-            if (!min || nextValue >= min) {
+            if ((!min || nextValue >= min) && !blockedDateLabels[nextValue]?.length) {
               onChange(nextValue);
             }
           }}
@@ -402,6 +404,7 @@ function DesktopCalendar({
   hotelId,
   editingBookingId,
   editingBookingRanges,
+  maintenanceDateLabels,
   isChangingRoom,
   roomChangeTargetRoomId,
   roomChangeTargetRange,
@@ -425,6 +428,7 @@ function DesktopCalendar({
   hotelId: number;
   editingBookingId?: string;
   editingBookingRanges: Map<string, BookingRoomRange[]>;
+  maintenanceDateLabels: Record<string, string[]>;
   isChangingRoom?: boolean;
   roomChangeTargetRoomId?: string | null;
   roomChangeTargetRange?: RoomDateRange;
@@ -516,6 +520,7 @@ function DesktopCalendar({
   const isAvailableWithMatrix = (room: BookingRoom, start: string, end: string) => {
     if (!isAvailableForRange(room, start, end)) return false;
     for (let day = start; day < end; day = shiftDay(day, 1)) {
+      if (maintenanceDateLabels[day]?.length) return false;
       const dateIsPast = new Date(`${day}T00:00:00`) < today;
       const isOwnBookingDate = isBookingRoomDate(editingBookingRanges, roomKeysOf(room), day);
       if (dateIsPast && !isOwnBookingDate) return false;
@@ -574,6 +579,7 @@ function DesktopCalendar({
     if (e.button !== 0) return;
     const dayValue = stableTimeline[dayIndex].value;
     const room = visibleRooms.find((item) => item.id === roomId);
+    if (maintenanceDateLabels[dayValue]?.length) return;
     if (isChangingRoom && roomId === roomChangeTargetRoomId) return;
     if (room && showRoomChangeAction && selected.includes(roomId) && !canChangeRoom?.(room)) return;
     const isOwnBookingDate = room && isBookingRoomDate(editingBookingRanges, roomKeysOf(room), dayValue);
@@ -681,7 +687,7 @@ function DesktopCalendar({
       const room = visibleRooms.find((item) => item.id === roomId);
       const date = stableTimeline[i].value;
       const isOwnBookingDate = room && isBookingRoomDate(editingBookingRanges, roomKeysOf(room), date);
-      if ((isPastDate(date) && !isOwnBookingDate) || (room && isReservedCell(room, date)) || (room && isMatrixReserved(room, date))) {
+      if (maintenanceDateLabels[date]?.length || (isPastDate(date) && !isOwnBookingDate) || (room && isReservedCell(room, date)) || (room && isMatrixReserved(room, date))) {
          isValid = false;
          break;
        }
@@ -730,6 +736,10 @@ function DesktopCalendar({
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-sky-200 border border-sky-400 shadow-2xs" />
             Phòng trống
+          </span>
+          <span className="flex items-center gap-1.5 text-amber-800">
+            <span className="h-2.5 w-2.5 rounded-full border border-amber-300 bg-amber-100" />
+            {t("booking.busyDateShort", "Lịch bận")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-400">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
@@ -816,6 +826,8 @@ function DesktopCalendar({
                     const date = new Date(pickerYear, pickerMonth, day);
                     const isSelected = date.toDateString() === selectedDate.toDateString();
                     const isToday = date.toDateString() === todayDate.toDateString();
+                    const dateValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                    const isMaintenanceDate = Boolean(maintenanceDateLabels[dateValue]?.length);
                     const isDisabled = date < todayDate;
 
                     return (
@@ -823,9 +835,9 @@ function DesktopCalendar({
                         key={day}
                         type="button"
                         disabled={isDisabled}
+                        title={isMaintenanceDate ? `${t("booking.busyDate", "Ngày bận")}: ${maintenanceDateLabels[dateValue].join(", ")}` : undefined}
                         onClick={() => {
-                          const nextDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-                          setTimelineStart(nextDate);
+                          setTimelineStart(dateValue);
                           setTimelinePickerOpen(false);
                         }}
                         className={`grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
@@ -833,6 +845,8 @@ function DesktopCalendar({
                             ? "bg-blue-600 text-white shadow-sm"
                             : isDisabled
                               ? "cursor-not-allowed text-slate-300"
+                              : isMaintenanceDate
+                                ? "border border-amber-300 bg-amber-100 font-bold text-amber-800"
                               : isToday
                                 ? "border border-blue-200 bg-blue-50 font-bold text-blue-700"
                                 : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
@@ -897,7 +911,11 @@ function DesktopCalendar({
                   <p className={`mt-0.5 text-xs font-extrabold ${isPastDate(date.value) ? "text-slate-400" : isToday ? "text-blue-900" : "text-slate-800"}`}>
                     {date.label}
                   </p>
-                  {hasEvent && <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span>}
+                  {maintenanceDateLabels[date.value]?.length ? (
+                    <span title={maintenanceDateLabels[date.value].join(", ")} className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">
+                      {t("booking.busyDateShort", "Lịch bận")}
+                    </span>
+                  ) : hasEvent ? <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span> : null}
                 </div>
               );
             })}
@@ -1017,6 +1035,7 @@ function DesktopCalendar({
                   ? roomKeysOf(room).flatMap((key) => booked[key] ?? []).find((item) => day >= item.start && day < item.end)
                   : undefined;
                 const matrixReserved = isMatrixReserved(room, day);
+                const maintenanceLabels = maintenanceDateLabels[day] ?? [];
                 const bookedGuestName = roomKeysOf(room)
                   .map((roomKey) => matrixGuestNames.get(roomKey)?.get(day))
                   .find((name): name is string => Boolean(name))
@@ -1038,11 +1057,15 @@ function DesktopCalendar({
                     key={`${room.id}-${day}`}
                     onPointerDown={handlePointerDown(room.id, dayIndex)}
                     onPointerEnter={handlePointerEnter(room.id, dayIndex)}
-                    title={matrixReserved || reservation ? `${bookedGuestName ?? "Khách"} · đã đặt` : undefined}
+                    title={maintenanceLabels.length
+                      ? `${t("booking.busyDate", "Ngày bận")}: ${maintenanceLabels.join(", ")}`
+                      : matrixReserved || reservation ? `${bookedGuestName ?? "Khách"} · đã đặt` : undefined}
                     className="p-1"
                   >
                     <div className={`flex h-full min-h-[72px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-2xs transition-all duration-150 ${
-                      pastDay
+                      maintenanceLabels.length
+                        ? "cursor-not-allowed border-amber-300 bg-amber-100 text-amber-900 opacity-90"
+                        : pastDay
                         ? "border-slate-200 bg-slate-100/70 text-slate-400 opacity-60 cursor-not-allowed"
                         : reservation || matrixReserved
                         ? "border-emerald-300/80 bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-xs shadow-emerald-200/50 font-bold"
@@ -1087,6 +1110,26 @@ export default function BookingWorkspace() {
   const dispatch = useAppDispatch();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
+  const {
+    data: hotelClosuresResponse,
+    isLoading: isHotelClosuresLoading,
+    isError: isHotelClosuresError,
+  } = useGetHotelClosuresQuery();
+  const maintenanceDateLabels = useMemo(() => {
+    const currentHotelId = Number(hotelId);
+    if (!Number.isFinite(currentHotelId)) return {};
+
+    return (hotelClosuresResponse?.result ?? []).reduce<Record<string, string[]>>((dateLabels, closure) => {
+      if (closure.active === false || (!closure.allHotels && !closure.hotelIds.includes(currentHotelId))) {
+        return dateLabels;
+      }
+
+      for (let date = closure.startDate; date <= closure.endDate; date = shiftDay(date, 1)) {
+        dateLabels[date] = [...(dateLabels[date] ?? []), closure.title];
+      }
+      return dateLabels;
+    }, {});
+  }, [hotelClosuresResponse?.result, hotelId]);
   const [createCounterBooking, { isLoading: isCreatingBooking }] = useCreateCounterBookingMutation();
   const [modifyBooking, { isLoading: isModifyingBooking }] = useModifyBookingMutation();
   const bookingMutationInFlight = useRef(false);
@@ -1338,6 +1381,7 @@ export default function BookingWorkspace() {
   const isAvailableForRange = (room: BookingRoom, start: string, end: string) => {
     const roomKeys = roomKeysOf(room);
     for (let date = start; date < end; date = shiftDay(date, 1)) {
+      if (maintenanceDateLabels[date]?.length) return false;
       if (isBookingRoomDate(editingBookingRanges, roomKeys, date)) continue;
       if (matrixBusyDays?.size && roomKeys.some((key) => matrixBusyDays.get(key)?.has(date))) return false;
       if (roomKeys.some((key) => (booked[key] || []).some((item) => date >= item.start && date < item.end))) return false;
@@ -1894,7 +1938,6 @@ export default function BookingWorkspace() {
           serviceId: string;
           originalQuantity: number;
           usedQuantity: number;
-          isPaid: boolean;
           minimumQuantity: number;
           detailId: string;
         }[] = [];
@@ -1908,13 +1951,11 @@ export default function BookingWorkspace() {
           const qty = Number(srv.quantity ?? srv.serviceQuantity ?? srv.quantityService ?? srv.amount ?? 0);
           if (!dId) return;
           const usedQuantity = usedQuantityOf(srv, qty);
-          const isPaid = booleanValueOf(srv.isPaid ?? srv.paid);
           origSelections.push({
             serviceId: sId,
             originalQuantity: qty,
             usedQuantity,
-            isPaid,
-            minimumQuantity: isPaid ? qty : usedQuantity,
+            minimumQuantity: usedQuantity,
             detailId: dId,
           });
         });
@@ -2107,9 +2148,13 @@ export default function BookingWorkspace() {
   useEffect(() => () => clearRoomGuestCache(), []);
   const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
   const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
-  const canContinue = selected.length > 0 && selectedRooms.every((room) => {
+  const canContinue = !isHotelClosuresLoading && !isHotelClosuresError && selected.length > 0 && selectedRooms.every((room) => {
     const range = selectedRanges[room.id] ?? (hasDates ? { checkIn, checkOut } : undefined);
-    return Boolean(range?.checkIn && range?.checkOut && range.checkIn < range.checkOut);
+    if (!range?.checkIn || !range?.checkOut || range.checkIn >= range.checkOut) return false;
+    for (let date = range.checkIn; date < range.checkOut; date = shiftDay(date, 1)) {
+      if (maintenanceDateLabels[date]?.length) return false;
+    }
+    return true;
   });
 
   if (step === "success")
@@ -2161,10 +2206,20 @@ export default function BookingWorkspace() {
             <button type="button" onClick={cancelRoomReplacement} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">{t("booking.cancelRoomChange")}</button>
           </div>}
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
-            <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} />
-            <DatePicker label={t("booking.checkOutDate")} value={displayedCheckOut} min={displayedCheckIn || undefined} onChange={(value) => updateStayDate("checkOut", value)} hotelId={hotelId} />
+            <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} blockedDateLabels={maintenanceDateLabels} />
+            <DatePicker label={t("booking.checkOutDate")} value={displayedCheckOut} min={displayedCheckIn || undefined} onChange={(value) => updateStayDate("checkOut", value)} hotelId={hotelId} blockedDateLabels={maintenanceDateLabels} />
             <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{displayedCheckIn && displayedCheckOut ? `${displayedNights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
           </div>
+          {isHotelClosuresError && (
+            <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {t("booking.busyScheduleLoadError", "Không thể tải lịch bận. Vui lòng thử lại trước khi đặt phòng.")}
+            </p>
+          )}
+          {isHotelClosuresLoading && (
+            <p role="status" className="mt-3 text-sm text-slate-500">
+              {t("booking.busyScheduleLoading", "Đang tải lịch bận...")}
+            </p>
+          )}
 
           <div className="mt-5 flex flex-col gap-3">
             <div className="grid w-full gap-2 sm:grid-cols-[minmax(260px,1.5fr)_repeat(3,minmax(150px,1fr))]">
@@ -2208,6 +2263,7 @@ export default function BookingWorkspace() {
               hotelId={Number(hotelId)}
               editingBookingId={editingBookingId}
               editingBookingRanges={editingBookingRanges}
+              maintenanceDateLabels={maintenanceDateLabels}
               isChangingRoom={Boolean(roomChangeTargetRoomId)}
               roomChangeTargetRoomId={roomChangeTargetRoomId}
               roomChangeTargetRange={roomChangeTargetRange}
@@ -2220,11 +2276,15 @@ export default function BookingWorkspace() {
             {visibleRooms.length > 0 && (
               <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                 <span>
-                  Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, visibleRooms.length)} trên {visibleRooms.length} phòng
+                  {t("booking.showingRooms", {
+                    from: (safePage - 1) * pageSize + 1,
+                    to: Math.min(safePage * pageSize, visibleRooms.length),
+                    total: visibleRooms.length,
+                  })}
                 </span>
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-2">
-                    Số dòng
+                    {t("booking.rowsPerPage")}
                     <select
                       value={pageSize}
                       onChange={(event) => setPageSize(Number(event.target.value))}
@@ -2240,7 +2300,7 @@ export default function BookingWorkspace() {
                     onClick={() => setPage((current) => Math.max(1, current - 1))}
                     disabled={safePage === 1}
                     className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang trước"
+                    aria-label={t("common.previousPage")}
                   >
                     <ChevronLeft size={14} />
                   </button>
@@ -2252,7 +2312,7 @@ export default function BookingWorkspace() {
                     onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                     disabled={safePage === totalPages}
                     className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang sau"
+                    aria-label={t("common.nextPage")}
                   >
                     <ChevronRight size={14} />
                   </button>

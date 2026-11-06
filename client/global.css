@@ -29,6 +29,15 @@ body:has(.password-gate) {
   overflow: hidden !important;
 }
 
+@keyframes branch-photo-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .password-gate {
   position: fixed;
   left: 50%;

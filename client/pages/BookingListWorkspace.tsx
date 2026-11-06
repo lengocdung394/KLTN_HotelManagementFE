@@ -69,6 +69,12 @@ const money = (value: unknown) => {
   return `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(numericValue)}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
 };
 
+const refundMoney = (value: unknown) => {
+  const numericValue = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  if (!Number.isFinite(numericValue)) return "-";
+  return `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(numericValue)}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
+};
+
 const bookingId = (booking: BookingListItem) => textOf(booking, ["bookingId", "orderId", "id"]);
 
 const bookingTotalIncludingSurcharges = (booking: BookingListItem) => {
@@ -857,18 +863,18 @@ export default function BookingListWorkspace() {
       void refetch();
       const refundMessage = cancellationStatus === "REFUND_BANK_DETAILS_REQUIRED"
         ? localizedText(
-          `Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn ${money(refundAmount)}. Sau khi duyệt và chuyển khoản, tiền thường về trong 1–3 ngày làm việc.`,
-          `Booking cancelled; add bank details before approving the ${money(refundAmount)} refund. After approval and transfer, funds usually arrive within 1–3 business days.`,
+          `Booking đã hủy; cần bổ sung tài khoản ngân hàng trước khi duyệt hoàn ${refundMoney(refundAmount)}. Sau khi duyệt và chuyển khoản, tiền thường về trong 1–3 ngày làm việc.`,
+          `Booking cancelled; add bank details before approving the ${refundMoney(refundAmount)} refund. After approval and transfer, funds usually arrive within 1–3 business days.`,
         )
         : cancellationStatus === "REFUND_REVIEW_PENDING"
         ? localizedText(
-          `Booking đã hủy; khoản hoàn ${money(refundAmount)} đang chờ quản lý duyệt. Sau khi duyệt và chuyển khoản, tiền thường về trong 1–3 ngày làm việc.`,
-          `Booking cancelled; the ${money(refundAmount)} refund is pending manager approval. After approval and transfer, funds usually arrive within 1–3 business days.`,
+          `Booking đã hủy; khoản hoàn ${refundMoney(refundAmount)} đang chờ quản lý duyệt. Sau khi duyệt và chuyển khoản, tiền thường về trong 1–3 ngày làm việc.`,
+          `Booking cancelled; the ${refundMoney(refundAmount)} refund is pending manager approval. After approval and transfer, funds usually arrive within 1–3 business days.`,
         )
         : cancellationStatus === "REFUNDED" && actualRefundMethod === "CASH"
         ? localizedText(
-          `Booking đã hủy và đã ghi nhận hoàn tiền mặt ${money(refundAmount)} cho khách.`,
-          `Booking cancelled and cash refund of ${money(refundAmount)} recorded.`,
+          `Booking đã hủy và đã ghi nhận hoàn tiền mặt ${refundMoney(refundAmount)} cho khách.`,
+          `Booking cancelled and cash refund of ${refundMoney(refundAmount)} recorded.`,
         )
         : cancellationStatus === "NO_REFUND_REQUIRED"
         ? localizedText("Booking đã hủy; không phát sinh tiền hoàn.", "Booking cancelled; no refund is due.")
@@ -1760,29 +1766,29 @@ export default function BookingListWorkspace() {
                   <dl className="mt-3 space-y-2 text-sm">
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-600">{localizedText("Tổng tiền khách đã thanh toán", "Total paid by guest")}</dt>
-                      <dd className="font-medium text-slate-900">{money(cancellationPreview.paidAmount)}</dd>
+                      <dd className="font-medium text-slate-900">{refundMoney(cancellationPreview.paidAmount)}</dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-600">{localizedText("Tiền phòng trước phạt", "Room amount before penalty")}</dt>
                       <dd className="font-medium text-slate-900">
-                        {money(Number(cancellationPreview.roomRefundAmount ?? 0) + Number(cancellationPreview.roomPenaltyAmount ?? 0))}
+                        {refundMoney(Number(cancellationPreview.roomRefundAmount ?? 0) + Number(cancellationPreview.roomPenaltyAmount ?? 0))}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-600">{localizedText("Phạt hủy phòng", "Room cancellation penalty")}</dt>
-                      <dd className="font-medium text-rose-700">−{money(cancellationPreview.roomPenaltyAmount)}</dd>
+                      <dd className="font-medium text-rose-700">−{refundMoney(cancellationPreview.roomPenaltyAmount)}</dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-600">{localizedText("Tiền phòng được hoàn", "Room refund")}</dt>
-                      <dd className="font-medium text-slate-900">{money(cancellationPreview.roomRefundAmount)}</dd>
+                      <dd className="font-medium text-slate-900">{refundMoney(cancellationPreview.roomRefundAmount)}</dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-600">{localizedText("Tiền dịch vụ được hoàn khi hủy", "Service refund on cancellation")}</dt>
-                      <dd className="font-medium text-slate-900">{money(cancellationPreview.serviceRefundAmount)}</dd>
+                      <dd className="font-medium text-slate-900">{refundMoney(cancellationPreview.serviceRefundAmount)}</dd>
                     </div>
                     <div className="flex justify-between gap-3 border-t border-blue-200 pt-2">
                       <dt className="font-semibold text-slate-800">{localizedText("TỔNG SỐ TIỀN HOÀN", "TOTAL REFUND")}</dt>
-                      <dd className="text-lg font-bold text-blue-700">{money(cancellationPreview.refundAmount)}</dd>
+                      <dd className="text-lg font-bold text-blue-700">{refundMoney(cancellationPreview.refundAmount)}</dd>
                     </div>
                   </dl>
                   <p className="mt-3 text-xs leading-5 text-slate-600">
@@ -1919,8 +1925,8 @@ export default function BookingListWorkspace() {
                     className="mt-0.5 accent-emerald-600"
                   />
                   {localizedText(
-                    `Tôi đã giao đúng ${money(cancellationPreview?.refundAmount)} tiền mặt cho khách và xác nhận số tiền này.`,
-                    `I handed exactly ${money(cancellationPreview?.refundAmount)} in cash to the guest and confirm this amount.`,
+                    `Tôi đã giao đúng ${refundMoney(cancellationPreview?.refundAmount)} tiền mặt cho khách và xác nhận số tiền này.`,
+                    `I handed exactly ${refundMoney(cancellationPreview?.refundAmount)} in cash to the guest and confirm this amount.`,
                   )}
                 </label>
               )}

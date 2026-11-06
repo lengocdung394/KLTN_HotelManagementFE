@@ -92,10 +92,14 @@ import SuperAdminResourceStatsPanel from "../components/SuperAdminResourceStatsP
 import SuperAdminAmenitiesPanel from "../components/SuperAdminAmenitiesPanel";
 import PromotionWorkspace from "./PromotionWorkspace";
 import ServiceWorkspace from "./ServiceWorkspace";
+import HotelClosureWorkspace from "./HotelClosureWorkspace";
+import SuperAdminProfileSettings from "../components/SuperAdminProfileSettings";
 
 type AdminSection =
   | "overview"
+  | "profile"
   | "notifications"
+  | "hotel-closures"
   | "branches"
   | "provinces"
   | "amenities"
@@ -769,8 +773,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "notifications", label: "Thông báo", icon: Bell },
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
     { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
+    { id: "hotel-closures", label: "Lịch tạm đóng", icon: CalendarDays },
     { id: "permissions", label: "Quản lý Role và quyền", icon: ShieldCheck },
     { id: "resource-stats", label: "Thống kê", icon: BarChart3 },
+    { id: "profile", label: "Cá nhân", icon: CircleUserRound },
   ];
   const isAccountSection =
     section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
@@ -1455,6 +1461,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               ? "w-full max-w-none px-3 sm:px-5"
               : "mx-auto max-w-7xl px-5 sm:px-8"
           }`}>
+          {section === "profile" && <SuperAdminProfileSettings onLogout={onLogout} />}
+          {section === "hotel-closures" && <HotelClosureWorkspace />}
           {section === "notifications" && (
             <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1617,6 +1625,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             section !== "permissions" &&
             section !== "resource-stats" &&
             section !== "notifications" &&
+            section !== "profile" &&
+            section !== "hotel-closures" &&
             section !== "promotions" &&
             section !== "services" &&
             section !== "accounts-overview" &&

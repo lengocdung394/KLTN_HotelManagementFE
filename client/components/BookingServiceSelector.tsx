@@ -44,7 +44,7 @@ const shiftDay = (dateStr: string, delta: number) => {
 };
 const minimumSelectionQuantity = (selection: ServiceSelection) =>
   selection.isExisting
-    ? selection.isPaid || selection.isLocked
+    ? selection.isLocked
       ? Number(selection.originalQuantity ?? selection.quantity)
       : Math.min(
         Number(selection.originalQuantity ?? selection.quantity),

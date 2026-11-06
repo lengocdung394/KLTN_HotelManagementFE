@@ -57,10 +57,15 @@ export type CheckInOutBookingDetail = {
   remainAmount?: number | string;
   remain?: number | string;
   nameCustomer?: string;
+  customerId?: string | number;
+  customerID?: string | number;
+  idCustomer?: string | number;
   cccd?: string;
   customerCccd?: string;
   customerName?: string;
   phone?: string;
+  phoneNumber?: string;
+  customerPhone?: string;
   bookingDetailStatus?: string;
   identityNumber?: string;
   bookingServiceResponseForHotel?: CheckInOutService[];

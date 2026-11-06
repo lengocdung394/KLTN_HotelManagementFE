@@ -4,7 +4,7 @@ import "./i18n";
 import { Toaster } from "@/components/ui/toaster";
 import { createRoot } from "react-dom/client";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Provider } from "react-redux";
 import { store } from "./store";
@@ -19,6 +19,9 @@ import LoginPage from "./pages/LoginPage";
 import { disconnectSocket, initSocket } from "./lib/socket";
 import { useAppSelector } from "./store/hooks";
 import ChatWidget from "./components/ChatWidget";
+import UserGuideButton from "./components/UserGuideButton";
+import BranchPhotoLoginSplash from "./components/BranchPhotoLoginSplash";
+import HotelClosureWorkspace from "./pages/HotelClosureWorkspace";
 
 type AppRoutesProps = {
   authenticated: boolean;
@@ -27,7 +30,9 @@ type AppRoutesProps = {
 };
 
 function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
-  const roles = useAppSelector((state) => state.auth.roles);
+  const { roles, hotelId, hotelName } = useAppSelector((state) => state.auth);
+  const [showLoginSplash, setShowLoginSplash] = useState(false);
+  const finishLoginSplash = useCallback(() => setShowLoginSplash(false), []);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const isBranchAdmin = roles.includes("ROLE_ADMIN");
   const isManager = roles.includes("ROLE_MANAGER");
@@ -36,7 +41,17 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
   if (!authenticated) {
     return (
       <Routes>
-        <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
+        <Route
+          path="/login"
+          element={
+            <LoginPage
+              onLogin={() => {
+                onLogin();
+                setShowLoginSplash(true);
+              }}
+            />
+          }
+        />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -48,6 +63,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<AdminDashboardPage onLogout={onLogout} />} />
         <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
+        <Route path="/hotel-closures" element={<HotelClosureWorkspace />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     );
@@ -72,12 +88,14 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
 
   if (isEmployee && !isManager && !isBranchAdmin) {
     return (
+      <>
       <Routes>
         <Route path="/" element={<Navigate to="/overview" replace />} />
         <Route path="/overview" element={<Index onLogout={onLogout} />} />
         <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={onLogout} />} />
         <Route path="/booking-list" element={<ModulePage path="/booking-list" onLogout={onLogout} />} />
         <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
+        <Route path="/hotel-closures" element={<ModulePage path="/hotel-closures" onLogout={onLogout} />} />
         <Route path="/hotel-rules" element={<ModulePage path="/hotel-rules" onLogout={onLogout} />} />
         <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
         <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />
@@ -92,16 +110,26 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/permissions" element={<Navigate to="/overview" replace />} />
         <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>
+      {showLoginSplash && hotelId && (
+        <BranchPhotoLoginSplash
+          hotelId={hotelId}
+          hotelName={hotelName}
+          onComplete={finishLoginSplash}
+        />
+      )}
+      </>
     );
   }
 
   return (
+    <>
     <Routes>
       <Route path="/" element={<Navigate to="/overview" replace />} />
       <Route path="/overview" element={<Index onLogout={onLogout} />} />
       <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={onLogout} />} />
       <Route path="/booking-list" element={<ModulePage path="/booking-list" onLogout={onLogout} />} />
       <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
+      {isManager && <Route path="/hotel-closures" element={<ModulePage path="/hotel-closures" onLogout={onLogout} />} />}
       <Route path="/hotel-rules" element={<ModulePage path="/hotel-rules" onLogout={onLogout} />} />
       <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
       <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />
@@ -122,6 +150,14 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
       <Route path="/cai-dat" element={<Navigate to="/settings" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
+    {showLoginSplash && hotelId && (
+      <BranchPhotoLoginSplash
+        hotelId={hotelId}
+        hotelName={hotelName}
+        onComplete={finishLoginSplash}
+      />
+    )}
+    </>
   );
 }
 
@@ -165,7 +201,12 @@ const App = () => {
             onLogin={() => setAuthenticated(true)}
             onLogout={handleLogout}
           />
-          {authenticated && <ChatWidget />}
+          {authenticated && (
+            <>
+              <UserGuideButton />
+              <ChatWidget />
+            </>
+          )}
         </BrowserRouter>
       </TooltipProvider>
     </Provider>

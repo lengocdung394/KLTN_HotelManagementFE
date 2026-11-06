@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-labelledby="title">
+  <title id="title">Hotel search illustration</title>
+  <rect width="960" height="420" rx="24" fill="#f3f4f6"/>
+  <rect x="22" y="22" width="916" height="376" rx="20" fill="white"/>
+  <rect x="22" y="22" width="916" height="52" rx="20" fill="#172554"/>
+  <text x="54" y="55" fill="white" font-family="Arial" font-size="16" font-weight="700">SEN VIET HOTELS</text>
+  <text x="680" y="54" fill="#dbeafe" font-family="Arial" font-size="12">Hotels　Offers　Services　Account</text>
+  <text x="54" y="112" fill="#0f172a" font-family="Arial" font-size="20" font-weight="700">Find your stay</text>
+  <rect x="54" y="132" width="852" height="88" rx="15" fill="#f8fafc" stroke="#e2e8f0"/>
+  <g font-family="Arial"><text x="78" y="158" fill="#64748b" font-size="11">DESTINATION</text><text x="78" y="190" fill="#0f172a" font-size="14">Choose a city or hotel</text><text x="300" y="158" fill="#64748b" font-size="11">CHECK-IN</text><text x="300" y="190" fill="#0f172a" font-size="14">Select a date</text><text x="480" y="158" fill="#64748b" font-size="11">CHECK-OUT</text><text x="480" y="190" fill="#0f172a" font-size="14">Select a date</text><text x="650" y="158" fill="#64748b" font-size="11">GUESTS / ROOMS</text><text x="650" y="190" fill="#0f172a" font-size="14">2 guests · 1 room</text></g>
+  <rect x="790" y="154" width="92" height="44" rx="22" fill="#d4a84e"/><text x="811" y="181" fill="#172554" font-family="Arial" font-size="13" font-weight="700">Search</text>
+  <rect x="54" y="242" width="852" height="122" rx="14" fill="#f1f5f9"/>
+  <rect x="68" y="256" width="148" height="94" rx="10" fill="#bfdbfe"/>
+  <path d="M75 328 118 278l26 30 18-20 47 62" fill="#93c5fd"/>
+  <text x="238" y="282" fill="#0f172a" font-family="Arial" font-size="15" font-weight="700">Hotel name · destination</text>
+  <text x="238" y="307" fill="#64748b" font-family="Arial" font-size="12">Address · guest rating · starting price</text>
+  <text x="238" y="334" fill="#1d4ed8" font-family="Arial" font-size="12" font-weight="700">Open details → View rooms</text>
+</svg>
