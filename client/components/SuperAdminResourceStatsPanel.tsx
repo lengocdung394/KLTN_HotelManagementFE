@@ -25,6 +25,7 @@ import {
 import { reportApi, type HotelReport } from "../services/reportApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
 import { useAppDispatch } from "../store/hooks";
+import ListPagination from "./ListPagination";
 
 type Props = {
   branches: SuperAdminBranch[];
@@ -101,6 +102,10 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [isReportTocVisible, setIsReportTocVisible] = useState(true);
+  const [cancelledPage, setCancelledPage] = useState(1);
+  const [cancelledPageSize, setCancelledPageSize] = useState(10);
+  const [branchPage, setBranchPage] = useState(1);
+  const [branchPageSize, setBranchPageSize] = useState(10);
   const dispatch = useAppDispatch();
   const hasValidDateRange = Boolean(startDate && endDate && startDate <= endDate);
   const reportSections = [
@@ -263,6 +268,26 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       rowKey: `${branch?.id ?? "branch"}-${booking.bookingId}`,
     }));
   });
+  const cancelledTotalPages = Math.max(1, Math.ceil(cancelledBookingDetails.length / cancelledPageSize));
+  const safeCancelledPage = Math.min(cancelledPage, cancelledTotalPages);
+  const paginatedCancelledBookings = cancelledBookingDetails.slice(
+    (safeCancelledPage - 1) * cancelledPageSize,
+    safeCancelledPage * cancelledPageSize,
+  );
+  const branchTotalPages = Math.max(1, Math.ceil(visibleBranches.length / branchPageSize));
+  const safeBranchPage = Math.min(branchPage, branchTotalPages);
+  const paginatedBranches = visibleBranches.slice((safeBranchPage - 1) * branchPageSize, safeBranchPage * branchPageSize);
+
+  useEffect(() => {
+    setCancelledPage(1);
+    setBranchPage(1);
+  }, [selectedBranchId, startDate, endDate]);
+  useEffect(() => {
+    if (cancelledPage > cancelledTotalPages) setCancelledPage(cancelledTotalPages);
+  }, [cancelledPage, cancelledTotalPages]);
+  useEffect(() => {
+    if (branchPage > branchTotalPages) setBranchPage(branchTotalPages);
+  }, [branchPage, branchTotalPages]);
   const formatCount = (value: number) => new Intl.NumberFormat("vi-VN").format(value);
   const formatMoney = (value: number) =>
     `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)}đ`;
@@ -691,8 +716,9 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             {cancelledBookingDetails.length === 0 ? (
               <p className="py-10 text-center text-sm text-slate-400">Không có booking bị hủy trong khoảng ngày này.</p>
             ) : (
-              <div className="max-h-[380px] overflow-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
+              <>
+                <div className="max-h-[380px] overflow-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
                   <thead className="sticky top-0 bg-slate-50 text-xs font-semibold text-slate-500">
                     <tr>
                       <th className="px-5 py-3">Chi nhánh</th>
@@ -703,7 +729,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {cancelledBookingDetails.map((booking) => (
+                    {paginatedCancelledBookings.map((booking) => (
                       <tr key={booking.rowKey} className="hover:bg-slate-50/70">
                         <td className="px-5 py-3 font-medium text-slate-700">{booking.branchName}</td>
                         <td className="whitespace-nowrap px-5 py-3 font-semibold text-slate-800">{booking.bookingId}</td>
@@ -722,8 +748,10 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                  </table>
+                </div>
+                <ListPagination totalItems={cancelledBookingDetails.length} page={safeCancelledPage} pageSize={cancelledPageSize} mode="table" onPageChange={setCancelledPage} onPageSizeChange={setCancelledPageSize} />
+              </>
             )}
           </section>
         </>
@@ -754,8 +782,9 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
         ) : visibleBranches.length === 0 ? (
           <p className="p-10 text-center text-sm text-slate-500">Không tìm thấy chi nhánh được chọn.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] text-left">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1120px] text-left">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
                   <th scope="col" className="px-5 py-3">Chi nhánh</th>
@@ -768,7 +797,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleBranches.map((branch) => {
+                {paginatedBranches.map((branch) => {
                   const branchReport = branchReports[branch.id];
                   const report = branchReport?.report;
                   const hasBranchReportError = branchReport?.hasError;
@@ -815,13 +844,10 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                   );
                 })}
               </tbody>
-            </table>
-          </div>
-        )}
-        {!isLoading && !isError && branches.length > 0 && (
-          <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">
-            Hiển thị {visibleBranches.length} / {branches.length} chi nhánh
-          </div>
+              </table>
+            </div>
+            <ListPagination totalItems={visibleBranches.length} page={safeBranchPage} pageSize={branchPageSize} mode="table" onPageChange={setBranchPage} onPageSizeChange={setBranchPageSize} />
+          </>
         )}
       </section>
       <div aria-hidden="true" className="h-64" />

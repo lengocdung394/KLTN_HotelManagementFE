@@ -9,11 +9,12 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BankSelectionField from "../components/BankSelectionField";
 import CheckoutRefundApprovalsPanel from "../components/CheckoutRefundApprovalsPanel";
 import DatePickerPopover from "../components/DatePickerPopover";
+import ListPagination from "../components/ListPagination";
 import { localizedText } from "../i18n";
 import {
   useApproveBookingRefundMutation,
@@ -124,6 +125,8 @@ export default function RefundApprovalWorkspace() {
   const [channelFilter, setChannelFilter] = useState<BookingChannelFilter>("ALL");
   const [activeQueue, setActiveQueue] = useState<RefundQueue>("overpayment");
   const [selectedRequestDate, setSelectedRequestDate] = useState<string | null>(null);
+  const [cancellationPage, setCancellationPage] = useState(1);
+  const [cancellationPageSize, setCancellationPageSize] = useState(10);
   const [activeCancellation, setActiveCancellation] = useState<BookingCancellation | null>(null);
   const [activeAction, setActiveAction] = useState<CancellationAction | null>(null);
   const [actionNote, setActionNote] = useState("");
@@ -216,6 +219,20 @@ export default function RefundApprovalWorkspace() {
       new Date(second.requestedAt ?? 0).getTime() - new Date(first.requestedAt ?? 0).getTime(),
     );
   }, [cancellations, channelFilter, filter, selectedRequestDate]);
+  const cancellationTotalPages = Math.max(1, Math.ceil(visibleCancellations.length / cancellationPageSize));
+  const safeCancellationPage = Math.min(cancellationPage, cancellationTotalPages);
+  const paginatedCancellations = visibleCancellations.slice(
+    (safeCancellationPage - 1) * cancellationPageSize,
+    safeCancellationPage * cancellationPageSize,
+  );
+
+  useEffect(() => {
+    setCancellationPage(1);
+  }, [filter, channelFilter, selectedRequestDate, cancellationPageSize]);
+
+  useEffect(() => {
+    if (cancellationPage > cancellationTotalPages) setCancellationPage(cancellationTotalPages);
+  }, [cancellationPage, cancellationTotalPages]);
 
   const isSubmitting = isApproving || isConfirmingManualRefund || isRejecting || isRequestingPayout || isSavingBankDetails || isLoadingBankDetails;
   const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending;
@@ -606,8 +623,9 @@ export default function RefundApprovalWorkspace() {
             </p>
           </div>
         ) : (
-          <div className="max-w-full overflow-x-auto">
-            <table className="w-[max(900px,100%)] table-fixed text-left text-sm">
+          <>
+            <div className="max-w-full overflow-x-auto">
+              <table className="w-[max(900px,100%)] table-fixed text-left text-sm">
               <thead className="bg-blue-50 text-[11px] uppercase tracking-wide text-blue-800">
                 <tr>
                   <th className="w-[23%] px-3 py-3">{localizedText("Booking / khách", "Booking / guest")}</th>
@@ -618,7 +636,7 @@ export default function RefundApprovalWorkspace() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleCancellations.map((cancellation) => (
+                {paginatedCancellations.map((cancellation) => (
                   <tr key={cancellation.id} className="align-top transition-colors hover:bg-slate-50/70">
                     <td className="px-3 py-4">
                       <p className="break-words font-semibold text-blue-700">{cancellation.bookingId}</p>
@@ -827,8 +845,17 @@ export default function RefundApprovalWorkspace() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+            <ListPagination
+              totalItems={visibleCancellations.length}
+              page={safeCancellationPage}
+              pageSize={cancellationPageSize}
+              mode="table"
+              onPageChange={setCancellationPage}
+              onPageSizeChange={setCancellationPageSize}
+            />
+          </>
         )}
       </div>
       )}

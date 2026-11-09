@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import { Banknote, CalendarDays, CheckCircle2, Clock3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { Banknote, CalendarDays, CheckCircle2, Clock3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, Search } from "lucide-react";
+import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
 import { downloadServiceTemplate, parseServiceImportArchive, validateServiceImportArchive, type ServiceImportRowResult } from "../lib/serviceBulkImport";
@@ -928,49 +929,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           </article>;
         })}
       </div>
-      {filteredServices.length > 0 && (
-        <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            {t("serviceWorkspace.showing", { from: (safePage - 1) * pageSize + 1, to: Math.min(safePage * pageSize, filteredServices.length), total: filteredServices.length })}
-          </span>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2">
-              {t("serviceWorkspace.rows")}
-              <select
-                value={pageSize}
-                onChange={(event) => setPageSize(Number(event.target.value))}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-              >
-                <option value={12}>12</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={safePage === 1}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label={t("serviceWorkspace.previousPage")}
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="min-w-16 text-center font-semibold text-slate-700">
-              {safePage} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-              disabled={safePage === totalPages}
-              className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label={t("serviceWorkspace.nextPage")}
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
+      <ListPagination totalItems={filteredServices.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={setPage} onPageSizeChange={setPageSize} />
       {detailService && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"

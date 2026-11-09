@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CalendarDays, FileText, LoaderCircle, Search } from "lucide-react";
 import CheckoutInvoice from "../components/CheckoutInvoice";
+import ListPagination from "../components/ListPagination";
 import { localizedText } from "../i18n";
 import { useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
 import { useAppSelector } from "../store/hooks";
@@ -77,6 +78,8 @@ export default function InvoiceWorkspace() {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const [query, setQuery] = useState("");
   const [createdDate, setCreatedDate] = useState(getTodayDateInputValue);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
   const {
     data: bookings = [],
@@ -105,6 +108,17 @@ export default function InvoiceWorkspace() {
     })
     .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""))),
   [bookings, createdDate, query]);
+  const totalPages = Math.max(1, Math.ceil(completedBookings.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedBookings = completedBookings.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [createdDate, query, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -202,7 +216,7 @@ export default function InvoiceWorkspace() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {completedBookings.map((booking) => {
+              {paginatedBookings.map((booking) => {
                 const bookingId = String(booking.bookingId ?? booking.id ?? "—");
                 const details = getBookingDetails(booking);
                 const total = booking.finalAmount ?? (
@@ -250,6 +264,9 @@ export default function InvoiceWorkspace() {
             </tbody>
           </table>
         </div>
+      )}
+      {!isLoading && !isError && (
+        <ListPagination totalItems={completedBookings.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
       )}
 
       {selectedBooking && (

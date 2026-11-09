@@ -4,8 +4,6 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CreditCard,
   Eye,
   Pencil,
@@ -32,6 +30,7 @@ import { useCreatePaymentQrMutation, useGetPaymentStatusQuery, usePayWithCashMut
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCancelBookingByStaffMutation, useGetBookingCancellationPreviewQuery } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import ListPagination from "../components/ListPagination";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import i18n, { localizedText } from "../i18n";
@@ -1150,48 +1149,7 @@ export default function BookingListWorkspace() {
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filteredBookings.length)} trên{" "}
-              {filteredBookings.length} booking
-            </span>
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2">
-                Số dòng
-                <select
-                  value={pageSize}
-                  onChange={(event) => setPageSize(Number(event.target.value))}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                disabled={safePage === 1}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Trang trước"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="min-w-16 text-center font-semibold text-slate-700">
-                {safePage} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                disabled={safePage === totalPages}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Trang sau"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
+          <ListPagination totalItems={filteredBookings.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
         </>
       )}
 

@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Search, Save, X } from "lucide-react";
+import ListPagination from "./ListPagination";
 import type { AmenityResponse } from "../services/amenityApi";
 
 type RoomAmenitiesTabProps = {
@@ -23,11 +24,24 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   const [createForm, setCreateForm] = useState({ name: "", price: "" });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const normalizedSearch = normalizeText(search);
   const filteredAmenities = useMemo(
     () => amenities.filter((amenity) => !normalizedSearch || normalizeText(amenity.name).includes(normalizedSearch)),
     [amenities, normalizedSearch],
   );
+  const totalPages = Math.max(1, Math.ceil(filteredAmenities.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedAmenities = filteredAmenities.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [normalizedSearch, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const closeEditor = () => setEditingAmenity(null);
   const closeCreateForm = () => {
@@ -108,7 +122,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredAmenities.map((amenity) => (
+              {paginatedAmenities.map((amenity) => (
                 <tr key={amenity.id} className="transition-colors hover:bg-blue-50/40">
                   <td className="px-4 py-4 font-medium text-slate-800">{amenity.name}</td>
                   <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-800">{money(amenity.price)}</td>
@@ -122,6 +136,9 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
             </tbody>
           </table>
         </div>
+      )}
+      {!isLoading && !isError && (
+        <ListPagination totalItems={filteredAmenities.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
       )}
 
       {canManage && editingAmenity && (

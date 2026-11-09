@@ -1,8 +1,9 @@
 import { useAppSelector } from "../store/hooks";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Banknote, Check, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import BankSelectionField from "./BankSelectionField";
+import ListPagination from "./ListPagination";
 import { localizedText } from "../i18n";
 import {
   useApproveCheckoutRefundMutation,
@@ -32,13 +33,26 @@ export default function CheckoutRefundApprovalsPanel() {
   useTranslation();
   const { data: refunds = [], isLoading, isFetching, isError, error, refetch } = useGetCheckoutRefundsQuery();
   const [channelFilter, setChannelFilter] = useState<"ALL" | "ONLINE" | "OFFLINE">("ALL");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const pending = refunds.filter((refund) => refund.status === "PENDING");
   const approved = refunds.filter((refund) => refund.status === "APPROVED");
   const refunded = refunds.filter((refund) => refund.status === "REFUNDED");
   const visibleRefunds = channelFilter === "ALL"
     ? refunds
     : refunds.filter((refund) => refund.bookingChannel === channelFilter);
+  const totalPages = Math.max(1, Math.ceil(visibleRefunds.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRefunds = visibleRefunds.slice((safePage - 1) * pageSize, safePage * pageSize);
   const pendingCashRefunds = refunds.filter((refund) => refund.refundMethod === "CASH" && refund.status === "PENDING");
+
+  useEffect(() => {
+    setPage(1);
+  }, [channelFilter, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
@@ -106,8 +120,9 @@ export default function CheckoutRefundApprovalsPanel() {
               {localizedText("Không có khoản hoàn nào thuộc kênh đặt phòng này.", "There are no refunds for this booking channel.")}
             </p>
           ) : (
-            <div className="max-w-full overflow-x-auto">
-              <table className="w-full min-w-[1240px] text-left text-sm">
+            <>
+              <div className="max-w-full overflow-x-auto">
+                <table className="w-full min-w-[1240px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="w-[230px] px-4 py-3">{localizedText("Booking / khách hàng", "Booking / guest")}</th>
@@ -119,10 +134,12 @@ export default function CheckoutRefundApprovalsPanel() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {visibleRefunds.map((refund) => <CheckoutRefundRow key={refund.id} refund={refund} />)}
+                  {paginatedRefunds.map((refund) => <CheckoutRefundRow key={refund.id} refund={refund} />)}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <ListPagination totalItems={visibleRefunds.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
+            </>
           )}
         </>
       )}

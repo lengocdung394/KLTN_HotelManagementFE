@@ -1,6 +1,7 @@
-import type { Dispatch, SetStateAction } from "react";
-import { BedDouble, Check, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Users } from "lucide-react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { BedDouble, Check, ChevronDown, Eye, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import ListPagination from "./ListPagination";
 
 export type RoomListItem = {
   id: string;
@@ -56,10 +57,104 @@ type RoomListTabProps = {
   onEditRoom: (room: RoomListItem) => void;
   onShowGallery: (room: RoomListItem) => void;
   onShowDetails: (room: RoomListItem) => void;
-  onAssign: (room: RoomListItem) => void;
 };
 
 const statusesForRoom = ["Sẵn sàng", "Bảo trì"];
+type FilterOption = { value: string; label: string };
+
+function SearchableRoomFilter({
+  value,
+  options,
+  onChange,
+  className,
+}: {
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  className: string;
+}) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const normalizedQuery = query.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const filteredOptions = options.filter((option) =>
+    option.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normalizedQuery));
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) {
+        setIsOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [isOpen]);
+
+  return (
+    <div ref={containerRef} className={`relative ${className}`}>
+      <SlidersHorizontal size={15} className="pointer-events-none absolute left-3 top-3 z-10 text-slate-400" />
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => { setIsOpen((open) => !open); setQuery(""); }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setIsOpen(false);
+            setQuery("");
+          }
+        }}
+        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-left text-sm text-slate-600 outline-none transition hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDown size={15} className="shrink-0 text-slate-400" />
+      </button>
+      {isOpen && <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="border-b border-slate-100 p-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setIsOpen(false);
+                  setQuery("");
+                }
+              }}
+              placeholder={t("common.search")}
+              aria-label={t("common.search")}
+              className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-2 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+        </div>
+        <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+          {filteredOptions.map((option) => <button
+            type="button"
+            role="option"
+            aria-selected={value === option.value}
+            key={option.value}
+            onClick={() => {
+              onChange(option.value);
+              setIsOpen(false);
+              setQuery("");
+            }}
+            className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition hover:bg-blue-50 ${value === option.value ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-600"}`}
+          >
+            <span className="truncate">{option.label}</span>
+            {value === option.value && <Check size={14} className="shrink-0" />}
+          </button>)}
+          {filteredOptions.length === 0 && <p className="px-3 py-4 text-center text-xs text-slate-400">{t("room.noFilterOptions")}</p>}
+        </div>
+      </div>}
+    </div>
+  );
+}
 
 export default function RoomListTab({
   canManageRooms,
@@ -92,7 +187,6 @@ export default function RoomListTab({
   onEditRoom,
   onShowGallery,
   onShowDetails,
-  onAssign,
 }: RoomListTabProps) {
   const { t, i18n } = useTranslation();
   const money = (value: number) =>
@@ -128,10 +222,42 @@ export default function RoomListTab({
     <>
       <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row">
         <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></div>
-        <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={building} onChange={(event) => onBuildingChange(event.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-44"><option value="Tất cả các tòa">{t("room.allBuildings")}</option>{buildings.map((item) => <option key={item.id} value={item.id}>{localizeBuilding(item.name)}</option>)}</select></div>
-        <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={floor} onChange={(event) => onFloorChange(event.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-44"><option value="Tất cả các tầng">{t("room.allFloors")}</option>{floors.map((item) => <option key={item} value={item}>{t("room.floorLabel", "Tầng: {{floor}}", { floor: item })}</option>)}</select></div>
-        <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={roomType} onChange={(event) => onRoomTypeChange(event.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-52"><option value="Tất cả loại phòng">{t("room.allRoomTypes")}</option>{roomTypes.map((item) => <option key={item} value={item}>{localizeRoomType(item)}</option>)}</select></div>
-        <div className="relative"><SlidersHorizontal size={15} className="absolute left-3 top-3 text-slate-400" /><select value={status} onChange={(event) => onStatusChange(event.target.value)} className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-sm text-slate-600 outline-none focus:border-blue-400 sm:w-52"><option value="Tất cả trạng thái">{t("room.allStatuses")}</option>{statuses.map((item) => <option key={item} value={item}>{localizeStatus(item)}</option>)}</select></div>
+        <SearchableRoomFilter
+          value={building}
+          options={[
+            { value: "Tất cả các tòa", label: t("room.allBuildings") },
+            ...buildings.map((item) => ({ value: item.id, label: localizeBuilding(item.name) })),
+          ]}
+          onChange={onBuildingChange}
+          className="sm:w-44"
+        />
+        <SearchableRoomFilter
+          value={floor}
+          options={[
+            { value: "Tất cả các tầng", label: t("room.allFloors") },
+            ...floors.map((item) => ({ value: item, label: t("room.floorLabel", "Tầng: {{floor}}", { floor: item }) })),
+          ]}
+          onChange={onFloorChange}
+          className="sm:w-44"
+        />
+        <SearchableRoomFilter
+          value={roomType}
+          options={[
+            { value: "Tất cả loại phòng", label: t("room.allRoomTypes") },
+            ...roomTypes.map((item) => ({ value: item, label: localizeRoomType(item) })),
+          ]}
+          onChange={onRoomTypeChange}
+          className="sm:w-52"
+        />
+        <SearchableRoomFilter
+          value={status}
+          options={[
+            { value: "Tất cả trạng thái", label: t("room.allStatuses") },
+            ...statuses.map((item) => ({ value: item, label: localizeStatus(item) })),
+          ]}
+          onChange={onStatusChange}
+          className="sm:w-52"
+        />
       </div>
 
       <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
@@ -146,13 +272,13 @@ export default function RoomListTab({
               <div className="flex items-start justify-between gap-2"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[room.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status === "Sẵn sàng" ? t("room.ready") : room.status === "Đang dọn" ? t("room.cleaning") : room.status === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span><p className="text-sm font-bold text-slate-900">{money(room.price)}<span className="text-xs font-normal text-slate-400"> {t("room.perNight")}</span></p></div>
               <div className="mt-4 grid grid-cols-2 gap-2 border-y border-slate-100 py-3"><p className="flex min-w-0 items-center gap-2 text-xs text-slate-600"><BedDouble size={15} className="shrink-0 text-slate-400" /><span className="truncate">{translateBed(room.beds)}</span></p><p className="flex min-w-0 items-center justify-end gap-2 text-right text-xs text-slate-600"><Users size={15} className="shrink-0 text-slate-400" /><span className="truncate">{t("room.standardCapacitySummary", { count: room.standardCapacity })}</span></p></div>
               <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2.5"><div className="grid grid-cols-2 gap-2 text-[11px]"><p className="text-slate-600">{t("room.adultSurcharge")}: <strong className="text-amber-800">{money(room.extraAdultFee)}{t("room.perPersonSuffix")}</strong></p><p className="text-slate-600">{t("room.childSurcharge")}: <strong className="text-amber-800">{money(room.extraChildFee)}{t("room.perPersonSuffix")}</strong></p></div><p className="mt-1 text-[10px] text-slate-500">{t("room.infantFreeNotice")}</p></div>
-              <div className="mt-4 border-t border-slate-100 pt-3"><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0">{room.cleaner ? <p className="truncate text-[11px] text-slate-500"><Sparkles size={13} className="mr-1 inline text-amber-500" />{room.cleaner}</p> : <p className="text-[11px] text-slate-400">{t("room.unassignedCleaning")}</p>}</div><div className="flex shrink-0 items-center gap-2">{canManageRooms && <button type="button" onClick={() => onEditRoom(room)} className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Pencil size={12} />{t("room.edit")}</button>}<button type="button" onClick={() => onShowDetails(room)} className="rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50">{t("room.details")}</button>{canManageRooms && !room.cleaner && <button type="button" onClick={() => onAssign(room)} className="rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100">{t("room.assign")}</button>}</div></div></div>
+              <div className="mt-4 border-t border-slate-100 pt-3"><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0">{room.cleaner && <p className="truncate text-[11px] text-slate-500"><Sparkles size={13} className="mr-1 inline text-amber-500" />{room.cleaner}</p>}</div><div className="flex shrink-0 items-center gap-2">{canManageRooms && <button type="button" onClick={() => onEditRoom(room)} className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Pencil size={12} />{t("room.edit")}</button>}<button type="button" onClick={() => onShowDetails(room)} className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"><Eye size={13} />{t("room.details")}</button></div></div></div>
             </div>
           </article>
         ))}
       </div>
 
-      {filtered.length > 0 && <div className="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between"><span>{t("room.paginationSummary", { from: (safePage - 1) * pageSize + 1, to: Math.min(safePage * pageSize, filtered.length), total: filtered.length })}</span><div className="flex items-center gap-2"><label className="flex items-center gap-2">{t("room.rowsPerPage")}<select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"><option value={12}>12</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label><button type="button" onClick={() => onPageChange((current) => Math.max(1, current - 1))} disabled={safePage === 1} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label={t("common.previousPage")}><ChevronLeft size={16} /></button><span className="min-w-16 text-center font-semibold text-slate-700">{safePage} / {Math.max(1, Math.ceil(filtered.length / pageSize))}</span><button type="button" onClick={() => onPageChange((current) => Math.min(Math.max(1, Math.ceil(filtered.length / pageSize)), current + 1))} disabled={safePage >= Math.max(1, Math.ceil(filtered.length / pageSize))} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label={t("common.nextPage")}><ChevronRight size={16} /></button></div></div>}
+      <ListPagination totalItems={filtered.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
       {filtered.length === 0 && <div className="p-10 text-center"><p className="font-semibold text-slate-700">{t("room.noRooms")}</p><p className="mt-1 text-xs text-slate-400">{t("room.changeFilters")}</p></div>}
     </>
   );

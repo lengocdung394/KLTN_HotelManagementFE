@@ -17,6 +17,7 @@ import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useGetHotelClosuresQuery } from "../services/hotelClosureApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import ListPagination from "../components/ListPagination";
 import { getServicePriceBreakdown, sumRoomPriceForRange } from "../lib/bookingPricing";
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
 import { calculatePromotionDiscount } from "../lib/promotionPricing";
@@ -2273,52 +2274,14 @@ export default function BookingWorkspace() {
               canChangeRoom={(room) => !initialBooking || canChangeBookingRoom(findBookingDetailForRoom(room))}
               onStartRoomChange={beginRoomReplacement}
             />
-            {visibleRooms.length > 0 && (
-              <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  {t("booking.showingRooms", {
-                    from: (safePage - 1) * pageSize + 1,
-                    to: Math.min(safePage * pageSize, visibleRooms.length),
-                    total: visibleRooms.length,
-                  })}
-                </span>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2">
-                    {t("booking.rowsPerPage")}
-                    <select
-                      value={pageSize}
-                      onChange={(event) => setPageSize(Number(event.target.value))}
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    disabled={safePage === 1}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label={t("common.previousPage")}
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="min-w-12 text-center font-semibold text-slate-700">
-                    {safePage} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                    disabled={safePage === totalPages}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label={t("common.nextPage")}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
+            <ListPagination
+              totalItems={visibleRooms.length}
+              page={safePage}
+              pageSize={pageSize}
+              mode="table"
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </>}
 
           <div className="mt-5 flex flex-col items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">

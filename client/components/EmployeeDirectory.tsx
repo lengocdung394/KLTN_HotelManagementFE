@@ -18,6 +18,7 @@ import {
   type EmployeeImportRowResult,
 } from "../lib/employeeBulkImport";
 import { localizedText } from "../i18n";
+import ListPagination from "./ListPagination";
 
 const MAX_EMPLOYEE_IMAGE_BYTES = 5 * 1024 * 1024;
 const EMPLOYEE_ROLES = ["Lễ tân", "Buồng phòng", "Bảo vệ"] as const;
@@ -85,6 +86,8 @@ export default function EmployeeDirectory() {
   const [addOpen, setAddOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [isAddingEmployee, setIsAddingEmployee] = useState(false);
   const addEmployeeInProgress = useRef(false);
   const [name, setName] = useState("");
@@ -129,6 +132,17 @@ export default function EmployeeDirectory() {
       ].some((value) => value?.toLocaleLowerCase().includes(normalizedQuery));
     });
   }, [employees, positionFilter, searchQuery]);
+  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedEmployees = filteredEmployees.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, positionFilter, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   useEffect(() => () => {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
@@ -404,7 +418,7 @@ export default function EmployeeDirectory() {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {filteredEmployees.map((employee) => <tr key={employee.id} className="hover:bg-slate-50/70">
+          {paginatedEmployees.map((employee) => <tr key={employee.id} className="hover:bg-slate-50/70">
             <td className="px-5 py-3">
               <div className="flex min-w-0 items-center gap-3">
                 {employee.avatarUrl
@@ -426,6 +440,7 @@ export default function EmployeeDirectory() {
         ? <p className="px-5 py-5 text-sm text-slate-500">{localizedText("Không tìm thấy nhân viên phù hợp. Hãy thử từ khóa hoặc bộ lọc khác.", "No matching employees found. Try another search term or filter.")}</p>
         : <p className="px-5 py-5 text-sm text-slate-500">{localizedText("Chưa có nhân viên nào được ghi nhận tại chi nhánh này.", "No employees have been recorded for this branch yet.")}</p>}
     </div>}
+    {!isLoading && !isError && <ListPagination totalItems={filteredEmployees.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />}
     {importRows.length > 0 && <div className="border-t border-slate-100 p-5"><div className="flex items-center justify-between gap-2"><h4 className="text-sm font-bold text-slate-800">{localizedText("Kết quả nhập file", "Import results")}</h4><span className="text-xs text-slate-500">{importRows.filter((row) => row.passed && row.message === "Đã tạo tài khoản thành công.").length} {localizedText("thành công", "successful")} · {importRows.filter((row) => !row.passed).length} {localizedText("cần kiểm tra", "need review")}</span></div><div className="mt-3 max-h-56 space-y-2 overflow-y-auto">{importRows.map((row) => <div key={row.rowNumber} className={`rounded-lg px-3 py-2 text-xs ${row.passed ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}><span className="font-semibold">{localizedText("Dòng", "Row")} {row.rowNumber} · {row.fullName}:</span> {row.message || localizedText("Hợp lệ.", "Valid.")}</div>)}</div></div>}
     <BulkImportDialog
       open={isBulkImportOpen}

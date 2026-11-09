@@ -18,6 +18,7 @@ import { useGetHotelReportQuery } from "../services/reportApi";
 import { useGetSuperAdminBranchesQuery } from "../services/superAdminApi";
 import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import ListPagination from "../components/ListPagination";
 
 const localDateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -81,6 +82,10 @@ export default function ReportWorkspace() {
   const today = localDateString(new Date());
   const [startDate, setStartDate] = useState(() => `${today.slice(0, 7)}-01`);
   const [endDate, setEndDate] = useState(today);
+  const [refundPages, setRefundPages] = useState<Record<string, number>>({});
+  const [refundPageSizes, setRefundPageSizes] = useState<Record<string, number>>({});
+  const [cancelledPage, setCancelledPage] = useState(1);
+  const [cancelledPageSize, setCancelledPageSize] = useState(10);
   const { data: branches = [], isLoading: isLoadingBranches, isError: isBranchesError } =
     useGetSuperAdminBranchesQuery(undefined, { skip: !isSystemAdmin });
   const reportHotelId = isSystemAdmin ? Number(selectedBranchId) : Number(hotelId);
@@ -128,6 +133,12 @@ export default function ReportWorkspace() {
     ?? cancelledBookings.filter((booking) => booking.bookingChannel === "OFFLINE").length;
   const checkoutSurplusRefunds = report?.checkoutSurplusRefunds ?? [];
   const bookingCancellationRefunds = report?.bookingCancellationRefunds ?? [];
+  const cancelledTotalPages = Math.max(1, Math.ceil(cancelledBookings.length / cancelledPageSize));
+  const safeCancelledPage = Math.min(cancelledPage, cancelledTotalPages);
+  const paginatedCancelledBookings = cancelledBookings.slice(
+    (safeCancelledPage - 1) * cancelledPageSize,
+    safeCancelledPage * cancelledPageSize,
+  );
   const totalBookingCount = report?.totalBookingCount ?? 0;
   const cashReceived = report?.cashReceived ?? 0;
   const cashReceivedCash = report?.cashReceivedCash ?? 0;
@@ -136,6 +147,13 @@ export default function ReportWorkspace() {
   const cashChangeReturned = report?.cashChangeReturned ?? 0;
   const netCashReceived = report?.netCashReceived
     ?? cashReceived - cashRefunded - cashChangeReturned;
+  useEffect(() => {
+    setRefundPages({});
+    setCancelledPage(1);
+  }, [selectedBranchId, startDate, endDate]);
+  useEffect(() => {
+    if (cancelledPage > cancelledTotalPages) setCancelledPage(cancelledTotalPages);
+  }, [cancelledPage, cancelledTotalPages]);
   const reportSections = [
     { id: "report-overview", label: localizedText("Tổng quan", "Overview") },
     { id: "report-service-revenue", label: localizedText("Doanh thu dịch vụ", "Service revenue") },
@@ -572,20 +590,26 @@ export default function ReportWorkspace() {
                 <div className="grid grid-cols-1 gap-4">
                   {[
                     {
+                      key: "checkout-surplus",
                       title: localizedText("Hoàn dư khi checkout", "Checkout surplus refunds"),
                       refunds: checkoutSurplusRefunds,
                     },
                     {
+                      key: "booking-cancellation",
                       title: localizedText("Hoàn tiền booking bị hủy", "Cancelled booking refunds"),
                       refunds: bookingCancellationRefunds,
                     },
-                  ].map(({ title, refunds }) => {
+                  ].map(({ key, title, refunds }) => {
                     const refunded = refunds.filter((refund) => refund.status === "REFUNDED");
                     const notCompletedCount = refunds.length - refunded.length;
                     const refundedAmount = refunded.reduce((sum, refund) => sum + Number(refund.amount ?? 0), 0);
+                    const pageSize = refundPageSizes[key] ?? 10;
+                    const totalPages = Math.max(1, Math.ceil(refunds.length / pageSize));
+                    const page = Math.min(refundPages[key] ?? 1, totalPages);
+                    const paginatedRefunds = refunds.slice((page - 1) * pageSize, page * pageSize);
 
                     return (
-                      <div key={title} className="min-w-0 rounded-xl border border-slate-200/80 p-4">
+                      <div key={key} className="min-w-0 rounded-xl border border-slate-200/80 p-4">
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                           <h5 className="text-sm font-semibold text-slate-800">{title}</h5>
                           <div className="flex flex-wrap gap-2 text-xs">
@@ -602,8 +626,9 @@ export default function ReportWorkspace() {
                             {localizedText("Không có khoản hoàn tiền trong khoảng ngày này.", "No refunds during this date range.")}
                           </p>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full min-w-[660px] text-left text-xs">
+                          <>
+                            <div className="overflow-x-auto">
+                              <table className="w-full min-w-[660px] text-left text-xs">
                               <thead>
                                 <tr className="border-b border-slate-100 text-slate-500">
                                   <th className="px-2 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
@@ -615,7 +640,7 @@ export default function ReportWorkspace() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {refunds.map((refund) => (
+                                {paginatedRefunds.map((refund) => (
                                   <tr key={refund.bookingId} className="border-b border-slate-50 last:border-0">
                                     <td className="whitespace-nowrap px-2 py-2.5 font-semibold text-slate-800">{refund.bookingId}</td>
                                     <td className="whitespace-nowrap px-2 py-2.5 text-slate-700">{formatMoney(refund.amount)}</td>
@@ -634,8 +659,20 @@ export default function ReportWorkspace() {
                                   </tr>
                                 ))}
                               </tbody>
-                            </table>
-                          </div>
+                              </table>
+                            </div>
+                            <ListPagination
+                              totalItems={refunds.length}
+                              page={page}
+                              pageSize={pageSize}
+                              mode="table"
+                              onPageChange={(nextPage) => setRefundPages((current) => ({ ...current, [key]: nextPage }))}
+                              onPageSizeChange={(nextPageSize) => {
+                                setRefundPageSizes((current) => ({ ...current, [key]: nextPageSize }));
+                                setRefundPages((current) => ({ ...current, [key]: 1 }));
+                              }}
+                            />
+                          </>
                         )}
                       </div>
                     );
@@ -646,8 +683,9 @@ export default function ReportWorkspace() {
             {cancelledBookings.length === 0 ? (
               <p className="py-10 text-center text-sm text-slate-400">{localizedText("Không có booking bị hủy trong khoảng ngày này.", "No bookings were cancelled during this date range.")}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-left text-sm">
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs text-slate-500">
                       <th className="px-3 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
@@ -657,7 +695,7 @@ export default function ReportWorkspace() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cancelledBookings.map((booking) => (
+                    {paginatedCancelledBookings.map((booking) => (
                       <tr key={booking.bookingId} className="border-b border-slate-50 last:border-0">
                         <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-800">{booking.bookingId}</td>
                         <td className="whitespace-nowrap px-3 py-3">
@@ -684,8 +722,10 @@ export default function ReportWorkspace() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                  </table>
+                </div>
+                <ListPagination totalItems={cancelledBookings.length} page={safeCancelledPage} pageSize={cancelledPageSize} mode="table" onPageChange={setCancelledPage} onPageSizeChange={setCancelledPageSize} />
+              </>
             )}
           </section>
           </div>

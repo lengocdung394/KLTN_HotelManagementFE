@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
+import { CalendarDays, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
+import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
@@ -131,7 +132,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const [formError, setFormError] = useState("");
   const pendingLocalPromotionName = useRef("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(12);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | PromotionStatus>("ALL");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -906,58 +907,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                 );
               })}
             </div>
-            {visiblePromotions.length > 0 && (
-              <div className="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  {label("showingPromotions", {
-                    from: String((safePage - 1) * pageSize + 1),
-                    to: String(Math.min(safePage * pageSize, visiblePromotions.length)),
-                    total: String(visiblePromotions.length),
-                  })}
-                </span>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2">
-                    Số dòng
-                    <select
-                      value={pageSize}
-                      onChange={(event) =>
-                        setPageSize(Number(event.target.value))
-                      }
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPage((current) => Math.max(1, current - 1))
-                    }
-                    disabled={safePage === 1}
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang trước"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <span className="min-w-16 text-center font-semibold text-slate-700">
-                    {safePage} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPage((current) => Math.min(totalPages, current + 1))
-                    }
-                    disabled={safePage === totalPages}
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang sau"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
+            <ListPagination totalItems={visiblePromotions.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </section>

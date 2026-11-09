@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Eye, EyeOff, KeyRound, RefreshCw, Search, Users, X } from "lucide-react";
 import {
   Command,
@@ -21,6 +21,7 @@ import {
   type SuperAdminAccountListType,
   type SuperAdminBranch,
 } from "../services/superAdminApi";
+import ListPagination from "./ListPagination";
 
 type AccountView = "all" | "staff" | "customers";
 
@@ -120,6 +121,8 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   const [updateCustomer, { isLoading: isUpdatingCustomer }] = useUpdateSuperAdminCustomerMutation();
   const [requestPasswordReset, { isLoading: isRequestingReset }] = useRequestSuperAdminPasswordResetMutation();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [branchSearch, setBranchSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState(ALL_BRANCHES);
   const [isBranchFilterOpen, setIsBranchFilterOpen] = useState(false);
@@ -160,6 +163,17 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
       ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch));
     });
   }, [branchFilteredAccounts, search]);
+  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedAccounts = filteredAccounts.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, branchFilter, view, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   const visibleBranches = useMemo(() => {
     const normalizedSearch = branchSearch.trim().toLocaleLowerCase();
     return branches.filter((branch) =>
@@ -447,7 +461,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredAccounts.map((account) => (
+                {paginatedAccounts.map((account) => (
                   <tr key={`${account.accountId ?? account.profileId}-${account.accountType}`} className="text-slate-700">
                     <td className="px-4 py-3 font-semibold text-slate-900">{account.fullName || "Chưa cập nhật"}</td>
                     <td className="px-4 py-3">
@@ -474,7 +488,8 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
             </table>
           </div>
         )}
-        <p className="mt-3 text-xs text-slate-400">                Đang hiển thị {filteredAccounts.length} / {branchFilteredAccounts.length} hồ sơ.</p>
+        <ListPagination totalItems={filteredAccounts.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
+        <p className="mt-3 text-xs text-slate-400">Đang hiển thị {filteredAccounts.length} / {branchFilteredAccounts.length} hồ sơ.</p>
       </section>
 
       {(selectedAccount || isLoadingDetails || detailError) && (
