@@ -922,7 +922,7 @@ export default function EventPricingCalendar() {
                           : status === "EXPIRED"
                             ? t("eventPricing.expiredEventEditError")
                             : undefined}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition enabled:hover:border-blue-200 enabled:hover:bg-blue-50 enabled:hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 transition enabled:hover:border-amber-300 enabled:hover:bg-amber-50 enabled:hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Pencil size={13} />
                         {t("eventPricing.edit")}

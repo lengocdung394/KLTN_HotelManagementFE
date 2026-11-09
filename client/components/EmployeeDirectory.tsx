@@ -430,8 +430,8 @@ export default function EmployeeDirectory() {
             <td className="px-5 py-3 text-sm text-slate-600">{employeeRoleLabel(employee.position)}</td>
             <td className="px-5 py-3">
               <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setDetailEmployee(employee)} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><Eye size={14} />{localizedText("Chi tiết", "Details")}</button>
-                {canManageBranchEmployees && isEditableEmployee(employee, roles) && <button type="button" onClick={() => openEditEmployee(employee)} className="flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Pencil size={14} />{localizedText("Sửa hồ sơ / tài khoản", "Edit profile / account")}</button>}
+                <button type="button" onClick={() => setDetailEmployee(employee)} className="flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"><Eye size={14} />{localizedText("Chi tiết", "Details")}</button>
+                {canManageBranchEmployees && isEditableEmployee(employee, roles) && <button type="button" onClick={() => openEditEmployee(employee)} className="flex items-center gap-1.5 rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"><Pencil size={14} />{localizedText("Sửa hồ sơ / tài khoản", "Edit profile / account")}</button>}
               </div>
             </td>
           </tr>)}

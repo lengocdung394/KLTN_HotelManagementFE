@@ -67,8 +67,10 @@ const payoutStateLabels: Record<PayOSPayoutState, [string, string]> = {
   UNKNOWN: ["PayOS: Trạng thái chưa xác định", "PayOS: Unknown state"],
 };
 
-const money = (value: number | undefined) =>
-  `${new Intl.NumberFormat(localStorage.getItem("language") === "en" ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(value ?? 0))}₫`;
+const money = (value: number | undefined) => {
+  const isEnglish = localStorage.getItem("language") === "en";
+  return `${new Intl.NumberFormat(isEnglish ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(value ?? 0))}${isEnglish ? " VND" : "đ"}`;
+};
 
 const dateTime = (value: string | null | undefined) => {
   if (!value) return "—";

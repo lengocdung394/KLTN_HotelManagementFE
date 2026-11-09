@@ -3075,7 +3075,7 @@ function DetailRow({
           onClick={onEdit}
           className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${
             onEdit
-              ? "border-blue-200 bg-white text-blue-700 transition hover:bg-blue-50"
+              ? "border-amber-200 bg-white text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
               : "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400"
           }`}
         >

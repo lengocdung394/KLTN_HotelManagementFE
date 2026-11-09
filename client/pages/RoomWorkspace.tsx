@@ -2064,7 +2064,7 @@ export default function RoomWorkspace() {
                           <button
                             type="button"
                             onClick={() => setEditingPricingType(entry.roomType)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 transition hover:border-amber-300 hover:bg-amber-100 hover:text-amber-800"
                             title={t("room.pricingConfig.edit")}
                           >
                             <Pencil size={14} />

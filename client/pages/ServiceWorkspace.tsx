@@ -136,11 +136,7 @@ const formatUsageDateTime = (value: string | null | undefined, locale: string) =
 
 const formatServicePrice = (price: number | null, locale: string) => {
   if (price === null) return "—";
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "VND",
-    maximumFractionDigits: 0,
-  }).format(price);
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(price)}${locale.startsWith("en") ? " VND" : "đ"}`;
 };
 
 const toLocalDateInputValue = (date: Date) => {
@@ -224,7 +220,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [createServiceRequest, { isLoading: isCreating }] = useCreateServiceMutation();
   const [updateServiceRequest, { isLoading: isUpdating }] = useUpdateServiceMutation();
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(12);
+  const [pageSize, setPageSize] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [expandedUsageBookingIds, setExpandedUsageBookingIds] = useState<Set<string>>(() => new Set());
@@ -623,19 +619,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           </article>
         </div>
       )}
-    <section className={`${mode === "usage" ? "" : "mt-2"} rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm`}>
-      {mode === "catalog" && <div className="flex justify-end gap-3">
-        <div className="flex flex-wrap gap-2">
-          {canManageServices && !isSystemAdmin && <button
-            type="button"
-            onClick={() => setIsBulkImportOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
-          >
-            <Upload size={16} />{t("serviceWorkspace.uploadFromFile")}
-          </button>}
-          {canManageServices && <button type="button" onClick={openCreateForm} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />{t("serviceWorkspace.addService")}</button>}
-        </div>
-      </div>}
+    <section className={`${mode === "usage" ? "p-5" : "mt-2"} rounded-2xl border border-slate-200/80 bg-white shadow-sm`}>
       {mode === "usage" && canConfirmServiceUsage && (
         <section aria-label={t("serviceWorkspace.usageSection")} className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -872,7 +856,27 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           validationOnly={serviceImportValidationOnly}
         />
       )}
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="font-bold text-slate-900">{t("serviceWorkspace.catalogList")}</h3>
+          <p className="mt-1 text-sm text-slate-500">{t("serviceWorkspace.catalogListDescription")}</p>
+        </div>
+        {canManageServices && (
+          <div className="flex shrink-0 flex-nowrap gap-2">
+            {!isSystemAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsBulkImportOpen(true)}
+                className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
+              >
+                <Upload size={16} />{t("serviceWorkspace.uploadFromFile")}
+              </button>
+            )}
+            <button type="button" onClick={openCreateForm} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />{t("serviceWorkspace.addService")}</button>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
         {isSystemAdmin && (
           <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
             <span>{t("serviceWorkspace.branch")}</span>
@@ -889,7 +893,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             </select>
           </label>
         )}
-        <label className="relative min-w-0 flex-1">
+        <label className="relative min-w-[220px] flex-1 sm:max-w-sm">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
@@ -913,23 +917,89 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           </select>
         </label>
       </div>
-      {isLoading && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingServices")}</p>}
-      {isError && <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{t("serviceWorkspace.servicesLoadError")}</p>}
-      {!isLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.branchUnknown")}</p>}
-      {!isLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noServices")}</p>}
-      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noMatchingServices")}</p>}
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {paginatedServices.map((service) => {
-          const isActive = service.active;
-          return <article key={service.id} className="rounded-xl border border-blue-200 bg-blue-100/55 p-4 text-left transition hover:border-blue-400 hover:bg-blue-100/80 hover:shadow-sm">
-            <div className="flex items-start justify-between gap-3"><span className="text-sm font-bold text-slate-900">{service.name}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">{service.category}</span></div>
-            <p className="mt-2 min-h-10 text-xs leading-5 text-slate-500">{service.detail}</p>
-            <div className="mt-4"><span className="text-sm font-bold text-blue-700">{service.price.toLocaleString("vi-VN")}đ <span className="font-normal text-slate-400">/ {service.unit}</span></span></div>
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3"><div className="flex items-center gap-3"><button type="button" onClick={() => setDetailService(service)} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600"><Eye size={14} />{t("serviceWorkspace.viewDetails")}</button>{canManageServices && <button type="button" onClick={() => openEditForm(service)} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800"><Pencil size={14} />{t("serviceWorkspace.edit")}</button>}</div>{canManageServices ? <button type="button" onClick={() => void toggleServiceStatus(service.id)} disabled={isUpdating} className={`flex items-center gap-1.5 text-xs font-semibold disabled:cursor-wait disabled:opacity-60 ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}</button> : <span className={`flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-600" : "text-slate-400"}`}><span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />{isActive ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}</span>}</div>
-          </article>;
-        })}
-      </div>
-      <ListPagination totalItems={filteredServices.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={setPage} onPageSizeChange={setPageSize} />
+      {isLoading && <p className="m-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingServices")}</p>}
+      {isError && <p className="m-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{t("serviceWorkspace.servicesLoadError")}</p>}
+      {!isLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="m-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.branchUnknown")}</p>}
+      {!isLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noServices")}</p>}
+      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noMatchingServices")}</p>}
+      {filteredServices.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
+              <tr>
+                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.serviceName")}</th>
+                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.category")}</th>
+                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.serviceDescription")}</th>
+                <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{t("serviceWorkspace.price")}</th>
+                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.status")}</th>
+                <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{t("serviceWorkspace.actions")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedServices.map((service) => {
+                const isActive = service.active;
+                return (
+                  <tr key={service.id} className="text-slate-700 transition hover:bg-slate-50/70">
+                    <td className="max-w-56 px-5 py-3 font-semibold text-slate-900">
+                      <p className="truncate" title={service.name}>{service.name}</p>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3 text-slate-600">{service.category}</td>
+                    <td className="max-w-80 px-5 py-3 text-slate-600">
+                      <p className="truncate" title={service.detail}>{service.detail || "—"}</p>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-slate-800">
+                      {service.price.toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}
+                      {i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}
+                      <span className="font-normal text-slate-400"> / {service.unit}</span>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3">
+                      {canManageServices ? (
+                        <button
+                          type="button"
+                          onClick={() => void toggleServiceStatus(service.id)}
+                          disabled={isUpdating}
+                          className={`inline-flex items-center gap-1.5 text-xs font-semibold transition disabled:cursor-wait disabled:opacity-60 ${isActive ? "text-emerald-700 hover:text-emerald-800" : "text-slate-500 hover:text-slate-700"}`}
+                        >
+                          <span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />
+                          {isActive ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}
+                        </button>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${isActive ? "text-emerald-700" : "text-slate-500"}`}>
+                          <span className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300"}`} />
+                          {isActive ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailService(service)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"
+                        >
+                          <Eye size={14} />
+                          {t("serviceWorkspace.viewDetails")}
+                        </button>
+                        {canManageServices && (
+                          <button
+                            type="button"
+                            onClick={() => openEditForm(service)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+                          >
+                            <Pencil size={14} />
+                            {t("serviceWorkspace.edit")}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <ListPagination totalItems={filteredServices.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
       {detailService && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"

@@ -127,11 +127,8 @@ export default function HotelClosureWorkspace() {
     const key = statusKey[status.toUpperCase()];
     return key ? t(`hotelClosure.${key}`) : status;
   };
-  const formatMoney = (amount: number) => new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", {
-    style: "currency",
-    currency: "VND",
-    maximumFractionDigits: 0,
-  }).format(amount);
+  const formatMoney = (amount: number) =>
+    `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(amount)}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
   const pendingRefundAmount = typeof pendingResolution?.refundAmount === "number"
     && Number.isFinite(pendingResolution.refundAmount)
     ? pendingResolution.refundAmount

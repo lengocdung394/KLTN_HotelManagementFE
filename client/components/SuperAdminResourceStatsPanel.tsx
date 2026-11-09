@@ -23,9 +23,22 @@ import {
   YAxis,
 } from "recharts";
 import { reportApi, type HotelReport } from "../services/reportApi";
+import { useGetPromotionsQuery } from "../services/promotionApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
 import { useAppDispatch } from "../store/hooks";
 import ListPagination from "./ListPagination";
+import {
+  buildRevenueChartData,
+  getReportDateRange,
+  reportPeriodOptions,
+  type ReportPeriod,
+} from "../lib/reportPeriod";
+import {
+  buildPromotionScopeBreakdown,
+  getPromotionScope,
+  promotionScopeColors,
+  type PromotionScope,
+} from "../lib/promotionReport";
 
 type Props = {
   branches: SuperAdminBranch[];
@@ -65,6 +78,13 @@ const roomTypeLabels: Record<string, string> = {
   FAMILY: "Phòng gia đình",
 };
 
+const promotionScopeLabels: Record<PromotionScope, string> = {
+  ROOM: "Tiền phòng",
+  SERVICE: "Tiền dịch vụ",
+  TOTAL: "Tổng booking",
+  UNKNOWN: "Chưa xác định phạm vi",
+};
+
 const StatCard = ({
   label,
   value,
@@ -96,8 +116,12 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const [selectedBranchId, setSelectedBranchId] = useState("all");
   const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
   const today = localDateString(new Date());
-  const [startDate, setStartDate] = useState(() => `${today.slice(0, 7)}-01`);
-  const [endDate, setEndDate] = useState(today);
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>("day-month");
+  const [comparisonUnit, setComparisonUnit] = useState<"day" | "week" | "month">("day");
+  const [comparisonScope, setComparisonScope] = useState<"week" | "month" | "year">("month");
+  const initialRange = getReportDateRange("day-month", today, today);
+  const [startDate, setStartDate] = useState(initialRange.startDate);
+  const [endDate, setEndDate] = useState(initialRange.endDate);
   const [branchReports, setBranchReports] = useState<Record<number, BranchReportState>>({});
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -106,6 +130,18 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const [cancelledPageSize, setCancelledPageSize] = useState(10);
   const [branchPage, setBranchPage] = useState(1);
   const [branchPageSize, setBranchPageSize] = useState(10);
+  const {
+    data: availablePromotions = [],
+    isError: isPromotionCatalogError,
+  } = useGetPromotionsQuery(
+    selectedBranchId === "all"
+      ? { page: 0, size: 100 }
+      : { hotelId: Number(selectedBranchId), page: 0, size: 100 },
+    { skip: branches.length === 0 },
+  );
+  const promotionScopeById = new Map(
+    availablePromotions.map((promotion) => [promotion.id, promotion.type]),
+  );
   const dispatch = useAppDispatch();
   const hasValidDateRange = Boolean(startDate && endDate && startDate <= endDate);
   const reportSections = [
@@ -212,22 +248,28 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     reports.forEach((report) => report.dailyServiceRevenue.forEach((item) => {
       values.set(item.date, (values.get(item.date) ?? 0) + Number(item.revenue ?? 0));
     }));
-    return [...values.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([date, revenue]) => ({
-        date,
-        day: date.slice(8, 10),
-        revenue,
-        fullDate: new Date(`${date}T00:00:00`).toLocaleDateString("vi-VN"),
-      }));
-  }, [reports]);
+    return buildRevenueChartData(
+      [...values.entries()].map(([date, revenue]) => ({ date, revenue })),
+      reportPeriod,
+      startDate,
+      endDate,
+      "vi-VN",
+    );
+  }, [endDate, reportPeriod, reports, startDate]);
   const promotionBreakdown = useMemo(() => {
-    const values = new Map<string, { name: string; code: string; usageCount: number; userCount: number; savings: number }>();
+    const values = new Map<string, { id: string; name: string; code: string; scope: PromotionScope; usageCount: number; userCount: number; savings: number }>();
     reports.forEach((report) => report.promotions.forEach((promotion) => {
       const key = `${promotion.promotionId}:${promotion.promotionCode}`;
       const current = values.get(key) ?? {
+        id: promotion.promotionId,
         name: promotion.promotionName,
         code: promotion.promotionCode,
+        scope: getPromotionScope(
+          promotionScopeById.get(promotion.promotionId)
+            ?? promotion.type
+            ?? promotion.scope
+            ?? promotion.promotionScope,
+        ),
         usageCount: 0,
         userCount: 0,
         savings: 0,
@@ -238,7 +280,15 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       values.set(key, current);
     }));
     return [...values.values()].sort((left, right) => right.usageCount - left.usageCount);
-  }, [reports]);
+  }, [promotionScopeById, reports]);
+  const promotionScopeBreakdown = useMemo(
+    () => buildPromotionScopeBreakdown(
+      reports.flatMap((report) => report.promotions),
+      promotionScopeById,
+    ),
+    [promotionScopeById, reports],
+  );
+  const promotionScopesTotalSavings = promotionScopeBreakdown.reduce((total, item) => total + item.savings, 0);
   const roomStatusBreakdown = useMemo(() => {
     const values = new Map<string, number>();
     reports.forEach((report) => report.roomStatuses.forEach((status) => {
@@ -294,6 +344,38 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const displayCount = (value: number) => isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatCount(value);
   const selectedBranchName = visibleBranches.length === 1 ? visibleBranches[0].name : null;
   const reportScopeLabel = selectedBranchName ? `chi nhánh ${selectedBranchName}` : "toàn bộ chi nhánh";
+  const selectReportPeriod = (period: Exclude<ReportPeriod, "custom">) => {
+    const option = reportPeriodOptions.find((item) => item.value === period);
+    if (!option) return;
+    const range = getReportDateRange(period, today, today);
+    setReportPeriod(period);
+    setComparisonUnit(option.unit);
+    setComparisonScope(option.scope);
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
+  };
+  const reportDateScopeLabel = reportPeriod === "custom"
+    ? "trong khoảng tùy chọn"
+    : `trong ${comparisonScope === "week" ? "tuần" : comparisonScope === "month" ? "tháng" : "năm"}`;
+  const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, string> = {
+    "day-week": "Ngày trong tuần",
+    "day-month": "Ngày trong tháng",
+    "day-year": "Ngày trong năm",
+    "week-month": "Tuần trong tháng",
+    "week-year": "Tuần trong năm",
+    "month-year": "Tháng trong năm",
+  };
+  const reportPeriodLabel = reportPeriod === "custom"
+    ? "ngày trong khoảng tùy chọn"
+    : reportPeriodOptionLabels[reportPeriod].toLowerCase();
+  const promotionChartData = [{
+    period: reportDateScopeLabel,
+    ROOM: promotionScopeBreakdown.find((item) => item.scope === "ROOM")?.savings ?? 0,
+    SERVICE: promotionScopeBreakdown.find((item) => item.scope === "SERVICE")?.savings ?? 0,
+    TOTAL: promotionScopeBreakdown.find((item) => item.scope === "TOTAL")?.savings ?? 0,
+    UNKNOWN: promotionScopeBreakdown.find((item) => item.scope === "UNKNOWN")?.savings ?? 0,
+  }];
+  const promotionChartIsStacked = comparisonUnit !== "day";
 
   return (
     <section className="mt-2 space-y-5" aria-labelledby="resource-stats-title">
@@ -312,6 +394,47 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          <label className="block text-xs font-semibold text-slate-500">
+            Theo
+            <select
+              value={comparisonUnit}
+              onChange={(event) => {
+                const nextUnit = event.target.value as "day" | "week" | "month";
+                const nextPeriod = reportPeriodOptions.find(
+                  (option) => option.unit === nextUnit && option.scope === comparisonScope,
+                ) ?? reportPeriodOptions.find((option) => option.unit === nextUnit);
+                if (nextPeriod) selectReportPeriod(nextPeriod.value);
+              }}
+              aria-label="Chọn đơn vị so sánh"
+              className="ml-2 mt-1 h-10 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+            >
+              <option value="day">Ngày</option>
+              <option value="week">Tuần</option>
+              <option value="month">Tháng</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-slate-500">
+            Trong
+            <select
+              value={comparisonScope}
+              onChange={(event) => {
+                const nextPeriod = reportPeriodOptions.find(
+                  (option) => option.unit === comparisonUnit && option.scope === event.target.value,
+                );
+                if (nextPeriod) selectReportPeriod(nextPeriod.value);
+              }}
+              aria-label="Chọn khoảng so sánh"
+              className="ml-2 mt-1 h-10 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+            >
+              {reportPeriodOptions
+                .filter((option) => option.unit === comparisonUnit)
+                .map(({ scope }) => (
+                  <option key={scope} value={scope}>
+                    {scope === "week" ? "Tuần" : scope === "month" ? "Tháng" : "Năm"}
+                  </option>
+                ))}
+            </select>
+          </label>
           <div className="text-xs font-semibold text-slate-500">
             <span>Chi nhánh</span>
             <Popover open={isBranchPickerOpen} onOpenChange={setIsBranchPickerOpen}>
@@ -320,7 +443,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                   type="button"
                   disabled={isLoading || isError}
                   aria-label="Tìm và chọn chi nhánh"
-                  className="mt-1 flex h-10 min-w-52 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                  className="ml-2 mt-1 flex h-10 min-w-52 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                 >
                   <span className="truncate">
                     {selectedBranchName ?? "Tất cả chi nhánh"}
@@ -369,8 +492,8 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               type="date"
               value={startDate}
               max={endDate || undefined}
-              onChange={(event) => setStartDate(event.target.value)}
-              className="mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              onChange={(event) => { setStartDate(event.target.value); setReportPeriod("custom"); }}
+              className="ml-2 mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             />
           </label>
           <label className="block text-xs font-semibold text-slate-500">
@@ -380,8 +503,8 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               value={endDate}
               min={startDate || undefined}
               max={today}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              onChange={(event) => { setEndDate(event.target.value); setReportPeriod("custom"); }}
+              className="ml-2 mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             />
           </label>
         </div>
@@ -594,28 +717,39 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
       {allReportsLoaded && (
         <>
-          <div className="grid gap-5 xl:grid-cols-2">
+          <div className="space-y-5">
             <section id="super-admin-stats-services" data-super-admin-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-slate-900">Doanh thu dịch vụ theo ngày</h3>
-                  <p className="mt-1 text-xs text-slate-400">Tổng hợp {reportScopeLabel} · VNĐ</p>
+                  <h3 className="font-bold text-slate-900">Doanh thu dịch vụ theo {reportPeriodLabel}</h3>
+                  <p className="mt-1 text-xs text-slate-400">Tổng hợp {reportScopeLabel} · đ</p>
                 </div>
                 <ConciergeBell size={18} className="text-violet-600" />
               </div>
-              {dailyServiceRevenue.length === 0 ? (
+              {dailyServiceRevenue.every((item) => item.revenue === 0) ? (
                 <p className="py-12 text-center text-sm text-slate-400">Không có dữ liệu doanh thu dịch vụ trong kỳ.</p>
               ) : (
-                <ResponsiveContainer width="100%" height={260}>
+                <ResponsiveContainer width="100%" height={290}>
                   <BarChart data={dailyServiceRevenue}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                    <XAxis dataKey="label" interval="preserveStartEnd" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => `${Math.round(Number(value) / 1000000)}tr`} />
                     <Tooltip
                       labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""}
                       formatter={(value) => [formatMoney(Number(value)), "Doanh thu dịch vụ"]}
                     />
-                    <Bar dataKey="revenue" fill="#7c3aed" radius={[5, 5, 0, 0]} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={30}
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: 12, color: "#334155" }}
+                    />
+                    <Bar
+                      dataKey="revenue"
+                      name="Doanh thu dịch vụ"
+                      fill="#6d28d9"
+                      radius={[5, 5, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -623,23 +757,57 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
             <section id="super-admin-stats-promotions" data-super-admin-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
-                <h3 className="font-bold text-slate-900">Hiệu quả khuyến mãi</h3>
-                <p className="mt-1 text-xs text-slate-400">Lượt áp dụng, khách hàng và tổng tiền giảm theo chương trình</p>
+                <h3 className="font-bold text-slate-900">Hiệu quả khuyến mãi {reportDateScopeLabel}</h3>
+                <p className="mt-1 text-xs text-slate-400">Phân loại theo tiền phòng, tiền dịch vụ và tổng booking</p>
               </div>
+              {isPromotionCatalogError && (
+                <p role="status" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Không tải được loại khuyến mãi; một số chương trình có thể hiện là chưa xác định.
+                </p>
+              )}
               {promotionBreakdown.length === 0 ? (
                 <p className="py-12 text-center text-sm text-slate-400">Không có khuyến mãi được áp dụng trong kỳ.</p>
               ) : (
-                <div className="max-h-[300px] space-y-2 overflow-y-auto">
-                  {promotionBreakdown.map((promotion) => (
-                    <article key={`${promotion.code}-${promotion.name}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-800">{promotion.name}</p>
-                        <p className="mt-1 text-xs text-slate-500">{promotion.code}</p>
-                        <p className="mt-1 text-xs font-medium text-slate-600">{promotion.userCount} khách · {promotion.usageCount} lượt dùng</p>
-                      </div>
-                      <p className="shrink-0 text-sm font-bold text-emerald-700">{formatMoney(promotion.savings)}</p>
-                    </article>
-                  ))}
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                    <p className="mb-2 text-center text-xs font-semibold text-slate-600">Số tiền giảm theo loại</p>
+                    {promotionScopesTotalSavings > 0 ? (
+                      <ResponsiveContainer width="100%" height={230}>
+                        <BarChart data={promotionChartData} barCategoryGap={promotionChartIsStacked ? "45%" : "20%"}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
+                          <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => `${Math.round(Number(value) / 1000000)}tr`} />
+                          <Tooltip formatter={(value) => [formatMoney(Number(value)), "Tiền giảm"]} />
+                          <Legend verticalAlign="bottom" height={32} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                          <Bar dataKey="ROOM" name={promotionScopeLabels.ROOM} fill={promotionScopeColors.ROOM} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="SERVICE" name={promotionScopeLabels.SERVICE} fill={promotionScopeColors.SERVICE} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="TOTAL" name={promotionScopeLabels.TOTAL} fill={promotionScopeColors.TOTAL} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
+                          {promotionChartData[0].UNKNOWN > 0 && (
+                            <Bar dataKey="UNKNOWN" name={promotionScopeLabels.UNKNOWN} fill={promotionScopeColors.UNKNOWN} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
+                          )}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="py-12 text-center text-xs text-slate-400">Chưa có số tiền giảm để so sánh.</p>
+                    )}
+                  </div>
+                  <div className="max-h-[300px] space-y-2 overflow-y-auto">
+                    {promotionBreakdown.map((promotion) => (
+                      <article key={`${promotion.code}-${promotion.name}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-slate-800">{promotion.name}</p>
+                            <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: promotionScopeColors[promotion.scope] }}>
+                              {promotionScopeLabels[promotion.scope]}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">{promotion.code}</p>
+                          <p className="mt-1 text-xs font-medium text-slate-600">{promotion.userCount} khách · {promotion.usageCount} lượt dùng</p>
+                        </div>
+                        <p className="shrink-0 text-sm font-bold text-emerald-700">{formatMoney(promotion.savings)}</p>
+                      </article>
+                    ))}
+                  </div>
                 </div>
               )}
             </section>

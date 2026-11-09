@@ -6,6 +6,7 @@ import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { useGetHotelReportQuery } from "../services/reportApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
@@ -132,7 +133,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const [formError, setFormError] = useState("");
   const pendingLocalPromotionName = useRef("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(12);
+  const [pageSize, setPageSize] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | PromotionStatus>("ALL");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -160,6 +161,22 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const locale = i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN";
   const monthStartKey = dateKey(calendarMonth);
   const monthEndKey = dateKey(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0));
+  const {
+    data: promotionUsageReport,
+    isLoading: isPromotionUsageLoading,
+    isError: isPromotionUsageError,
+  } = useGetHotelReportQuery({
+    startDate: monthStartKey,
+    endDate: monthEndKey,
+    ...(isSystemAdmin && selectedBranchId
+      ? { hotelId: Number(selectedBranchId) }
+      : !isSystemAdmin && hasHotelId
+        ? { hotelId: Number(hotelId) }
+        : {}),
+  }, { skip: !hasHotelId && !isSystemAdmin });
+  const promotionSavingsById = new Map(
+    (promotionUsageReport?.promotions ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
+  );
   const promotionDateMarkers = useMemo(() => {
     const markers: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">> = {};
     displayedPromotions.forEach((promotion) => {
@@ -824,90 +841,99 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
           <p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery || statusFilter !== "ALL" ? label("noPromotionsMatchingFilters") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p>
         ) : (
           <>
-            <div className="divide-y divide-slate-100">
-              {paginatedPromotions.map((promotion) => {
-                const scope = promotionScopeOf(promotion);
-                const status = promotionStatusOf(promotion);
-                return (
-                <article
-                  key={promotion.id}
-                  className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(410px,auto)] lg:items-center"
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className={`grid h-10 w-10 place-items-center rounded-xl ${scopeColorClasses[scope]}`}>
-                      <Tag size={18} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-bold text-slate-900">
-                          {promotion.name}
-                        </h4>
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${scopeColorClasses[scope]}`}>
-                          {label(scopeLabelKeys[scope])}
-                        </span>
-                        {promotion.code ? (
-                          <button
-                            type="button"
-                            onClick={() => copyCode(promotion.code)}
-                            title={label("copyCode")}
-                            className="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600"
-                          >
-                            <Copy size={11} />
-                            {copied === promotion.code ? label("copied") : promotion.code}
-                          </button>
-                        ) : <span className="text-xs text-slate-400">{label("codeGenerated")}</span>}
-                      </div>
-                      <p className="mt-1 truncate text-sm text-slate-500" title={promotion.description}>
-                        {promotion.description}
-                      </p>
-                      <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-                        <CalendarDays size={13} />
-                        {formatDate(promotion.startDate)} –{" "}
-                        {formatDate(promotion.endDate)}
-                      </p>
-                      <p className="mt-2 text-xs font-medium text-slate-500">
-                        {label("claimedCount")}: {(promotion.claimedCount ?? 0).toLocaleString(locale)}
-                        <span className="mx-2 text-slate-300">·</span>
-                        {label("usedCount")}: {(promotion.usedCount ?? 0).toLocaleString(locale)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_120px_90px] lg:justify-items-stretch">
-                    <div className="min-w-0 text-right">
-                      <p className="text-xs text-slate-400">
-                        {label("offerLevel")}
-                      </p>
-                      <p className="mt-1 text-xl font-bold text-slate-900">
-                        {formatValue(promotion)}
-                      </p>
-                    </div>
-                    <div className="flex w-full justify-center">
-                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
-                        {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setDetailPromotion(promotion)}
-                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    >
-                      <Eye size={14} />
-                      {label("viewDetails")}
-                    </button>
-                    {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) ? <button
-                      type="button"
-                      onClick={() => openEditPromotion(promotion)}
-                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    >
-                      <Pencil size={14} />
-                      {label("edit")}
-                    </button> : <span aria-hidden="true" />}
-                  </div>
-                </article>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
+                  <tr>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("programName")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("scope")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("validity")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("offerLevel")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("claimedCount")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("usedCount")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("usedValue")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("status")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("actions")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedPromotions.map((promotion) => {
+                    const scope = promotionScopeOf(promotion);
+                    const status = promotionStatusOf(promotion);
+                    return (
+                      <tr key={promotion.id} className="text-slate-700 transition hover:bg-slate-50/70">
+                        <td className="max-w-80 px-5 py-3">
+                          <p className="truncate font-semibold text-slate-900" title={promotion.name}>{promotion.name}</p>
+                          {promotion.description && <p className="mt-1 truncate text-xs text-slate-500" title={promotion.description}>{promotion.description}</p>}
+                          {promotion.code ? (
+                            <button
+                              type="button"
+                              onClick={() => copyCode(promotion.code)}
+                              title={label("copyCode")}
+                              className="mt-1 inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 transition hover:bg-slate-200"
+                            >
+                              <Copy size={11} />
+                              {copied === promotion.code ? label("copied") : promotion.code}
+                            </button>
+                          ) : <span className="mt-1 inline-block text-xs text-slate-400">{label("codeGenerated")}</span>}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${scopeColorClasses[scope]}`}>
+                            {label(scopeLabelKeys[scope])}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-slate-600">
+                          <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} className="text-slate-400" />{formatDate(promotion.startDate)} – {formatDate(promotion.endDate)}</span>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-right font-bold text-slate-900">{formatValue(promotion)}</td>
+                        <td className="px-5 py-3 text-right tabular-nums">{(promotion.claimedCount ?? 0).toLocaleString(locale)}</td>
+                        <td className="px-5 py-3 text-right tabular-nums">{(promotion.usedCount ?? 0).toLocaleString(locale)}</td>
+                        <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
+                          {isPromotionUsageLoading
+                            ? "…"
+                            : isPromotionUsageError
+                              ? "—"
+                              : `${(promotionSavingsById.get(promotion.id) ?? 0).toLocaleString(locale)}${locale === "en-US" ? " VND" : "đ"}`}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
+                            {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <div className="grid grid-cols-[80px_96px] justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setDetailPromotion(promotion)}
+                              className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-blue-200 px-2 py-2 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"
+                            >
+                              <Eye size={14} />
+                              {label("viewDetails")}
+                            </button>
+                            {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) ? (
+                              <button
+                                type="button"
+                                onClick={() => openEditPromotion(promotion)}
+                                className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-200 px-2 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+                              >
+                                <Pencil size={16} className="shrink-0" aria-hidden="true" />
+                                {label("edit")}
+                              </button>
+                            ) : <span aria-hidden="true" />}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <ListPagination totalItems={visiblePromotions.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={setPage} onPageSizeChange={setPageSize} />
+            {isPromotionUsageError && (
+              <p role="alert" className="border-t border-rose-100 px-5 py-3 text-xs text-rose-700">
+                {label("usageValueLoadError")}
+              </p>
+            )}
+            <ListPagination totalItems={visiblePromotions.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </section>

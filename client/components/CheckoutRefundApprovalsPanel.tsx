@@ -13,8 +13,10 @@ import {
   type CheckoutRefund,
 } from "../services/managementBookingApi";
 
-const money = (amount: number) =>
-  `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}₫`;
+const money = (amount: number) => {
+  const isEnglish = localStorage.getItem("language") === "en";
+  return `${new Intl.NumberFormat(isEnglish ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}${isEnglish ? " VND" : "đ"}`;
+};
 
 const dateTime = (value?: string | null) => {
   if (!value) return "—";

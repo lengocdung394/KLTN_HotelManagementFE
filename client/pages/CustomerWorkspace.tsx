@@ -172,7 +172,6 @@ export default function CustomerWorkspace() {
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${tierStyle[customer.tier]}`}>{tierLabel(customer.tier)}</span>
                       </span>
                       <span className="mt-1 block truncate text-xs text-slate-500"><Phone size={12} className="mr-1 inline" />{customer.phone}</span>
-                      <span className="mt-1 block truncate text-xs text-slate-500"><BedDouble size={12} className="mr-1 inline" />{t("customer.roomAmount")}: {formatMoney(customer.totalRoomAmount)}</span>
                     </span>
                   </button>
                   <div className="grid flex-1 grid-cols-2 gap-3 border-t border-slate-200 pt-3 sm:grid-cols-4 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
@@ -191,7 +190,7 @@ export default function CustomerWorkspace() {
                       {isExpanded ? t("customer.hideBookings") : t("customer.viewBookings")}
                       <ChevronDown size={15} className={`transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                     </button>
-                    {canManageCustomers && <button type="button" onClick={() => openEdit(customer)} aria-label={t("customer.edit")} title={t("customer.edit")} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"><Pencil size={16} /></button>}
+                    {canManageCustomers && <button type="button" onClick={() => openEdit(customer)} aria-label={t("customer.edit")} title={t("customer.edit")} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-amber-200 text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"><Pencil size={16} /></button>}
                   </div>
                 </div>
                 {isExpanded && <div className="border-t border-slate-200 p-4">

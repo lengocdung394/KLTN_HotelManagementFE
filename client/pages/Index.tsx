@@ -284,11 +284,11 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {t("dashboard.todayRevenue")}
               </p>
               <p className="mt-4 text-[26px] font-bold">
-                {reportLoading ? "—" : reportError ? t("dashboard.error") : new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", {
-                  style: "currency",
-                  currency: "VND",
-                  maximumFractionDigits: 0,
-                }).format(Number(dailyReport?.netCashReceived ?? 0))}
+                {reportLoading
+                  ? "—"
+                  : reportError
+                    ? t("dashboard.error")
+                    : `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(dailyReport?.netCashReceived ?? 0))}${i18n.language.startsWith("en") ? " VND" : "đ"}`}
               </p>
               <p className="mt-1 text-xs text-blue-100">
                 {reportError ? t("dashboard.revenueLoadError") : t("dashboard.netRevenueDescription")}
