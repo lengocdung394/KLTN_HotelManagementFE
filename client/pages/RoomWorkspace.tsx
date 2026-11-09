@@ -1365,36 +1365,36 @@ export default function RoomWorkspace() {
     }).join(" · ");
     setRoomFormErrors({});
     const errors: RoomFormErrors = {};
-    if (!roomCode) errors.roomNumber = "Vui lòng nhập số phòng.";
+    if (!roomCode) errors.roomNumber = localizedText("Vui lòng nhập số phòng.", "Enter a room number.");
     if (rooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase() && room.id !== editingRoomId)) {
-      errors.roomNumber = "Số phòng đã tồn tại, vui lòng nhập số khác.";
+      errors.roomNumber = localizedText("Số phòng đã tồn tại, vui lòng nhập số khác.", "This room number already exists. Enter a different one.");
     }
     if (!roomType || !area || !Number.isFinite(area) || area <= 0 || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
-      errors.form = "Vui lòng kiểm tra thông tin loại phòng và cấu hình giá trước khi lưu.";
+      errors.form = localizedText("Vui lòng kiểm tra thông tin loại phòng và cấu hình giá trước khi lưu.", "Check the room type and pricing details before saving.");
     }
     if (!isEditingRoom) {
-      if (!createRoomForm.building) errors.building = "Vui lòng chọn tòa nhà.";
+      if (!createRoomForm.building) errors.building = localizedText("Vui lòng chọn tòa nhà.", "Select a building.");
       const selectedFloor = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor || item.name === createRoomForm.floor);
-      if (!selectedFloor?.id) errors.floor = "Vui lòng chọn tầng hợp lệ.";
-      if (roomImageFiles.length < 4) errors.images = "Vui lòng tải lên ít nhất 4 ảnh phòng.";
-      if (!description) errors.description = "Vui lòng nhập mô tả phòng.";
+      if (!selectedFloor?.id) errors.floor = localizedText("Vui lòng chọn tầng hợp lệ.", "Select a valid floor.");
+      if (roomImageFiles.length < 4) errors.images = localizedText("Vui lòng tải lên ít nhất 4 ảnh phòng.", "Upload at least 4 room photos.");
+      if (!description) errors.description = localizedText("Vui lòng nhập mô tả phòng.", "Enter a room description.");
     } else if (!createRoomForm.floor) {
-      errors.floor = "Vui lòng chọn tầng hợp lệ.";
+      errors.floor = localizedText("Vui lòng chọn tầng hợp lệ.", "Select a valid floor.");
     }
     const invalidBedQuantities = createRoomForm.bedConfigurations.reduce<Record<number, string>>((bedErrors, bed) => {
       if (!Number.isSafeInteger(Number(bed.quantity)) || Number(bed.quantity) < 1) {
-        bedErrors[Number(bed.bedTypeId)] = "Nhập số lượng giường là số nguyên lớn hơn 0.";
+        bedErrors[Number(bed.bedTypeId)] = localizedText("Nhập số lượng giường là số nguyên lớn hơn 0.", "Enter a whole number of beds greater than 0.");
       }
       return bedErrors;
     }, {});
     if (createRoomForm.bedConfigurations.length === 0) {
-      errors.beds = "Vui lòng chọn ít nhất một loại giường.";
+      errors.beds = localizedText("Vui lòng chọn ít nhất một loại giường.", "Select at least one bed type.");
     } else if (Object.keys(invalidBedQuantities).length > 0) {
       errors.bedQuantities = invalidBedQuantities;
     }
     if (Object.keys(errors).length > 0) {
       setRoomFormErrors(isEditingRoom
-        ? { form: errors.form ?? errors.roomNumber ?? errors.floor ?? errors.beds ?? "Vui lòng kiểm tra lại thông tin phòng." }
+        ? { form: errors.form ?? errors.roomNumber ?? errors.floor ?? errors.beds ?? localizedText("Vui lòng kiểm tra lại thông tin phòng.", "Check the room details and try again.") }
         : errors);
       return;
     }
@@ -1426,13 +1426,13 @@ export default function RoomWorkspace() {
             ? responseData.message
             : typeof errorRecord.message === "string"
               ? errorRecord.message
-              : "Không thể thêm phòng. Vui lòng thử lại.";
+              : localizedText("Không thể thêm phòng. Vui lòng thử lại.", "Could not add the room. Please try again.");
         setRoomFormErrors({ form: message });
       }
       return;
     }
     if (!editingRoomDatabaseId) {
-      setRoomFormErrors({ form: "Không tìm thấy ID phòng từ máy chủ. Vui lòng tải lại danh sách phòng." });
+      setRoomFormErrors({ form: localizedText("Không tìm thấy ID phòng từ máy chủ. Vui lòng tải lại danh sách phòng.", "The room ID was not found. Reload the room list and try again.") });
       return;
     }
     const updateDefaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
@@ -1465,7 +1465,7 @@ export default function RoomWorkspace() {
           ? responseData.message
           : typeof errorRecord.message === "string"
             ? errorRecord.message
-            : "Không thể cập nhật phòng. Vui lòng thử lại.";
+            : localizedText("Không thể cập nhật phòng. Vui lòng thử lại.", "Could not update the room. Please try again.");
       setRoomFormErrors({ form: message });
       return;
     }

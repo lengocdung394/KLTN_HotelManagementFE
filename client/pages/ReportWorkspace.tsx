@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, BedDouble, CalendarDays, Tag, TrendingUp, XCircle } from "lucide-react";
+import { BarChart3, BedDouble, CalendarDays, RefreshCw, Tag, TrendingUp, XCircle } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -21,7 +21,7 @@ import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
 import ListPagination from "../components/ListPagination";
 import FilterSelect from "../components/FilterSelect";
-import { FilterResetButton } from "../components/SearchableFilter";
+import DatePickerPopover from "../components/DatePickerPopover";
 import {
   buildBookingRevenueChartData,
   buildRevenueChartData,
@@ -42,6 +42,9 @@ const EMPTY_PROMOTIONS: Promotion[] = [];
 
 const localDateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+const dateFromLocalDateString = (value: string) =>
+  value ? new Date(`${value}T00:00:00`) : undefined;
 
 const formatMoney = (amount: number) =>
   localizedText(
@@ -399,37 +402,48 @@ export default function ReportWorkspace() {
               </FilterSelect>
             </label>
           )}
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">
-            {localizedText("Từ ngày", "From")}
-            <div className="relative mt-1">
-              <input
-                type="date"
-                value={startDate}
-                max={endDate || undefined}
-                onChange={(event) => { setStartDate(event.target.value); setReportPeriod("custom"); }}
-                className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
-              />
-            </div>
-          </label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">
-            {localizedText("Đến ngày", "To")}
-            <div className="relative mt-1">
-              <input
-                type="date"
-                value={endDate}
-                min={startDate || undefined}
-                max={today}
-                onChange={(event) => { setEndDate(event.target.value); setReportPeriod("custom"); }}
-                className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
-              />
-            </div>
-          </label>
-          <div className="flex items-end">
-            <FilterResetButton
-              onClick={resetReportFilters}
-              label={localizedText("Xóa bộ lọc", "Clear filters")}
-              showLabel
+          <div className="min-w-0 text-xs font-semibold text-slate-500">
+            <p className="mb-1">{localizedText("Từ ngày", "From")}</p>
+            <DatePickerPopover
+              value={dateFromLocalDateString(startDate)}
+              onChange={(date) => {
+                if (!date) return;
+                setStartDate(localDateString(date));
+                setReportPeriod("custom");
+              }}
+              maxDate={dateFromLocalDateString(endDate)}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              align="start"
+              buttonClassName="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 transition hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
+          </div>
+          <div className="min-w-0 text-xs font-semibold text-slate-500">
+            <p className="mb-1">{localizedText("Đến ngày", "To")}</p>
+            <DatePickerPopover
+              value={dateFromLocalDateString(endDate)}
+              onChange={(date) => {
+                if (!date) return;
+                setEndDate(localDateString(date));
+                setReportPeriod("custom");
+              }}
+              minDate={dateFromLocalDateString(startDate)}
+              maxDate={dateFromLocalDateString(today)}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              align="start"
+              buttonClassName="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 transition hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={resetReportFilters}
+              aria-label={localizedText("Khôi phục mặc định", "Reset to default")}
+              title={localizedText("Khôi phục mặc định", "Reset to default")}
+              className="flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            >
+              <RefreshCw size={15} />
+              <span className="text-xs font-medium">{localizedText("Mặc định", "Default")}</span>
+            </button>
           </div>
           {startDate > endDate && (
             <p role="alert" className="w-full text-xs text-rose-600">{localizedText("Ngày bắt đầu không được sau ngày kết thúc.", "The start date must be on or before the end date.")}</p>

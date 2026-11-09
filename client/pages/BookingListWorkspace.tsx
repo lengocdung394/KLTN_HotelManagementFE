@@ -809,7 +809,7 @@ export default function BookingListWorkspace() {
     if (!selectedBooking) return;
     const id = bookingId(selectedBooking);
     if (!id || id === "-") {
-      setCancelError("Không tìm thấy mã booking để hủy.");
+      setCancelError(localizedText("Không tìm thấy mã booking để hủy.", "Could not find the booking ID to cancel."));
       return;
     }
     if (!cancellationPreview || cancellationPreview.bookingId !== id) {
@@ -817,7 +817,7 @@ export default function BookingListWorkspace() {
       return;
     }
     if (cancelRefundEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cancelRefundEmail.trim())) {
-      setCancelError("Vui lòng nhập email khách hàng hợp lệ.");
+      setCancelError(localizedText("Vui lòng nhập email khách hàng hợp lệ.", "Enter a valid guest email address."));
       return;
     }
     if (cancelRefundMethod === "CASH"
@@ -831,7 +831,10 @@ export default function BookingListWorkspace() {
       && (!cancelBankDetails.bankName.trim()
         || !cancelBankDetails.bankAccountName.trim()
         || !/^[0-9]{6,50}$/.test(cancelBankDetails.bankAccountNumber.trim()))) {
-      setCancelError("Nếu nhập thông tin hoàn tiền, vui lòng nhập tên ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ (6–50 chữ số).");
+      setCancelError(localizedText(
+        "Nếu nhập thông tin hoàn tiền, vui lòng nhập tên ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ (6–50 chữ số).",
+        "If providing refund details, enter a bank name, account holder name, and a valid account number (6–50 digits).",
+      ));
       return;
     }
     setCancelError("");

@@ -3,10 +3,10 @@ import {
   AlertCircle,
   Banknote,
   Check,
-  Copy,
   ClipboardCheck,
   LoaderCircle,
   RefreshCw,
+  Search,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -16,6 +16,7 @@ import CheckoutRefundApprovalsPanel from "../components/CheckoutRefundApprovalsP
 import DatePickerPopover from "../components/DatePickerPopover";
 import ListPagination from "../components/ListPagination";
 import FilterResultStatus from "../components/FilterResultStatus";
+import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
 import { localizedText } from "../i18n";
 import {
   useApproveBookingRefundMutation,
@@ -126,6 +127,7 @@ export default function RefundApprovalWorkspace() {
   const [submitBankDetails, { isLoading: isSavingBankDetails }] = useSubmitRefundBankDetailsByStaffMutation();
   const [filter, setFilter] = useState<CancellationFilter>("ALL");
   const [channelFilter, setChannelFilter] = useState<BookingChannelFilter>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeQueue, setActiveQueue] = useState<RefundQueue>("overpayment");
   const [selectedRequestDate, setSelectedRequestDate] = useState<string | null>(null);
   const [cancellationPage, setCancellationPage] = useState(1);
@@ -147,21 +149,6 @@ export default function RefundApprovalWorkspace() {
   const [refundEmail, setRefundEmail] = useState("");
   const [actionError, setActionError] = useState("");
   const [feedback, setFeedback] = useState("");
-  const [copyError, setCopyError] = useState("");
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  const copyValue = async (value: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedField(field);
-      setCopyError("");
-      window.setTimeout(() => {
-        setCopiedField((current) => current === field ? null : current);
-      }, 1500);
-    } catch {
-      setCopyError(localizedText("Không thể sao chép. Vui lòng kiểm tra quyền clipboard của trình duyệt.", "Could not copy. Check your browser's clipboard permissions."));
-    }
-  };
 
   const counts = useMemo(() => {
     const reviewPending = cancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length;
@@ -203,13 +190,14 @@ export default function RefundApprovalWorkspace() {
   const refundRequestDates = useMemo(() => Array.from(refundRequestsByDate.keys()), [refundRequestsByDate]);
 
   const visibleCancellations = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const byStatus = filter === "ALL"
       ? cancellations
       : cancellations.filter((item) => item.status === filter);
     const byChannel = channelFilter === "ALL"
       ? byStatus
       : byStatus.filter((item) => item.bookingChannel === channelFilter);
-    const filtered = selectedRequestDate
+    const byDate = selectedRequestDate
       ? byChannel.filter((item) => {
           if (Number(item.refundAmount) <= 0 || !item.requestedAt) return false;
           const date = new Date(item.requestedAt);
@@ -218,10 +206,20 @@ export default function RefundApprovalWorkspace() {
           return key === selectedRequestDate;
         })
       : byChannel;
+    const filtered = normalizedQuery
+      ? byDate.filter((item) => [
+          item.bookingId,
+          item.customerName,
+          item.customerPhone,
+          item.reason,
+        ].some((value) =>
+          (value ?? "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normalizedQuery),
+        ))
+      : byDate;
     return [...filtered].sort((first, second) =>
       new Date(second.requestedAt ?? 0).getTime() - new Date(first.requestedAt ?? 0).getTime(),
     );
-  }, [cancellations, channelFilter, filter, selectedRequestDate]);
+  }, [cancellations, channelFilter, filter, searchQuery, selectedRequestDate]);
   const cancellationTotalPages = Math.max(1, Math.ceil(visibleCancellations.length / cancellationPageSize));
   const safeCancellationPage = Math.min(cancellationPage, cancellationTotalPages);
   const paginatedCancellations = visibleCancellations.slice(
@@ -231,7 +229,7 @@ export default function RefundApprovalWorkspace() {
 
   useEffect(() => {
     setCancellationPage(1);
-  }, [filter, channelFilter, selectedRequestDate, cancellationPageSize]);
+  }, [filter, channelFilter, searchQuery, selectedRequestDate, cancellationPageSize]);
 
   useEffect(() => {
     if (cancellationPage > cancellationTotalPages) setCancellationPage(cancellationTotalPages);
@@ -407,7 +405,7 @@ export default function RefundApprovalWorkspace() {
   };
 
   const filters: { value: CancellationFilter; label: string }[] = [
-    { value: "ALL", label: localizedText("Tất cả", "All") },
+    { value: "ALL", label: localizedText("Tất cả trạng thái", "All statuses") },
     { value: "REFUND_REVIEW_PENDING", label: localizedText("Chờ duyệt", "Pending review") },
     { value: "REFUND_BANK_DETAILS_REQUIRED", label: localizedText("Chờ thông tin ngân hàng", "Awaiting bank details") },
     { value: "REFUND_APPROVED", label: localizedText("Chờ chuyển khoản", "Awaiting transfer") },
@@ -503,30 +501,6 @@ export default function RefundApprovalWorkspace() {
               <p className="mt-1 text-sm text-slate-500">
                 {localizedText("Theo dõi và duyệt khoản hoàn khi booking bị hủy; đây không phải khoản hoàn do hủy riêng một phòng.", "Review refunds when a booking is canceled; this does not cover cancellation of an individual room.")}
               </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  {localizedText("Ngày có yêu cầu", "Request dates")}
-                </span>
-                <DatePickerPopover
-                  value={selectedRequestDate ? new Date(`${selectedRequestDate}T00:00:00`) : undefined}
-                  onChange={(date) => setSelectedRequestDate(date
-                    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
-                    : null)}
-                  highlightDates={refundRequestDates}
-                  placeholder={localizedText("Chọn ngày", "Select date")}
-                  label={localizedText("Lịch yêu cầu", "Request calendar")}
-                />
-                {selectedRequestDate && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRequestDate(null)}
-                    className="rounded-lg px-2 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                  >
-                    {localizedText("Tất cả ngày", "All dates")}
-                  </button>
-                )}
-              </div>
             </div>
           </div>
           <button
@@ -548,52 +522,65 @@ export default function RefundApprovalWorkspace() {
             </button>
           </div>
         )}
-        {copyError && (
-          <p role="alert" className="mx-5 mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            {copyError}
-          </p>
-        )}
-
-        <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-5 py-3">
-          {filters.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => setFilter(item.value)}
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                filter === item.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {item.label}
-              {item.value === "REFUND_REVIEW_PENDING" && counts.reviewPending > 0 && (
-                <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5">{counts.reviewPending}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <span className="mr-1 text-xs font-semibold text-slate-500">{localizedText("Kênh đặt:", "Booking channel:")}</span>
-          {([
-            ["ALL", localizedText("Tất cả", "All")],
-            ["ONLINE", localizedText("Online", "Online")],
-            ["OFFLINE", localizedText("Tại quầy / Offline", "Front desk / Offline")],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setChannelFilter(value)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                channelFilter === value
-                  ? "bg-violet-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3 xl:flex-nowrap">
+          <label className="relative min-w-[220px] flex-1">
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={localizedText("Tìm mã booking, khách hàng...", "Search booking ID or guest...")}
+              aria-label={localizedText("Tìm mã booking hoặc khách hàng", "Search booking ID or guest")}
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          <SearchableFilter
+              value={filter}
+              options={filters.map((item) => ({
+                value: item.value,
+                label: item.value === "REFUND_REVIEW_PENDING" && counts.reviewPending > 0
+                  ? `${item.label} (${counts.reviewPending})`
+                  : item.label,
+              }))}
+              onChange={(value) => setFilter(value as CancellationFilter)}
+              ariaLabel={localizedText("Lọc theo trạng thái hoàn tiền", "Filter by refund status")}
+              searchPlaceholder={localizedText("Tìm trạng thái...", "Search statuses...")}
+              emptyMessage={localizedText("Không tìm thấy trạng thái.", "No statuses found.")}
+              className="w-56"
+          />
+          <SearchableFilter
+            value={channelFilter}
+            options={[
+              { value: "ALL", label: localizedText("Tất cả kênh", "All channels") },
+              { value: "ONLINE", label: localizedText("Online", "Online") },
+              { value: "OFFLINE", label: localizedText("Tại quầy / Offline", "Front desk / Offline") },
+            ]}
+            onChange={(value) => setChannelFilter(value as BookingChannelFilter)}
+            ariaLabel={localizedText("Lọc theo kênh đặt", "Filter by booking channel")}
+            searchPlaceholder={localizedText("Tìm kênh đặt...", "Search booking channels...")}
+            emptyMessage={localizedText("Không tìm thấy kênh đặt.", "No booking channels found.")}
+            className="w-52"
+          />
+          <DatePickerPopover
+            value={selectedRequestDate ? new Date(`${selectedRequestDate}T00:00:00`) : undefined}
+            onChange={(date) => setSelectedRequestDate(date
+              ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+              : null)}
+            highlightDates={refundRequestDates}
+            placeholder={localizedText("Tất cả phạm vi", "All date ranges")}
+            buttonClassName="flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+          />
+          {(searchQuery.trim() || filter !== "ALL" || channelFilter !== "ALL" || selectedRequestDate) && (
+            <FilterResetButton
+              onClick={() => {
+                setSearchQuery("");
+                setFilter("ALL");
+                setChannelFilter("ALL");
+                setSelectedRequestDate(null);
+              }}
+              label={localizedText("Xóa bộ lọc", "Reset filters")}
+            />
+          )}
         </div>
 
         {isLoading ? (
@@ -614,11 +601,11 @@ export default function RefundApprovalWorkspace() {
             </button>
           </div>
         ) : visibleCancellations.length === 0 ? (
-          <FilterResultStatus filterKey={JSON.stringify([filter, channelFilter, selectedRequestDate])}><div className="p-12 text-center">
+          <FilterResultStatus filterKey={JSON.stringify([filter, channelFilter, selectedRequestDate, searchQuery])}><div className="p-12 text-center">
             <ClipboardCheck size={28} className="mx-auto text-slate-300" />
             <p className="mt-3 text-sm font-semibold text-slate-700">
-              {selectedRequestDate
-                ? localizedText("Không có yêu cầu hoàn tiền phù hợp trong ngày đã chọn", "No refund requests match the selected date")
+              {selectedRequestDate || channelFilter !== "ALL" || searchQuery.trim()
+                ? localizedText("Không có yêu cầu phù hợp với bộ lọc", "No requests match these filters")
                 : filter === "ALL" ? localizedText("Chưa có yêu cầu hủy cần xử lý", "There are no cancellation requests to review") : localizedText("Không có yêu cầu ở trạng thái này", "No requests in this status")}
             </p>
             <p className="mt-1 text-xs text-slate-500">
@@ -628,49 +615,53 @@ export default function RefundApprovalWorkspace() {
         ) : (
           <>
             <div className="max-w-full overflow-x-auto">
-              <table className="w-[max(900px,100%)] table-fixed text-left text-sm">
+              <table className="w-[max(1600px,100%)] table-fixed text-left text-sm">
               <thead className="bg-blue-50 text-[11px] uppercase tracking-wide text-blue-800">
                 <tr>
-                  <th className="w-[23%] px-3 py-3">{localizedText("Booking / khách", "Booking / guest")}</th>
-                  <th className="w-[13%] px-3 py-3">{localizedText("Ngày yêu cầu", "Request date")}</th>
-                  <th className="w-[21%] px-3 py-3">{localizedText("Tài khoản nhận", "Recipient account")}</th>
-                  <th className="w-[18%] px-3 py-3">{localizedText("Chi tiết hoàn", "Refund details")}</th>
-                  <th className="w-[25%] px-3 py-3">{localizedText("Trạng thái / thao tác", "Status / actions")}</th>
+                  <th className="w-[12%] px-3 py-3">{localizedText("Mã booking", "Booking ID")}</th>
+                  <th className="w-[11%] px-3 py-3">{localizedText("Khách hàng", "Guest")}</th>
+                  <th className="w-[8%] px-3 py-3">{localizedText("Kênh đặt", "Channel")}</th>
+                  <th className="w-[10%] px-3 py-3">{localizedText("Ngày yêu cầu", "Request date")}</th>
+                  <th className="w-[12%] px-3 py-3">{localizedText("Lý do", "Reason")}</th>
+                  <th className="w-[14%] px-3 py-3">{localizedText("Tài khoản nhận", "Recipient account")}</th>
+                  <th className="w-[13%] px-3 py-3">{localizedText("Chi tiết hoàn", "Refund details")}</th>
+                  <th className="w-[12%] px-3 py-3">{localizedText("Trạng thái", "Status")}</th>
+                  <th className="w-[8%] px-3 py-3">{localizedText("Thao tác", "Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginatedCancellations.map((cancellation) => (
                   <tr key={cancellation.id} className="align-top transition-colors hover:bg-slate-50/70">
                     <td className="px-3 py-4">
-                      <p className="break-words font-semibold text-blue-700">{cancellation.bookingId}</p>
-                      {cancellation.bookingChannel && (
-                          <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            cancellation.bookingChannel === "ONLINE" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700"
-                          }`}>
-                            {cancellation.bookingChannel === "ONLINE" ? "Online" : localizedText("Tại quầy", "Front desk")}
-                          </span>
-                      )}
-                      <div className="mt-2 flex min-w-0 items-center gap-1">
-                        <p className="truncate font-medium text-slate-800">{cancellation.customerName || localizedText("Khách hàng", "Guest")}</p>
-                        {cancellation.customerName && (
-                          <CopyValueButton
-                            label={localizedText("tên khách hàng", "guest name")}
-                            value={cancellation.customerName}
-                            copied={copiedField === `${cancellation.id}:customer`}
-                            onCopy={() => void copyValue(cancellation.customerName!, `${cancellation.id}:customer`)}
-                          />
-                        )}
-                      </div>
+                      <p className="whitespace-nowrap font-semibold text-blue-700">{cancellation.bookingId}</p>
+                    </td>
+                    <td className="px-3 py-4">
+                      <p className="whitespace-nowrap font-medium text-slate-800">{cancellation.customerName || localizedText("Khách hàng", "Guest")}</p>
                       {cancellation.customerPhone && (
-                        <p className="mt-0.5 text-xs text-slate-500">{cancellation.customerPhone}</p>
-                      )}
-                      {cancellation.reason && (
-                        <p className="mt-2 line-clamp-2 text-xs leading-4 text-slate-500" title={cancellation.reason}>
-                          {localizedText("Lý do:", "Reason:")} {cancellation.reason}
-                        </p>
+                        <p className="mt-0.5 whitespace-nowrap text-xs text-slate-500">{cancellation.customerPhone}</p>
                       )}
                     </td>
-                    <td className="px-3 py-4 text-xs leading-5 text-slate-600">{dateTime(cancellation.requestedAt)}</td>
+                    <td className="px-3 py-4">
+                      {cancellation.bookingChannel ? (
+                        <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${
+                          cancellation.bookingChannel === "ONLINE" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700"
+                        }`}>
+                          {cancellation.bookingChannel === "ONLINE" ? "Online" : localizedText("Tại quầy", "Front desk")}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-4 text-xs leading-5 text-slate-600">{dateTime(cancellation.requestedAt)}</td>
+                    <td className="px-3 py-4">
+                      {cancellation.reason ? (
+                        <p className="line-clamp-3 break-words text-xs leading-4 text-slate-600" title={cancellation.reason}>
+                          {cancellation.reason}
+                        </p>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-4">
                       {cancellation.refundMethod === "CASH" ? (
                         <span className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-700">
@@ -742,13 +733,13 @@ export default function RefundApprovalWorkspace() {
                       )}
                     </td>
                     <td className="px-3 py-4">
-                      <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
+                      <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
                         {cancellation.status === "NO_REFUND_REQUIRED"
                           ? localizedText("Không hoàn", "No refund")
                           : localizedText(...statusLabels[cancellation.status])}
                       </span>
                       {cancellation.payoutState && (
-                        <span className="mt-1 inline-flex max-w-full whitespace-normal break-words rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                        <span className="mt-1 inline-flex whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
                           {localizedText(...payoutStateLabels[cancellation.payoutState])}
                         </span>
                       )}
@@ -769,7 +760,9 @@ export default function RefundApprovalWorkspace() {
                           {cancellation.payoutError}
                         </p>
                       )}
-                      <div className="mt-3 flex flex-col items-start gap-2">
+                    </td>
+                    <td className="px-3 py-4">
+                      <div className="flex flex-col items-start gap-2">
                         {canApproveRefund && cancellation.status === "REFUND_REVIEW_PENDING" && (
                           <>
                             <button
@@ -892,17 +885,7 @@ export default function RefundApprovalWorkspace() {
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">{localizedText("Khách hàng", "Guest")}</span>
-                <div className="flex items-center gap-1.5 text-right font-semibold text-slate-800">
-                  <span>{activeCancellation.customerName || "—"}</span>
-                  {activeCancellation.customerName && (
-                    <CopyValueButton
-                      label={localizedText("tên khách hàng", "guest name")}
-                      value={activeCancellation.customerName}
-                      copied={copiedField === `${activeCancellation.id}:customer`}
-                      onCopy={() => void copyValue(activeCancellation.customerName!, `${activeCancellation.id}:customer`)}
-                    />
-                  )}
-                </div>
+                <span className="text-right font-semibold text-slate-800">{activeCancellation.customerName || "—"}</span>
               </div>
               <div className="mt-2 flex justify-between gap-3">
                 <span className="text-slate-500">{localizedText("Số tiền hoàn", "Refund amount")}</span>
@@ -1216,31 +1199,6 @@ export default function RefundApprovalWorkspace() {
         </div>
       )}
     </section>
-  );
-}
-
-function CopyValueButton({
-  label,
-  value,
-  copied,
-  onCopy,
-}: {
-  label: string;
-  value?: string;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onCopy}
-      aria-label={copied ? `${localizedText("Đã sao chép", "Copied")} ${label}` : `${localizedText("Sao chép", "Copy")} ${label}`}
-      title={copied ? localizedText("Đã sao chép", "Copied") : `${localizedText("Sao chép", "Copy")} ${label}`}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50"
-    >
-      {copied ? <Check size={12} /> : <Copy size={12} />}
-      {copied ? localizedText("Đã copy", "Copied") : "Copy"}
-    </button>
   );
 }
 

@@ -4,6 +4,7 @@ import ListPagination from "./ListPagination";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 import type { AmenityResponse } from "../services/amenityApi";
+import { localizedText } from "../i18n";
 
 type RoomAmenitiesTabProps = {
   amenities: AmenityResponse[];
@@ -53,14 +54,19 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   const saveNewAmenity = async () => {
     const name = createForm.name.trim();
     const price = Number(createForm.price);
-    if (!name || !createForm.price || !Number.isFinite(price) || price < 0) return;
+    if (!name || !createForm.price || !Number.isFinite(price) || price < 0) {
+      setSaveError(!name
+        ? localizedText("Vui lòng nhập tên tiện ích.", "Enter an amenity name.")
+        : localizedText("Vui lòng nhập mức giá hợp lệ không âm.", "Enter a valid non-negative price."));
+      return;
+    }
     setIsSaving(true);
     setSaveError("");
     try {
       await onAdd({ name, price });
       closeCreateForm();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Không thể thêm tiện ích.");
+      setSaveError(error instanceof Error ? error.message : localizedText("Không thể thêm tiện ích.", "Could not add the amenity."));
     } finally {
       setIsSaving(false);
     }
@@ -70,14 +76,19 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
     if (!editingAmenity) return;
     const name = editForm.name.trim();
     const price = Number(editForm.price);
-    if (!name || !editForm.price || !Number.isFinite(price) || price < 0) return;
+    if (!name || !editForm.price || !Number.isFinite(price) || price < 0) {
+      setSaveError(!name
+        ? localizedText("Vui lòng nhập tên tiện ích.", "Enter an amenity name.")
+        : localizedText("Vui lòng nhập mức giá hợp lệ không âm.", "Enter a valid non-negative price."));
+      return;
+    }
     setIsSaving(true);
     setSaveError("");
     try {
       await onSave(editingAmenity, { name, price });
       closeEditor();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Không thể cập nhật tiện ích.");
+      setSaveError(error instanceof Error ? error.message : localizedText("Không thể cập nhật tiện ích.", "Could not update the amenity."));
     } finally {
       setIsSaving(false);
     }

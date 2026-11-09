@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff, Filter, Pencil, Plus, Search, Upload, UserRound, X } from "lucide-react";
+import { Eye, KeyRound, Pencil, Plus, Search, Upload, UserRound, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { uploadEmployeeImageToCloudinary, uploadImagesToCloudinary } from "../services/cloudinaryUploadApi";
 import {
@@ -9,8 +9,8 @@ import {
   type EmployeeRecord,
   type UpdateEmployeeRequest,
 } from "../services/employeeApi";
+import { useRequestPasswordResetMutation } from "../services/authApi";
 import { useAppSelector } from "../store/hooks";
-import FilterSelect from "./FilterSelect";
 import FilterResultStatus from "./FilterResultStatus";
 import BulkImportDialog from "./BulkImportDialog";
 import {
@@ -22,9 +22,12 @@ import {
 import { localizedText } from "../i18n";
 import ClearSearchButton from "./ClearSearchButton";
 import ListPagination from "./ListPagination";
+import { FilterResetButton } from "./SearchableFilter";
+import SearchableFilter from "./SearchableFilter";
 
 const MAX_EMPLOYEE_IMAGE_BYTES = 5 * 1024 * 1024;
 const EMPLOYEE_ROLES = ["Lễ tân", "Buồng phòng", "Bảo vệ"] as const;
+type AddEmployeeField = "name" | "role" | "email" | "identityNumber" | "phone" | "address" | "image";
 const employeeRoleLabel = (role: string) => role === "Lễ tân"
   ? localizedText(role, "Front desk")
   : role === "Buồng phòng"
@@ -33,7 +36,10 @@ const employeeRoleLabel = (role: string) => role === "Lễ tân"
       ? localizedText(role, "Security")
       : role;
 
-const getErrorMessage = (error: unknown) => {
+const getErrorMessage = (
+  error: unknown,
+  fallback = localizedText("Không thể tạo nhân viên. Vui lòng kiểm tra thông tin hoặc thử lại.", "Could not create employee. Check the information and try again."),
+) => {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "object" && error !== null && "data" in error) {
     const data = error.data;
@@ -41,7 +47,7 @@ const getErrorMessage = (error: unknown) => {
       return data.message;
     }
   }
-  return localizedText("Không thể tạo nhân viên. Vui lòng kiểm tra thông tin hoặc thử lại.", "Could not create employee. Check the information and try again.");
+  return fallback;
 };
 
 const getInitials = (fullName: string) =>
@@ -85,6 +91,7 @@ export default function EmployeeDirectory() {
   const { data: employees = [], isLoading, isError, error } = useGetMyHotelEmployeesQuery();
   const [createEmployee, { isLoading: isSaving }] = useCreateEmployeeMutation();
   const [updateEmployee, { isLoading: isUpdatingEmployee }] = useUpdateEmployeeMutation();
+  const [requestPasswordReset, { isLoading: isRequestingPasswordReset }] = useRequestPasswordResetMutation();
   const canManageBranchEmployees = isBranchManagerOrAdmin(roles, position);
   const [addOpen, setAddOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,6 +109,7 @@ export default function EmployeeDirectory() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<AddEmployeeField, string>>>({});
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [importProgress, setImportProgress] = useState("");
   const [importRows, setImportRows] = useState<EmployeeImportRowResult[]>([]);
@@ -115,10 +123,6 @@ export default function EmployeeDirectory() {
     address: "",
     position: EMPLOYEE_ROLES[0],
   });
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [editError, setEditError] = useState("");
   const filteredEmployees = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
@@ -138,6 +142,7 @@ export default function EmployeeDirectory() {
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedEmployees = filteredEmployees.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const hasActiveFilters = Boolean(searchQuery.trim()) || positionFilter !== "all";
 
   useEffect(() => {
     setPage(1);
@@ -161,6 +166,7 @@ export default function EmployeeDirectory() {
     setImageFile(null);
     setImagePreview("");
     setSaveError("");
+    setFieldErrors({});
   };
 
   const closeForm = () => {
@@ -171,6 +177,7 @@ export default function EmployeeDirectory() {
 
   const selectImage = (file: File | undefined) => {
     setSaveError("");
+    setFieldErrors((current) => ({ ...current, image: undefined }));
     if (!file) {
       setImageFile(null);
       setImagePreview("");
@@ -179,13 +186,13 @@ export default function EmployeeDirectory() {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setImageFile(null);
       setImagePreview("");
-      setSaveError("Ảnh nhân viên chỉ chấp nhận định dạng JPG, PNG hoặc WebP.");
+      setFieldErrors((current) => ({ ...current, image: localizedText("Ảnh chỉ chấp nhận định dạng JPG, PNG hoặc WebP.", "Only JPG, PNG, or WebP images are accepted.") }));
       return;
     }
     if (file.size > MAX_EMPLOYEE_IMAGE_BYTES) {
       setImageFile(null);
       setImagePreview("");
-      setSaveError("Ảnh nhân viên không được vượt quá 5 MB.");
+      setFieldErrors((current) => ({ ...current, image: localizedText("Ảnh không được vượt quá 5 MB.", "Image must not exceed 5 MB.") }));
       return;
     }
     setImageFile(file);
@@ -195,12 +202,20 @@ export default function EmployeeDirectory() {
   const addEmployee = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (addEmployeeInProgress.current) return;
+    const errors: Partial<Record<AddEmployeeField, string>> = {};
+    if (!name.trim()) errors.name = localizedText("Vui lòng nhập họ và tên.", "Enter a full name.");
+    if (!role.trim()) errors.role = localizedText("Vui lòng chọn chức vụ.", "Select a position.");
+    if (!email.trim()) errors.email = localizedText("Vui lòng nhập email.", "Enter an email address.");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = localizedText("Email không hợp lệ.", "Enter a valid email address.");
+    if (!identityNumber.trim()) errors.identityNumber = localizedText("Vui lòng nhập số CCCD.", "Enter an ID number.");
+    if (!phone.trim()) errors.phone = localizedText("Vui lòng nhập số điện thoại.", "Enter a phone number.");
+    if (!address.trim()) errors.address = localizedText("Vui lòng nhập địa chỉ.", "Enter an address.");
+    if (!imageFile) errors.image = localizedText("Vui lòng chọn ảnh nhân viên.", "Select an employee photo.");
+    setFieldErrors(errors);
+    setSaveError("");
+    if (Object.keys(errors).length > 0) return;
     if (!hasHotelId) {
-      setSaveError("Không xác định được chi nhánh làm việc. Vui lòng đăng nhập lại hoặc liên hệ quản trị viên.");
-      return;
-    }
-    if (!imageFile) {
-      setSaveError("Vui lòng chọn ảnh nhân viên.");
+      setSaveError(localizedText("Không xác định được chi nhánh làm việc. Vui lòng đăng nhập lại hoặc liên hệ quản trị viên.", "Could not determine the work branch. Sign in again or contact an administrator."));
       return;
     }
     addEmployeeInProgress.current = true;
@@ -322,24 +337,12 @@ export default function EmployeeDirectory() {
       address: employee.address,
       position: employee.position,
     });
-    setNewPassword("");
-    setConfirmPassword("");
-    setShowNewPassword(false);
-    setShowConfirmPassword(false);
     setEditError("");
   };
 
   const saveEmployeeChanges = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingEmployee) return;
-    if (newPassword && newPassword.length < 8) {
-      setEditError("Mật khẩu mới phải có ít nhất 8 ký tự.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setEditError("Mật khẩu xác nhận không khớp.");
-      return;
-    }
     setEditError("");
     try {
       await updateEmployee({
@@ -351,18 +354,66 @@ export default function EmployeeDirectory() {
           phone: editForm.phone.trim(),
           cccd: editForm.cccd.trim(),
           address: editForm.address.trim(),
-          ...(newPassword ? { password: newPassword } : {}),
         },
       }).unwrap();
+      const emailChanged = editForm.email.trim().toLowerCase() !== editingEmployee.email.trim().toLowerCase();
+      if (emailChanged) {
+        try {
+          await requestPasswordReset({ email: editForm.email.trim() }).unwrap();
+        } catch (resetError) {
+          setEditError(getErrorMessage(
+            resetError,
+            localizedText(
+              "Đã lưu thông tin và đổi email, nhưng không gửi được OTP đặt lại mật khẩu. Hãy thử gửi lại.",
+              "Profile and email were updated, but the password reset OTP could not be sent. Please try again.",
+            ),
+          ));
+          toast({
+            variant: "destructive",
+            title: localizedText("Không gửi được OTP", "Could not send OTP"),
+            description: localizedText(
+              "Email đã được đổi. Bạn có thể gửi lại OTP đặt lại mật khẩu từ form này.",
+              "The email was updated. You can retry sending the password reset OTP from this form.",
+            ),
+          });
+          return;
+        }
+      }
       toast({
-        title: "Đã cập nhật tài khoản nhân viên",
-        description: newPassword
-          ? `Đã lưu thay đổi hồ sơ và đặt mật khẩu mới cho ${editForm.fullName.trim()}.`
-          : `Đã lưu thay đổi hồ sơ của ${editForm.fullName.trim()}.`,
+        title: localizedText("Đã cập nhật thông tin nhân viên", "Employee information updated"),
+        description: emailChanged
+          ? localizedText(
+              `Đã lưu hồ sơ và gửi OTP đặt lại mật khẩu đến ${editForm.email.trim()}.`,
+              `Profile saved and a password reset OTP was sent to ${editForm.email.trim()}.`,
+            )
+          : localizedText(
+              `Đã lưu thay đổi hồ sơ của ${editForm.fullName.trim()}.`,
+              `Profile changes for ${editForm.fullName.trim()} were saved.`,
+            ),
       });
       setEditingEmployee(null);
     } catch (error) {
       setEditError(getErrorMessage(error));
+    }
+  };
+
+  const sendEmployeePasswordReset = async () => {
+    if (!editingEmployee) return;
+    setEditError("");
+    try {
+      await requestPasswordReset({ email: editingEmployee.email }).unwrap();
+      toast({
+        title: localizedText("Đã gửi OTP đặt lại mật khẩu", "Password reset OTP sent"),
+        description: localizedText(
+          `Kiểm tra email ${editingEmployee.email} để đặt lại mật khẩu.`,
+          `Check ${editingEmployee.email} for the password reset OTP.`,
+        ),
+      });
+    } catch (error) {
+      setEditError(getErrorMessage(
+        error,
+        localizedText("Không thể gửi OTP đặt lại mật khẩu. Vui lòng thử lại.", "Could not send the password reset OTP. Please try again."),
+      ));
     }
   };
 
@@ -377,12 +428,14 @@ export default function EmployeeDirectory() {
               : localizedText(`${employees.length} nhân viên đang làm việc tại chi nhánh.`, `${employees.length} employees work at this branch.`)}
           </p>
         </div>
-        {canManageBranchEmployees && <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setIsBulkImportOpen(true)} className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Upload size={15} />{localizedText("Thêm bằng Excel", "Import from Excel")}</button>
-          <button type="button" onClick={() => setAddOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"><Plus size={15} />{localizedText("Thêm nhân viên", "Add employee")}</button>
-        </div>}
+        <div className="flex flex-wrap gap-2">
+          {canManageBranchEmployees && <>
+            <button type="button" onClick={() => setIsBulkImportOpen(true)} className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Upload size={15} />{localizedText("Thêm bằng Excel", "Import from Excel")}</button>
+            <button type="button" onClick={() => setAddOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"><Plus size={15} />{localizedText("Thêm nhân viên", "Add employee")}</button>
+          </>}
+        </div>
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+      <div className={`mt-4 grid gap-3 ${hasActiveFilters ? "sm:grid-cols-[minmax(0,1fr)_220px_auto]" : "sm:grid-cols-[minmax(0,1fr)_220px]"}`}>
         <div className="relative block">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -395,21 +448,97 @@ export default function EmployeeDirectory() {
           />
           <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
         </div>
-        <label className="relative block">
-          <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <FilterSelect
-            value={positionFilter}
-            onChange={(event) => setPositionFilter(event.target.value)}
-            aria-label={localizedText("Lọc theo chức vụ", "Filter by position")}
-            className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="all">{localizedText("Tất cả chức vụ", "All positions")}</option>
-            {EMPLOYEE_ROLES.map((employeeRole) => <option key={employeeRole} value={employeeRole}>{employeeRoleLabel(employeeRole)}</option>)}
-          </FilterSelect>
-        </label>
+        <SearchableFilter
+          value={positionFilter}
+          options={[
+            { value: "all", label: localizedText("Tất cả chức vụ", "All positions") },
+            ...EMPLOYEE_ROLES.map((employeeRole) => ({
+              value: employeeRole,
+              label: employeeRoleLabel(employeeRole),
+            })),
+          ]}
+          onChange={setPositionFilter}
+          ariaLabel={localizedText("Lọc theo chức vụ", "Filter by position")}
+          searchPlaceholder={localizedText("Tìm chức vụ...", "Search positions...")}
+          emptyMessage={localizedText("Không tìm thấy chức vụ.", "No positions found.")}
+        />
+        {hasActiveFilters && (
+          <FilterResetButton
+            onClick={() => {
+              setSearchQuery("");
+              setPositionFilter("all");
+            }}
+            label={localizedText("Xóa bộ lọc", "Clear filters")}
+          />
+        )}
       </div>
     </div>
-    {addOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeForm}><form onSubmit={addEmployee} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between border-b border-slate-100 pb-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">{localizedText("Nhân viên", "Employee")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">{localizedText("Thêm nhân viên", "Add employee")}</h3><p className="mt-1 text-sm text-slate-500">{localizedText("Ảnh được tải trực tiếp từ trình duyệt lên Cloudinary theo thư mục chi nhánh.", "Photos are uploaded directly from the browser to the branch folder in Cloudinary.")}</p></div><button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="text-2xl leading-none text-slate-400 disabled:opacity-50" aria-label={localizedText("Đóng", "Close")}><X size={20} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-slate-700 sm:col-span-2">{localizedText("Ảnh nhân viên", "Employee photo")} <span className="text-red-500">*</span><input type="file" accept="image/jpeg,image/png,image/webp" required disabled={isAddingEmployee || isSaving} onChange={(event) => selectImage(event.target.files?.[0])} className="mt-1.5 block h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700" />{imagePreview && <img src={imagePreview} alt={localizedText("Xem trước ảnh nhân viên", "Employee photo preview")} className="mt-3 h-24 w-24 rounded-xl object-cover" />}</label><label className="text-sm font-semibold text-slate-700">{localizedText("Họ và tên", "Full name")} <span className="text-red-500">*</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder={localizedText("Nhập họ và tên", "Enter full name")} required autoFocus disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">{localizedText("Chức vụ", "Position")} <span className="text-red-500">*</span><select value={role} onChange={(event) => setRole(event.target.value)} required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal"><option value={EMPLOYEE_ROLES[0]}>{employeeRoleLabel(EMPLOYEE_ROLES[0])}</option><option value={EMPLOYEE_ROLES[1]}>{employeeRoleLabel(EMPLOYEE_ROLES[1])}</option><option value={EMPLOYEE_ROLES[2]}>{employeeRoleLabel(EMPLOYEE_ROLES[2])}</option></select></label><label className="text-sm font-semibold text-slate-700">Email <span className="text-red-500">*</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@senviet.vn" required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">{localizedText("CCCD", "ID number")} <span className="text-red-500">*</span><input value={identityNumber} onChange={(event) => setIdentityNumber(event.target.value)} placeholder={localizedText("Nhập số CCCD", "Enter ID number")} required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700">{localizedText("Số điện thoại", "Phone number")} <span className="text-red-500">*</span><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="090 123 4567" required disabled={isAddingEmployee || isSaving} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label><label className="text-sm font-semibold text-slate-700 sm:col-span-2">{localizedText("Địa chỉ", "Address")} <span className="text-red-500">*</span><textarea value={address} onChange={(event) => setAddress(event.target.value)} placeholder={localizedText("Nhập địa chỉ hiện tại", "Enter current address")} required rows={3} disabled={isAddingEmployee || isSaving} className="mt-1.5 w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-normal outline-none focus:border-blue-400" /></label></div>{saveError && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</p>}<div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4"><button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button><button type="submit" disabled={isAddingEmployee || isSaving} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isAddingEmployee || isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu nhân viên", "Save employee")}</button></div></form></div>}
+    {addOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeForm}>
+      <form noValidate onSubmit={addEmployee} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
+        <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">{localizedText("Nhân viên", "Employee")}</p>
+            <h3 className="mt-1 text-xl font-bold text-slate-900">{localizedText("Thêm nhân viên", "Add employee")}</h3>
+            <p className="mt-1 text-sm text-slate-500">{localizedText("Ảnh được tải trực tiếp từ trình duyệt lên Cloudinary theo thư mục chi nhánh.", "Photos are uploaded directly from the browser to the branch folder in Cloudinary.")}</p>
+          </div>
+          <button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="text-2xl leading-none text-slate-400 disabled:opacity-50" aria-label={localizedText("Đóng", "Close")}><X size={20} /></button>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+            {localizedText("Ảnh nhân viên", "Employee photo")} <span className="text-rose-500">*</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={isAddingEmployee || isSaving}
+              aria-invalid={Boolean(fieldErrors.image)}
+              aria-describedby={fieldErrors.image ? "employee-image-error" : undefined}
+              onChange={(event) => selectImage(event.target.files?.[0])}
+              className={`mt-1.5 block h-11 w-full rounded-lg border bg-white px-3 py-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-blue-700 ${fieldErrors.image ? "border-rose-400" : "border-slate-200"}`}
+            />
+            {fieldErrors.image && <span id="employee-image-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.image}</span>}
+            {imagePreview && <img src={imagePreview} alt={localizedText("Xem trước ảnh nhân viên", "Employee photo preview")} className="mt-3 h-24 w-24 rounded-xl object-cover" />}
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            {localizedText("Họ và tên", "Full name")} <span className="text-rose-500">*</span>
+            <input value={name} onChange={(event) => { setName(event.target.value); setFieldErrors((current) => ({ ...current, name: undefined })); }} placeholder={localizedText("Nhập họ và tên", "Enter full name")} aria-invalid={Boolean(fieldErrors.name)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-11 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.name ? "border-rose-400" : "border-slate-200"}`} />
+            {fieldErrors.name && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.name}</span>}
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            {localizedText("Chức vụ", "Position")} <span className="text-rose-500">*</span>
+            <select value={role} onChange={(event) => { setRole(event.target.value); setFieldErrors((current) => ({ ...current, role: undefined })); }} aria-invalid={Boolean(fieldErrors.role)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-11 w-full rounded-lg border bg-white px-3 text-sm font-normal ${fieldErrors.role ? "border-rose-400" : "border-slate-200"}`}>
+              <option value="">{localizedText("Chọn chức vụ", "Select a position")}</option>
+              {EMPLOYEE_ROLES.map((employeeRole) => <option key={employeeRole} value={employeeRole}>{employeeRoleLabel(employeeRole)}</option>)}
+            </select>
+            {fieldErrors.role && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.role}</span>}
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Email <span className="text-rose-500">*</span>
+            <input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setFieldErrors((current) => ({ ...current, email: undefined })); }} placeholder="email@senviet.vn" aria-invalid={Boolean(fieldErrors.email)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-11 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.email ? "border-rose-400" : "border-slate-200"}`} />
+            {fieldErrors.email && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.email}</span>}
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            {localizedText("CCCD", "ID number")} <span className="text-rose-500">*</span>
+            <input value={identityNumber} onChange={(event) => { setIdentityNumber(event.target.value); setFieldErrors((current) => ({ ...current, identityNumber: undefined })); }} placeholder={localizedText("Nhập số CCCD", "Enter ID number")} aria-invalid={Boolean(fieldErrors.identityNumber)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-11 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.identityNumber ? "border-rose-400" : "border-slate-200"}`} />
+            {fieldErrors.identityNumber && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.identityNumber}</span>}
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            {localizedText("Số điện thoại", "Phone number")} <span className="text-rose-500">*</span>
+            <input type="tel" value={phone} onChange={(event) => { setPhone(event.target.value); setFieldErrors((current) => ({ ...current, phone: undefined })); }} placeholder="090 123 4567" aria-invalid={Boolean(fieldErrors.phone)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-11 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.phone ? "border-rose-400" : "border-slate-200"}`} />
+            {fieldErrors.phone && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.phone}</span>}
+          </label>
+          <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+            {localizedText("Địa chỉ", "Address")} <span className="text-rose-500">*</span>
+            <textarea value={address} onChange={(event) => { setAddress(event.target.value); setFieldErrors((current) => ({ ...current, address: undefined })); }} placeholder={localizedText("Nhập địa chỉ hiện tại", "Enter current address")} aria-invalid={Boolean(fieldErrors.address)} rows={3} disabled={isAddingEmployee || isSaving} className={`mt-1.5 w-full resize-none rounded-lg border px-3 py-2.5 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.address ? "border-rose-400" : "border-slate-200"}`} />
+            {fieldErrors.address && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.address}</span>}
+          </label>
+        </div>
+        {saveError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{saveError}</p>}
+        <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button>
+          <button type="submit" disabled={isAddingEmployee || isSaving} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isAddingEmployee || isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu nhân viên", "Save employee")}</button>
+        </div>
+      </form>
+    </div>}
     {isLoading && <p className="p-5 text-sm text-slate-500">{localizedText("Đang tải danh sách nhân viên...", "Loading employee directory...")}</p>}
     {isError && <p role="alert" className="p-5 text-sm text-red-700">{localizedText("Không thể tải danh sách nhân viên", "Could not load the employee directory")}{typeof error === "object" && error !== null && "status" in error ? ` (HTTP ${String(error.status)})` : ""}{localizedText(". Vui lòng kiểm tra tài khoản chi nhánh hoặc thử tải lại.", ". Check the branch account or try reloading.")}</p>}
     {!isLoading && !isError && <div className="overflow-x-auto">
@@ -491,19 +620,36 @@ export default function EmployeeDirectory() {
         <section className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
           <div className="mb-4 border-b border-blue-100 pb-3">
             <h4 className="text-sm font-bold text-slate-900">{localizedText("Thông tin tài khoản", "Account information")}</h4>
-            <p className="mt-1 text-xs text-slate-500">{localizedText("Email dùng để đăng nhập. Để trống mật khẩu nếu không muốn đổi.", "Email is used to sign in. Leave the password blank to keep it unchanged.")}</p>
+            <p className="mt-1 text-xs text-slate-500">{localizedText("Email dùng để đăng nhập. Khi đổi email và lưu, OTP đặt lại mật khẩu sẽ được gửi tới email mới.", "Email is used to sign in. When you change and save it, a password reset OTP will be sent to the new email.")}</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700 sm:col-span-2">{localizedText("Email / tài khoản", "Email / account")}<input required type="email" value={editForm.email} disabled={isUpdatingEmployee} onChange={(event) => setEditForm((current) => ({ ...current, email: event.target.value }))} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal" /></label>
-            <label className="text-sm font-semibold text-slate-700">{localizedText("Mật khẩu mới", "New password")}<span className="relative mt-1.5 block"><input type={showNewPassword ? "text" : "password"} autoComplete="new-password" minLength={8} value={newPassword} disabled={isUpdatingEmployee} onChange={(event) => setNewPassword(event.target.value)} placeholder={localizedText("Để trống nếu không đổi", "Leave blank to keep unchanged")} className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 pr-11 text-sm font-normal" /><button type="button" disabled={isUpdatingEmployee} onClick={() => setShowNewPassword((visible) => !visible)} aria-label={showNewPassword ? localizedText("Ẩn mật khẩu mới", "Hide new password") : localizedText("Hiện mật khẩu mới", "Show new password")} className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-500 hover:text-blue-700">{showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label>
-            <label className="text-sm font-semibold text-slate-700">{localizedText("Xác nhận mật khẩu mới", "Confirm new password")}<span className="relative mt-1.5 block"><input type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" value={confirmPassword} disabled={isUpdatingEmployee} onChange={(event) => setConfirmPassword(event.target.value)} placeholder={localizedText("Nhập lại mật khẩu mới", "Re-enter new password")} className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 pr-11 text-sm font-normal" /><button type="button" disabled={isUpdatingEmployee} onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? localizedText("Ẩn mật khẩu xác nhận", "Hide password confirmation") : localizedText("Hiện mật khẩu xác nhận", "Show password confirmation")} className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-500 hover:text-blue-700">{showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label>
+            <div className="sm:col-span-2">
+              <button
+                type="button"
+                onClick={() => void sendEmployeePasswordReset()}
+                disabled={isUpdatingEmployee || isRequestingPasswordReset}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <KeyRound size={15} />
+                {isRequestingPasswordReset
+                  ? localizedText("Đang gửi OTP...", "Sending OTP...")
+                  : localizedText("Gửi OTP đặt lại mật khẩu", "Send password reset OTP")}
+              </button>
+              <p className="mt-1.5 text-xs text-slate-500">
+                {localizedText(
+                  `OTP sẽ được gửi tới email hiện tại: ${editingEmployee.email}. Nếu đổi email, hãy lưu trước.`,
+                  `The OTP will be sent to the current email: ${editingEmployee.email}. Save any email change first.`,
+                )}
+              </p>
+            </div>
           </div>
         </section>
 
         {editError && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{editError}</p>}
         <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
-          <button type="button" disabled={isUpdatingEmployee} onClick={() => setEditingEmployee(null)} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button>
-          <button type="submit" disabled={isUpdatingEmployee} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isUpdatingEmployee ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu thay đổi", "Save changes")}</button>
+          <button type="button" disabled={isUpdatingEmployee || isRequestingPasswordReset} onClick={() => setEditingEmployee(null)} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button>
+          <button type="submit" disabled={isUpdatingEmployee || isRequestingPasswordReset} className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isUpdatingEmployee ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu thay đổi", "Save changes")}</button>
         </div>
       </form>
     </div>}

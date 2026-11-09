@@ -3,6 +3,7 @@ import { Check, CircleUserRound, KeyRound, LoaderCircle, Save, ShieldCheck } fro
 import { useUpdateMyProfileMutation } from "../services/employeeApi";
 import { logout, updateProfile } from "../store/authSlice";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { localizedText } from "../i18n";
 
 type SuperAdminProfileSettingsProps = {
   onLogout: () => void;
@@ -34,15 +35,15 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
     setSaved(false);
 
     if (!form.currentPassword) {
-      setError("Nhập mật khẩu hiện tại để xác nhận thay đổi.");
+      setError(localizedText("Nhập mật khẩu hiện tại để xác nhận thay đổi.", "Enter your current password to confirm the changes."));
       return;
     }
     if (form.newPassword && form.newPassword.length < 8) {
-      setError("Mật khẩu mới cần có ít nhất 8 ký tự.");
+      setError(localizedText("Mật khẩu mới cần có ít nhất 8 ký tự.", "The new password must be at least 8 characters."));
       return;
     }
     if (form.newPassword !== form.confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
+      setError(localizedText("Mật khẩu xác nhận không khớp.", "The passwords do not match."));
       return;
     }
 
@@ -86,7 +87,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
       const message = saveError && typeof saveError === "object" && "data" in saveError
         ? (saveError as { data?: { message?: string } }).data?.message
         : undefined;
-      setError(message ?? "Không thể cập nhật thông tin. Vui lòng thử lại.");
+      setError(message ?? localizedText("Không thể cập nhật thông tin. Vui lòng thử lại.", "Could not update your information. Please try again."));
     }
   };
 

@@ -150,13 +150,6 @@ form.max-w-lg label {
   align-items: center;
 }
 
-form.max-w-lg label::before {
-  color: rgb(239 68 68);
-  content: "*";
-  margin-left: 4px;
-  order: 2;
-}
-
 form.max-w-lg label > input,
 form.max-w-lg label > select,
 form.max-w-lg label > textarea {
@@ -760,5 +753,11 @@ form.max-w-lg label > textarea {
   code {
     overflow-x: auto;
     white-space: pre;
+  }
+
+  table > thead > tr > th {
+    background-color: rgb(239 246 255) !important;
+    color: rgb(30 58 138) !important;
+    border-bottom: 1px solid rgb(191 219 254) !important;
   }
 }

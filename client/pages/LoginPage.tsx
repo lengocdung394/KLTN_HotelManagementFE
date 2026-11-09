@@ -6,6 +6,7 @@ import { useAppDispatch } from "../store/hooks";
 import { getRolesFromToken, setCredentials } from "../store/authSlice";
 import { useNavigate } from "react-router-dom";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../components/ui/input-otp";
+import { localizedText } from "../i18n";
 
 type LoginPageProps = { onLogin: () => void };
 type ErrorField = "email" | "password" | "otp" | "newPassword" | "confirmPassword";
@@ -60,15 +61,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setNotice("");
     const emailInput = e.currentTarget.elements.namedItem("email");
     if (!email.trim()) {
-      setFieldError({ field: "email", message: "Vui lòng nhập email." });
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email.", "Enter your email address.") });
       return;
     }
     if (emailInput instanceof HTMLInputElement && emailInput.validity.typeMismatch) {
-      setFieldError({ field: "email", message: "Vui lòng nhập email hợp lệ." });
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email hợp lệ.", "Enter a valid email address.") });
       return;
     }
     if (!password) {
-      setFieldError({ field: "password", message: "Vui lòng nhập mật khẩu." });
+      setFieldError({ field: "password", message: localizedText("Vui lòng nhập mật khẩu.", "Enter your password.") });
       return;
     }
     try {
@@ -81,7 +82,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     } catch (err: any) {
       // err.data là phần "data" mà axiosBaseQuery trả về khi lỗi
       const message =
-        err?.data?.message ?? "Đăng nhập thất bại, vui lòng thử lại";
+        err?.data?.message ?? localizedText("Đăng nhập thất bại, vui lòng thử lại.", "Sign-in failed. Please try again.");
       setFieldError({ field: "password", message });
     }
   };
@@ -100,7 +101,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     } catch (err: any) {
       setFieldError({
         field: "email",
-        message: err?.data?.message ?? "Không thể gửi mã OTP. Vui lòng kiểm tra email và thử lại.",
+        message: err?.data?.message ?? localizedText("Không thể gửi mã OTP. Vui lòng kiểm tra email và thử lại.", "Could not send the OTP. Check your email address and try again."),
       });
     }
   };
@@ -111,11 +112,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setNotice("");
     const emailInput = e.currentTarget.elements.namedItem("email");
     if (!email.trim()) {
-      setFieldError({ field: "email", message: "Vui lòng nhập email." });
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email.", "Enter your email address.") });
       return;
     }
     if (emailInput instanceof HTMLInputElement && emailInput.validity.typeMismatch) {
-      setFieldError({ field: "email", message: "Vui lòng nhập email hợp lệ." });
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email hợp lệ.", "Enter a valid email address.") });
       return;
     }
     await sendPasswordResetOtp();
@@ -127,27 +128,27 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setFieldError(null);
     setNotice("");
     if (otpSecondsRemaining === 0) {
-      setFieldError({ field: "otp", message: "Mã OTP đã hết hạn. Vui lòng gửi lại mã OTP." });
+      setFieldError({ field: "otp", message: localizedText("Mã OTP đã hết hạn. Vui lòng gửi lại mã OTP.", "The OTP has expired. Request a new one.") });
       return;
     }
     if (!/^\d{6}$/.test(otp)) {
-      setFieldError({ field: "otp", message: "Vui lòng nhập mã OTP gồm 6 chữ số." });
+      setFieldError({ field: "otp", message: localizedText("Vui lòng nhập mã OTP gồm 6 chữ số.", "Enter the 6-digit OTP.") });
       return;
     }
     if (!newPassword) {
-      setFieldError({ field: "newPassword", message: "Vui lòng nhập mật khẩu mới." });
+      setFieldError({ field: "newPassword", message: localizedText("Vui lòng nhập mật khẩu mới.", "Enter a new password.") });
       return;
     }
     if (newPassword.length < 6) {
-      setFieldError({ field: "newPassword", message: "Mật khẩu mới cần có ít nhất 6 ký tự." });
+      setFieldError({ field: "newPassword", message: localizedText("Mật khẩu mới cần có ít nhất 6 ký tự.", "The new password must be at least 6 characters.") });
       return;
     }
     if (!confirmPassword) {
-      setFieldError({ field: "confirmPassword", message: "Vui lòng xác nhận mật khẩu mới." });
+      setFieldError({ field: "confirmPassword", message: localizedText("Vui lòng xác nhận mật khẩu mới.", "Confirm your new password.") });
       return;
     }
     if (newPassword !== confirmPassword) {
-      setFieldError({ field: "confirmPassword", message: "Mật khẩu xác nhận không khớp." });
+      setFieldError({ field: "confirmPassword", message: localizedText("Mật khẩu xác nhận không khớp.", "The passwords do not match.") });
       return;
     }
     try {
@@ -168,13 +169,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         setIsOtpLocked(true);
         setFieldError({
           field: "otp",
-          message: "Bạn đã nhập sai OTP 3 lần. Mã đã bị khóa, vui lòng gửi lại mã OTP để thử tiếp.",
+          message: localizedText("Bạn đã nhập sai OTP 3 lần. Mã đã bị khóa, vui lòng gửi lại mã OTP để thử tiếp.", "You entered the wrong OTP 3 times. This code is locked; request a new OTP to continue."),
         });
         return;
       }
       setFieldError({
         field: "otp",
-        message: err?.data?.message ?? "Không thể đặt lại mật khẩu. Vui lòng kiểm tra OTP và thử lại.",
+        message: err?.data?.message ?? localizedText("Không thể đặt lại mật khẩu. Vui lòng kiểm tra OTP và thử lại.", "Could not reset the password. Check the OTP and try again."),
       });
     }
   };

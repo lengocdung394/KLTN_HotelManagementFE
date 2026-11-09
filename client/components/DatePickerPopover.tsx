@@ -77,11 +77,11 @@ export default function DatePickerPopover({
 
   const pickerMonthLabel = useMemo(
     () =>
-      pickerMonth.toLocaleDateString("vi-VN", {
+      pickerMonth.toLocaleDateString(i18n.language.startsWith("en") ? "en-US" : "vi-VN", {
         month: "long",
         year: "numeric",
       }),
-    [pickerMonth],
+    [i18n.language, pickerMonth],
   );
 
   const highlightDateKeys = useMemo(() => {
@@ -116,7 +116,10 @@ export default function DatePickerPopover({
     (minDate && today < new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()))
     || (maxDate && today > new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate())),
   );
-  const selectedDateLabel = value?.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const selectedDateLabel = value?.toLocaleDateString(
+    i18n.language.startsWith("en") ? "en-US" : "vi-VN",
+    { day: "2-digit", month: "2-digit", year: "numeric" },
+  );
   const accessibleLabel = selectedDateLabel ? `${resolvedPlaceholder}: ${selectedDateLabel}` : resolvedPlaceholder;
 
   return (

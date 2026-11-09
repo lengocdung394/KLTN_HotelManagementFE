@@ -16,6 +16,7 @@ import { parseSuperAdminPermissionCatalogFile } from "../lib/superAdminPermissio
 import { parseSuperAdminRolePermissionsFile } from "../lib/superAdminRolePermissionsImport";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
+import { localizedText } from "../i18n";
 import {
   useCreateSuperAdminPermissionMutation,
   useCreateSuperAdminRoleMutation,
@@ -198,15 +199,15 @@ export default function SuperAdminRolePermissionsPanel() {
     setRoleError("");
     const code = normalizeCode(roleCode);
     if (!/^ROLE_[A-Z0-9_]+$/.test(code)) {
-      setRoleError("Mã role cần bắt đầu bằng ROLE_ và chỉ gồm chữ in hoa, số hoặc dấu gạch dưới.");
+      setRoleError(localizedText("Mã role cần bắt đầu bằng ROLE_ và chỉ gồm chữ in hoa, số hoặc dấu gạch dưới.", "Role codes must start with ROLE_ and contain only uppercase letters, numbers, or underscores."));
       return;
     }
     if (roles.some((role) => role.code === code)) {
-      setRoleError(`Role ${code} đã tồn tại.`);
+      setRoleError(localizedText(`Role ${code} đã tồn tại.`, `Role ${code} already exists.`));
       return;
     }
     if (!roleName.trim()) {
-      setRoleError("Vui lòng nhập tên role.");
+      setRoleError(localizedText("Vui lòng nhập tên role.", "Enter a role name."));
       return;
     }
     try {
@@ -221,7 +222,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setIsAddRoleDialogOpen(false);
       setActiveStep("catalog");
     } catch (error) {
-      setRoleError(getErrorMessage(error, "Không thể tạo role. Vui lòng thử lại."));
+      setRoleError(getErrorMessage(error, localizedText("Không thể tạo role. Vui lòng thử lại.", "Could not create the role. Please try again.")));
     }
   };
 
@@ -231,15 +232,15 @@ export default function SuperAdminRolePermissionsPanel() {
     setCatalogMessage("");
     const code = normalizeCode(permissionCode);
     if (!/^[A-Z][A-Z0-9_.:-]*$/.test(code)) {
-      setCatalogError("Mã quyền phải bắt đầu bằng chữ và chỉ gồm chữ in hoa, số, dấu gạch dưới, chấm, hai chấm hoặc gạch ngang.");
+      setCatalogError(localizedText("Mã quyền phải bắt đầu bằng chữ và chỉ gồm chữ in hoa, số, dấu gạch dưới, chấm, hai chấm hoặc gạch ngang.", "Permission codes must start with a letter and contain only uppercase letters, numbers, underscores, periods, colons, or hyphens."));
       return;
     }
     if (!permissionName.trim()) {
-      setCatalogError("Vui lòng nhập tên quyền.");
+      setCatalogError(localizedText("Vui lòng nhập tên quyền.", "Enter a permission name."));
       return;
     }
     if (!permissionCategory.trim()) {
-      setCatalogError("Vui lòng nhập danh mục quyền.");
+      setCatalogError(localizedText("Vui lòng nhập danh mục quyền.", "Enter a permission category."));
       return;
     }
     try {
@@ -256,7 +257,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setCatalogMessage(`Đã tạo quyền ${code}.`);
       setIsAddPermissionDialogOpen(false);
     } catch (error) {
-      setCatalogError(getErrorMessage(error, "Không thể tạo quyền. Vui lòng thử lại."));
+      setCatalogError(getErrorMessage(error, localizedText("Không thể tạo quyền. Vui lòng thử lại.", "Could not create the permission. Please try again.")));
     }
   };
 
@@ -271,7 +272,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setCatalogFileMessage(`Đã nhập ${parsed.permissions.length} quyền từ ${file.name}.`);
       setIsAddPermissionDialogOpen(false);
     } catch (error) {
-      setCatalogFileError(getErrorMessage(error, "Không thể đọc file hoặc nhập danh mục quyền."));
+      setCatalogFileError(getErrorMessage(error, localizedText("Không thể đọc file hoặc nhập danh mục quyền.", "Could not read the file or import the permission catalog.")));
     } finally {
       setIsReadingFile(false);
       if (catalogFileInputRef.current) catalogFileInputRef.current.value = "";
@@ -321,7 +322,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setImportMessage(`Đã nạp ${parsed.importedRowCount} dòng phân quyền từ ${file.name}.`);
       setActiveStep("overview");
     } catch (error) {
-      setImportError(getErrorMessage(error, "Không thể đọc file hoặc nạp quyền. Vui lòng thử lại."));
+      setImportError(getErrorMessage(error, localizedText("Không thể đọc file hoặc nạp quyền. Vui lòng thử lại.", "Could not read the file or load the permissions. Please try again.")));
     } finally {
       setIsReadingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

@@ -672,13 +672,13 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     event.preventDefault();
     setBranchFormError("");
     if (isParsingBranchPolicy) {
-      setBranchPolicyError("Đang đọc file Excel, vui lòng đợi đọc xong rồi tạo chi nhánh.");
+      setBranchPolicyError(localizedText("Đang đọc file Excel, vui lòng đợi đọc xong rồi tạo chi nhánh.", "The Excel file is still being processed. Wait for it to finish before creating the branch."));
       return;
     }
     if (branchRoomPolicies.length !== roomTypes.length) {
       setBranchPolicyError(branchPolicyFileName
-        ? "File chưa được đọc đủ chính sách cho 4 loại phòng. Vui lòng kiểm tra lỗi bên trên hoặc tải lại file."
-        : "Vui lòng chọn file Excel có đủ chính sách cho 4 loại phòng.");
+        ? localizedText("File chưa được đọc đủ chính sách cho 4 loại phòng. Vui lòng kiểm tra lỗi bên trên hoặc tải lại file.", "The file does not contain policies for all 4 room types. Check the error above or upload the file again.")
+        : localizedText("Vui lòng chọn file Excel có đủ chính sách cho 4 loại phòng.", "Select an Excel file containing policies for all 4 room types."));
       return;
     }
     try {
@@ -690,7 +690,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       setIsParsingBranchPolicy(false);
       setIsBranchFormOpen(false);
     } catch (error) {
-      setBranchFormError(getErrorMessage(error, "Không thể tạo chi nhánh. Vui lòng thử lại."));
+      setBranchFormError(getErrorMessage(error, localizedText("Không thể tạo chi nhánh. Vui lòng thử lại.", "Could not create the branch. Please try again.")));
     }
   };
 
@@ -698,7 +698,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     event.preventDefault();
     setProvinceFormError("");
     if (!provinceBackgroundFile) {
-      setProvinceFormError("Vui lòng chọn ảnh nền cho tỉnh/thành.");
+      setProvinceFormError(localizedText("Vui lòng chọn ảnh nền cho tỉnh/thành.", "Select a background image for the province."));
       return;
     }
     setIsUploadingProvinceBackground(true);
@@ -710,7 +710,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       setProvinceBackgroundFile(null);
       setIsProvinceFormOpen(false);
     } catch (error) {
-      setProvinceFormError(getErrorMessage(error, "Không thể tải ảnh hoặc thêm tỉnh/thành. Vui lòng thử lại."));
+      setProvinceFormError(getErrorMessage(error, localizedText("Không thể tải ảnh hoặc thêm tỉnh/thành. Vui lòng thử lại.", "Could not upload the image or add the province. Please try again.")));
     } finally {
       setIsUploadingProvinceBackground(false);
     }
@@ -724,7 +724,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       const backgroundImageUrl = await uploadProvinceBackgroundToCloudinary(file, provinceName);
       await updateProvinceBackground({ provinceId, backgroundImageUrl }).unwrap();
     } catch (error) {
-      setProvinceCardUploadError(getErrorMessage(error, `Không thể cập nhật ảnh nền cho ${provinceName}.`));
+      setProvinceCardUploadError(getErrorMessage(error, localizedText(`Không thể cập nhật ảnh nền cho ${provinceName}.`, `Could not update the background image for ${provinceName}.`)));
     } finally {
       setUploadingProvinceId(null);
     }
@@ -746,7 +746,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       setBedTypeForm(initialBedTypeForm);
       setEditingBedTypeId(null);
     } catch (error) {
-      setBedTypeError(getErrorMessage(error, "Không thể lưu loại giường."));
+      setBedTypeError(getErrorMessage(error, localizedText("Không thể lưu loại giường.", "Could not save the bed type.")));
     }
   };
 
@@ -760,7 +760,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       const imported = await importBedTypes(parsed).unwrap();
       setBedTypeMessage(`Đã nhập ${imported.length} loại giường.`);
     } catch (error) {
-      setBedTypeError(getErrorMessage(error, "Không thể nhập danh sách loại giường."));
+      setBedTypeError(getErrorMessage(error, localizedText("Không thể nhập danh sách loại giường.", "Could not import the bed types.")));
     } finally {
       setIsParsingBedTypeFile(false);
     }
@@ -2063,7 +2063,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       setBranchRoomPolicies(policies);
                       setBranchPolicyError("");
                     }).catch((error: unknown) => {
-                      setBranchPolicyError(error instanceof Error ? error.message : "Không thể đọc file chính sách phòng.");
+                      setBranchPolicyError(error instanceof Error ? error.message : localizedText("Không thể đọc file chính sách phòng.", "Could not read the room policy file."));
                     }).finally(() => {
                       setIsParsingBranchPolicy(false);
                     });
@@ -2503,7 +2503,7 @@ function BranchDetailsPanel({
                               setRoomEditImageFiles([]);
                             })
                             .catch((error: unknown) => {
-                              setRoomEditError(getErrorMessage(error, "Không thể tải dữ liệu phòng để chỉnh sửa."));
+                              setRoomEditError(getErrorMessage(error, localizedText("Không thể tải dữ liệu phòng để chỉnh sửa.", "Could not load the room details for editing.")));
                             })
                             .finally(() => setLoadingRoomId(null));
                         }}
@@ -2611,7 +2611,7 @@ function BranchDetailsPanel({
                           }
                           setRoomPolicyMessage(`${roomTypeNames[policy.roomType]} đã được lưu cho chi nhánh.`);
                         } catch (error) {
-                          setRoomPolicyError(getErrorMessage(error, "Không thể lưu cấu hình loại phòng."));
+                          setRoomPolicyError(getErrorMessage(error, localizedText("Không thể lưu cấu hình loại phòng.", "Could not save the room type configuration.")));
                         }
                       }}
                     />
@@ -2674,7 +2674,7 @@ function BranchDetailsPanel({
               event.preventDefault();
               const name = buildingName.trim().replace(/\s+/g, " ");
               if (!name) {
-                setBuildingError("Vui lòng nhập tên tòa nhà.");
+                setBuildingError(localizedText("Vui lòng nhập tên tòa nhà.", "Enter a building name."));
                 return;
               }
 
@@ -2687,7 +2687,7 @@ function BranchDetailsPanel({
                   setEditingBuilding(null);
                 })
                 .catch((error: unknown) => {
-                  setBuildingError(getErrorMessage(error, "Không thể cập nhật tòa nhà."));
+                  setBuildingError(getErrorMessage(error, localizedText("Không thể cập nhật tòa nhà.", "Could not update the building.")));
                 });
             }}
             className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
@@ -2757,7 +2757,7 @@ function BranchDetailsPanel({
               event.preventDefault();
               const nextFloorNumber = Number(floorNumber);
               if (!Number.isSafeInteger(nextFloorNumber)) {
-                setFloorError("Số tầng phải là số nguyên hợp lệ.");
+                setFloorError(localizedText("Số tầng phải là số nguyên hợp lệ.", "The floor number must be a valid whole number."));
                 return;
               }
 
@@ -2768,7 +2768,7 @@ function BranchDetailsPanel({
               }).unwrap()
                 .then(() => setEditingFloor(null))
                 .catch((error: unknown) => {
-                  setFloorError(getErrorMessage(error, "Không thể cập nhật tầng."));
+                  setFloorError(getErrorMessage(error, localizedText("Không thể cập nhật tầng.", "Could not update the floor.")));
                 });
             }}
             className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
@@ -2902,7 +2902,7 @@ function BranchDetailsPanel({
                 setRoomEditImageFiles([]);
               })
               .catch((error: unknown) => {
-                setRoomEditError(getErrorMessage(error, "Không thể cập nhật phòng."));
+                setRoomEditError(getErrorMessage(error, localizedText("Không thể cập nhật phòng.", "Could not update the room.")));
               });
           }}
         />
