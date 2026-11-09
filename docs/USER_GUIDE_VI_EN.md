@@ -1,279 +1,376 @@
-# Hướng dẫn sử dụng hệ thống quản lý khách sạn / Hotel Management System User Guide
+# Hướng dẫn nhân viên và quản lý chi nhánh / Staff and Branch Manager Guide
 
-> **Phạm vi / Scope:** Hướng dẫn bao gồm hai giao diện hiện có trong môi trường làm việc: cổng khách hàng tại `E:\SenViet_Customer_FE` và cổng quản lý tại repository này. Quyền truy cập và nút thao tác hiển thị tùy theo tài khoản, vai trò và cấu hình hiện tại.  
-> This guide covers both applications available in this workspace: the customer portal at `E:\SenViet_Customer_FE` and the management portal in this repository. Access and available actions depend on the signed-in account, role, and current configuration.
+> **Phạm vi:** Tài liệu này dành riêng cho nhân viên và quản lý chi nhánh sử dụng web quản lý khách sạn. Không hướng dẫn cổng khách hàng hoặc cổng quản trị hệ thống. Các nút và quyền thao tác có thể khác nhau theo tài khoản.
+>
+> **Scope:** This guide is exclusively for hotel staff and branch managers using the hotel-management web app. It does not cover the customer portal or system-administration portal. Available controls and permissions vary by account.
 
-> **Ảnh chụp / Screenshots:** Các ảnh của cổng quản lý là ảnh chụp giao diện thực tế bằng tiếng Việt; thông tin nhận diện tài khoản, chi nhánh, lịch và nhân viên đã được làm mờ. Chưa có ảnh chụp cổng khách hàng hoặc cổng quản trị hệ thống vì hiện chưa có phiên đăng nhập/môi trường truy cập phù hợp.  
-> Management-portal images are real screenshots of the Vietnamese interface; identifying account, branch, schedule, and staff details have been blurred. Customer-portal and system-administration screenshots are not included because an appropriate signed-in environment is not currently available.
+> Ảnh minh họa là ảnh chụp giao diện quản lý thực tế bằng tiếng Việt; thông tin nhận diện tài khoản, khách, lịch và nhân viên đã được làm mờ.
+>
+> The illustrations are real screenshots of the Vietnamese management interface; identifying account, guest, schedule, and staff details have been blurred.
 
-## 1. Đăng nhập và ngôn ngữ / Sign-in and language
-
-### Tiếng Việt
-
-1. Mở trang đăng nhập và nhập email cùng mật khẩu được cấp.
-2. Nếu quên mật khẩu, chọn luồng đặt lại mật khẩu, yêu cầu mã OTP gửi đến email, nhập OTP và đặt mật khẩu mới. OTP có thời hạn; nếu nhập sai quá số lần cho phép, yêu cầu mã mới.
-3. Sau khi đăng nhập, tài khoản quản trị hệ thống vào cổng quản trị; tài khoản chi nhánh vào Tổng quan.
-4. Chọn **Tiếng Việt / English** ở thanh đầu trang để đổi ngôn ngữ giao diện. Lựa chọn được lưu cho lần truy cập sau.
-5. Việc đổi ngôn ngữ dịch các chuỗi giao diện và trạng thái hệ thống đã được hỗ trợ; tên khách, tên dịch vụ, ghi chú, tiêu đề lịch bận và nội dung do người dùng nhập vẫn giữ nguyên ngôn ngữ ban đầu. Hãy nhập bản dịch phù hợp vào dữ liệu nếu cần hiển thị song ngữ.
-
-### English
-
-1. Open the sign-in page and enter the email and password provided to you.
-2. If you forget your password, start the password-reset flow, request an OTP by email, enter it, and set a new password. The OTP expires; if too many attempts fail, request a new code.
-3. After sign-in, system-administrator accounts open the administration portal; branch accounts open Overview.
-4. Select **Tiếng Việt / English** in the top bar to change the interface language. The selection is saved for your next visit.
-5. Changing language translates supported interface text and system statuses. Guest names, service names, notes, busy-schedule titles, and other user-entered content remain in their original language. Enter suitable translations in the data when bilingual content is required.
-
-## 2. Điều hướng và quyền truy cập / Navigation and access
+## 1. Đăng nhập, ngôn ngữ và điều hướng / Sign-in, language, and navigation
 
 ### Tiếng Việt
 
-- Dùng menu bên trái để mở các phân hệ; một số mục có mũi tên để mở danh mục con.
-- Trên điện thoại, menu có thể mở/đóng từ nút menu. Trên máy tính, có thể thu gọn thanh điều hướng.
-- Nếu không thấy một mục, tài khoản có thể không có quyền hoặc mục đó chỉ dành cho vai trò quản lý/quản trị.
-- Nhân viên thường thấy các mục phục vụ ca trực và công việc được giao. Quản lý chi nhánh có thêm thao tác quản lý nhân sự, phân ca, phân công việc và danh mục dịch vụ. Quản trị hệ thống có cổng riêng để cấu hình toàn hệ thống.
-- Đăng xuất bằng thẻ hồ sơ ở cuối menu hoặc nút đăng xuất.
+1. Mở trang đăng nhập của web quản lý.
+2. Nhập email và mật khẩu tài khoản nhân viên/quản lý được cấp, sau đó chọn đăng nhập.
+3. Nếu quên mật khẩu, chọn chức năng quên/đặt lại mật khẩu, yêu cầu mã OTP gửi đến email, nhập mã còn hạn và tạo mật khẩu mới. Không chia sẻ OTP hoặc mật khẩu.
+4. Sau khi đăng nhập, xác nhận bạn đang ở đúng tài khoản và chi nhánh.
+5. Dùng menu bên trái để mở các phân hệ. Chọn mũi tên cạnh mục có danh mục con để xem thêm lựa chọn.
+6. Trên điện thoại, dùng nút menu để mở/đóng điều hướng; trên máy tính, có thể thu gọn thanh điều hướng.
+7. Chọn **Tiếng Việt / English** trên thanh đầu trang để đổi ngôn ngữ giao diện.
+8. Lưu ý: nội dung giao diện được hỗ trợ dịch, nhưng tên khách, tên dịch vụ, ghi chú, tiêu đề lịch bận và nội dung do người dùng nhập có thể vẫn giữ ngôn ngữ ban đầu.
+9. Nếu không thấy menu cần dùng, không dùng tài khoản khác để vượt quyền; hỏi quản lý để xác nhận vai trò được cấp.
+10. Đăng xuất bằng thẻ hồ sơ hoặc nút đăng xuất khi dùng xong, đặc biệt trên máy tính dùng chung.
 
 ### English
 
-- Use the left navigation to open modules; some items have an arrow to reveal submenus.
-- On mobile, open or close navigation with the menu button. On desktop, the sidebar can be collapsed.
-- If a menu item is missing, the account may not have permission, or that feature may be restricted to managers/administrators.
-- Staff generally see shift and assigned-work tools. Branch managers have additional staff, shift, task-assignment, and service-catalog controls. System administrators use a separate portal for system-wide configuration.
-- Sign out from the profile card at the bottom of the navigation or the sign-out control.
+1. Open the hotel-management sign-in page.
+2. Enter the staff/manager email and password provided to you, then sign in.
+3. If you forget your password, choose the password-reset option, request an email OTP, enter the unexpired code, and set a new password. Never share your OTP or password.
+4. After signing in, verify that you are using the correct account and branch.
+5. Use the left menu to open modules. Select the arrow beside a menu item to reveal its submenu.
+6. On mobile, use the menu button to open/close navigation; on desktop, the sidebar can be collapsed.
+7. Select **Tiếng Việt / English** in the top bar to change the interface language.
+8. Note: supported interface text is translated, but guest/service names, notes, busy-schedule titles, and other user-entered content may remain in their original language.
+9. If a menu is missing, do not use another account to bypass permissions; ask a manager to confirm your role.
+10. Sign out from the profile card or sign-out control when finished, especially on a shared computer.
 
-## 3. Tài khoản nhân viên và quản lý chi nhánh / Staff and branch-manager accounts
+## 2. Tổng quan chi nhánh / Branch overview
 
-### 3.1 Tổng quan / Overview
+![Ảnh chụp giao diện Tổng quan thực tế; thông tin nhận diện đã được làm mờ / Actual Overview screenshot with identifying details blurred](../public/user-guide/screenshots/overview.jpg)
+![Ảnh chụp lịch check-in/check-out và dịch vụ cần xác nhận / Check-in, check-out, and pending-services dashboard screenshot](../public/user-guide/screenshots/overview-schedule.jpg)
 
-![Ảnh chụp giao diện Tổng quan thực tế; thông tin nhận diện đã được làm mờ](../public/user-guide/screenshots/overview.jpg)
-![Ảnh chụp lịch check-in/check-out và dịch vụ cần xác nhận / Check-in, check-out, and pending-services dashboard](../public/user-guide/screenshots/overview-schedule.jpg)
+### Tiếng Việt
 
-**Tiếng Việt**
+1. Chọn **Tổng quan** ở menu bên trái.
+2. Xem các thẻ đầu trang để nắm nhanh doanh thu, công suất phòng, khách đang lưu trú và lượt đến/trả phòng.
+3. Nếu chỉ số đang tải hoặc hiện dấu gạch ngang/lỗi, không hiểu dữ liệu thiếu là 0; mở phân hệ chi tiết để kiểm tra.
+4. Cuộn đến lịch check-in/check-out và xác nhận ngày đang xem.
+5. Dùng mũi tên hoặc bộ chọn ngày để xem ngày khác; chọn **Hôm nay** để trở về ngày hiện tại.
+6. Chọn tab khách chờ nhận phòng, chờ trả phòng hoặc đã nhận phòng sớm.
+7. Tìm đúng booking, mở dòng cần xử lý và tiếp tục ở phân hệ tương ứng.
+8. Trong khu vực dịch vụ cần xác nhận, mở booking và kiểm tra loại dịch vụ, số lượng, rồi mới xác nhận phần khách đã sử dụng.
+9. Dùng Tổng quan để theo dõi nhanh; kiểm tra chi tiết trong Booking, Quầy lễ tân, Dịch vụ hoặc Báo cáo trước khi ra quyết định.
 
-- Trang Tổng quan hiển thị tình hình chi nhánh như doanh thu hôm nay, công suất phòng, khách đang lưu trú, lượt đến/trả phòng, dịch vụ cần xác nhận, lịch check-in/check-out, công việc và trạng thái phòng.
-- Chọn ngày trên lịch check-in/check-out để xem danh sách khách dự kiến đến, trả phòng hoặc đã check-in sớm. Dùng nút mũi tên để đổi ngày và nút **Hôm nay** để quay về ngày hiện tại.
-- Chọn **Mở quầy lễ tân** để mở màn hình thao tác check-in/check-out.
-- Nếu dữ liệu đang tải, lỗi hoặc không đủ để tính chính xác, một số chỉ số có thể hiển thị dấu gạch ngang hoặc thông báo lỗi. Không xem giá trị thiếu dữ liệu là số 0.
+### English
 
-**English**
+1. Select **Overview** from the left menu.
+2. Review the top cards for a quick view of revenue, room occupancy, in-house guests, and arrivals/departures.
+3. If a metric is loading or shows a dash/error, do not interpret missing data as zero; check the relevant module.
+4. Scroll to the check-in/check-out schedule and verify the displayed date.
+5. Use the arrows or date picker to view another day; select **Today** to return to the current date.
+6. Select the tab for waiting check-ins, waiting check-outs, or early check-ins.
+7. Find the correct booking, open the row, and continue in the relevant module.
+8. In services awaiting confirmation, open the booking and verify service type and quantity before confirming actual usage.
+9. Use Overview for monitoring; review details in Bookings, Front desk, Services, or Reports before making a decision.
 
-- Overview summarizes branch activity, including today's revenue, room occupancy, guests in-house, arrivals/departures, services awaiting confirmation, the check-in/check-out schedule, tasks, and room status.
-- Select a date in the schedule to see expected arrivals, departures, or early check-ins. Use the arrows to change dates and **Today** to return to the current date.
-- Select **Open front desk** to open check-in/check-out operations.
-- While data is loading, unavailable, or insufficient for an accurate calculation, some figures may show a dash or an error. Do not interpret missing data as zero.
+## 3. Tạo, tra cứu và cập nhật booking / Create, find, and update bookings
 
-### 3.2 Đặt phòng và danh sách booking / Bookings and booking list
-
-![Ảnh chụp trang Đặt phòng thực tế](../public/user-guide/screenshots/bookings.jpg)
+![Ảnh chụp trang Đặt phòng thực tế / Actual booking screen](../public/user-guide/screenshots/bookings.jpg)
 ![Ảnh chụp trang Danh sách booking thực tế / Actual booking-list screen](../public/user-guide/screenshots/booking-list.jpg)
-
-**Tiếng Việt**
-
-- Mở **Quản lý đặt phòng → Đặt phòng** để tạo booking. Chọn ngày nhận/trả phòng, xem phòng còn khả dụng, chọn phòng, nhập thông tin khách, chọn dịch vụ nếu cần, kiểm tra tổng tiền rồi xác nhận.
-- Ngày có lịch bận được đánh dấu và không cho chọn phòng/ngày bị ảnh hưởng. Nếu cần đặt trong khoảng này, kiểm tra lại lịch và liên hệ quản lý.
-- Mở **Danh sách booking** để tra cứu booking. Dùng bộ lọc/tìm kiếm có sẵn, mở booking để xem chi tiết và chọn thao tác phù hợp với trạng thái booking và quyền tài khoản.
-- Khi sửa booking, kiểm tra ngày, phòng, khách, dịch vụ và số tiền trước khi lưu. Các thao tác có thể bị giới hạn với booking đã check-in, checkout, hủy hoặc hoàn tất.
-
-**English**
-
-- Open **Booking management → Create booking**. Choose check-in/check-out dates, review available rooms, select rooms, enter guest information, add services if needed, review the total, and confirm.
-- Busy-schedule dates are marked, and affected dates/rooms cannot be selected. If a stay overlaps a busy period, verify the schedule and contact a manager.
-- Open **Booking list** to find bookings. Use the available filters/search, open a booking to review its details, and choose an action allowed by the booking status and your permissions.
-- Before saving a booking edit, verify dates, rooms, guest information, services, and amounts. Actions may be restricted for checked-in, checked-out, cancelled, or completed bookings.
-
-### 3.3 Check-in và check-out / Check-in and check-out
-
-![Ảnh chụp trang Check-in / Check-out thực tế](../public/user-guide/screenshots/check-in-out.jpg)
-
-**Tiếng Việt**
-
-1. Mở **Check-in / Check-out**, chọn ngày và loại thao tác cần xử lý.
-2. Tìm booking/khách trong danh sách chờ; mở chi tiết để đối chiếu thông tin khách, số điện thoại, phòng, ngày ở, khoản thu và dịch vụ.
-3. Thực hiện check-in sau khi xác nhận khách và phòng đúng. Với check-out, kiểm tra các khoản phát sinh, dịch vụ chưa xác nhận, tiền đã thanh toán và khoản hoàn/tiền thừa.
-4. Xác nhận lựa chọn hoàn tiền theo đúng yêu cầu và chính sách của khách sạn. Yêu cầu hoàn qua ngân hàng có thể cần chuyển sang mục phê duyệt hoàn tiền.
-5. Với booking nhiều phòng, kiểm tra từng phòng/khách và dùng thao tác nhóm nếu phù hợp.
-
-**English**
-
-1. Open **Check-in / Check-out**, select the date and operation type.
-2. Find the booking/guest in the waiting list; open its details and verify guest information, phone number, room, stay dates, charges, and services.
-3. Complete check-in after confirming the guest and room. For check-out, review extra charges, unconfirmed services, payments, and any refund/change due.
-4. Confirm the refund option according to the guest's request and hotel policy. Bank-transfer refund requests may need review in Refund approvals.
-5. For multi-room bookings, review each room/guest and use a group action only when appropriate.
-
-### 3.4 Khách hàng, hóa đơn và hoàn tiền / Customers, invoices, and refunds
-
-**Tiếng Việt**
-
-- **Khách hàng:** tìm hồ sơ khách, xem thông tin và lịch sử lưu trú; chỉ người có quyền quản lý mới được tạo/chỉnh sửa hồ sơ.
-- **Hóa đơn:** tra cứu hóa đơn và giao dịch theo thông tin có sẵn trên trang. Đối chiếu booking và thanh toán trước khi tư vấn hoặc xử lý sai lệch.
-- **Phê duyệt hoàn tiền:** xem yêu cầu chờ xử lý, kiểm tra booking, số tiền và thông tin hoàn, sau đó chọn quyết định theo quyền được cấp. Không xác nhận hoàn nếu chưa đối chiếu giao dịch thực tế.
-
-**English**
-
-- **Customers:** find guest profiles and review their information and stay history. Only users with the required permission can create or edit profiles.
-- **Invoices:** find invoices and transactions using the page's available search/filter controls. Reconcile against the booking and payment before advising on or correcting a discrepancy.
-- **Refund approvals:** review pending requests, verify the booking, amount, and refund details, then make an authorized decision. Do not confirm a refund without reconciling the actual transaction.
-
-![Ảnh chụp trang Quản lý khách hàng; thông tin khách đã được làm mờ / Customer list with guest details blurred](../public/user-guide/screenshots/customers.jpg)
-![Ảnh chụp trang Hóa đơn; dữ liệu booking đã được làm mờ / Invoices with booking details blurred](../public/user-guide/screenshots/invoices.jpg)
-![Ảnh chụp trang Phê duyệt hoàn tiền / Refund approvals screen](../public/user-guide/screenshots/refund-approvals.jpg)
-
-### 3.5 Phòng, lịch bận và nội quy / Rooms, busy schedules, and hotel rules
-
-![Ảnh chụp trang Quản lý phòng thực tế](../public/user-guide/screenshots/rooms.jpg)
-
-**Tiếng Việt**
-
-- **Quản lý phòng:** xem trạng thái phòng; tùy quyền, quản lý danh sách phòng, tòa/tầng, cấu hình giá, tiện nghi, hình ảnh và phân công dọn phòng.
-- Khi cập nhật trạng thái phòng hoặc giao việc dọn phòng, xác nhận đúng số phòng và nhân viên trước khi lưu.
-- **Lịch bận:** xem các khoảng ngày tạm ngưng khai thác được thông báo cho chi nhánh. Các ngày này được dùng để tránh tạo booking bị trùng. Quản trị hệ thống tạo lịch và chọn phạm vi chi nhánh; nhân viên chi nhánh xem lịch được áp dụng.
-- **Nội quy khách sạn:** tra cứu quy tắc đặt phòng, nhận/trả phòng, hủy, dịch vụ và đối soát. Luôn đối chiếu booking và chính sách thực tế trước khi trao đổi với khách.
-
-![Ảnh chụp trang Lịch bận thực tế; thông tin lịch đã được làm mờ](../public/user-guide/screenshots/hotel-closures.jpg)
-![Ảnh chụp phần cấu hình giá phòng / Room pricing configuration](../public/user-guide/screenshots/room-pricing.jpg)
-![Ảnh chụp trang Nội quy khách sạn / Hotel rules screen](../public/user-guide/screenshots/hotel-rules.jpg)
-
-**English**
-
-- **Room management:** review room status. Depending on permissions, manage rooms, buildings/floors, pricing, amenities, images, and housekeeping assignments.
-- When changing room status or assigning housekeeping, verify the room number and staff member before saving.
-- **Busy schedules:** review notified periods when a branch is unavailable. These dates help prevent overlapping bookings. System administrators create schedules and select branch scope; branch staff view the schedules that apply to them.
-- **Hotel rules:** consult booking, check-in/out, cancellation, service, and settlement rules. Verify the booking and actual policy before advising a guest.
-
-### 3.6 Dịch vụ và khuyến mãi / Services and promotions
-
-![Ảnh chụp trang thao tác dịch vụ khách hàng thực tế](../public/user-guide/screenshots/services.jpg)
-
-**Tiếng Việt**
-
-- **Thao tác dịch vụ khách hàng:** tìm booking/khách, xem dịch vụ đã đặt, xác nhận số lượng khách đã sử dụng và kiểm tra phần còn chờ xác nhận.
-- **Danh mục dịch vụ:** dành cho người có quyền quản lý; có thể tạo/chỉnh sửa thông tin dịch vụ và trạng thái hoạt động.
-- **Khuyến mãi:** tra cứu và quản lý mã/ưu đãi theo quyền. Kiểm tra thời hạn, trạng thái và điều kiện áp dụng trước khi sử dụng cho booking.
-
-![Ảnh chụp danh mục dịch vụ / Service catalog screen](../public/user-guide/screenshots/service-catalog.jpg)
-![Ảnh chụp trang Khuyến mãi / Promotions screen](../public/user-guide/screenshots/promotions.jpg)
-
-**English**
-
-- **Guest service usage:** find the booking/guest, review booked services, confirm the quantity used, and check any remaining quantity awaiting confirmation.
-- **Service catalog:** available to authorized managers to create/edit service details and active status.
-- **Promotions:** find and manage promotion codes/offers according to your permissions. Check validity dates, status, and eligibility before applying one to a booking.
-
-### 3.7 Nhân viên, ca làm và công việc / Staff, shifts, and tasks
-
-![Ảnh chụp trang Nhân viên & ca làm thực tế; thông tin nhân viên đã được làm mờ](../public/user-guide/screenshots/staff.jpg)
-![Ảnh chụp danh sách nhân viên; thông tin cá nhân đã được làm mờ / Employee directory with personal details blurred](../public/user-guide/screenshots/staff-employees.jpg)
-![Ảnh chụp màn hình phân ca làm việc / Shift scheduling screen](../public/user-guide/screenshots/staff-shifts.jpg)
-![Ảnh chụp màn hình phân công công việc / Task assignment screen](../public/user-guide/screenshots/staff-tasks.jpg)
-
-**Tiếng Việt**
-
-- Nhân viên mở **Ca trực** để xem lịch/ca của mình và **Phân công dọn phòng** hoặc mục công việc để xem việc được giao, cập nhật tiến độ theo thao tác trên màn hình.
-- Quản lý mở **Danh sách nhân viên** để tra cứu nhân sự; mở **Phân ca làm** để lập lịch ca; mở **Phân công công việc** để giao và theo dõi công việc.
-- Kiểm tra nhân viên, ngày, ca và phòng trước khi lưu phân công. Việc quản lý nhân sự và phân ca có thể yêu cầu quyền quản lý.
-
-**English**
-
-- Staff open **My shifts** to review their schedule and **Housekeeping assignment** or the tasks area to see assigned work and update its progress using the available controls.
-- Managers open **Employee list** to find staff, **Assign shifts** to schedule shifts, and **Assign tasks** to create and monitor work assignments.
-- Verify the staff member, date, shift, and room before saving an assignment. Staff management and shift scheduling may require manager permissions.
-
-### 3.8 Báo cáo và cài đặt / Reports and settings
-
-![Ảnh chụp trang Báo cáo doanh thu thực tế](../public/user-guide/screenshots/reports.jpg)
-![Ảnh chụp trang Phân quyền / Permissions screen](../public/user-guide/screenshots/permissions.jpg)
-![Ảnh chụp trang Cài đặt; thông tin nhận diện đã được làm mờ / Settings with identifying details blurred](../public/user-guide/screenshots/settings.jpg)
-
-**Tiếng Việt**
-
-- **Báo cáo:** chọn bộ lọc/khoảng thời gian được cung cấp để xem các chỉ số doanh thu, dịch vụ, khuyến mãi hoặc trạng thái phòng. Đối chiếu ngày và chi nhánh trước khi xuất/đọc số liệu.
-- **Cài đặt:** cập nhật thông tin cá nhân hoặc cài đặt chi nhánh được cấp quyền; đổi ngôn ngữ tại mục Ngôn ngữ. Một số thay đổi bảo mật có thể yêu cầu xác thực lại.
-
-**English**
-
-- **Reports:** use the available filters/date range to review revenue, services, promotions, or room-status metrics. Verify the date range and branch before exporting or interpreting results.
-- **Settings:** update your profile or authorized branch settings and change the interface language under Language. Some security-sensitive changes may require re-authentication.
-
-## 4. Cổng khách hàng / Customer portal
-
-> **Ảnh chụp cổng khách hàng:** Chưa có ảnh chụp thực tế trong tài liệu này vì chưa có phiên đăng nhập/môi trường khách hàng khả dụng.  
-> **Customer portal screenshots:** No real screenshots are included because a signed-in customer environment is not currently available.
+![Ảnh chụp thật bước chọn ngày và phòng; tên khách trong lịch đã được ẩn / Actual dates-and-rooms step; guest names in the calendar have been hidden](../public/user-guide/screenshots/booking-dates-rooms.jpg)
+![Ảnh chụp thật bước nhập thông tin khách và số người theo phòng; dữ liệu cá nhân đã được ẩn / Actual guest-information step with guest counts per room; personal data has been hidden](../public/user-guide/screenshots/booking-guest-info.jpg)
+![Ảnh chụp thật bước chọn dịch vụ cho tất cả phòng và tóm tắt chi phí / Actual service-selection step for all rooms and its cost summary](../public/user-guide/screenshots/booking-services-all-rooms.jpg)
+![Ảnh chụp thật bước chọn dịch vụ riêng theo từng phòng / Actual service-selection step for individual rooms](../public/user-guide/screenshots/booking-services-by-room.jpg)
+![Ảnh chụp thật bước chọn khuyến mãi; tên và mã ưu đãi đã được làm mờ / Actual promotion-selection step; promotion names and codes have been blurred](../public/user-guide/screenshots/booking-promotion-selection.jpg)
 
 ### Tiếng Việt
 
-1. **Tìm khách sạn:** từ trang chủ, mở danh sách khách sạn hoặc tìm kiếm theo điểm đến/ngày lưu trú. Chọn khách sạn để xem thông tin và chọn **Xem phòng**.
-2. **Chọn ngày và phòng:** chọn ngày nhận/trả phòng, giờ dự kiến nếu được yêu cầu, xem ngày tạm đóng và tình trạng còn phòng, sau đó chọn loại phòng/số lượng phòng và số khách phù hợp.
-3. **Dịch vụ và thanh toán:** tiếp tục đến trang dịch vụ để thêm dịch vụ nếu cần; tại trang thanh toán, kiểm tra thông tin khách, ngày ở, phòng, dịch vụ, ưu đãi, chính sách và tổng tiền. Chọn phương thức thanh toán được cung cấp và làm theo hướng dẫn trên màn hình.
-4. **Kết quả đặt phòng:** sau khi gửi yêu cầu, lưu lại thông tin xác nhận/mã booking hiển thị. Nếu cần, đăng nhập hoặc đăng ký tài khoản để theo dõi booking, hóa đơn và thông tin cá nhân.
-5. **Tài khoản:** đăng nhập/đăng ký từ menu tài khoản. Các trang lịch sử booking, hóa đơn, hồ sơ, tài khoản khách hàng và chương trình khách hàng thân thiết yêu cầu đăng nhập. Dùng chức năng quên mật khẩu nếu không đăng nhập được.
-6. **Ưu đãi, dịch vụ và đánh giá:** xem danh sách ưu đãi/dịch vụ công khai; đánh giá booking theo luồng được cung cấp. Nội dung đánh giá và thông tin hồ sơ là nội dung do khách nhập.
-7. **Ngôn ngữ:** dùng bộ chọn ngôn ngữ trên thanh đầu trang. Nội dung tĩnh được chuyển theo ngôn ngữ hỗ trợ; tên khách sạn, địa chỉ, tên phòng/dịch vụ và nội dung do khách sạn hoặc khách nhập có thể không được tự dịch.
+**Tạo booking**
+
+1. Mở **Quản lý đặt phòng → Đặt phòng**. Trên trang lịch đặt phòng, chọn **Đặt phòng mới**.
+2. Ở bước **Ngày & phòng**, chọn **Ngày nhận phòng** trước, sau đó chọn **Ngày trả phòng**. Kiểm tra ngày trả muộn hơn ngày nhận và số đêm hiển thị.
+3. Nếu ngày màu vàng/lịch bận, ngày không khả dụng hoặc hệ thống báo không tải được lịch bận, dừng lại để kiểm tra lịch/đường truyền; không cố đặt ngày bị khóa.
+4. Đọc chú giải lịch: **Còn phòng**, **Đã đặt/không thể chọn**, **Đang chọn**. Chỉ chọn ô phòng còn trống trong đúng khoảng ngày.
+5. Nhấn hoặc kéo dọc trên lịch để chọn phòng; thao tác kéo dọc có thể chọn nhiều phòng trong cùng ngày. Kiểm tra các ô được tô chọn.
+6. Nhấn lại ô đã chọn để bỏ phòng. Khi điều chỉnh khoảng ngày, lịch chỉ cho bỏ ngày đầu hoặc ngày cuối của khoảng.
+7. Tìm phòng bằng ô tìm kiếm số/loại phòng; lọc thêm theo **Loại phòng**, **Tầng**, **Tòa nhà**. Nếu không thấy, kiểm tra ngày và xóa bộ lọc.
+8. Xem số phòng và tổng tạm tính trong phần **Đã chọn**. Chọn **Xem phòng đã chọn** để rà soát riêng các phòng đã chọn.
+9. Với nhiều phòng, đối chiếu từng số phòng, ngày ở và sức chứa. Chọn **Tiếp tục** chỉ sau khi các phòng cần đặt đều đúng.
+10. Ở bước **Thông tin đặt phòng**, tìm khách đã lưu theo tên/số điện thoại rồi chọn đúng hồ sơ. Thông tin hồ sơ sẽ tự điền.
+11. Nếu chưa có hồ sơ, nhập họ tên, số điện thoại đủ 10 chữ số và CCCD đủ 12 chữ số. Email xác nhận không bắt buộc; nếu nhập thì email phải đúng định dạng.
+12. Với khách mới, nhấn **Tạo khách hàng** và chờ xác nhận hồ sơ đã được tạo/chọn. Với khách đã lưu, kiểm tra tên và số điện thoại hiển thị.
+13. Trong từng thẻ phòng, chọn số **Người lớn (từ 12 tuổi)**, **Trẻ em (2 đến dưới 12 tuổi)** và **Em bé (dưới 2 tuổi)** theo thực tế.
+14. Đọc sức chứa tiêu chuẩn, số khách ghép thêm tối đa và phụ thu hiển thị. Điều chỉnh số lượng nếu vượt sức chứa; em bé dưới 2 tuổi được ghi là miễn phí theo quy định hiển thị.
+15. Nhấn **Tiếp tục chọn dịch vụ**. Nếu nút chưa bật, đọc thông báo trên màn hình và chọn/tạo hồ sơ khách trước khi đi tiếp.
+16. Ở bước **Chọn dịch vụ**, chọn **Chọn cho tất cả phòng** nếu mọi phòng dùng cùng dịch vụ; chọn **Chọn riêng từng phòng** nếu dịch vụ hoặc số người khác nhau theo phòng.
+17. Dùng **Tìm dịch vụ** để lọc theo tên. Đọc tên, nhóm, mô tả và giá/đơn vị trước khi tích chọn.
+18. Ở chế độ tất cả phòng, tích chọn dịch vụ cần thêm rồi rà soát chi tiết từng phòng: dịch vụ, số người sử dụng và tiền dịch vụ.
+19. Nếu dịch vụ chỉ áp dụng cho một số người, bỏ chọn **Áp dụng cả phòng** và nhập đúng số người dùng; nếu cả phòng sử dụng, giữ lựa chọn này.
+20. Ở chế độ từng phòng, mở thẻ đúng phòng, tìm dịch vụ, tích chọn và nhập số lượng. Kiểm tra đơn giá/đơn vị hiển thị.
+21. Rà soát **Chi tiết phòng** và **Tóm tắt chi phí**: tiền phòng, từng khoản dịch vụ và tổng tiền từng phòng. Bỏ chọn dịch vụ khách không yêu cầu.
+22. Nếu danh sách dịch vụ báo lỗi tải, không đoán giá hoặc xác nhận dịch vụ; thử lại hoặc báo quản lý. Nếu không cần dịch vụ, để trống và nhấn **Tiếp tục**.
+23. Ở bước **Khuyến mãi**, kiểm tra cả **Khuyến mãi chi nhánh** và **Khuyến mãi khách hàng**. Ưu đãi riêng của khách chỉ hiển thị sau khi chọn hồ sơ khách có mã đã lưu.
+24. Dùng **Tìm khuyến mãi** để tìm theo tên/mã. Hoặc nhập mã vào **Nhập mã khuyến mãi** rồi nhấn **Áp dụng**.
+25. Trên thẻ ưu đãi, đọc tên, mã và mức giảm. Nhấn **Chi tiết** để xem mô tả; ưu đãi áp dụng cho tiền phòng, tiền dịch vụ hay tổng hóa đơn; mức tối thiểu; ngày hiệu lực và trạng thái.
+26. Trong **Chi tiết**, kiểm tra số giảm dự kiến cho booking hiện tại và mức giảm tối đa (nếu có). Chỉ chọn ưu đãi khi booking đáp ứng điều kiện.
+27. Chọn **Chọn mã** trên thẻ hoặc **Chọn khuyến mãi này** trong cửa sổ chi tiết. Chỉ một mã được áp dụng tại một thời điểm; kiểm tra dòng xác nhận và số tiền giảm.
+28. Có thể nhấn **Chọn mã giảm nhiều nhất** để hệ thống tìm ưu đãi hợp lệ có mức giảm cao nhất. Nếu không có ưu đãi phù hợp, đọc cảnh báo và tiếp tục không giảm.
+29. Nếu không tìm thấy mã, kiểm tra lại mã và nguồn phát hành. Nếu mã không đủ điều kiện, xem mức tối thiểu/ngày hiệu lực trong **Chi tiết**; nếu chọn nhầm, nhấn **Bỏ chọn** rồi kiểm tra tổng tiền cập nhật.
+30. Ở bước cuối, kiểm tra tổng tiền sau khi áp dụng khuyến mãi. Biểu mẫu tạo booking hiện không có lựa chọn phương thức thanh toán.
+31. Trước khi gửi, đối chiếu lại khách, số người/phụ thu từng phòng, ngày/phòng, dịch vụ, khuyến mãi và tổng tiền. Không xem booking là đã thanh toán chỉ vì đã xác nhận; ghi nhận thu tiền theo quy trình của chi nhánh.
+32. Nhấn **Xác nhận đặt phòng** một lần và chờ kết quả. Khi thành công, ghi lại mã booking và kiểm tra trạng thái trong **Danh sách booking**; không gửi lại chỉ vì trang đang xử lý.
+
+**Tra cứu hoặc sửa booking**
+
+1. Mở **Quản lý đặt phòng → Danh sách booking**.
+2. Dùng tìm kiếm/bộ lọc trên trang để thu hẹp danh sách; xác nhận đúng mã booking hoặc thông tin khách.
+3. Mở dòng booking và kiểm tra trạng thái trước khi chọn thao tác.
+4. Khi chỉnh sửa, xác nhận ngày/phòng mới còn khả dụng; kiểm tra lại khách, dịch vụ và tổng tiền sau thay đổi.
+5. Chỉ lưu khi thông tin đã được đối chiếu. Booking đã nhận phòng, hoàn tất hoặc hủy có thể giới hạn thao tác.
 
 ### English
 
-1. **Find a hotel:** from the home page, browse hotels or search by destination/stay dates. Open a hotel to review its details and select **View rooms**.
-2. **Choose dates and rooms:** select check-in/check-out dates and estimated arrival time if requested; review closure dates and availability, then choose room type/quantity and guest count.
-3. **Services and payment:** continue to the services page to add optional services. On checkout, review guest details, dates, rooms, services, promotions, policies, and the total. Select an available payment method and follow the on-screen instructions.
-4. **Booking result:** after submitting the request, save the confirmation/booking reference shown. Sign in or register if you want to manage bookings, invoices, and personal details.
-5. **Account:** sign in/register from the account menu. Booking history, invoices, profile, customer account, and loyalty pages require sign-in. Use password recovery if you cannot sign in.
-6. **Offers, services, and reviews:** browse public offers/services and review a booking through the available flow. Reviews and profile details are entered by the customer.
-7. **Language:** use the language selector in the top bar. Static text changes to a supported language; hotel names, addresses, room/service names, and content entered by a hotel or customer may not be translated automatically.
+**Create a booking**
 
-## 5. Quản trị viên hệ thống / System administrator
+1. Open **Booking management → Bookings**. On the booking schedule page, select **New booking**.
+2. At **Dates & rooms**, select **Check-in date** first, then **Check-out date**. Confirm check-out is later and review the displayed number of nights.
+3. If a date is marked busy/yellow, unavailable, or the busy schedule fails to load, stop to check the schedule/connection; do not book a blocked date.
+4. Read the calendar legend: **Available**, **Booked/unavailable**, and **Selecting**. Select only available room cells for the required dates.
+5. Click or drag vertically on the calendar to select rooms; vertical dragging can select multiple rooms for the same dates. Check the highlighted cells.
+6. Click a selected cell again to remove a room. When adjusting a date range, only its first or last day can be removed.
+7. Search rooms by number/type and filter by **Room type**, **Floor**, and **Building**. If the room is missing, verify dates and clear filters.
+8. Review the room count and estimated total under **Selected**. Select **View selected rooms** to review only the rooms chosen.
+9. For multiple rooms, verify each room number, stay dates, and capacity. Select **Continue** only when all required rooms are correct.
+10. At **Booking information**, search saved customers by name/phone and select the correct profile. Its details will be populated.
+11. If no profile exists, enter the full name, a 10-digit phone number, and a 12-digit identity number. Confirmation email is optional but must be valid if entered.
+12. For a new guest, select **Create customer** and wait for confirmation. For a saved profile, verify the displayed name and phone.
+13. In each room card, select the actual number of **Adults (12+)**, **Children (2 to under 12)**, and **Infants (under 2)**.
+14. Review standard capacity, maximum extra guests, and displayed surcharges. Adjust counts if capacity is exceeded; infants under 2 are shown as free under the displayed policy.
+15. Select **Continue to select services**. If disabled, read the on-screen message and select/create the customer profile before proceeding.
+16. At **Select services**, choose **Select for all rooms** when rooms share the same services; choose **Select individually by room** when services or quantities differ.
+17. Use **Search services** to filter by name. Review the name, category, description, and displayed price/unit before checking a service.
+18. In all-rooms mode, check the services needed, then review each room's details: services, number of users, and service charges.
+19. If only some guests use a service, clear **Apply to the whole room** and enter the actual number of users; keep it selected when everyone uses it.
+20. In per-room mode, expand the correct room, find and check the service, then enter its quantity. Verify the displayed unit price/unit.
+21. Review **Room details** and **Cost summary** for room charges, each service, and each room total. Uncheck services the guest did not request.
+22. If services fail to load, do not guess a price or confirm a service; retry or contact a manager. If no service is needed, leave selections empty and select **Continue**.
+23. At **Promotions**, review both **Branch promotions** and **Customer promotions**. Customer offers appear only after selecting a guest profile with saved offers.
+24. Use **Search promotions** to find an offer by name/code, or enter a code in the promotion field and select **Apply**.
+25. On a promotion card, review the name, code, and discount. Select **Details** to review its description; whether it applies to room, service, or total; minimums; validity dates; and status.
+26. In **Details**, review the estimated discount for this booking and any maximum discount. Select an offer only when the booking meets its conditions.
+27. Select **Choose code** on the card or **Choose this promotion** in the details dialog. Only one offer is applied at a time; verify the applied-code line and discount.
+28. Select **Choose best available discount** to have the system find the eligible offer with the highest discount. If none qualify, read the warning and proceed without a discount.
+29. If a code is not found, verify the code and issuing source. If ineligible, review minimums/validity in **Details**; if the wrong offer was selected, select **Remove selection** and verify the total updates.
+30. At the final step, review the total after promotions. The booking form currently has no payment-method selector.
+31. Before submitting, recheck the guest, guest counts/surcharges by room, dates/rooms, services, promotion, and total. Do not treat a booking as paid just because it was confirmed; record payment using the branch's process.
+32. Select **Confirm booking** once and wait for the result. On success, note the booking reference and verify its status in **Booking list**; do not resubmit while processing.
 
-> **Ảnh chụp cổng quản trị:** Chưa có ảnh chụp thực tế trong tài liệu này vì chưa có phiên đăng nhập/môi trường quản trị khả dụng.  
-> **System administration screenshots:** No real screenshots are included because a signed-in administrator environment is not currently available.
+**Find or edit a booking**
+
+1. Open **Booking management → Booking list**.
+2. Use the page search/filters to narrow the list and verify the booking reference or guest details.
+3. Open the booking row and check its status before choosing an action.
+4. Before editing, confirm new dates/rooms are available; review guest details, services, and the updated total.
+5. Save only after reviewing the changes. Check-in, completed, or cancelled bookings may have restricted actions.
+
+## 4. Nhận phòng và trả phòng / Check-in and check-out
+
+![Ảnh chụp trang Check-in / Check-out thực tế / Actual Check-in / Check-out screenshot](../public/user-guide/screenshots/check-in-out.jpg)
 
 ### Tiếng Việt
 
-Quản trị hệ thống vào cổng quản trị sau khi đăng nhập. Các mục có thể gồm:
-
-- **Tổng quan và thông báo:** theo dõi tình trạng toàn hệ thống, lọc/xem thông báo và đánh dấu đã đọc.
-- **Tỉnh/thành và chi nhánh:** chọn tỉnh/thành hoặc chi nhánh để xem chi tiết; tạo/cập nhật dữ liệu chi nhánh theo biểu mẫu và quyền được cấp.
-- **Lịch tạm đóng:** tạo lịch, đặt tiêu đề/mô tả/ngày bắt đầu/ngày kết thúc, chọn áp dụng toàn hệ thống hoặc các chi nhánh cụ thể, kiểm tra xung đột rồi gửi thông báo.
-- **Quản lý danh mục:** quản lý các dữ liệu dùng chung như tiện nghi và loại giường; một số danh mục hỗ trợ nhập từ tệp mẫu.
-- **Khuyến mãi và dịch vụ:** quản lý cấu hình dùng chung/toàn hệ thống khi có quyền.
-- **Role và quyền:** xem/quản lý vai trò và quyền truy cập. Chỉ thay đổi khi đã xác nhận phạm vi ảnh hưởng.
-- **Tài khoản và thống kê tài nguyên:** dùng các mục quản lý tài khoản/thống kê khi cần, kiểm tra đúng đối tượng/phạm vi trước khi lưu.
-- **Cá nhân:** quản lý thông tin hồ sơ quản trị.
-
-Khi tạo hoặc cập nhật cấu hình toàn hệ thống, rà soát phạm vi, dữ liệu và ảnh hưởng đến chi nhánh trước khi xác nhận. Không chia sẻ thông tin đăng nhập quản trị.
+1. Mở **Check-in / Check-out** từ menu hoặc chọn **Mở quầy lễ tân** trên Tổng quan.
+2. Chọn ngày cần xử lý và kiểm tra ngày trên màn hình.
+3. Chọn tab **Nhận phòng** hoặc **Trả phòng** phù hợp.
+4. Tìm booking bằng mã hoặc thông tin khách. Nếu không thấy, kiểm tra ngày, tab và bộ lọc trước.
+5. Mở booking và đối chiếu mã booking, tên/số điện thoại khách, phòng, ngày ở, số khách và trạng thái.
+6. **Khi nhận phòng:** kiểm tra phòng, trạng thái thanh toán, ghi chú đến sớm và phụ thu (nếu có).
+7. Thông báo và thống nhất các khoản phí phát sinh với khách trước khi xác nhận nhận phòng.
+8. **Khi trả phòng:** kiểm tra từng dịch vụ, lượng sử dụng thực tế và khoản phát sinh; không mặc định mọi dịch vụ đã đặt đều đã dùng.
+9. Đối chiếu tiền đã thu, số còn phải thu hoặc số tiền hoàn. Thực hiện hoàn theo phương thức và quy trình phê duyệt của khách sạn.
+10. Với booking nhiều phòng, rà soát từng phòng/khách. Chỉ dùng thao tác nhóm sau khi kiểm tra toàn bộ các dòng được chọn.
+11. Sau khi xác nhận, kiểm tra trạng thái booking mới và trạng thái phòng.
 
 ### English
 
-System administrators open the administration portal after sign-in. Available sections may include:
+1. Open **Check-in / Check-out** from the menu or select **Open front desk** on Overview.
+2. Select the processing date and verify it on screen.
+3. Choose the appropriate **Check-in** or **Check-out** tab.
+4. Find the booking by reference or guest details. If it is missing, verify the date, tab, and filters first.
+5. Open the booking and verify its reference, guest name/phone, room, stay dates, guest count, and status.
+6. **For check-in:** review the room, payment status, early-arrival notes, and any surcharge.
+7. Explain and agree on extra charges with the guest before confirming check-in.
+8. **For check-out:** review each service, actual usage, and extra charge; do not assume every booked service was used.
+9. Reconcile payments received, any outstanding balance, and any refund. Follow the hotel's refund method and approval process.
+10. For multi-room bookings, review each room/guest. Use a group action only after checking every selected row.
+11. After confirmation, verify the new booking status and room status.
 
-- **Overview and notifications:** monitor system-wide activity, review/filter notifications, and mark them as read.
-- **Provinces and branches:** select a province or branch to review details; create/update branch records using the available form and permissions.
-- **Busy schedules:** enter a title, description, start/end dates, choose all branches or specific branches, check for conflicts, and notify the selected scope.
-- **Catalog management:** manage shared data such as amenities and bed types; some catalogs support importing from a template file.
-- **Promotions and services:** manage shared/system-wide configuration when authorized.
-- **Roles and permissions:** review/manage roles and access rights. Change these only after confirming the impact.
-- **Accounts and resource statistics:** use account-management and statistics sections as needed, verifying the target and scope before saving.
-- **Profile:** manage the administrator profile.
+## 5. Phòng, lịch bận và nội quy / Rooms, busy schedules, and hotel rules
 
-Before confirming a system-wide change, review its scope, data, and branch impact. Never share administrator credentials.
-
-## 6. Thông báo, xử lý lỗi và an toàn dữ liệu / Notifications, errors, and data safety
+![Ảnh chụp trang Quản lý phòng thực tế / Actual Room management screenshot](../public/user-guide/screenshots/rooms.jpg)
+![Ảnh chụp cấu hình giá phòng / Room pricing screenshot](../public/user-guide/screenshots/room-pricing.jpg)
+![Ảnh chụp trang Lịch bận; thông tin lịch đã được làm mờ / Busy schedule screenshot with details blurred](../public/user-guide/screenshots/hotel-closures.jpg)
+![Ảnh chụp trang Nội quy khách sạn / Hotel rules screenshot](../public/user-guide/screenshots/hotel-rules.jpg)
 
 ### Tiếng Việt
 
-- Biểu tượng chuông hiển thị thông báo; mở thông báo để xem chi tiết và dùng thao tác đánh dấu đã đọc nếu cần.
-- Nếu trang báo lỗi tải dữ liệu, thử tải lại; nếu lỗi tiếp diễn, ghi nhận tên màn hình, thời điểm và thao tác vừa thực hiện để báo quản trị viên.
-- Trước khi lưu các thao tác ảnh hưởng đến booking, tiền, phòng, lịch làm hoặc quyền truy cập, hãy kiểm tra lại dữ liệu và phạm vi.
-- Không nhập thông tin thanh toán hoặc dữ liệu cá nhân vào ghi chú không liên quan. Chỉ mở hồ sơ khách khi phục vụ công việc được giao.
+1. Mở **Quản lý phòng → Quản lý danh sách phòng**.
+2. Dùng bộ lọc có sẵn để tìm phòng; kiểm tra đúng số phòng trước khi mở chi tiết.
+3. Đọc nhãn/màu trạng thái để nhận biết phòng trống, đang sử dụng, đang dọn hoặc bảo trì.
+4. Mở phòng để kiểm tra thông tin, hình ảnh, tiện nghi, tầng và tòa nhà.
+5. Nếu có quyền chỉnh sửa, cập nhật trường cần thiết rồi đọc lại thông tin trước khi lưu.
+6. Khi giao dọn phòng, chọn đúng phòng và nhân viên; cập nhật tiến độ/trạng thái theo tình hình thực tế.
+7. Không chuyển phòng sang Sẵn sàng trước khi công việc dọn/kiểm tra hoàn tất.
+8. Mở **Lịch bận** để xem ngày/khoảng thời gian không nhận đặt áp dụng cho chi nhánh. Mở chi tiết để xác nhận phạm vi và thời hạn.
+9. Nếu tài khoản quản lý có chức năng tạo lịch bận, chọn đúng chi nhánh và thời gian, rà soát lịch trùng và nội dung trước khi lưu/thông báo. Nếu không thấy chức năng này, liên hệ người có quyền.
+10. Ngày đặt bị khóa thì kiểm tra lịch bận; không đổi trạng thái phòng để lách ngày.
+11. Cấu hình giá phòng chỉ sửa khi được phân quyền. Trước khi lưu, kiểm tra đúng phòng/loại phòng, khoảng áp dụng và giá.
+12. Mở **Nội quy khách sạn** để tra cứu chính sách nhận/trả phòng, hủy, dịch vụ và các quy định liên quan trước khi tư vấn.
 
 ### English
 
-- The bell icon shows notifications. Open a notification to review its details and mark it as read when appropriate.
-- If a page reports a loading error, retry. If it persists, record the page, time, and action taken and report it to an administrator.
-- Before saving changes that affect bookings, money, rooms, shifts, or access rights, verify the information and scope.
-- Do not put payment details or personal data in unrelated notes. Access guest profiles only when needed for assigned work.
+1. Open **Room management → Room list**.
+2. Use the available filters and verify the room number before opening its details.
+3. Read the status label/color to identify available, occupied, cleaning, or maintenance rooms.
+4. Open the room to review its details, images, amenities, floor, and building.
+5. If authorized to edit, update the required fields and review them before saving.
+6. When assigning housekeeping, select the correct room and employee; update progress/status to reflect actual work.
+7. Do not mark a room Ready until cleaning/inspection is complete.
+8. Open **Busy schedule** to review unavailable dates/periods for the branch. Open a schedule to verify scope and dates.
+9. If an authorized manager account can create a busy schedule, choose the correct branch and dates, review conflicts and details, then save/notify. If the option is not visible, contact an authorized user.
+10. When booking dates are blocked, check Busy schedule; do not change room status to bypass the restriction.
+11. Change room rates only if authorized. Before saving, verify the room/room type, applicable dates, and rate.
+12. Open **Hotel rules** to review check-in/out, cancellation, service, and related policies before advising guests.
 
-## 7. Ghi chú về tài liệu / Guide notes
+## 6. Khách hàng, dịch vụ, hóa đơn và hoàn tiền / Customers, services, invoices, and refunds
 
-**Tiếng Việt:** Giao diện và quyền có thể thay đổi theo phiên bản, vai trò và cấu hình chi nhánh. Tên menu trong tài liệu mô tả các mục hiện có; tài khoản của bạn có thể không thấy toàn bộ mục. Khi nhãn trong giao diện khác, ưu tiên hướng dẫn của quản lý và quy trình nội bộ.
+![Ảnh chụp danh sách khách hàng; thông tin đã được làm mờ / Customer list screenshot with details blurred](../public/user-guide/screenshots/customers.jpg)
+![Ảnh chụp thao tác dịch vụ khách hàng / Guest service usage screenshot](../public/user-guide/screenshots/services.jpg)
+![Ảnh chụp danh mục dịch vụ / Service catalog screenshot](../public/user-guide/screenshots/service-catalog.jpg)
+![Ảnh chụp hóa đơn; dữ liệu booking đã được làm mờ / Invoice screenshot with booking details blurred](../public/user-guide/screenshots/invoices.jpg)
+![Ảnh chụp phê duyệt hoàn tiền / Refund approvals screenshot](../public/user-guide/screenshots/refund-approvals.jpg)
+![Ảnh chụp trang Khuyến mãi / Promotions screenshot](../public/user-guide/screenshots/promotions.jpg)
 
-**English:** The interface and permissions may vary by version, role, and branch configuration. Menu names in this guide describe currently implemented areas; your account may not show every item. If the interface differs, follow your manager's instructions and internal procedures.
+### Tiếng Việt
+
+1. Mở **Khách hàng**, tìm hồ sơ bằng ô tìm kiếm/bộ lọc và xác nhận đúng khách trước khi mở.
+2. Đối chiếu thông tin và lịch sử cần thiết cho công việc. Chỉ sửa hồ sơ khi được cấp quyền.
+3. Mở **Dịch vụ → Thao tác dịch vụ khách hàng** và tìm booking liên quan.
+4. Mở chi tiết dịch vụ; so sánh dịch vụ đã đặt với lượng khách thực tế sử dụng.
+5. Nhập/xác nhận lượng thực tế, kiểm tra đơn vị, số lượng và giá trước khi lưu.
+6. Nếu dịch vụ chưa dùng hoặc thông tin không khớp, không xác nhận đã sử dụng; hỏi khách hoặc quản lý.
+7. Quản lý danh mục: mở **Dịch vụ → Quản lý danh mục dịch vụ** nếu tài khoản có quyền; rà soát tên, giá và trạng thái hoạt động trước khi lưu.
+8. Mở **Hóa đơn**, dùng bộ lọc để tìm đúng hóa đơn rồi đối chiếu booking, dịch vụ và thanh toán đã ghi nhận.
+9. Nếu còn chênh lệch, ghi lại mã booking và nội dung cần kiểm tra; không tự sửa giao dịch ngoài quyền.
+10. Mở **Phê duyệt hoàn tiền**, chọn yêu cầu chờ xử lý và xác minh booking, số tiền, phương thức, lý do.
+11. Chỉ phê duyệt/từ chối theo quyền và chính sách; kiểm tra kết quả sau khi gửi quyết định.
+12. Mở **Khuyến mãi** để tra cứu ưu đãi. Trước khi áp dụng, kiểm tra thời hạn, trạng thái và điều kiện của booking.
+
+### English
+
+1. Open **Customers**, search/filter for the profile, and verify the guest before opening it.
+2. Review only details and history needed for your work. Edit a profile only if authorized.
+3. Open **Services → Guest service usage** and find the relevant booking.
+4. Open service details and compare the booking with the amount actually used.
+5. Enter/confirm actual usage and verify unit, quantity, and price before saving.
+6. If the service was not used or details do not match, do not confirm usage; check with the guest or manager.
+7. To manage the catalog, open **Services → Service catalog** if authorized; review the name, price, and active status before saving.
+8. Open **Invoices**, search for the correct invoice, and reconcile it with the booking, services, and recorded payments.
+9. If a discrepancy remains, record the booking reference and what needs review; do not modify a transaction outside your permissions.
+10. Open **Refund approvals**, select a pending request, and verify booking, amount, method, and reason.
+11. Approve/reject only within your permissions and policy; verify the result after submitting.
+12. Open **Promotions** to look up offers. Before applying one, check its validity dates, status, and booking eligibility.
+
+## 7. Nhân viên, ca làm và công việc / Staff, shifts, and tasks
+
+![Ảnh chụp trang Nhân viên & ca làm; thông tin đã được làm mờ / Staff & shifts screenshot with details blurred](../public/user-guide/screenshots/staff.jpg)
+![Ảnh chụp danh sách nhân viên; thông tin đã được làm mờ / Employee list screenshot with details blurred](../public/user-guide/screenshots/staff-employees.jpg)
+![Ảnh chụp màn hình phân ca làm việc / Shift scheduling screenshot](../public/user-guide/screenshots/staff-shifts.jpg)
+![Ảnh chụp màn hình phân công công việc / Task assignment screenshot](../public/user-guide/screenshots/staff-tasks.jpg)
+
+### Tiếng Việt
+
+**Nhân viên**
+
+1. Mở **Nhân viên & ca làm → Ca trực**.
+2. Kiểm tra ngày/tuần đang xem và xem ca được xếp cho mình.
+3. Mở mục công việc/Phân công dọn phòng để xem nhiệm vụ được giao.
+4. Đọc phòng, thời hạn và hướng dẫn trước khi bắt đầu.
+5. Khi hoàn tất, mở đúng nhiệm vụ và cập nhật trạng thái theo kết quả thực tế.
+6. Nếu thông tin sai hoặc không thể hoàn tất, báo quản lý thay vì tự đóng nhiệm vụ không đúng thực tế.
+
+**Quản lý**
+
+1. Mở **Nhân viên & ca làm → Danh sách nhân viên**.
+2. Tìm đúng nhân viên; kiểm tra chi nhánh và trạng thái trước khi xem/cập nhật hồ sơ.
+3. Để lập ca, mở **Phân ca làm**, chọn ngày/ca theo biểu mẫu rồi chọn nhân viên thuộc chi nhánh phù hợp.
+4. Rà soát nhân viên, ngày, giờ và ca trùng trước khi lưu.
+5. Sau khi lưu, kiểm tra ca xuất hiện đúng trên lịch.
+6. Để giao việc, mở **Phân công công việc**, nhập nội dung và thời hạn cùng phòng/nhân viên liên quan nếu biểu mẫu yêu cầu.
+7. Đọc lại người nhận và chi tiết nhiệm vụ trước khi xác nhận.
+8. Theo dõi trạng thái nhiệm vụ và cập nhật/phối hợp khi có thay đổi.
+
+### English
+
+**Staff**
+
+1. Open **Staff & shifts → My shifts**.
+2. Verify the selected day/week and review your assigned shifts.
+3. Open Tasks/Housekeeping assignments to see work assigned to you.
+4. Read the room, due time, and instructions before starting.
+5. When finished, reopen the task and update its status to reflect the actual result.
+6. If details are wrong or the task cannot be completed, notify a manager rather than incorrectly closing it.
+
+**Managers**
+
+1. Open **Staff & shifts → Employee list**.
+2. Find the correct employee and verify branch/status before reviewing or updating the record.
+3. To schedule a shift, open **Assign shifts**, choose the date/shift in the form, and select staff for the correct branch.
+4. Check employee, date, hours, and overlapping shifts before saving.
+5. After saving, confirm the shift appears correctly on the schedule.
+6. To assign work, open **Assign tasks** and enter the description/due date and related room/employee if requested by the form.
+7. Review the assignee and task details before confirming.
+8. Monitor task status and coordinate updates when circumstances change.
+
+## 8. Báo cáo và cài đặt / Reports and settings
+
+![Ảnh chụp báo cáo doanh thu thực tế / Actual revenue report screenshot](../public/user-guide/screenshots/reports.jpg)
+![Ảnh chụp trang Cài đặt; thông tin nhận diện đã được làm mờ / Settings screenshot with identifying details blurred](../public/user-guide/screenshots/settings.jpg)
+
+### Tiếng Việt
+
+1. Mở **Báo cáo** từ menu.
+2. Chọn loại báo cáo nếu trang có lựa chọn, sau đó đặt khoảng thời gian và chi nhánh cần xem.
+3. Kiểm tra lại bộ lọc trước khi đọc hoặc xuất số liệu.
+4. So sánh các khoảng thời gian tương đương; không coi dữ liệu chưa tải hoặc dấu gạch ngang là số 0.
+5. Mở **Cài đặt** để cập nhật hồ sơ hoặc cấu hình chi nhánh được cấp quyền.
+6. Chọn **Tiếng Việt / English** để đổi ngôn ngữ giao diện.
+7. Lưu thay đổi và chờ thông báo kết quả. Nếu hệ thống yêu cầu xác thực lại, làm theo hướng dẫn hiển thị.
+
+### English
+
+1. Open **Reports** from the menu.
+2. Choose a report type if available, then set the required date range and branch.
+3. Verify the filters before reviewing or exporting figures.
+4. Compare equivalent date ranges; do not treat unloaded data or a dash as zero.
+5. Open **Settings** to update your profile or authorized branch configuration.
+6. Select **Tiếng Việt / English** to change the interface language.
+7. Save and wait for the result message. If re-authentication is required, follow the on-screen instructions.
+
+## 9. Khi gặp lỗi / Troubleshooting
+
+### Tiếng Việt
+
+- **Không thấy booking:** kiểm tra ngày, tab, mã booking và bộ lọc; nếu vẫn không thấy, báo quản lý kèm mã booking.
+- **Ngày đặt bị khóa:** mở Lịch bận để kiểm tra phạm vi và thời hạn. Không thử thay đổi trạng thái phòng để vượt chặn.
+- **Không thể lưu biểu mẫu:** đọc thông báo lỗi, bổ sung trường bắt buộc và kiểm tra dữ liệu hợp lệ. Không gửi lặp lại khi thao tác trước vẫn đang tải.
+- **Không có quyền hoặc thiếu menu:** hỏi quản lý xác nhận vai trò/quyền; không dùng tài khoản của người khác.
+- **Lỗi tải dữ liệu kéo dài:** ghi lại tên trang, thời điểm, thao tác vừa làm và nội dung lỗi; gửi cho quản lý/người phụ trách hệ thống.
+- Trước khi xác nhận thao tác liên quan đến booking, tiền, phòng, ca làm hoặc thông tin khách, hãy đọc lại đối tượng và dữ liệu một lần cuối.
+
+### English
+
+- **Booking not found:** verify the date, tab, booking reference, and filters; if still missing, report it to a manager with the reference.
+- **Date blocked:** open Busy schedule and check its scope and dates. Do not change room status to bypass the restriction.
+- **Form will not save:** read the validation message, complete required fields, and verify values. Do not resubmit while the previous action is still loading.
+- **Missing permission/menu:** ask a manager to verify your role/access; do not use another person's account.
+- **Persistent loading error:** note the page, time, action taken, and error message, then report it to a manager/system contact.
+- Before confirming an action involving a booking, money, room, shift, or guest information, review the target and data one final time.
+
+## 10. Ghi chú / Notes
+
+Giao diện và quyền có thể thay đổi theo phiên bản, vai trò và cấu hình chi nhánh. Tên menu trong tài liệu bám theo các mục hiện có; tài khoản của bạn có thể không thấy mọi chức năng. Khi giao diện khác tài liệu, ưu tiên quy trình nội bộ và hướng dẫn của quản lý.
+
+The interface and permissions may vary by version, role, and branch configuration. Menu names follow the current application; your account may not show every feature. If the interface differs, follow internal procedures and your manager's instructions.

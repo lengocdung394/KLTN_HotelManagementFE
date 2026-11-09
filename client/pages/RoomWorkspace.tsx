@@ -1864,11 +1864,6 @@ export default function RoomWorkspace() {
                 standardCapacity: String(entry.standardCapacity),
                 maxExtraGuests: String(entry.maxExtraGuests),
               };
-              const currentPriceNum = Number(draft.price) || 0;
-              const currentAdultFeeNum = Number(draft.extraAdultFee) || 0;
-              const currentChildFeeNum = Number(draft.extraChildFee) || 0;
-              const currentStandardCapacity = Number(draft.standardCapacity) || entry.standardCapacity || 1;
-              const currentMaxExtraGuests = Number(draft.maxExtraGuests) || entry.maxExtraGuests || 0;
               const isModified = String(draft.price) !== String(entry.price) || String(draft.extraAdultFee) !== String(entry.extraAdultFee) || String(draft.extraChildFee) !== String(entry.extraChildFee) || String(draft.standardCapacity) !== String(entry.standardCapacity) || String(draft.maxExtraGuests) !== String(entry.maxExtraGuests);
 
               return (
@@ -1968,16 +1963,15 @@ export default function RoomWorkspace() {
                       </div>
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
-                      <span className="text-[11px] font-semibold text-slate-500">{t("room.pricingConfig.guestSummary", { standard: currentStandardCapacity, extra: currentMaxExtraGuests, price: formatPricingMoney(currentPriceNum), adultFee: formatPricingMoney(currentAdultFeeNum), childFee: formatPricingMoney(currentChildFeeNum) })}</span>
-                      <div className="flex gap-2.5">
-                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-100">{t("room.pricingConfig.cancel")}</button>
+                    <div className="mt-5 flex justify-end gap-3 border-t border-slate-100 pt-4">
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-12 rounded-xl border border-slate-200 bg-slate-50 px-6 text-base font-bold text-slate-600 transition hover:bg-slate-100">{t("room.pricingConfig.cancel")}</button>
                         <button
                           type="button"
                           onClick={async () => {
                             if (await saveRoomTypePricing(entry.roomType)) setEditingPricingType(null);
                           }}
-                          className={`h-10 rounded-xl px-4 text-sm font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
+                          className={`h-12 rounded-xl px-6 text-base font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
                           disabled={!isModified || !entry.policyId || isUpdatingPolicy}
                         >
                           {isUpdatingPolicy ? t("room.pricingConfig.saving") : t("room.pricingConfig.save")}
