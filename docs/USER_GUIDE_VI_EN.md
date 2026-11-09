@@ -4,9 +4,9 @@
 >
 > **Scope:** This guide is exclusively for hotel staff and branch managers using the hotel-management web app. It does not cover the customer portal or system-administration portal. Available controls and permissions vary by account.
 
-> Ảnh minh họa là ảnh chụp giao diện quản lý thực tế bằng tiếng Việt; thông tin nhận diện tài khoản, khách, lịch và nhân viên đã được làm mờ.
+> Ảnh minh họa là ảnh chụp giao diện quản lý thực tế bằng tiếng Việt; thông tin nhận diện tài khoản, khách và nhân viên đã được làm mờ.
 >
-> The illustrations are real screenshots of the Vietnamese management interface; identifying account, guest, schedule, and staff details have been blurred.
+> The illustrations are real screenshots of the Vietnamese management interface; identifying account, guest, and staff details have been blurred.
 
 ## 1. Đăng nhập, ngôn ngữ và điều hướng / Sign-in, language, and navigation
 
@@ -19,7 +19,7 @@
 5. Dùng menu bên trái để mở các phân hệ. Chọn mũi tên cạnh mục có danh mục con để xem thêm lựa chọn.
 6. Trên điện thoại, dùng nút menu để mở/đóng điều hướng; trên máy tính, có thể thu gọn thanh điều hướng.
 7. Chọn **Tiếng Việt / English** trên thanh đầu trang để đổi ngôn ngữ giao diện.
-8. Lưu ý: nội dung giao diện được hỗ trợ dịch, nhưng tên khách, tên dịch vụ, ghi chú, tiêu đề lịch bận và nội dung do người dùng nhập có thể vẫn giữ ngôn ngữ ban đầu.
+8. Lưu ý: nội dung giao diện được hỗ trợ dịch, nhưng tên khách, tên dịch vụ, ghi chú và nội dung do người dùng nhập có thể vẫn giữ ngôn ngữ ban đầu.
 9. Nếu không thấy menu cần dùng, không dùng tài khoản khác để vượt quyền; hỏi quản lý để xác nhận vai trò được cấp.
 10. Đăng xuất bằng thẻ hồ sơ hoặc nút đăng xuất khi dùng xong, đặc biệt trên máy tính dùng chung.
 
@@ -81,18 +81,17 @@
 
 1. Mở **Quản lý đặt phòng → Đặt phòng**. Trên trang lịch đặt phòng, chọn **Đặt phòng mới**.
 2. Ở bước **Ngày & phòng**, chọn **Ngày nhận phòng** trước, sau đó chọn **Ngày trả phòng**. Kiểm tra ngày trả muộn hơn ngày nhận và số đêm hiển thị.
-3. Nếu ngày màu vàng/lịch bận, ngày không khả dụng hoặc hệ thống báo không tải được lịch bận, dừng lại để kiểm tra lịch/đường truyền; không cố đặt ngày bị khóa.
-4. Đọc chú giải lịch: **Còn phòng**, **Đã đặt/không thể chọn**, **Đang chọn**. Chỉ chọn ô phòng còn trống trong đúng khoảng ngày.
-5. Nhấn hoặc kéo dọc trên lịch để chọn phòng; thao tác kéo dọc có thể chọn nhiều phòng trong cùng ngày. Kiểm tra các ô được tô chọn.
-6. Nhấn lại ô đã chọn để bỏ phòng. Khi điều chỉnh khoảng ngày, lịch chỉ cho bỏ ngày đầu hoặc ngày cuối của khoảng.
-7. Tìm phòng bằng ô tìm kiếm số/loại phòng; lọc thêm theo **Loại phòng**, **Tầng**, **Tòa nhà**. Nếu không thấy, kiểm tra ngày và xóa bộ lọc.
-8. Xem số phòng và tổng tạm tính trong phần **Đã chọn**. Chọn **Xem phòng đã chọn** để rà soát riêng các phòng đã chọn.
-9. Với nhiều phòng, đối chiếu từng số phòng, ngày ở và sức chứa. Chọn **Tiếp tục** chỉ sau khi các phòng cần đặt đều đúng.
-10. Ở bước **Thông tin đặt phòng**, tìm khách đã lưu theo tên/số điện thoại rồi chọn đúng hồ sơ. Thông tin hồ sơ sẽ tự điền.
-11. Nếu chưa có hồ sơ, nhập họ tên, số điện thoại đủ 10 chữ số và CCCD đủ 12 chữ số. Email xác nhận không bắt buộc; nếu nhập thì email phải đúng định dạng.
-12. Với khách mới, nhấn **Tạo khách hàng** và chờ xác nhận hồ sơ đã được tạo/chọn. Với khách đã lưu, kiểm tra tên và số điện thoại hiển thị.
-13. Trong từng thẻ phòng, chọn số **Người lớn (từ 12 tuổi)**, **Trẻ em (2 đến dưới 12 tuổi)** và **Em bé (dưới 2 tuổi)** theo thực tế.
-14. Đọc sức chứa tiêu chuẩn, số khách ghép thêm tối đa và phụ thu hiển thị. Điều chỉnh số lượng nếu vượt sức chứa; em bé dưới 2 tuổi được ghi là miễn phí theo quy định hiển thị.
+3. Đọc chú giải lịch: **Còn phòng**, **Đã đặt/không thể chọn**, **Đang chọn**. Chỉ chọn ô phòng còn trống trong đúng khoảng ngày.
+4. Nhấn hoặc kéo dọc trên lịch để chọn phòng; thao tác kéo dọc có thể chọn nhiều phòng trong cùng ngày. Kiểm tra các ô được tô chọn.
+5. Nhấn lại ô đã chọn để bỏ phòng. Khi điều chỉnh khoảng ngày, lịch chỉ cho bỏ ngày đầu hoặc ngày cuối của khoảng.
+6. Tìm phòng bằng ô tìm kiếm số/loại phòng; lọc thêm theo **Loại phòng**, **Tầng**, **Tòa nhà**. Nếu không thấy, kiểm tra ngày và xóa bộ lọc.
+7. Xem số phòng và tổng tạm tính trong phần **Đã chọn**. Chọn **Xem phòng đã chọn** để rà soát riêng các phòng đã chọn.
+8. Với nhiều phòng, đối chiếu từng số phòng, ngày ở và sức chứa. Chọn **Tiếp tục** chỉ sau khi các phòng cần đặt đều đúng.
+9. Ở bước **Thông tin đặt phòng**, tìm khách đã lưu theo tên/số điện thoại rồi chọn đúng hồ sơ. Thông tin hồ sơ sẽ tự điền.
+10. Nếu chưa có hồ sơ, nhập họ tên, số điện thoại đủ 10 chữ số và CCCD đủ 12 chữ số. Email xác nhận không bắt buộc; nếu nhập thì email phải đúng định dạng.
+11. Với khách mới, nhấn **Tạo khách hàng** và chờ xác nhận hồ sơ đã được tạo/chọn. Với khách đã lưu, kiểm tra tên và số điện thoại hiển thị.
+12. Trong từng thẻ phòng, chọn số **Người lớn (từ 12 tuổi)**, **Trẻ em (2 đến dưới 12 tuổi)** và **Em bé (dưới 2 tuổi)** theo thực tế.
+13. Đọc sức chứa tiêu chuẩn, số khách ghép thêm tối đa và phụ thu hiển thị. Điều chỉnh số lượng nếu vượt sức chứa; em bé dưới 2 tuổi được ghi là miễn phí theo quy định hiển thị.
 15. Nhấn **Tiếp tục chọn dịch vụ**. Nếu nút chưa bật, đọc thông báo trên màn hình và chọn/tạo hồ sơ khách trước khi đi tiếp.
 16. Ở bước **Chọn dịch vụ**, chọn **Chọn cho tất cả phòng** nếu mọi phòng dùng cùng dịch vụ; chọn **Chọn riêng từng phòng** nếu dịch vụ hoặc số người khác nhau theo phòng.
 17. Dùng **Tìm dịch vụ** để lọc theo tên. Đọc tên, nhóm, mô tả và giá/đơn vị trước khi tích chọn.
@@ -126,16 +125,15 @@
 
 1. Open **Booking management → Bookings**. On the booking schedule page, select **New booking**.
 2. At **Dates & rooms**, select **Check-in date** first, then **Check-out date**. Confirm check-out is later and review the displayed number of nights.
-3. If a date is marked busy/yellow, unavailable, or the busy schedule fails to load, stop to check the schedule/connection; do not book a blocked date.
-4. Read the calendar legend: **Available**, **Booked/unavailable**, and **Selecting**. Select only available room cells for the required dates.
-5. Click or drag vertically on the calendar to select rooms; vertical dragging can select multiple rooms for the same dates. Check the highlighted cells.
-6. Click a selected cell again to remove a room. When adjusting a date range, only its first or last day can be removed.
-7. Search rooms by number/type and filter by **Room type**, **Floor**, and **Building**. If the room is missing, verify dates and clear filters.
-8. Review the room count and estimated total under **Selected**. Select **View selected rooms** to review only the rooms chosen.
-9. For multiple rooms, verify each room number, stay dates, and capacity. Select **Continue** only when all required rooms are correct.
-10. At **Booking information**, search saved customers by name/phone and select the correct profile. Its details will be populated.
-11. If no profile exists, enter the full name, a 10-digit phone number, and a 12-digit identity number. Confirmation email is optional but must be valid if entered.
-12. For a new guest, select **Create customer** and wait for confirmation. For a saved profile, verify the displayed name and phone.
+3. Read the calendar legend: **Available**, **Booked/unavailable**, and **Selecting**. Select only available room cells for the required dates.
+4. Click or drag vertically on the calendar to select rooms; vertical dragging can select multiple rooms for the same dates. Check the highlighted cells.
+5. Click a selected cell again to remove a room. When adjusting a date range, only its first or last day can be removed.
+6. Search rooms by number/type and filter by **Room type**, **Floor**, and **Building**. If the room is missing, verify dates and clear filters.
+7. Review the room count and estimated total under **Selected**. Select **View selected rooms** to review only the rooms chosen.
+8. For multiple rooms, verify each room number, stay dates, and capacity. Select **Continue** only when all required rooms are correct.
+9. At **Booking information**, search saved customers by name/phone and select the correct profile. Its details will be populated.
+10. If no profile exists, enter the full name, a 10-digit phone number, and a 12-digit identity number. Confirmation email is optional but must be valid if entered.
+11. For a new guest, select **Create customer** and wait for confirmation. For a saved profile, verify the displayed name and phone.
 13. In each room card, select the actual number of **Adults (12+)**, **Children (2 to under 12)**, and **Infants (under 2)**.
 14. Review standard capacity, maximum extra guests, and displayed surcharges. Adjust counts if capacity is exceeded; infants under 2 are shown as free under the displayed policy.
 15. Select **Continue to select services**. If disabled, read the on-screen message and select/create the customer profile before proceeding.
@@ -197,11 +195,10 @@
 10. For multi-room bookings, review each room/guest. Use a group action only after checking every selected row.
 11. After confirmation, verify the new booking status and room status.
 
-## 5. Phòng, lịch bận và nội quy / Rooms, busy schedules, and hotel rules
+## 5. Phòng và nội quy / Rooms and hotel rules
 
 ![Ảnh chụp trang Quản lý phòng thực tế / Actual Room management screenshot](../public/user-guide/screenshots/rooms.jpg)
 ![Ảnh chụp cấu hình giá phòng / Room pricing screenshot](../public/user-guide/screenshots/room-pricing.jpg)
-![Ảnh chụp trang Lịch bận; thông tin lịch đã được làm mờ / Busy schedule screenshot with details blurred](../public/user-guide/screenshots/hotel-closures.jpg)
 ![Ảnh chụp trang Nội quy khách sạn / Hotel rules screenshot](../public/user-guide/screenshots/hotel-rules.jpg)
 
 ### Tiếng Việt
@@ -213,11 +210,8 @@
 5. Nếu có quyền chỉnh sửa, cập nhật trường cần thiết rồi đọc lại thông tin trước khi lưu.
 6. Khi giao dọn phòng, chọn đúng phòng và nhân viên; cập nhật tiến độ/trạng thái theo tình hình thực tế.
 7. Không chuyển phòng sang Sẵn sàng trước khi công việc dọn/kiểm tra hoàn tất.
-8. Mở **Lịch bận** để xem ngày/khoảng thời gian không nhận đặt áp dụng cho chi nhánh. Mở chi tiết để xác nhận phạm vi và thời hạn.
-9. Nếu tài khoản quản lý có chức năng tạo lịch bận, chọn đúng chi nhánh và thời gian, rà soát lịch trùng và nội dung trước khi lưu/thông báo. Nếu không thấy chức năng này, liên hệ người có quyền.
-10. Ngày đặt bị khóa thì kiểm tra lịch bận; không đổi trạng thái phòng để lách ngày.
-11. Cấu hình giá phòng chỉ sửa khi được phân quyền. Trước khi lưu, kiểm tra đúng phòng/loại phòng, khoảng áp dụng và giá.
-12. Mở **Nội quy khách sạn** để tra cứu chính sách nhận/trả phòng, hủy, dịch vụ và các quy định liên quan trước khi tư vấn.
+8. Cấu hình giá phòng chỉ sửa khi được phân quyền. Trước khi lưu, kiểm tra đúng phòng/loại phòng, khoảng áp dụng và giá.
+9. Mở **Nội quy khách sạn** để tra cứu chính sách nhận/trả phòng, hủy, dịch vụ và các quy định liên quan trước khi tư vấn.
 
 ### English
 
@@ -228,11 +222,8 @@
 5. If authorized to edit, update the required fields and review them before saving.
 6. When assigning housekeeping, select the correct room and employee; update progress/status to reflect actual work.
 7. Do not mark a room Ready until cleaning/inspection is complete.
-8. Open **Busy schedule** to review unavailable dates/periods for the branch. Open a schedule to verify scope and dates.
-9. If an authorized manager account can create a busy schedule, choose the correct branch and dates, review conflicts and details, then save/notify. If the option is not visible, contact an authorized user.
-10. When booking dates are blocked, check Busy schedule; do not change room status to bypass the restriction.
-11. Change room rates only if authorized. Before saving, verify the room/room type, applicable dates, and rate.
-12. Open **Hotel rules** to review check-in/out, cancellation, service, and related policies before advising guests.
+8. Change room rates only if authorized. Before saving, verify the room/room type, applicable dates, and rate.
+9. Open **Hotel rules** to review check-in/out, cancellation, service, and related policies before advising guests.
 
 ## 6. Khách hàng, dịch vụ, hóa đơn và hoàn tiền / Customers, services, invoices, and refunds
 
@@ -354,7 +345,7 @@
 ### Tiếng Việt
 
 - **Không thấy booking:** kiểm tra ngày, tab, mã booking và bộ lọc; nếu vẫn không thấy, báo quản lý kèm mã booking.
-- **Ngày đặt bị khóa:** mở Lịch bận để kiểm tra phạm vi và thời hạn. Không thử thay đổi trạng thái phòng để vượt chặn.
+- **Không chọn được ngày/phòng:** kiểm tra lại khoảng ngày và tình trạng phòng; nếu lỗi vẫn xảy ra, báo quản lý kèm thao tác và thông báo lỗi.
 - **Không thể lưu biểu mẫu:** đọc thông báo lỗi, bổ sung trường bắt buộc và kiểm tra dữ liệu hợp lệ. Không gửi lặp lại khi thao tác trước vẫn đang tải.
 - **Không có quyền hoặc thiếu menu:** hỏi quản lý xác nhận vai trò/quyền; không dùng tài khoản của người khác.
 - **Lỗi tải dữ liệu kéo dài:** ghi lại tên trang, thời điểm, thao tác vừa làm và nội dung lỗi; gửi cho quản lý/người phụ trách hệ thống.
@@ -363,7 +354,7 @@
 ### English
 
 - **Booking not found:** verify the date, tab, booking reference, and filters; if still missing, report it to a manager with the reference.
-- **Date blocked:** open Busy schedule and check its scope and dates. Do not change room status to bypass the restriction.
+- **Cannot select dates/rooms:** verify the date range and room availability; if the issue persists, report the action and error message to a manager.
 - **Form will not save:** read the validation message, complete required fields, and verify values. Do not resubmit while the previous action is still loading.
 - **Missing permission/menu:** ask a manager to verify your role/access; do not use another person's account.
 - **Persistent loading error:** note the page, time, action taken, and error message, then report it to a manager/system contact.

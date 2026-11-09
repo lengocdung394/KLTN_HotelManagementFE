@@ -60,7 +60,6 @@ const guideSections: GuideSection[] = [
     steps: [
       ["Mở Quản lý đặt phòng → Đặt phòng. Trên trang lịch đặt phòng, nhấn Đặt phòng mới để mở biểu mẫu tạo booking.", "Open Booking management → Bookings. On the booking schedule page, select New booking to open the booking form."],
       ["Bước 1 – Ngày & phòng: chọn Ngày nhận phòng trước, sau đó chọn Ngày trả phòng. Kiểm tra ngày trả muộn hơn ngày nhận và số đêm hiển thị.", "Step 1 – Dates & rooms: choose Check-in date first, then Check-out date. Confirm check-out is later and review the displayed night count."],
-      ["Nếu ngày lịch bận màu vàng, ngày không khả dụng hoặc hệ thống báo không tải được lịch bận, dừng lại để kiểm tra lịch/đường truyền; không cố đặt ngày bị khóa.", "If a date is marked busy in yellow, unavailable, or the busy schedule fails to load, stop and check the schedule/connection; do not book a blocked date."],
       ["Trong lịch phòng, đọc chú giải: Còn phòng, Đã đặt/không thể chọn và Đang chọn. Chỉ chọn ô phòng còn trống cho đúng khoảng ngày.", "In the room calendar, read the legend: Available, Booked/unavailable, and Selecting. Select only an available room cell for the required dates."],
       ["Nhấn hoặc kéo dọc trên các ô lịch để chọn phòng; kéo dọc có thể chọn nhiều phòng trong cùng ngày. Kiểm tra vùng ngày/phòng được tô chọn.", "Click or drag vertically on calendar cells to select rooms; dragging vertically can select multiple rooms for the same dates. Verify the highlighted room/date range."],
       ["Muốn bỏ phòng, nhấn lại ô đang chọn. Khi chỉnh khoảng ngày đã chọn, chỉ bỏ được ngày ở đầu hoặc cuối khoảng theo hướng dẫn của lịch.", "To remove a room, click its selected cell again. When adjusting a selected range, only its first or last day can be removed as indicated by the calendar."],
@@ -118,13 +117,12 @@ const guideSections: GuideSection[] = [
     tip: ["Không tự xác nhận tiền mặt đã hoàn nếu chưa giao/hoàn thực tế. Yêu cầu hoàn qua ngân hàng có thể cần xử lý tại Phê duyệt hoàn tiền.", "Do not mark a cash refund complete until it has actually been returned. Bank refunds may need to be handled in Refund approvals."],
   },
   {
-    title: ["4. Quản lý phòng và lịch bận", "4. Room management and busy schedules"],
+    title: ["4. Quản lý phòng", "4. Room management"],
     imageVi: "/user-guide/screenshots/rooms.jpg",
     imageEn: "/user-guide/screenshots/rooms.jpg",
     imageAlt: ["Ảnh chụp trang Quản lý phòng thực tế", "Actual Room management screen"],
     relatedScreenshots: [
       { src: "/user-guide/screenshots/room-pricing.jpg", alt: ["Ảnh chụp phần cấu hình giá phòng", "Room pricing configuration screen"] },
-      { src: "/user-guide/screenshots/hotel-closures.jpg", alt: ["Ảnh chụp trang Lịch bận thực tế; thông tin lịch đã được làm mờ", "Actual Busy schedule screen; schedule details have been blurred"] },
       { src: "/user-guide/screenshots/hotel-rules.jpg", alt: ["Ảnh chụp trang Nội quy khách sạn", "Hotel rules screen"] },
     ],
     route: "/rooms",
@@ -136,11 +134,7 @@ const guideSections: GuideSection[] = [
       ["Nếu có quyền chỉnh sửa, cập nhật các trường cần thiết rồi đọc lại toàn bộ thông tin trước khi lưu.", "If you have edit permission, update the required fields and review all details before saving."],
       ["Khi giao dọn phòng, mở mục công việc/phân công, chọn đúng phòng và nhân viên được giao, rồi xác nhận phân công.", "To assign housekeeping, open tasks/assignments, select the correct room and staff member, then confirm the assignment."],
       ["Cập nhật trạng thái phòng theo tiến độ thực tế; không chuyển sang Sẵn sàng trước khi công việc dọn/kiểm tra hoàn tất.", "Update room status to match actual progress; do not mark it Ready until cleaning/inspection is complete."],
-      ["Mở Lịch bận để xem khoảng thời gian không nhận đặt áp dụng cho chi nhánh. Mở chi tiết lịch để xác nhận ngày và phạm vi.", "Open Busy schedule to review periods when the branch is unavailable. Open a schedule to verify dates and scope."],
-      ["Khi ngày đặt bị khóa, kiểm tra lịch bận trước; không đổi trạng thái phòng để lách ngày bị chặn.", "When a booking date is blocked, check Busy schedule first; do not change room status to bypass a blocked date."],
-      ["Thao tác tạo lịch bận hoặc sửa giá phòng chỉ dành cho tài khoản được phân quyền quản lý; xác nhận chi nhánh và thời hạn trước khi lưu.", "Creating busy schedules or changing room rates is restricted to authorized managers; verify branch and dates before saving."],
     ],
-    tip: ["Nếu ngày đặt bị khóa, xem lịch bận trước khi thử ngày khác; không tự đổi trạng thái phòng để lách lịch.", "If a booking date is blocked, review the busy schedule before choosing another date; do not change room status to bypass it."],
   },
   {
     title: ["5. Khách hàng, dịch vụ, hóa đơn và hoàn tiền", "5. Customers, services, invoices, and refunds"],

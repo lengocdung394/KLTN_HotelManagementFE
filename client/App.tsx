@@ -21,7 +21,6 @@ import { useAppSelector } from "./store/hooks";
 import ChatWidget from "./components/ChatWidget";
 import UserGuideButton from "./components/UserGuideButton";
 import BranchPhotoLoginSplash from "./components/BranchPhotoLoginSplash";
-import HotelClosureWorkspace from "./pages/HotelClosureWorkspace";
 
 type AppRoutesProps = {
   authenticated: boolean;
@@ -63,7 +62,6 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<AdminDashboardPage onLogout={onLogout} />} />
         <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
-        <Route path="/hotel-closures" element={<HotelClosureWorkspace />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     );
@@ -95,7 +93,6 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={onLogout} />} />
         <Route path="/booking-list" element={<ModulePage path="/booking-list" onLogout={onLogout} />} />
         <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
-        <Route path="/hotel-closures" element={<ModulePage path="/hotel-closures" onLogout={onLogout} />} />
         <Route path="/hotel-rules" element={<ModulePage path="/hotel-rules" onLogout={onLogout} />} />
         <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
         <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />
@@ -129,7 +126,6 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
       <Route path="/bookings" element={<ModulePage path="/bookings" onLogout={onLogout} />} />
       <Route path="/booking-list" element={<ModulePage path="/booking-list" onLogout={onLogout} />} />
       <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
-      {isManager && <Route path="/hotel-closures" element={<ModulePage path="/hotel-closures" onLogout={onLogout} />} />}
       <Route path="/hotel-rules" element={<ModulePage path="/hotel-rules" onLogout={onLogout} />} />
       <Route path="/customers" element={<CustomerPage onLogout={onLogout} />} />
       <Route path="/check-in-out" element={<ModulePage path="/check-in-out" onLogout={onLogout} />} />

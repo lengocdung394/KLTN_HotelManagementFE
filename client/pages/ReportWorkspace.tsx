@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart3, BedDouble, CalendarDays, Tag, TrendingUp, XCircle } from "lucide-react";
 import {
@@ -15,13 +15,15 @@ import {
   YAxis,
 } from "recharts";
 import { useGetHotelReportQuery } from "../services/reportApi";
-import { useGetPromotionsQuery } from "../services/promotionApi";
+import { useGetPromotionsQuery, type Promotion } from "../services/promotionApi";
 import { useGetSuperAdminBranchesQuery } from "../services/superAdminApi";
 import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
 import ListPagination from "../components/ListPagination";
 import FilterSelect from "../components/FilterSelect";
+import { FilterResetButton } from "../components/SearchableFilter";
 import {
+  buildBookingRevenueChartData,
   buildRevenueChartData,
   getReportDateRange,
   reportPeriodOptions,
@@ -29,10 +31,14 @@ import {
 } from "../lib/reportPeriod";
 import {
   buildPromotionScopeBreakdown,
-  getPromotionScope,
+  buildPromotionSavingsChartData,
+  formatReportCurrencyAxis,
   promotionScopeColors,
   promotionScopeLabelKey,
 } from "../lib/promotionReport";
+import usePeriodReportData from "../hooks/usePeriodReportData";
+
+const EMPTY_PROMOTIONS: Promotion[] = [];
 
 const localDateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -89,7 +95,7 @@ const paymentMethodLabel = (method: string | null) => {
 };
 
 export default function ReportWorkspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { hotelId, roles } = useAppSelector((state) => state.auth);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const [selectedBranchId, setSelectedBranchId] = useState("");
@@ -126,14 +132,15 @@ export default function ReportWorkspace() {
     { skip: !canLoadReport },
   );
   const {
-    data: availablePromotions = [],
+    data: availablePromotions = EMPTY_PROMOTIONS,
     isError: isPromotionCatalogError,
   } = useGetPromotionsQuery(
     canLoadReport ? { hotelId: reportHotelId, page: 0, size: 100 } : undefined,
     { skip: !canLoadReport },
   );
-  const promotionScopeById = new Map(
-    availablePromotions.map((promotion) => [promotion.id, promotion.type]),
+  const promotionScopeById = useMemo(
+    () => new Map(availablePromotions.map((promotion) => [promotion.id, promotion.type])),
+    [availablePromotions],
   );
   const promotionScopeBreakdown = buildPromotionScopeBreakdown(
     report?.promotions ?? [],
@@ -143,6 +150,18 @@ export default function ReportWorkspace() {
     scopeLabel: t(`promotion.${promotionScopeLabelKey[item.scope]}`),
   }));
   const promotionScopesTotalSavings = promotionScopeBreakdown.reduce((total, item) => total + item.savings, 0);
+  const dailyReportHotelIds = useMemo(
+    () => isSystemAdmin ? [reportHotelId] : [undefined],
+    [isSystemAdmin, reportHotelId],
+  );
+  const periodReportData = usePeriodReportData(
+    reportPeriod !== "custom" && canLoadReport && Boolean(report),
+    reportPeriod,
+    startDate,
+    endDate,
+    dailyReportHotelIds,
+    promotionScopeById,
+  );
 
   const dailyRevenue = buildRevenueChartData(
     report?.dailyServiceRevenue ?? [],
@@ -151,6 +170,20 @@ export default function ReportWorkspace() {
     endDate,
     localizedText("vi-VN", "en-US"),
   );
+  const bookingRevenueChartData = reportPeriod === "custom"
+    ? [{
+        label: `${startDate} – ${endDate}`,
+        fullDate: `${startDate} – ${endDate}`,
+        roomRevenue: Number(report?.roomRevenue ?? 0),
+        serviceRevenue: Number(report?.serviceRevenue ?? 0),
+      }]
+    : buildBookingRevenueChartData(
+        periodReportData.data,
+        reportPeriod,
+        startDate,
+        endDate,
+        i18n.language,
+      );
   const roomStatuses = (report?.roomStatuses ?? []).map((item) => ({
     ...item,
     name: roomStatusLabel(item.status),
@@ -195,6 +228,15 @@ export default function ReportWorkspace() {
     setStartDate(range.startDate);
     setEndDate(range.endDate);
   };
+  const resetReportFilters = () => {
+    const range = getReportDateRange("day-month", today, today);
+    setReportPeriod("day-month");
+    setComparisonUnit("day");
+    setComparisonScope("month");
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
+    if (isSystemAdmin) setSelectedBranchId("");
+  };
   const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, [string, string]> = {
     "day-week": ["Ngày trong tuần", "Day of week"],
     "day-month": ["Ngày trong tháng", "Day of month"],
@@ -212,14 +254,31 @@ export default function ReportWorkspace() {
         `trong ${comparisonScope === "week" ? "tuần" : comparisonScope === "month" ? "tháng" : "năm"}`,
         `in the ${comparisonScope}`,
       );
-  const promotionChartData = [{
-    period: reportScopeLabel,
-    ROOM: promotionScopeBreakdown.find((item) => item.scope === "ROOM")?.savings ?? 0,
-    SERVICE: promotionScopeBreakdown.find((item) => item.scope === "SERVICE")?.savings ?? 0,
-    TOTAL: promotionScopeBreakdown.find((item) => item.scope === "TOTAL")?.savings ?? 0,
-    UNKNOWN: promotionScopeBreakdown.find((item) => item.scope === "UNKNOWN")?.savings ?? 0,
-  }];
-  const promotionChartIsStacked = comparisonUnit !== "day";
+  const promotionSavingsByScope = promotionScopeBreakdown
+    .filter((item) => item.savings > 0)
+    .map((item) => ({
+      scope: item.scope,
+      label: t(`promotion.${promotionScopeLabelKey[item.scope]}`),
+      savings: item.savings,
+      color: promotionScopeColors[item.scope],
+    }));
+  const promotionChartData = reportPeriod !== "custom"
+    ? buildPromotionSavingsChartData(
+        periodReportData.data,
+        reportPeriod,
+        startDate,
+        endDate,
+        i18n.language,
+      )
+    : [{
+        date: reportScopeLabel,
+        fullDate: reportScopeLabel,
+        label: reportScopeLabel,
+        ROOM: promotionSavingsByScope.find((item) => item.scope === "ROOM")?.savings ?? 0,
+        SERVICE: promotionSavingsByScope.find((item) => item.scope === "SERVICE")?.savings ?? 0,
+        TOTAL: promotionSavingsByScope.find((item) => item.scope === "TOTAL")?.savings ?? 0,
+        UNKNOWN: promotionSavingsByScope.find((item) => item.scope === "UNKNOWN")?.savings ?? 0,
+      }];
   useEffect(() => {
     setRefundPages({});
     setCancelledPage(1);
@@ -229,6 +288,7 @@ export default function ReportWorkspace() {
   }, [cancelledPage, cancelledTotalPages]);
   const reportSections = [
     { id: "report-overview", label: localizedText("Tổng quan", "Overview") },
+    { id: "report-booking-revenue", label: localizedText("Doanh thu booking", "Booking revenue") },
     { id: "report-service-revenue", label: localizedText("Doanh thu dịch vụ", "Service revenue") },
     { id: "report-promotions", label: localizedText("Khuyến mãi", "Promotions") },
     { id: "report-room-types", label: localizedText("Lượt đặt theo loại phòng", "Bookings by room type") },
@@ -263,8 +323,8 @@ export default function ReportWorkspace() {
 
   return (
     <div className="mt-6 space-y-5">
-      <section className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-3">
+      <section className="grid gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm xl:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)] xl:items-center">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
             <CalendarDays size={18} />
           </div>
@@ -277,8 +337,8 @@ export default function ReportWorkspace() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="block text-xs font-semibold text-slate-500">
+        <div className={`grid min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-4 ${isSystemAdmin ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}>
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             {localizedText("Theo", "By")}
             <FilterSelect
               value={comparisonUnit}
@@ -290,14 +350,14 @@ export default function ReportWorkspace() {
                 if (nextPeriod) selectReportPeriod(nextPeriod.value);
               }}
               aria-label={localizedText("Chọn đơn vị so sánh", "Choose comparison unit")}
-              className="ml-2 mt-1 h-9 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             >
               <option value="day">{localizedText("Ngày", "Day")}</option>
               <option value="week">{localizedText("Tuần", "Week")}</option>
               <option value="month">{localizedText("Tháng", "Month")}</option>
             </FilterSelect>
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             {localizedText("Trong", "Within")}
             <FilterSelect
               value={comparisonScope}
@@ -308,7 +368,7 @@ export default function ReportWorkspace() {
                 if (nextPeriod) selectReportPeriod(nextPeriod.value);
               }}
               aria-label={localizedText("Chọn khoảng so sánh", "Choose comparison range")}
-              className="ml-2 mt-1 h-9 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             >
               {reportPeriodOptions
                 .filter((option) => option.unit === comparisonUnit)
@@ -324,13 +384,13 @@ export default function ReportWorkspace() {
             </FilterSelect>
           </label>
           {isSystemAdmin && (
-            <label className="block text-xs font-semibold text-slate-500">
+            <label className="block min-w-0 text-xs font-semibold text-slate-500">
               {localizedText("Chi nhánh", "Branch")}
               <FilterSelect
                 value={selectedBranchId}
                 onChange={(event) => setSelectedBranchId(event.target.value)}
                 aria-label={localizedText("Chọn chi nhánh xem báo cáo", "Select a branch for the report")}
-                className="ml-2 mt-1 h-9 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+                className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
               >
                 <option value="">{isLoadingBranches ? localizedText("Đang tải chi nhánh...", "Loading branches...") : localizedText("Chọn chi nhánh", "Select a branch")}</option>
                 {branches.map((branch) => (
@@ -339,31 +399,38 @@ export default function ReportWorkspace() {
               </FilterSelect>
             </label>
           )}
-          <label className="block text-xs font-semibold text-slate-500">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             {localizedText("Từ ngày", "From")}
-            <div className="relative ml-2 mt-1">
+            <div className="relative mt-1">
               <input
                 type="date"
                 value={startDate}
                 max={endDate || undefined}
                 onChange={(event) => { setStartDate(event.target.value); setReportPeriod("custom"); }}
-                className="h-9 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+                className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
               />
             </div>
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             {localizedText("Đến ngày", "To")}
-            <div className="relative ml-2 mt-1">
+            <div className="relative mt-1">
               <input
                 type="date"
                 value={endDate}
                 min={startDate || undefined}
                 max={today}
                 onChange={(event) => { setEndDate(event.target.value); setReportPeriod("custom"); }}
-                className="h-9 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+                className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
               />
             </div>
           </label>
+          <div className="flex items-end">
+            <FilterResetButton
+              onClick={resetReportFilters}
+              label={localizedText("Xóa bộ lọc", "Clear filters")}
+              showLabel
+            />
+          </div>
           {startDate > endDate && (
             <p role="alert" className="w-full text-xs text-rose-600">{localizedText("Ngày bắt đầu không được sau ngày kết thúc.", "The start date must be on or before the end date.")}</p>
           )}
@@ -566,6 +633,46 @@ export default function ReportWorkspace() {
           </section>
 
           <div className="space-y-5">
+            <section id="report-booking-revenue" data-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+              <div className="mb-5 flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-900">{localizedText(`Doanh thu booking ${reportPeriodLabel}`, `Booking revenue ${reportPeriodLabel}`)}</h3>
+                  <p className="mt-1 text-xs text-slate-400">{localizedText("Gồm doanh thu phòng và dịch vụ · đ", "Room and service revenue · VND")}</p>
+                </div>
+                <BedDouble size={18} className="text-blue-600" />
+              </div>
+              {reportPeriod !== "custom" && periodReportData.isLoading ? (
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Đang tải doanh thu booking…", "Loading booking revenue…")}</p>
+              ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                <p role="alert" className="py-12 text-center text-sm text-rose-600">{localizedText("Không thể tải doanh thu booking theo kỳ.", "Could not load booking revenue for this period.")}</p>
+              ) : bookingRevenueChartData.every((item) => item.roomRevenue === 0 && item.serviceRevenue === 0) && reportPeriod === "custom" ? (
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có doanh thu booking trong khoảng ngày này.", "No booking revenue for this date range.")}</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={reportPeriod === "day-month" ? 320 : 290}>
+                  <BarChart data={bookingRevenueChartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
+                    <XAxis
+                      dataKey="label"
+                      interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                      angle={reportPeriod === "day-month" ? -45 : 0}
+                      textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                      height={reportPeriod === "day-month" ? 48 : 30}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language)} />
+                    <Tooltip
+                      labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""}
+                      formatter={(value, name) => [formatMoney(Number(value)), name]}
+                    />
+                    <Legend verticalAlign="bottom" height={30} iconType="circle" wrapperStyle={{ fontSize: 12, color: "#334155" }} />
+                    <Bar dataKey="roomRevenue" name={localizedText("Doanh thu phòng", "Room revenue")} fill="#2563eb" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="serviceRevenue" name={localizedText("Doanh thu dịch vụ", "Service revenue")} fill="#10b981" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </section>
             <section id="report-service-revenue" data-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-5 flex items-start justify-between">
                 <div>
@@ -574,14 +681,23 @@ export default function ReportWorkspace() {
                 </div>
                 <TrendingUp size={18} className="text-emerald-500" />
               </div>
-              {dailyRevenue.every((item) => item.revenue === 0) ? (
+              {dailyRevenue.every((item) => item.revenue === 0) && reportPeriod === "custom" ? (
                 <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có dữ liệu doanh thu trong khoảng ngày này.", "No revenue data for this date range.")}</p>
               ) : (
-                <ResponsiveContainer width="100%" height={280}>
+                <ResponsiveContainer width="100%" height={reportPeriod === "day-month" ? 320 : 280}>
                   <BarChart data={dailyRevenue}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
-                    <XAxis dataKey="label" interval="preserveStartEnd" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => localizedText(`${Math.round(Number(value) / 1000000)}tr`, `${Math.round(Number(value) / 1000000)}M`)} />
+                    <XAxis
+                      dataKey="label"
+                      interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                      angle={reportPeriod === "day-month" ? -45 : 0}
+                      textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                      height={reportPeriod === "day-month" ? 48 : 30}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language)} />
                     <Tooltip labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""} formatter={(value) => [formatMoney(Number(value)), localizedText("Doanh thu dịch vụ", "Service revenue")]} />
                     <Legend
                       verticalAlign="bottom"
@@ -610,59 +726,64 @@ export default function ReportWorkspace() {
                   {localizedText("Không tải được loại khuyến mãi; một số chương trình có thể hiện là chưa xác định.", "Promotion types could not be loaded; some entries may be marked unknown.")}
                 </p>
               )}
-              {report.promotions.length === 0 ? (
+              {report.promotions.length === 0
+                && reportPeriod === "custom" ? (
                 <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có khuyến mãi được áp dụng trong khoảng ngày này.", "No promotions were used during this date range.")}</p>
               ) : (
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                  <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
-                    <p className="mb-2 text-center text-xs font-semibold text-slate-600">{localizedText("Số tiền giảm theo loại", "Discount savings by type")}</p>
-                    {promotionScopesTotalSavings > 0 ? (
-                      <ResponsiveContainer width="100%" height={230}>
-                        <BarChart data={promotionChartData} barCategoryGap={promotionChartIsStacked ? "45%" : "20%"}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
-                          <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#64748b" }} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => `${Math.round(Number(value) / 1000000)}tr`} />
-                          <Tooltip formatter={(value) => [formatMoney(Number(value)), localizedText("Tiền giảm", "Savings")]} />
-                          <Legend verticalAlign="bottom" height={32} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                          <Bar dataKey="ROOM" name={t("promotion.scopeRoom")} fill={promotionScopeColors.ROOM} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="SERVICE" name={t("promotion.scopeService")} fill={promotionScopeColors.SERVICE} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="TOTAL" name={t("promotion.scopeTotal")} fill={promotionScopeColors.TOTAL} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
-                          {promotionChartData[0].UNKNOWN > 0 && (
-                            <Bar dataKey="UNKNOWN" name={t("promotion.scopeUnknown")} fill={promotionScopeColors.UNKNOWN} stackId={promotionChartIsStacked ? "savings" : undefined} radius={[4, 4, 0, 0]} />
-                          )}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <p className="py-12 text-center text-xs text-slate-400">{localizedText("Chưa có số tiền giảm để so sánh.", "No discount savings to compare.")}</p>
-                    )}
-                  </div>
-                  <div className="max-h-[300px] space-y-2 overflow-y-auto">
-                    {report.promotions.map((promotion) => {
-                      const scope = getPromotionScope(
-                        promotionScopeById.get(promotion.promotionId)
-                          ?? promotion.type
-                          ?? promotion.scope
-                          ?? promotion.promotionScope,
-                      );
-                      return (
-                        <article key={promotion.promotionId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="truncate text-sm font-semibold text-slate-800">{promotion.promotionName}</p>
-                              <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: promotionScopeColors[scope] }}>
-                                {t(`promotion.${promotionScopeLabelKey[scope]}`)}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs text-slate-500">{promotion.promotionCode}</p>
-                            <p className="mt-1 text-xs font-medium text-slate-600">
-                              {localizedText(`${promotion.userCount} khách · ${promotion.usageCount} lượt dùng`, `${promotion.userCount} guests · ${promotion.usageCount} uses`)}
-                            </p>
-                          </div>
-                          <p className="shrink-0 text-sm font-bold text-emerald-700">{formatMoney(promotion.savings)}</p>
-                        </article>
-                      );
-                    })}
-                  </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                  <p className="mb-2 text-center text-xs font-semibold text-slate-600">
+                    {reportPeriod !== "custom"
+                      ? localizedText(
+                          `Tiền giảm theo ${reportPeriodOptionLabels[reportPeriod][0].toLowerCase()}`,
+                          `Discount savings ${reportPeriodOptionLabels[reportPeriod][1].toLowerCase()}`,
+                        )
+                      : localizedText("Số tiền giảm theo loại", "Discount savings by type")}
+                  </p>
+                  {reportPeriod !== "custom" && periodReportData.isLoading ? (
+                    <p className="py-12 text-center text-xs text-slate-400">{localizedText("Đang tải dữ liệu khuyến mãi…", "Loading promotion data…")}</p>
+                  ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                    <p role="alert" className="py-12 text-center text-xs text-rose-600">{localizedText("Không thể tải dữ liệu khuyến mãi theo ngày.", "Could not load daily promotion data.")}</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={promotionChartData} margin={{ top: 8, right: 12, left: 0, bottom: reportPeriod === "day-month" ? 22 : 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
+                        <XAxis
+                          dataKey="label"
+                          axisLine={false}
+                          tickLine={false}
+                          interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                          angle={reportPeriod === "day-month" ? -45 : 0}
+                          textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                          height={reportPeriod === "day-month" ? 48 : 30}
+                          tick={{ fontSize: 10, fill: "#64748b" }}
+                        />
+                        <YAxis
+                          type="number"
+                          domain={[0, "dataMax"]}
+                          allowDecimals={false}
+                          axisLine={false}
+                          tickLine={false}
+                          width={52}
+                          tick={{ fontSize: 9, fill: "#94a3b8" }}
+                          tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language)}
+                        />
+                        <Tooltip
+                          labelFormatter={(_label, entries) => {
+                            return entries[0]?.payload.fullDate ?? "";
+                          }}
+                          formatter={(value, name) => [formatMoney(Number(value)), name]}
+                        />
+                        <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="ROOM" name={t("promotion.scopeRoom")} fill={promotionScopeColors.ROOM} stackId="savings" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="SERVICE" name={t("promotion.scopeService")} fill={promotionScopeColors.SERVICE} stackId="savings" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="TOTAL" name={t("promotion.scopeTotal")} fill={promotionScopeColors.TOTAL} stackId="savings" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="UNKNOWN" name={t("promotion.scopeUnknown")} fill={promotionScopeColors.UNKNOWN} stackId="savings" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                  {promotionScopesTotalSavings === 0 && !periodReportData.isLoading && !periodReportData.isError && (
+                    <p className="py-3 text-center text-xs text-slate-400">{localizedText("Chưa có số tiền giảm để so sánh.", "No discount savings to compare.")}</p>
+                  )}
                 </div>
               )}
             </section>

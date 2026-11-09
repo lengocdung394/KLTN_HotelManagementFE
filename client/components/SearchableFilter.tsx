@@ -126,14 +126,23 @@ export default function SearchableFilter({
   </div>;
 }
 
-export function FilterResetButton({ onClick, label }: { onClick: () => void; label: string }) {
+export function FilterResetButton({
+  onClick,
+  label,
+  showLabel = false,
+}: {
+  onClick: () => void;
+  label: string;
+  showLabel?: boolean;
+}) {
   return <button
     type="button"
     aria-label={label}
     title={label}
     onClick={onClick}
-    className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+    className={`flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 ${showLabel ? "w-auto px-3" : "w-10"}`}
   >
     <RotateCcw size={15} />
+    {showLabel && <span className="text-xs font-medium">{label}</span>}
   </button>;
 }

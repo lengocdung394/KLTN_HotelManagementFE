@@ -9,6 +9,17 @@ export type ReportPeriod =
 export type ReportDateRange = { startDate: string; endDate: string };
 export type DailyRevenuePoint = { date: string; revenue: number };
 export type RevenueChartPoint = { label: string; revenue: number; fullDate: string };
+export type ReportDateBucket = {
+  label: string;
+  startDate: string;
+  endDate: string;
+  fullDate: string;
+};
+export type BookingRevenuePoint = {
+  date: string;
+  roomRevenue: number;
+  serviceRevenue: number;
+};
 
 const parseLocalDate = (value: string) => {
   const [year, month, day] = value.split("-").map(Number);
@@ -69,86 +80,144 @@ export const buildRevenueChartData = (
 ): RevenueChartPoint[] => {
   if (!startDate || !endDate || startDate > endDate) return [];
 
-  const option = reportPeriodOptions.find((item) => item.value === period);
-  const unit = option?.unit ?? "day";
   const revenueByDate = new Map(
     dailyRevenue.map(({ date, revenue }) => [date, Number(revenue ?? 0)]),
   );
+  return buildReportDateBuckets(period, startDate, endDate, locale).map((bucket) => ({
+    label: bucket.label,
+    revenue: sumRevenueInRange(revenueByDate, bucket.startDate, bucket.endDate),
+    fullDate: bucket.fullDate,
+  }));
+};
+
+export const buildBookingRevenueChartData = (
+  revenueByDate: BookingRevenuePoint[],
+  period: ReportPeriod,
+  startDate: string,
+  endDate: string,
+  locale: string,
+) => {
+  const revenueMap = new Map(revenueByDate.map((item) => [item.date, item]));
+  return buildReportDateBuckets(period, startDate, endDate, locale).map((bucket) => {
+    const revenue = revenueMap.get(bucket.startDate);
+    return {
+      label: bucket.label,
+      fullDate: bucket.fullDate,
+      roomRevenue: revenue?.roomRevenue ?? 0,
+      serviceRevenue: revenue?.serviceRevenue ?? 0,
+    };
+  });
+};
+
+export const buildReportDateBuckets = (
+  period: ReportPeriod,
+  startDate: string,
+  endDate: string,
+  locale: string,
+): ReportDateBucket[] => {
+  if (!startDate || !endDate || startDate > endDate) return [];
+
+  const option = reportPeriodOptions.find((item) => item.value === period);
+  const unit = option?.unit ?? "day";
   const start = parseLocalDate(startDate);
   const end = parseLocalDate(endDate);
   const formatDate = (date: Date) => date.toLocaleDateString(locale);
-  const dateKeys: string[] = [];
 
   if (unit === "month") {
+    const buckets: ReportDateBucket[] = [];
     const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-    const lastMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+    const bucketEnd = period === "month-year" ? new Date(end.getFullYear(), 11, 31) : end;
+    const lastMonth = new Date(bucketEnd.getFullYear(), bucketEnd.getMonth(), 1);
     while (cursor <= lastMonth) {
-      dateKeys.push(formatLocalDate(cursor));
+      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+      const monthStartKey = formatLocalDate(cursor);
+      const monthEndKey = formatLocalDate(monthEnd);
+      const bucketStart = monthStartKey < startDate ? startDate : monthStartKey;
+      const currentBucketEnd = monthEndKey > formatLocalDate(bucketEnd) ? formatLocalDate(bucketEnd) : monthEndKey;
+      buckets.push({
+        label: cursor.toLocaleDateString(locale, { month: "short" }),
+        startDate: bucketStart,
+        endDate: currentBucketEnd,
+        fullDate: cursor.toLocaleDateString(locale, { month: "long", year: "numeric" }),
+      });
       cursor.setMonth(cursor.getMonth() + 1);
     }
-
-    return dateKeys.map((monthStart) => {
-      const month = parseLocalDate(monthStart);
-      const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-      const bucketStart = monthStart < startDate ? startDate : monthStart;
-      const monthEndKey = formatLocalDate(monthEnd);
-      const bucketEnd = monthEndKey > endDate ? endDate : monthEndKey;
-      const revenue = sumRevenueInRange(revenueByDate, bucketStart, bucketEnd);
-      return {
-        label: month.toLocaleDateString(locale, { month: "short" }),
-        revenue,
-        fullDate: month.toLocaleDateString(locale, { month: "long", year: "numeric" }),
-      };
-    });
+    return buckets;
   }
 
   if (unit === "week") {
-    const firstMonday = new Date(start);
-    firstMonday.setDate(firstMonday.getDate() - ((firstMonday.getDay() + 6) % 7));
-    const weekStarts: string[] = [];
-    for (const cursor = new Date(firstMonday); cursor <= end; cursor.setDate(cursor.getDate() + 7)) {
-      weekStarts.push(formatLocalDate(cursor));
+    const buckets: ReportDateBucket[] = [];
+    if (period === "week-month") {
+      const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+      const bucketEnd = new Date(end.getFullYear(), end.getMonth() + 1, 0);
+      const lastMonth = new Date(bucketEnd.getFullYear(), bucketEnd.getMonth(), 1);
+      while (cursor <= lastMonth) {
+        const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+        for (let week = 0; week < 4; week += 1) {
+          const weekStart = new Date(cursor.getFullYear(), cursor.getMonth(), week * 7 + 1);
+          const weekEnd = week === 3
+            ? monthEnd
+            : new Date(cursor.getFullYear(), cursor.getMonth(), (week + 1) * 7);
+          const weekStartKey = formatLocalDate(weekStart);
+          const weekEndKey = formatLocalDate(weekEnd);
+          const bucketStart = weekStartKey < startDate ? startDate : weekStartKey;
+          buckets.push({
+            label: localizedWeekLabel(week + 1, locale),
+            startDate: bucketStart,
+            endDate: weekEndKey,
+            fullDate: `${formatDate(parseLocalDate(bucketStart))} – ${formatDate(weekEnd)}`,
+          });
+        }
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      return buckets;
     }
 
-    return weekStarts.map((weekStart, index) => {
-      const monday = parseLocalDate(weekStart);
+    const firstMonday = new Date(start);
+    firstMonday.setDate(firstMonday.getDate() - ((firstMonday.getDay() + 6) % 7));
+    const bucketEnd = period === "week-year" ? new Date(end.getFullYear(), 11, 31) : end;
+    for (const monday = new Date(firstMonday); monday <= bucketEnd; monday.setDate(monday.getDate() + 7)) {
       const sunday = new Date(monday);
       sunday.setDate(sunday.getDate() + 6);
-      const bucketStart = weekStart < startDate ? startDate : weekStart;
+      const mondayKey = formatLocalDate(monday);
       const sundayKey = formatLocalDate(sunday);
-      const bucketEnd = sundayKey > endDate ? endDate : sundayKey;
-      const bucketStartDate = parseLocalDate(bucketStart);
-      const bucketEndDate = parseLocalDate(bucketEnd);
-      return {
-        label: localizedWeekLabel(index + 1, locale),
-        revenue: sumRevenueInRange(revenueByDate, bucketStart, bucketEnd),
-        fullDate: `${formatDate(bucketStartDate)} – ${formatDate(bucketEndDate)}`,
-      };
-    });
+      const bucketStart = mondayKey < startDate ? startDate : mondayKey;
+      const currentBucketEnd = sundayKey > formatLocalDate(bucketEnd) ? bucketEnd : sunday;
+      buckets.push({
+        label: localizedWeekLabel(buckets.length + 1, locale),
+        startDate: bucketStart,
+        endDate: formatLocalDate(currentBucketEnd),
+        fullDate: `${formatDate(parseLocalDate(bucketStart))} – ${formatDate(currentBucketEnd)}`,
+      });
+    }
+    return buckets;
   }
 
   const chartEnd = new Date(end);
   if (period === "day-week") {
     chartEnd.setDate(chartEnd.getDate() + (6 - ((chartEnd.getDay() + 6) % 7)));
+  } else if (period === "day-month") {
+    chartEnd.setMonth(chartEnd.getMonth() + 1, 0);
+  } else if (period === "day-year") {
+    chartEnd.setMonth(11, 31);
   }
-  const cursor = new Date(start);
-  while (cursor <= chartEnd) {
-    dateKeys.push(formatLocalDate(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dateKeys.map((date) => {
-    const parsedDate = parseLocalDate(date);
+
+  const buckets: ReportDateBucket[] = [];
+  for (const cursor = new Date(start); cursor <= chartEnd; cursor.setDate(cursor.getDate() + 1)) {
+    const date = formatLocalDate(cursor);
     const label = period === "day-week"
-      ? parsedDate.toLocaleDateString(locale, { weekday: "short" })
+      ? cursor.toLocaleDateString(locale, { weekday: "short" })
       : period === "day-year"
-        ? parsedDate.toLocaleDateString(locale, { day: "2-digit", month: "short" })
+        ? cursor.toLocaleDateString(locale, { day: "2-digit", month: "short" })
         : date.slice(8, 10);
-    return {
+    buckets.push({
       label,
-      revenue: revenueByDate.get(date) ?? 0,
-      fullDate: formatDate(parsedDate),
-    };
-  });
+      startDate: date,
+      endDate: date,
+      fullDate: formatDate(cursor),
+    });
+  }
+  return buckets;
 };
 
 const sumRevenueInRange = (revenueByDate: Map<string, number>, startDate: string, endDate: string) =>

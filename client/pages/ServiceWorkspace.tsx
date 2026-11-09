@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { Banknote, CalendarDays, CheckCircle2, Clock3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, Search } from "lucide-react";
 import ListPagination from "../components/ListPagination";
+import DatePickerPopover from "../components/DatePickerPopover";
+import { localizedText } from "../i18n";
 import { toast } from "@/components/ui/use-toast";
 import { useCreateServiceMutation, useGetAllServicesQuery, useUpdateServiceMutation, type HotelService } from "../services/serviceApi";
 import { downloadServiceTemplate, parseServiceImportArchive, validateServiceImportArchive, type ServiceImportRowResult } from "../lib/serviceBulkImport";
@@ -23,6 +25,7 @@ import ServiceImportProgressCard from "../components/ServiceImportProgressCard";
 import ClearSearchButton from "../components/ClearSearchButton";
 import FilterSelect from "../components/FilterSelect";
 import FilterResultStatus from "../components/FilterResultStatus";
+import { FilterResetButton } from "../components/SearchableFilter";
 
 const getSaveErrorMessage = (error: unknown) => {
   if (typeof error === "object" && error !== null && "data" in error) {
@@ -57,6 +60,9 @@ type BookingServiceUsageGroup = {
   bookingCreatedAt: string;
   services: ServiceUsageRow[];
 };
+
+type ServiceFormField = "name" | "detail" | "price" | "unit" | "category" | "image";
+type ServiceFormErrors = Partial<Record<ServiceFormField, string>>;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? value as Record<string, unknown> : null;
@@ -154,6 +160,15 @@ const getBookingDateValue = (value: string) => {
   return Number.isNaN(date.getTime()) ? "" : toLocalDateInputValue(date);
 };
 
+const parseLocalDateValue = (value: string) => {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const normalizeUsageSearch = (value: string) =>
+  value.trim().normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+
 const getTodayServiceStats = (bookings: BookingListItem[]) => {
   const today = new Date().toDateString();
   let bookedToday = 0;
@@ -213,6 +228,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [newService, setNewService] = useState({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [saveError, setSaveError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<ServiceFormErrors>({});
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [serviceImportTaskId, setServiceImportTaskId] = useState("");
   const [serviceImportRows, setServiceImportRows] = useState<ServiceImportRowResult[]>([]);
@@ -233,6 +249,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [usageDateTo, setUsageDateTo] = useState(() => toLocalDateInputValue(new Date()));
   const [usedDateFrom, setUsedDateFrom] = useState(() => toLocalDateInputValue(new Date()));
   const [usedDateTo, setUsedDateTo] = useState(() => toLocalDateInputValue(new Date()));
+  const [usageSearchQuery, setUsageSearchQuery] = useState("");
 
   const { hotelId, roles } = useAppSelector((state) => state.auth);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
@@ -279,13 +296,23 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       return rightTimestamp - leftTimestamp;
     });
   }, [pendingUsageRows]);
-  const filteredPendingUsageGroups = useMemo(() => pendingUsageGroups.filter((group) => {
-    if (!usageDateFrom && !usageDateTo) return true;
-    const bookingDate = getBookingDateValue(group.bookingCreatedAt);
-    if (!bookingDate) return false;
-    return (!usageDateFrom || bookingDate >= usageDateFrom)
-      && (!usageDateTo || bookingDate <= usageDateTo);
-  }), [pendingUsageGroups, usageDateFrom, usageDateTo]);
+  const filteredPendingUsageGroups = useMemo(() => {
+    const normalizedQuery = normalizeUsageSearch(usageSearchQuery);
+    return pendingUsageGroups.filter((group) => {
+      const bookingDate = getBookingDateValue(group.bookingCreatedAt);
+      const matchesDate = (!usageDateFrom && !usageDateTo)
+        || (Boolean(bookingDate)
+          && (!usageDateFrom || bookingDate >= usageDateFrom)
+          && (!usageDateTo || bookingDate <= usageDateTo));
+      const searchableText = [
+        group.bookingId,
+        group.customerName,
+        ...group.services.flatMap((service) => [service.serviceName, service.roomNumber]),
+      ].join(" ");
+      const matchesSearch = !normalizedQuery || normalizeUsageSearch(searchableText).includes(normalizedQuery);
+      return matchesDate && matchesSearch;
+    });
+  }, [pendingUsageGroups, usageDateFrom, usageDateTo, usageSearchQuery]);
   const usedServiceRows = useMemo(() => bookings.flatMap((bookingItem) => {
       const booking = asRecord(bookingItem);
       if (!booking || String(booking.bookingStatus ?? "").toUpperCase().startsWith("CANCELLED")) return [];
@@ -325,12 +352,18 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         });
       });
     }), [bookings]);
-  const filteredUsedServiceRows = useMemo(() => usedServiceRows.filter((row) => {
-    const usedDate = getBookingDateValue(row.usedAt ?? "");
-    if (!usedDate) return false;
-    return (!usedDateFrom || usedDate >= usedDateFrom)
-      && (!usedDateTo || usedDate <= usedDateTo);
-  }), [usedServiceRows, usedDateFrom, usedDateTo]);
+  const filteredUsedServiceRows = useMemo(() => {
+    const normalizedQuery = normalizeUsageSearch(usageSearchQuery);
+    return usedServiceRows.filter((row) => {
+      const usedDate = getBookingDateValue(row.usedAt ?? "");
+      const matchesDate = Boolean(usedDate)
+        && (!usedDateFrom || usedDate >= usedDateFrom)
+        && (!usedDateTo || usedDate <= usedDateTo);
+      const searchableText = [row.bookingId, row.customerName, row.serviceName, row.roomNumber, row.usedBy ?? ""].join(" ");
+      const matchesSearch = !normalizedQuery || normalizeUsageSearch(searchableText).includes(normalizedQuery);
+      return matchesDate && matchesSearch;
+    });
+  }, [usedServiceRows, usedDateFrom, usedDateTo, usageSearchQuery]);
   const filteredServices = useMemo(() => {
     const normalizedQuery = searchQuery.trim().normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
     return allServices.filter((service) => {
@@ -444,6 +477,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     setTargetHotelId("");
     setSelectedImage(null);
     setSaveError("");
+    setFieldErrors({});
     setNewService({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
     setShowCreate(true);
   };
@@ -460,6 +494,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     setEditingService(service);
     setSelectedImage(null);
     setSaveError("");
+    setFieldErrors({});
     setNewService({
       name: service.name,
       detail: service.detail,
@@ -477,16 +512,16 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     const detail = newService.detail.trim();
     const category = newService.category.trim();
     const price = Number(newService.price);
-    if (!name || !detail || !category || !newService.unit || !Number.isFinite(price) || price < 0) {
-      const message = "Vui lòng kiểm tra và điền đầy đủ thông tin hợp lệ.";
-      setSaveError(message);
-      toast({ variant: "destructive", title: "Thông tin chưa hợp lệ", description: message });
-      return;
-    }
-    if (!editingService && !selectedImage) {
-      const message = "Vui lòng tải ảnh dịch vụ lên.";
-      setSaveError(message);
-      toast({ variant: "destructive", title: "Thiếu ảnh dịch vụ", description: message });
+    const errors: ServiceFormErrors = {};
+    if (!name) errors.name = t("serviceWorkspace.nameRequired");
+    if (!detail) errors.detail = t("serviceWorkspace.descriptionRequired");
+    if (!newService.category.trim()) errors.category = t("serviceWorkspace.categoryRequired");
+    if (!newService.unit.trim()) errors.unit = t("serviceWorkspace.unitRequired");
+    if (!newService.price.trim() || !Number.isFinite(price)) errors.price = t("serviceWorkspace.priceRequired");
+    else if (price < 0) errors.price = t("serviceWorkspace.priceInvalid");
+    if (!editingService && !selectedImage) errors.image = t("serviceWorkspace.imageRequired");
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
@@ -506,6 +541,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       setShowCreate(false);
       setEditingService(null);
       setSelectedImage(null);
+      setFieldErrors({});
       setNewService({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
       toast({
         variant: wasEditing ? "default" : "checkin",
@@ -625,7 +661,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     <section className={`${mode === "usage" ? "p-5" : "mt-2"} rounded-2xl border border-slate-200/80 bg-white shadow-sm`}>
       {mode === "usage" && canConfirmServiceUsage && (
         <section aria-label={t("serviceWorkspace.usageSection")} className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 border-b border-slate-100 p-4">
             <div role="tablist" aria-label={t("serviceWorkspace.usageTabs")} className="flex w-fit flex-wrap gap-5 border-b border-slate-200 lg:shrink-0">
               <button
                 type="button"
@@ -654,30 +690,58 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">{filteredUsedServiceRows.length}</span>
               </button>
             </div>
-            <div className="flex flex-wrap items-end gap-3 lg:justify-end">
-                <label className="block text-xs font-semibold text-slate-500">
+            <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3 lg:flex-nowrap">
+              <div className="relative min-w-[220px] flex-1 lg:min-w-[320px] lg:max-w-xl">
+                <Search size={15} className="pointer-events-none absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  value={usageSearchQuery}
+                  onChange={(event) => setUsageSearchQuery(event.target.value)}
+                  placeholder={localizedText("Tìm mã booking, tên khách, dịch vụ hoặc phòng...", "Search booking ID, guest, service, or room...")}
+                  aria-label={localizedText("Tìm dịch vụ khách hàng", "Search customer services")}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+                <ClearSearchButton value={usageSearchQuery} onClear={() => setUsageSearchQuery("")} label={t("common.clearSearch")} />
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                   {activeUsageTab === "pending" ? t("serviceWorkspace.bookedFrom") : t("serviceWorkspace.usedFrom")}
-                  <input
-                    type="date"
-                    value={activeUsageTab === "pending" ? usageDateFrom : usedDateFrom}
-                    max={(activeUsageTab === "pending" ? usageDateTo : usedDateTo) || undefined}
-                    onChange={(event) => activeUsageTab === "pending" ? setUsageDateFrom(event.target.value) : setUsedDateFrom(event.target.value)}
-                    className="mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none transition hover:border-blue-300 focus:border-blue-400"
-                  />
-                </label>
-                <label className="block text-xs font-semibold text-slate-500">
+                </p>
+                <DatePickerPopover
+                  value={parseLocalDateValue(activeUsageTab === "pending" ? usageDateFrom : usedDateFrom)}
+                  maxDate={parseLocalDateValue(activeUsageTab === "pending" ? usageDateTo : usedDateTo)}
+                  onChange={(date) => {
+                    const value = date ? toLocalDateInputValue(date) : "";
+                    if (activeUsageTab === "pending") setUsageDateFrom(value);
+                    else setUsedDateFrom(value);
+                  }}
+                  placeholder={localizedText("Chọn ngày", "Select date")}
+                  buttonClassName="flex h-9 min-w-[145px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+                  align="start"
+                />
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <p className="whitespace-nowrap text-xs font-semibold text-slate-500">
                   {activeUsageTab === "pending" ? t("serviceWorkspace.bookedTo") : t("serviceWorkspace.usedTo")}
-                  <input
-                    type="date"
-                    value={activeUsageTab === "pending" ? usageDateTo : usedDateTo}
-                    min={(activeUsageTab === "pending" ? usageDateFrom : usedDateFrom) || undefined}
-                    onChange={(event) => activeUsageTab === "pending" ? setUsageDateTo(event.target.value) : setUsedDateTo(event.target.value)}
-                    className="mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none transition hover:border-blue-300 focus:border-blue-400"
-                  />
-                </label>
-                {(activeUsageTab === "pending" ? usageDateFrom || usageDateTo : usedDateFrom || usedDateTo) && (
-                  <button
-                    type="button"
+                </p>
+                <DatePickerPopover
+                  value={parseLocalDateValue(activeUsageTab === "pending" ? usageDateTo : usedDateTo)}
+                  minDate={parseLocalDateValue(activeUsageTab === "pending" ? usageDateFrom : usedDateFrom)}
+                  onChange={(date) => {
+                    const value = date ? toLocalDateInputValue(date) : "";
+                    if (activeUsageTab === "pending") setUsageDateTo(value);
+                    else setUsedDateTo(value);
+                  }}
+                  placeholder={localizedText("Chọn ngày", "Select date")}
+                  buttonClassName="flex h-9 min-w-[145px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+                  align="start"
+                />
+              </div>
+                {(activeUsageTab === "pending"
+                  ? usageDateFrom || usageDateTo || usageSearchQuery
+                  : usedDateFrom || usedDateTo || usageSearchQuery) && (
+                  <FilterResetButton
+                    label={t("serviceWorkspace.clearFilter")}
                     onClick={() => {
                       if (activeUsageTab === "pending") {
                         setUsageDateFrom("");
@@ -686,13 +750,11 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                         setUsedDateFrom("");
                         setUsedDateTo("");
                       }
+                      setUsageSearchQuery("");
                     }}
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    {t("serviceWorkspace.clearFilter")}
-                  </button>
+                  />
                 )}
-              </div>
+            </div>
           </div>
           {activeUsageTab === "pending" && (
             <div id="service-usage-pending-panel" role="tabpanel" aria-labelledby="service-usage-pending-tab">
@@ -703,7 +765,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noPendingServices")}</p>
               )}
               {!isLoadingUsage && !isUsageError && pendingUsageRows.length > 0 && filteredPendingUsageGroups.length === 0 && (
-                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noPendingInRange")}</p>
+                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{localizedText("Không tìm thấy kết quả phù hợp với bộ lọc.", "No results match the selected filters.")}</p>
               )}
               {!isLoadingUsage && !isUsageError && filteredPendingUsageGroups.length > 0 && (
                 <div className="flex flex-col gap-2">
@@ -801,7 +863,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingHistory")}</p>}
               {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">{t("serviceWorkspace.historyLoadError")}</p>}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length === 0 && (
-                <FilterResultStatus filterKey={JSON.stringify([usedDateFrom, usedDateTo])}><p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noUsedInRange")}</p></FilterResultStatus>
+                <FilterResultStatus filterKey={JSON.stringify([usedDateFrom, usedDateTo, usageSearchQuery])}><p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{localizedText("Không tìm thấy kết quả phù hợp với bộ lọc.", "No results match the selected filters.")}</p></FilterResultStatus>
               )}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -1123,6 +1185,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       {showCreate && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onMouseDown={() => setShowCreate(false)}>
           <form
+            noValidate
             className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl shrink-0 overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_25px_80px_rgba(15,23,42,0.18)]"
             onSubmit={(event) => {
               event.preventDefault();
@@ -1169,10 +1232,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <input
                   required
                   value={newService.name}
-                  onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))}
-                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  onChange={(event) => { setNewService((current) => ({ ...current, name: event.target.value })); setFieldErrors((current) => ({ ...current, name: undefined })); }}
+                  aria-invalid={Boolean(fieldErrors.name)}
+                  aria-describedby={fieldErrors.name ? "service-name-error" : undefined}
+                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.name ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                   placeholder={t("serviceWorkspace.enterServiceName")}
                 />
+                {fieldErrors.name && <span id="service-name-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.name}</span>}
               </label>
 
               <label className="text-sm font-semibold text-slate-700">
@@ -1182,10 +1248,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   type="number"
                   min="0"
                   value={newService.price}
-                  onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))}
-                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  onChange={(event) => { setNewService((current) => ({ ...current, price: event.target.value })); setFieldErrors((current) => ({ ...current, price: undefined })); }}
+                  aria-invalid={Boolean(fieldErrors.price)}
+                  aria-describedby={fieldErrors.price ? "service-price-error" : undefined}
+                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.price ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                   placeholder="0"
                 />
+                {fieldErrors.price && <span id="service-price-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.price}</span>}
               </label>
 
               <label className="text-sm font-semibold text-slate-700">
@@ -1193,14 +1262,17 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <select
                   required
                   value={newService.unit}
-                  onChange={(event) => setNewService((current) => ({ ...current, unit: event.target.value }))}
-                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  onChange={(event) => { setNewService((current) => ({ ...current, unit: event.target.value })); setFieldErrors((current) => ({ ...current, unit: undefined })); }}
+                  aria-invalid={Boolean(fieldErrors.unit)}
+                  aria-describedby={fieldErrors.unit ? "service-unit-error" : undefined}
+                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.unit ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                 >
                   <option value="lần">{t("serviceWorkspace.unitOnce")}</option>
                   <option value="người">{t("booking.people")}</option>
                   <option value="giờ">{t("serviceWorkspace.unitHour")}</option>
                   <option value="ngày">{t("serviceWorkspace.unitDay")}</option>
                 </select>
+                {fieldErrors.unit && <span id="service-unit-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.unit}</span>}
               </label>
 
               <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
@@ -1208,8 +1280,10 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <select
                   required
                   value={newService.category}
-                  onChange={(event) => setNewService((current) => ({ ...current, category: event.target.value }))}
-                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  onChange={(event) => { setNewService((current) => ({ ...current, category: event.target.value })); setFieldErrors((current) => ({ ...current, category: undefined })); }}
+                  aria-invalid={Boolean(fieldErrors.category)}
+                  aria-describedby={fieldErrors.category ? "service-category-error" : undefined}
+                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.category ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                 >
                   <option value="Khác">{t("serviceWorkspace.other")}</option>
                   <option value="Dịch vụ phòng">{t("serviceWorkspace.roomService")}</option>
@@ -1218,6 +1292,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   <option value="Nhà hàng">{t("serviceWorkspace.restaurant")}</option>
                   <option value="Điện tử">{t("serviceWorkspace.electronics")}</option>
                 </select>
+                {fieldErrors.category && <span id="service-category-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.category}</span>}
               </label>
 
               <div className="text-sm font-semibold text-slate-700 sm:col-span-2">
@@ -1235,6 +1310,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                         const file = event.target.files?.[0];
                         if (!file) return;
                         setSelectedImage(file);
+                        setFieldErrors((current) => ({ ...current, image: undefined }));
                         setNewService((current) => ({
                           ...current,
                           imageUrl: URL.createObjectURL(file),
@@ -1242,6 +1318,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                       }}
                     />
                   </label>
+                  {fieldErrors.image && <p id="service-image-error" className="text-xs font-normal text-rose-600" role="alert">{fieldErrors.image}</p>}
 
                   {newService.imageUrl && (
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
@@ -1252,15 +1329,18 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               </div>
 
               <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                {t("serviceWorkspace.description")}
+                {t("serviceWorkspace.description")} <span className="text-rose-500">*</span>
                 <textarea
                   required
                   value={newService.detail}
-                  onChange={(event) => setNewService((current) => ({ ...current, detail: event.target.value }))}
+                  onChange={(event) => { setNewService((current) => ({ ...current, detail: event.target.value })); setFieldErrors((current) => ({ ...current, detail: undefined })); }}
+                  aria-invalid={Boolean(fieldErrors.detail)}
+                  aria-describedby={fieldErrors.detail ? "service-description-error" : undefined}
                   rows={3}
                   placeholder={t("serviceWorkspace.enterDescription")}
-                  className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  className={`mt-2 w-full resize-none rounded-xl border bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.detail ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                 />
+                {fieldErrors.detail && <span id="service-description-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.detail}</span>}
               </label>
 
               <div className="sm:col-span-2">

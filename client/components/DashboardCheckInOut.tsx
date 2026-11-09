@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, LogIn, LogOut, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import DatePickerPopover from "./DatePickerPopover";
 import {
   useGetTodayCheckInsQuery,
   useGetTodayCheckOutsQuery,
@@ -146,16 +147,13 @@ export default function DashboardCheckInOut() {
           <button type="button" onClick={() => shiftDate(-1)} aria-label={t("dashboard.previousDay")} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600">
             <ChevronLeft size={16} />
           </button>
-          <label className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700">
-            <CalendarDays size={14} className="text-blue-600" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(event) => event.target.value && setSelectedDate(event.target.value)}
-              aria-label={t("dashboard.selectCheckInOutDate")}
-              className="min-w-0 bg-transparent outline-none"
-            />
-          </label>
+          <DatePickerPopover
+            value={new Date(`${selectedDate}T00:00:00`)}
+            onChange={(date) => date && setSelectedDate(localDateString(date))}
+            placeholder={t("dashboard.selectCheckInOutDate")}
+            buttonClassName="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-600"
+            align="center"
+          />
           <button type="button" onClick={() => shiftDate(1)} aria-label={t("dashboard.nextDay")} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600">
             <ChevronRight size={16} />
           </button>

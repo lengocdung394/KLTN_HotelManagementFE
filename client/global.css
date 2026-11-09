@@ -1,5 +1,5 @@
 /** @import must precede all other statements */
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700;800&display=swap");
 
 @import "tailwindcss";
 
@@ -206,7 +206,7 @@ form.max-w-lg label > textarea {
   @media (prefers-reduced-motion: reduce) { .login-orb, .login-panel-lines { animation: none; } }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: "DM Sans", sans-serif;
+    font-family: "Playfair Display", serif;
   }
 
   :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {

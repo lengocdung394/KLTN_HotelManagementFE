@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/use-toast";
 import ClearSearchButton from "../components/ClearSearchButton";
+import DatePickerPopover from "../components/DatePickerPopover";
 import FilterSelect from "../components/FilterSelect";
 import FilterResultStatus from "../components/FilterResultStatus";
 import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
@@ -57,6 +58,16 @@ const valueOf = (item: BookingListItem, keys: string[]) => {
 
 const textOf = (item: BookingListItem, keys: string[], fallback = "-") =>
   String(valueOf(item, keys) ?? fallback);
+
+const parseDateFilterValue = (value: string) => {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateFilterValue = (date: Date | undefined) => date
+  ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  : "";
 
 const bookingAmount = (item: BookingListItem, keys: string[], fallback = 0) => {
   const value = valueOf(item, keys);
@@ -949,9 +960,7 @@ export default function BookingListWorkspace() {
       {/* Search Bar */}
       <div className="border-b border-slate-100 p-5">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_150px_150px_180px_170px_auto] xl:items-end">
-          <div className="block min-w-0 text-xs font-semibold text-slate-500">
-          <span>{localizedText("Tìm kiếm", "Search")}</span>
-          <div className="relative mt-1">
+          <div className="relative min-w-0">
           <Search size={15} className="absolute left-3 top-3 text-slate-400" />
           <input
             value={search}
@@ -962,11 +971,27 @@ export default function BookingListWorkspace() {
           />
           <ClearSearchButton value={search} onClear={() => setSearch("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
           </div>
+          <div className="min-w-0">
+            <DatePickerPopover
+              value={parseDateFilterValue(dateFrom)}
+              maxDate={parseDateFilterValue(dateTo)}
+              onChange={(date) => setDateFrom(formatDateFilterValue(date))}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              buttonClassName="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+              align="start"
+            />
           </div>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Từ ngày", "From")}<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Đến ngày", "To")}<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">
-            {localizedText("Trạng thái booking", "Booking status")}
+          <div className="min-w-0">
+            <DatePickerPopover
+              value={parseDateFilterValue(dateTo)}
+              minDate={parseDateFilterValue(dateFrom)}
+              onChange={(date) => setDateTo(formatDateFilterValue(date))}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              buttonClassName="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+              align="start"
+            />
+          </div>
+          <div className="min-w-0">
             <SearchableFilter
               value={statusFilter}
               options={statusFilterOptions}
@@ -974,10 +999,12 @@ export default function BookingListWorkspace() {
               searchPlaceholder={localizedText("Tìm trạng thái...", "Search statuses...")}
               emptyMessage={localizedText("Không tìm thấy trạng thái.", "No statuses found.")}
               ariaLabel={localizedText("Tìm và chọn trạng thái booking", "Search and select a booking status")}
-              className="mt-1"
+              className="w-full"
             />
-          </label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Sắp xếp", "Sort")}<FilterSelect value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">{localizedText("Mới nhất trước", "Newest first")}</option><option value="asc">{localizedText("Cũ nhất trước", "Oldest first")}</option></FilterSelect></label>
+          </div>
+          <div className="min-w-0">
+            <FilterSelect aria-label={localizedText("Sắp xếp", "Sort")} value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">{localizedText("Mới nhất trước", "Newest first")}</option><option value="asc">{localizedText("Cũ nhất trước", "Oldest first")}</option></FilterSelect>
+          </div>
           <div className="flex items-end">
             {hasActiveFilters && <FilterResetButton
               onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setStatusFilter("ALL"); }}

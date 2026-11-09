@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CalendarDays, FileText, LoaderCircle, Search } from "lucide-react";
+import { AlertTriangle, FileText, LoaderCircle, Search } from "lucide-react";
 import CheckoutInvoice from "../components/CheckoutInvoice";
 import ClearSearchButton from "../components/ClearSearchButton";
+import DatePickerPopover from "../components/DatePickerPopover";
 import FilterResultStatus from "../components/FilterResultStatus";
+import { FilterResetButton } from "../components/SearchableFilter";
 import ListPagination from "../components/ListPagination";
 import { localizedText } from "../i18n";
 import { useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
@@ -21,6 +23,16 @@ const getTodayDateInputValue = () => {
   const day = String(today.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
+
+const parseDateInputValue = (value: string) => {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateInputValue = (date: Date | undefined) => date
+  ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  : "";
 
 const formatCreatedDate = (createdAt: unknown, language: string) => {
   const date = getCreatedDate(createdAt);
@@ -149,25 +161,19 @@ export default function InvoiceWorkspace() {
           <ClearSearchButton value={query} onClear={() => setQuery("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <label className="relative flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
-            <CalendarDays size={15} className="text-slate-400" />
-            <span>{localizedText("Ngày tạo", "Created")}</span>
-            <input
-              type="date"
-              value={createdDate}
-              onChange={(event) => setCreatedDate(event.target.value)}
-              aria-label={localizedText("Lọc hóa đơn theo ngày tạo booking", "Filter invoices by booking creation date")}
-              className="min-w-0 bg-transparent text-xs text-slate-700 outline-none"
-            />
-          </label>
+          <span className="text-xs font-semibold text-slate-600">{localizedText("Ngày tạo", "Created")}</span>
+          <DatePickerPopover
+            value={parseDateInputValue(createdDate)}
+            onChange={(date) => setCreatedDate(formatDateInputValue(date))}
+            placeholder={localizedText("Chọn ngày", "Select date")}
+            buttonClassName="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+            align="end"
+          />
           {createdDate && (
-            <button
-              type="button"
+            <FilterResetButton
               onClick={() => setCreatedDate("")}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-            >
-              {localizedText("Xóa lọc ngày", "Clear date filter")}
-            </button>
+              label={localizedText("Xóa lọc ngày", "Clear date filter")}
+            />
           )}
         </div>
       </div>

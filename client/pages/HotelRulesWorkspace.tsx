@@ -5,7 +5,6 @@ import {
   CalendarCheck,
   ClipboardList,
   ConciergeBell,
-  Construction,
   CreditCard,
   DoorOpen,
   Info,
@@ -86,44 +85,6 @@ const getRuleSections = () => [
       localizedText("Dưới 24 giờ trước check-in: phạt 100% phần tiền phòng đã thanh toán được phân bổ cho phòng đó.", "Under 24 hours before check-in: the penalty is 100% of the paid room amount allocated to that room."),
       localizedText("Khi hủy phòng, các dịch vụ chưa bị hủy của phòng đó sẽ tự động bị hủy theo. Dịch vụ đã sử dụng thì không thể hủy phòng.", "When a room is canceled, its active services are canceled automatically. A room cannot be canceled if a service has already been used."),
       localizedText("Hủy riêng phòng không tạo yêu cầu hoàn tiền ngay. Booking được đối soát khi checkout; nếu đã thanh toán dư, khoản dư được xử lý hoàn sau khi toàn bộ booking checkout.", "Canceling one room does not create an immediate refund request. The booking is reconciled at checkout; any overpayment is refunded after every room in the booking has checked out."),
-    ],
-  },
-  {
-    title: localizedText(
-      "Khách sạn tạm đóng / sửa chữa",
-      "Hotel closure or repairs",
-    ),
-    description: localizedText(
-      "Áp dụng khi khách sạn chủ động yêu cầu hủy booking hoặc checkout sớm vì lịch tạm đóng, sửa chữa hay lý do vận hành.",
-      "Applies when the hotel initiates a booking cancellation or early checkout due to a closure, repairs, or operational reasons.",
-    ),
-    icon: Construction,
-    tone: "amber",
-    points: [
-      localizedText(
-        "Booking chưa check-in: hủy theo diện khách sạn, không áp dụng phí phạt hủy; hoàn lại toàn bộ số tiền khách đã thanh toán.",
-        "Before check-in: process as a hotel-initiated cancellation with no cancellation penalty and refund the full amount paid.",
-      ),
-      localizedText(
-        "Booking đang lưu trú: checkout sớm các phòng bị ảnh hưởng; tính tiền phòng theo số đêm đã ở và giữ lại các khoản phụ thu hợp lệ.",
-        "During a stay: check out the affected rooms early; charge for nights already used and retain applicable surcharges.",
-      ),
-      localizedText(
-        "Dịch vụ chưa sử dụng được hủy và tính vào khoản hoàn; dịch vụ đã sử dụng vẫn được tính phí.",
-        "Unused services are canceled and included in the refund calculation; consumed services remain chargeable.",
-      ),
-      localizedText(
-        "Đối soát tổng chi phí sau khi tính lại với số tiền khách đã thanh toán: nếu khách còn nợ thì thu phần chênh lệch; nếu đã trả dư thì hoàn phần chênh lệch.",
-        "Compare the recalculated final charges with the amount paid: collect any remaining balance or refund any overpayment.",
-      ),
-      localizedText(
-        "Trao đổi rõ số tiền và phương thức hoàn với khách; có thể hoàn tiền mặt tại quầy hoặc chuyển khoản theo lựa chọn và quy trình của khách sạn.",
-        "Clearly confirm the amount and refund method with the guest; refund by cash at the front desk or bank transfer according to the guest's choice and hotel procedure.",
-      ),
-      localizedText(
-        "Đây là chính sách do khách sạn chủ động xử lý, không áp dụng nhầm mức phạt của trường hợp khách tự yêu cầu hủy booking.",
-        "This is a hotel-initiated resolution; do not apply the cancellation penalties used when a guest requests cancellation.",
-      ),
     ],
   },
   {
