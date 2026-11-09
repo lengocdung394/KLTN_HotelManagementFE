@@ -2,6 +2,8 @@ import { Pencil, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ListPagination from "./ListPagination";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 
 export type BuildingItem = { id: string; name: string };
 
@@ -34,7 +36,8 @@ export default function BuildingManagementPanel({ query, filteredBuildings, onQu
       <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("room.buildingList", "Danh sách tòa nhà")}</p>
       <div className="relative w-full sm:w-64">
         <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-        <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchBuildings", "Tìm tên hoặc mã tòa...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+        <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchBuildings", "Tìm tên hoặc mã tòa...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+        <ClearSearchButton value={query} onClear={() => onQueryChange("")} label={t("common.clearSearch")} className="h-6 w-6" />
       </div>
     </div>
     {canManage && <p className="mb-3 text-xs text-slate-500">Bạn có thể thêm tòa nhà riêng lẻ bằng nút “Thêm tòa nhà”.</p>}
@@ -55,7 +58,7 @@ export default function BuildingManagementPanel({ query, filteredBuildings, onQu
               </button>
             </td>}
           </tr>)}
-          {filteredBuildings.length === 0 && <tr><td colSpan={canManage ? 2 : 1} className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noBuildingsFound", "Không tìm thấy tòa nhà phù hợp.")}</td></tr>}
+          {filteredBuildings.length === 0 && <tr><td colSpan={canManage ? 2 : 1} className="p-0"><FilterResultStatus filterKey={query}><p className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noBuildingsFound", "Không tìm thấy tòa nhà phù hợp.")}</p></FilterResultStatus></td></tr>}
         </tbody>
       </table>
     </div>

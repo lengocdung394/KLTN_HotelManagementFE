@@ -2,6 +2,9 @@ import { Pencil, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ListPagination from "./ListPagination";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterSelect from "./FilterSelect";
+import FilterResultStatus from "./FilterResultStatus";
 
 type FloorManagementPanelProps = {
   floors: string[];
@@ -34,12 +37,13 @@ export default function FloorManagementPanel({ floors, rooms, buildings, selecte
 
   return <div className="border-b border-slate-100 p-4">
     <div className="mb-3 flex flex-col justify-between gap-3 sm:flex-row">
-      <select value={selectedBuildingId} onChange={(event) => onBuildingChange(event.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-64">
+      <FilterSelect value={selectedBuildingId} onChange={(event) => onBuildingChange(event.target.value)} className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-64">
         {buildings.map((building) => <option key={building.id} value={building.id}>{building.name}</option>)}
-      </select>
+      </FilterSelect>
       <div className="relative w-full sm:w-64">
         <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("room.searchFloors", "Tìm tầng nhà...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("room.searchFloors", "Tìm tầng nhà...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+        <ClearSearchButton value={query} onClear={() => setQuery("")} label={t("common.clearSearch")} className="h-6 w-6" />
       </div>
     </div>
     {canManage && <p className="mb-3 text-xs text-slate-500">Chọn tòa nhà, sau đó thêm từng tầng bằng nút “Thêm tầng”.</p>}
@@ -62,7 +66,7 @@ export default function FloorManagementPanel({ floors, rooms, buildings, selecte
               </button>
             </td>}
           </tr>)}
-          {filteredFloors.length === 0 && <tr><td colSpan={canManage ? 3 : 2} className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noFloorsFound", "Không tìm thấy tầng nhà phù hợp.")}</td></tr>}
+          {filteredFloors.length === 0 && <tr><td colSpan={canManage ? 3 : 2} className="p-0"><FilterResultStatus filterKey={JSON.stringify([query, selectedBuildingId])}><p className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noFloorsFound", "Không tìm thấy tầng nhà phù hợp.")}</p></FilterResultStatus></td></tr>}
         </tbody>
       </table>
     </div>

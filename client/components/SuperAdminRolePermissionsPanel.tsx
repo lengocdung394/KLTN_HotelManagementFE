@@ -14,6 +14,8 @@ import {
 import { createXlsxWorkbook, downloadFile } from "../lib/bulkImportFiles";
 import { parseSuperAdminPermissionCatalogFile } from "../lib/superAdminPermissionCatalogImport";
 import { parseSuperAdminRolePermissionsFile } from "../lib/superAdminRolePermissionsImport";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 import {
   useCreateSuperAdminPermissionMutation,
   useCreateSuperAdminRoleMutation,
@@ -412,17 +414,18 @@ export default function SuperAdminRolePermissionsPanel() {
                 </p>
               </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                <label className="relative block w-full sm:w-64">
+                <div className="relative block w-full sm:w-64">
                   <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="search"
+                    type="text"
                     value={catalogSearch}
                     onChange={(event) => setCatalogSearch(event.target.value)}
                     placeholder="Tìm mã, tên hoặc danh mục..."
                     aria-label="Tìm quyền trong danh mục"
-                    className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
+                    className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400"
                   />
-                </label>
+                    <ClearSearchButton value={catalogSearch} onClear={() => setCatalogSearch("")} label="Xóa tìm kiếm" />
+                  </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -506,9 +509,9 @@ export default function SuperAdminRolePermissionsPanel() {
                   </details>
                 ))}
                 {filteredCatalogPermissions.length === 0 && (
-                  <p className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                  <FilterResultStatus filterKey={catalogSearch}><p className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
                     Không tìm thấy quyền phù hợp.
-                  </p>
+                  </p></FilterResultStatus>
                 )}
               </div>
             )}
@@ -1093,17 +1096,18 @@ export default function SuperAdminRolePermissionsPanel() {
                 </p>
               )}
               <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <label className="relative block min-w-0 flex-1 sm:max-w-sm">
+                <div className="relative block min-w-0 flex-1 sm:max-w-sm">
                   <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="search"
+                    type="text"
                     value={overviewSearch}
                     onChange={(event) => setOverviewSearch(event.target.value)}
                     placeholder="Tìm role hoặc quyền..."
                     aria-label="Tìm role hoặc quyền"
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400"
                   />
-                </label>
+                  <ClearSearchButton value={overviewSearch} onClear={() => setOverviewSearch("")} label="Xóa tìm kiếm" />
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowOnlyGranted((current) => !current)}
@@ -1228,9 +1232,9 @@ export default function SuperAdminRolePermissionsPanel() {
                       .some((value) => value.toLocaleLowerCase().includes(overviewSearch.trim().toLocaleLowerCase())),
                   );
                 }) && (
-                  <p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                  <FilterResultStatus filterKey={overviewSearch}><p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
                     Không tìm thấy role hoặc quyền phù hợp.
-                  </p>
+                  </p></FilterResultStatus>
                 )}
               </div>
             </div>

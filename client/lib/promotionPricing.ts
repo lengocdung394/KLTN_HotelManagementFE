@@ -19,6 +19,12 @@ const promotionDateTimestamp = (value: string | undefined, endOfDay = false) => 
   return new Date(dateValue).getTime();
 };
 
+export const isPromotionExpired = (promotion: Pick<PromotionEligibility, "status" | "endDate">) => {
+  const status = String(promotion.status ?? "").toUpperCase();
+  const endTimestamp = promotionDateTimestamp(promotion.endDate, true);
+  return status === "EXPIRED" || (Number.isFinite(endTimestamp) && endTimestamp < Date.now());
+};
+
 export const promotionEligibilityMessage = (
   promotion: PromotionEligibility,
   orderTotal: number,
@@ -39,7 +45,7 @@ export const promotionEligibilityMessage = (
   const startTimestamp = promotionDateTimestamp(promotion.startDate);
   const endTimestamp = promotionDateTimestamp(promotion.endDate, true);
   const now = Date.now();
-  const isExpired = status === "EXPIRED" || (Number.isFinite(endTimestamp) && endTimestamp < now);
+  const isExpired = isPromotionExpired(promotion);
   const appliedAtTimestamp = options.applyAt ? new Date(options.applyAt).getTime() : Number.NaN;
   const wasAppliedDuringValidity = options.alreadyApplied
     && Number.isFinite(appliedAtTimestamp)

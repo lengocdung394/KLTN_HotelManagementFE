@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Clock3, LogOut, Search } from "lucide-react";
 import { localizedText } from "../i18n";
 import ListPagination from "./ListPagination";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 
 export type LateCheckoutLevel = string;
 
@@ -82,17 +84,18 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
             </button>
           ))}
         </div>
-        <label className="relative block w-full lg:max-w-xs">
+        <div className="relative block w-full lg:max-w-xs">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={localizedText("Tìm phòng, khách, mã booking", "Search room, guest, or booking ID")} aria-label={localizedText("Tìm phòng check-out trễ", "Search late check-out rooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-        </label>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={localizedText("Tìm phòng, khách, mã booking", "Search room, guest, or booking ID")} aria-label={localizedText("Tìm phòng check-out trễ", "Search late check-out rooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          <ClearSearchButton value={query} onClear={() => setQuery("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
+        </div>
       </div>
       {isLoading ? (
         <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">{localizedText("Đang tải danh sách check-out...", "Loading check-out list...")}</p>
       ) : isError ? (
         <p role="alert" className="rounded-lg bg-rose-50 px-3 py-4 text-center text-sm text-rose-700">{localizedText("Không tải được danh sách check-out. Vui lòng thử lại.", "Could not load check-out list. Please try again.")}</p>
       ) : filteredRecords.length === 0 ? (
-        <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">{localizedText("Không có phòng check-out trễ.", "No late check-out rooms.")}</p>
+        <FilterResultStatus filterKey={JSON.stringify([query, activeLevel])}><p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">{localizedText("Không có phòng check-out trễ.", "No late check-out rooms.")}</p></FilterResultStatus>
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border border-slate-200">

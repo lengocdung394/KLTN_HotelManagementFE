@@ -9,6 +9,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 import {
   useGetSuperAdminBranchesQuery,
   useGetSuperAdminAccountsQuery,
@@ -419,15 +421,17 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 </PopoverContent>
               </Popover>
             )}
-            <label className="relative block w-full sm:w-72">
+            <div className="relative block w-full sm:w-72">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Tìm tên, email, SĐT, mã hoặc chi nhánh"
-                className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                aria-label="Tìm tài khoản"
+                className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
-            </label>
+              <ClearSearchButton value={search} onClear={() => setSearch("")} label="Xóa tìm kiếm" />
+            </div>
           </div>
         </div>
 
@@ -441,12 +445,12 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
         {isLoading ? (
           <p className="py-12 text-center text-sm text-slate-500">Đang tải danh sách tài khoản...</p>
         ) : filteredAccounts.length === 0 ? (
-          <div className="py-12 text-center">
+          <FilterResultStatus filterKey={JSON.stringify([search, branchFilter])}><div className="py-12 text-center">
             <Users size={25} className="mx-auto text-slate-300" />
             <p className="mt-3 text-sm font-medium text-slate-600">
               {accountsInView.length === 0 ? "Chưa có tài khoản hoặc hồ sơ phù hợp." : "Không tìm thấy hồ sơ phù hợp với bộ lọc."}
             </p>
-          </div>
+          </div></FilterResultStatus>
         ) : (
           <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[850px] text-left text-sm">

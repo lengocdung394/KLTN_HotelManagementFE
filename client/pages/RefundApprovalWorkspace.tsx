@@ -15,6 +15,7 @@ import BankSelectionField from "../components/BankSelectionField";
 import CheckoutRefundApprovalsPanel from "../components/CheckoutRefundApprovalsPanel";
 import DatePickerPopover from "../components/DatePickerPopover";
 import ListPagination from "../components/ListPagination";
+import FilterResultStatus from "../components/FilterResultStatus";
 import { localizedText } from "../i18n";
 import {
   useApproveBookingRefundMutation,
@@ -613,7 +614,7 @@ export default function RefundApprovalWorkspace() {
             </button>
           </div>
         ) : visibleCancellations.length === 0 ? (
-          <div className="p-12 text-center">
+          <FilterResultStatus filterKey={JSON.stringify([filter, channelFilter, selectedRequestDate])}><div className="p-12 text-center">
             <ClipboardCheck size={28} className="mx-auto text-slate-300" />
             <p className="mt-3 text-sm font-semibold text-slate-700">
               {selectedRequestDate
@@ -623,7 +624,7 @@ export default function RefundApprovalWorkspace() {
             <p className="mt-1 text-xs text-slate-500">
               {localizedText("Yêu cầu hoàn tiền có thể cần tải lại sau khi nhân viên hủy booking.", "Refresh after a staff member cancels a booking to see new refund requests.")}
             </p>
-          </div>
+          </div></FilterResultStatus>
         ) : (
           <>
             <div className="max-w-full overflow-x-auto">

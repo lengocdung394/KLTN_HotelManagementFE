@@ -3,7 +3,6 @@ import {
   Banknote,
   CalendarDays,
   Check,
-  ChevronDown,
   CreditCard,
   Eye,
   Pencil,
@@ -17,8 +16,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/use-toast";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterSelect from "../components/FilterSelect";
+import FilterResultStatus from "../components/FilterResultStatus";
+import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import BankSelectionField from "../components/BankSelectionField";
 import {
   useGetBookingsByHotelQuery,
@@ -252,8 +254,6 @@ export default function BookingListWorkspace() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [statusSearch, setStatusSearch] = useState("");
-  const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
   const [dateSort, setDateSort] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -495,7 +495,7 @@ export default function BookingListWorkspace() {
   };
 
   const normalizedSearch = search.trim().toLowerCase();
-  const hasActiveFilters = Boolean(dateFrom || dateTo || statusFilter !== "ALL");
+  const hasActiveFilters = Boolean(search.trim() || dateFrom || dateTo || statusFilter !== "ALL");
   const statusOptions = [...new Set([...bookings
     .map((booking) => String(booking.bookingStatus ?? booking.status ?? "").trim().toUpperCase())
     .filter(Boolean),
@@ -503,6 +503,11 @@ export default function BookingListWorkspace() {
     "COMPLETED",
     "CANCELLED_BY_CUSTOMER",
   ])].sort();
+  const statusFilterOptions = [
+    { value: "ALL", label: localizedText("Tất cả trạng thái", "All statuses") },
+    { value: "__CANCELLED__", label: localizedText("Tất cả booking đã hủy", "All cancelled bookings") },
+    ...statusOptions.map((status) => ({ value: status, label: bookingStatusLabel(status) })),
+  ];
   const filteredBookings = bookings.filter((booking) => {
     const matchesSearch = JSON.stringify(booking).toLowerCase().includes(normalizedSearch);
     const bookingStatus = String(booking.bookingStatus ?? booking.status ?? "").trim().toUpperCase();
@@ -943,103 +948,42 @@ export default function BookingListWorkspace() {
 
       {/* Search Bar */}
       <div className="border-b border-slate-100 p-5">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_150px_150px_180px_170px_100px] xl:items-end">
-          <label className="relative block min-w-0">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_150px_150px_180px_170px_auto] xl:items-end">
+          <div className="block min-w-0 text-xs font-semibold text-slate-500">
+          <span>{localizedText("Tìm kiếm", "Search")}</span>
+          <div className="relative mt-1">
           <Search size={15} className="absolute left-3 top-3 text-slate-400" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={localizedText("Tìm mã booking, tên khách hàng...", "Search booking ID or guest name...")}
-            className="h-10 w-full min-w-0 rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400 transition-colors"
+            aria-label={localizedText("Tìm booking", "Search bookings")}
+            className="h-10 w-full min-w-0 rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400 transition-colors"
           />
-          </label>
+          <ClearSearchButton value={search} onClear={() => setSearch("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
+          </div>
+          </div>
           <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Từ ngày", "From")}<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
           <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Đến ngày", "To")}<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
           <label className="block min-w-0 text-xs font-semibold text-slate-500">
             {localizedText("Trạng thái booking", "Booking status")}
-            <Popover
-              open={isStatusFilterOpen}
-              onOpenChange={(open) => {
-                setIsStatusFilterOpen(open);
-                if (!open) setStatusSearch("");
-              }}
-            >
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  role="combobox"
-                  aria-expanded={isStatusFilterOpen}
-                  aria-label={localizedText("Tìm và chọn trạng thái booking", "Search and select a booking status")}
-                  className="mt-1 flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:border-blue-300 focus:border-blue-400"
-                >
-                  <span className="truncate">
-                    {statusFilter === "ALL"
-                      ? localizedText("Tất cả trạng thái", "All statuses")
-                      : statusFilter === "__CANCELLED__"
-                        ? localizedText("Tất cả booking đã hủy", "All cancelled bookings")
-                        : bookingStatusLabel(statusFilter)}
-                  </span>
-                  <ChevronDown size={16} className="shrink-0 text-slate-400" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-0 p-0">
-                <Command shouldFilter>
-                  <CommandInput
-                    value={statusSearch}
-                    onValueChange={setStatusSearch}
-                    placeholder={localizedText("Tìm trạng thái...", "Search statuses...")}
-                    aria-label={localizedText("Tìm trạng thái booking", "Search booking statuses")}
-                  />
-                  <CommandList>
-                    <CommandEmpty>{localizedText("Không tìm thấy trạng thái.", "No statuses found.")}</CommandEmpty>
-                    <CommandItem
-                      value={`ALL ${localizedText("Tất cả trạng thái", "All statuses")}`}
-                      onSelect={() => {
-                        setStatusFilter("ALL");
-                        setIsStatusFilterOpen(false);
-                      }}
-                    >
-                      <Check size={16} className={`mr-2 ${statusFilter === "ALL" ? "opacity-100" : "opacity-0"}`} />
-                      {localizedText("Tất cả trạng thái", "All statuses")}
-                    </CommandItem>
-                    <CommandItem
-                      value={`__CANCELLED__ ${localizedText("Tất cả booking đã hủy", "All cancelled bookings")}`}
-                      onSelect={() => {
-                        setStatusFilter("__CANCELLED__");
-                        setIsStatusFilterOpen(false);
-                      }}
-                    >
-                      <Check size={16} className={`mr-2 ${statusFilter === "__CANCELLED__" ? "opacity-100" : "opacity-0"}`} />
-                      {localizedText("Tất cả booking đã hủy", "All cancelled bookings")}
-                    </CommandItem>
-                    {statusOptions.map((status) => (
-                      <CommandItem
-                        key={status}
-                        value={`${status} ${bookingStatusLabel(status)}`}
-                        onSelect={() => {
-                          setStatusFilter(status);
-                          setIsStatusFilterOpen(false);
-                        }}
-                      >
-                        <Check size={16} className={`mr-2 ${statusFilter === status ? "opacity-100" : "opacity-0"}`} />
-                        {bookingStatusLabel(status)}
-                      </CommandItem>
-                    ))}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            <SearchableFilter
+              value={statusFilter}
+              options={statusFilterOptions}
+              onChange={setStatusFilter}
+              searchPlaceholder={localizedText("Tìm trạng thái...", "Search statuses...")}
+              emptyMessage={localizedText("Không tìm thấy trạng thái.", "No statuses found.")}
+              ariaLabel={localizedText("Tìm và chọn trạng thái booking", "Search and select a booking status")}
+              className="mt-1"
+            />
           </label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Sắp xếp", "Sort")}<select value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">{localizedText("Mới nhất trước", "Newest first")}</option><option value="asc">{localizedText("Cũ nhất trước", "Oldest first")}</option></select></label>
-          <button
-            type="button"
-            disabled={!hasActiveFilters}
-            aria-hidden={!hasActiveFilters}
-            onClick={() => { setDateFrom(""); setDateTo(""); setStatusFilter("ALL"); }}
-            className={`h-10 w-[100px] whitespace-nowrap rounded-lg border px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 ${hasActiveFilters ? "" : "invisible pointer-events-none"}`}
-          >
-            {localizedText("Xóa lọc", "Clear filters")}
-          </button>
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Sắp xếp", "Sort")}<FilterSelect value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">{localizedText("Mới nhất trước", "Newest first")}</option><option value="asc">{localizedText("Cũ nhất trước", "Oldest first")}</option></FilterSelect></label>
+          <div className="flex items-end">
+            {hasActiveFilters && <FilterResetButton
+              onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setStatusFilter("ALL"); }}
+              label={localizedText("Xóa tất cả bộ lọc", "Clear all filters")}
+            />}
+          </div>
         </div>
       </div>
 
@@ -1048,10 +992,9 @@ export default function BookingListWorkspace() {
         <p className="p-8 text-center text-sm text-slate-500">{localizedText("Đang tải danh sách booking...", "Loading bookings...")}</p>
       ) : isError ? (
         <p className="p-8 text-center text-sm text-rose-600">{localizedText("Không thể tải danh sách booking của chi nhánh.", "Could not load this branch's bookings.")}</p>
-      ) : filteredBookings.length === 0 ? (
-        <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có booking phù hợp.", "No matching bookings found.")}</p>
       ) : (
-        <>
+        <FilterResultStatus filterKey={JSON.stringify([search, dateFrom, dateTo, statusFilter, dateSort])}>
+        {filteredBookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có booking phù hợp.", "No matching bookings found.")}</p> : <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-max text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
@@ -1150,7 +1093,8 @@ export default function BookingListWorkspace() {
           </div>
 
           <ListPagination totalItems={filteredBookings.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
-        </>
+        </>}
+        </FilterResultStatus>
       )}
 
       {/* ========================================== */}

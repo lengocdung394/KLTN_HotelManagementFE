@@ -10,6 +10,8 @@ import {
   type UpdateEmployeeRequest,
 } from "../services/employeeApi";
 import { useAppSelector } from "../store/hooks";
+import FilterSelect from "./FilterSelect";
+import FilterResultStatus from "./FilterResultStatus";
 import BulkImportDialog from "./BulkImportDialog";
 import {
   downloadEmployeeTemplate,
@@ -18,6 +20,7 @@ import {
   type EmployeeImportRowResult,
 } from "../lib/employeeBulkImport";
 import { localizedText } from "../i18n";
+import ClearSearchButton from "./ClearSearchButton";
 import ListPagination from "./ListPagination";
 
 const MAX_EMPLOYEE_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -380,20 +383,21 @@ export default function EmployeeDirectory() {
         </div>}
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-        <label className="relative block">
+        <div className="relative block">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            type="search"
+            type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={localizedText("Tìm theo tên, email, SĐT hoặc CCCD...", "Search by name, email, phone, or ID number...")}
             aria-label={localizedText("Tìm nhân viên", "Search employees")}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
-        </label>
+          <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
+        </div>
         <label className="relative block">
           <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <select
+          <FilterSelect
             value={positionFilter}
             onChange={(event) => setPositionFilter(event.target.value)}
             aria-label={localizedText("Lọc theo chức vụ", "Filter by position")}
@@ -401,7 +405,7 @@ export default function EmployeeDirectory() {
           >
             <option value="all">{localizedText("Tất cả chức vụ", "All positions")}</option>
             {EMPLOYEE_ROLES.map((employeeRole) => <option key={employeeRole} value={employeeRole}>{employeeRoleLabel(employeeRole)}</option>)}
-          </select>
+          </FilterSelect>
         </label>
       </div>
     </div>
@@ -437,7 +441,7 @@ export default function EmployeeDirectory() {
           </tr>)}
         </tbody>
       </table> : employees.length
-        ? <p className="px-5 py-5 text-sm text-slate-500">{localizedText("Không tìm thấy nhân viên phù hợp. Hãy thử từ khóa hoặc bộ lọc khác.", "No matching employees found. Try another search term or filter.")}</p>
+        ? <FilterResultStatus filterKey={JSON.stringify([searchQuery, positionFilter])}><p className="px-5 py-5 text-sm text-slate-500">{localizedText("Không tìm thấy nhân viên phù hợp. Hãy thử từ khóa hoặc bộ lọc khác.", "No matching employees found. Try another search term or filter.")}</p></FilterResultStatus>
         : <p className="px-5 py-5 text-sm text-slate-500">{localizedText("Chưa có nhân viên nào được ghi nhận tại chi nhánh này.", "No employees have been recorded for this branch yet.")}</p>}
     </div>}
     {!isLoading && !isError && <ListPagination totalItems={filteredEmployees.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />}

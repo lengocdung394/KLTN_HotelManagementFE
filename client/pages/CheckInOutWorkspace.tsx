@@ -9,6 +9,8 @@ import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from ".
 import CheckoutUnusedServicesWarning, { type CheckoutUnusedService } from "../components/CheckoutUnusedServicesWarning";
 import CheckInOutBookingDetailModal, { type BookingServiceQuantityEdit } from "../components/CheckInOutBookingDetailModal";
 import LateCheckoutPreview, { type LateCheckoutRecord } from "../components/LateCheckoutPreview";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterResultStatus from "../components/FilterResultStatus";
 import DatePickerPopover from "../components/DatePickerPopover";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import EarlyLateStayNotice from "../components/EarlyLateStayNotice";
@@ -1942,12 +1944,14 @@ export default function CheckInOutWorkspace() {
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />{localizedText("Đã thanh toán đủ", "Paid in full")}</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" />{localizedText("Chưa thanh toán đủ", "Payment incomplete")}</span>
           </div>
-          <DatePickerPopover
-            value={selectedDate}
-            onChange={setSelectedDate}
-            placeholder={localizedText("Chọn ngày", "Select date")}
-            buttonClassName="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
-          />
+          <div className="relative">
+            <DatePickerPopover
+              value={selectedDate}
+              onChange={setSelectedDate}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              buttonClassName="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+            />
+          </div>
         </div>
       </div>
       {activeFlow === "check-out" && <LateCheckoutPreview records={lateCheckoutRecords} isLoading={checkOutQuery.isLoading} isError={checkOutQuery.isError} onCheckout={handleLateCheckout} />}
@@ -1958,8 +1962,9 @@ export default function CheckInOutWorkspace() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("frontDesk.searchPlaceholder")}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
+          <ClearSearchButton value={query} onClear={() => setQuery("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
         </div>
       </div>
       <div className="divide-y divide-slate-100">
@@ -2134,14 +2139,14 @@ export default function CheckInOutWorkspace() {
         <CheckoutInvoice booking={invoiceBooking} onClose={() => setInvoiceBooking(null)} />
       )}
       {filtered.length === 0 && (
-        <div className="p-8 text-center">
+        <FilterResultStatus filterKey={JSON.stringify([query, selectedDate?.toISOString(), activeFlow])}><div className="p-8 text-center">
           <p className="text-sm font-semibold text-slate-700">
             {localizedText("Không có lượt phù hợp trong hôm nay", "No matching arrivals or departures for this day")}
           </p>
           <p className="mt-1 text-xs text-slate-400">
             {localizedText("Thử đổi từ khoá tìm kiếm hoặc chuyển sang tab còn lại.", "Try another search term or switch to the other tab.")}
           </p>
-        </div>
+        </div></FilterResultStatus>
       )}
       {bookingDetailRecords && (
         <CheckInOutBookingDetailModal

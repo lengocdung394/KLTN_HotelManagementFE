@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
 import { vietnameseBanks } from "../lib/vietnameseBanks";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 
 type BankSelectionFieldProps = {
   bankName: string;
@@ -42,36 +44,39 @@ export default function BankSelectionField({
         <label className="block text-sm font-semibold text-slate-700" htmlFor="refund-bank-search">
           {localizedText("Ngân hàng *", "Bank *")}
         </label>
-        <input
-          id="refund-bank-search"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={menuOpen}
-          aria-controls="refund-bank-options"
-          value={menuOpen ? search : selectedBank?.shortName ?? (isOtherSelected ? localizedText("Ngân hàng khác", "Other bank") : "")}
-          onFocus={() => {
-            setSearch("");
-            setMenuOpen(true);
-          }}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setMenuOpen(true);
-            setOtherSelected(false);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setMenuOpen(false);
-            if (event.key === "Enter" && filteredBanks.length === 1) {
-              event.preventDefault();
-              const bank = filteredBanks[0];
-              onChange(bank.shortName, bank.bin);
+        <div className="relative mt-1">
+          <input
+            id="refund-bank-search"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={menuOpen}
+            aria-controls="refund-bank-options"
+            value={menuOpen ? search : selectedBank?.shortName ?? (isOtherSelected ? localizedText("Ngân hàng khác", "Other bank") : "")}
+            onFocus={() => {
+              setSearch("");
+              setMenuOpen(true);
+            }}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setMenuOpen(true);
               setOtherSelected(false);
-              setMenuOpen(false);
-            }
-          }}
-          placeholder={localizedText("Tìm ngân hàng theo tên hoặc mã BIN", "Search banks by name or BIN")}
-          autoComplete="off"
-          className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
-        />
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setMenuOpen(false);
+              if (event.key === "Enter" && filteredBanks.length === 1) {
+                event.preventDefault();
+                const bank = filteredBanks[0];
+                onChange(bank.shortName, bank.bin);
+                setOtherSelected(false);
+                setMenuOpen(false);
+              }
+            }}
+            placeholder={localizedText("Tìm ngân hàng theo tên hoặc mã BIN", "Search banks by name or BIN")}
+            autoComplete="off"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-10 text-sm font-normal outline-none focus:border-blue-400"
+          />
+          <ClearSearchButton value={menuOpen ? search : ""} onClear={() => setSearch("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
+        </div>
         {menuOpen && (
           <div
             id="refund-bank-options"
@@ -98,7 +103,7 @@ export default function BankSelectionField({
               </button>
             ))}
             {filteredBanks.length === 0 && (
-              <p className="px-3 py-2 text-sm text-slate-500">{localizedText("Không tìm thấy ngân hàng.", "No banks found.")}</p>
+              <FilterResultStatus filterKey={search}><p className="px-3 py-2 text-sm text-slate-500">{localizedText("Không tìm thấy ngân hàng.", "No banks found.")}</p></FilterResultStatus>
             )}
             <button
               type="button"

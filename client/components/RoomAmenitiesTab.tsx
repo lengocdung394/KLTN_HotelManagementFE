@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Search, Save, X } from "lucide-react";
 import ListPagination from "./ListPagination";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 import type { AmenityResponse } from "../services/amenityApi";
 
 type RoomAmenitiesTabProps = {
@@ -94,10 +96,11 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
           </span>
         </div>
         <div className="w-full sm:w-72">
-          <label className="relative block">
+          <div className="relative block">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên tiện ích..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-          </label>
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên tiện ích..." aria-label="Tìm tiện ích" className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
+            <ClearSearchButton value={search} onClear={() => setSearch("")} label="Xóa tìm kiếm" />
+          </div>
         </div>
       </div>
       {canManage && (
@@ -110,7 +113,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
       ) : isError ? (
         <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách tiện nghi.</p>
       ) : filteredAmenities.length === 0 ? (
-        <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p>
+        <FilterResultStatus filterKey={search}><p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p></FilterResultStatus>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-105 text-left text-sm">

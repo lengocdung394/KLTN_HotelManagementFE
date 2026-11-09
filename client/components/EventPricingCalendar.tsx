@@ -6,9 +6,11 @@ import { toast } from "../hooks/use-toast";
 import { bindHotelSocketEvents, SEASONAL_RATE_UPDATE_EVENT } from "../lib/socket";
 import { useSelector } from "react-redux";
 import { useCreateRoomSeasonalRateMutation, useGetRoomSeasonalRatesByMonthQuery, useUpdateRoomSeasonalRateMutation, type CreateRoomSeasonalRateRequest, type RoomSeasonalRate } from "../services/roomApi";
+import SearchableFilter, { FilterResetButton } from "./SearchableFilter";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 import {
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -36,102 +38,6 @@ const roomTypesList: RoomType[] = [
 const defaultEventName = "__DEFAULT_EVENT_NAME__";
 const getLocalDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-
-type SearchablePricingFilterOption = { value: string; label: string };
-
-function SearchablePricingFilter({
-  value,
-  options,
-  onChange,
-  searchLabel,
-  noResultsLabel,
-}: {
-  value: string;
-  options: SearchablePricingFilterOption[];
-  onChange: (value: string) => void;
-  searchLabel: string;
-  noResultsLabel: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const normalizedQuery = query.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const filteredOptions = options.filter((option) =>
-    option.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normalizedQuery));
-  const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) {
-        setIsOpen(false);
-        setQuery("");
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsideClick);
-    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
-  }, [isOpen]);
-
-  return (
-    <div ref={containerRef} className="relative w-full">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        onClick={() => { setIsOpen((open) => !open); setQuery(""); }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setIsOpen(false);
-            setQuery("");
-          }
-        }}
-        className="flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-left text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-      >
-        <span className="truncate">{selectedLabel}</span>
-        <ChevronDown size={14} className="shrink-0 text-slate-400" />
-      </button>
-      {isOpen && <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-        <div className="border-b border-slate-100 p-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  setIsOpen(false);
-                  setQuery("");
-                }
-              }}
-              placeholder={searchLabel}
-              aria-label={searchLabel}
-              className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-2 text-sm font-normal outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-        </div>
-        <div role="listbox" className="max-h-60 overflow-y-auto p-1">
-          {filteredOptions.map((option) => <button
-            type="button"
-            role="option"
-            aria-selected={value === option.value}
-            key={option.value}
-            onClick={() => {
-              onChange(option.value);
-              setIsOpen(false);
-              setQuery("");
-            }}
-            className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition hover:bg-blue-50 ${value === option.value ? "bg-blue-50 font-bold text-blue-700" : "text-slate-600"}`}
-          >
-            <span className="truncate">{option.label}</span>
-            {value === option.value && <Check size={13} className="shrink-0" />}
-          </button>)}
-          {filteredOptions.length === 0 && <p className="px-3 py-4 text-center text-xs text-slate-400">{noResultsLabel}</p>}
-        </div>
-      </div>}
-    </div>
-  );
-}
 
 export type PriceEventRule = {
   id: string;
@@ -773,7 +679,7 @@ export default function EventPricingCalendar() {
 
       {/* 2. Controls & Search Filter Bar */}
       <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto] lg:items-center">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto] lg:items-center">
           {/* Search Input */}
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
@@ -782,8 +688,9 @@ export default function EventPricingCalendar() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("eventPricing.searchPlaceholder")}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9.5 pr-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9.5 pr-10 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
+            <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={t("common.clearSearch")} />
           </div>
 
           {/* Date Picker */}
@@ -813,7 +720,10 @@ export default function EventPricingCalendar() {
             />
           </div>
 
-          <SearchablePricingFilter
+          <SearchableFilter
+            ariaLabel={t("eventPricing.allStatuses")}
+            searchPlaceholder={t("eventPricing.searchStatus")}
+            emptyMessage={t("eventPricing.noFilterResults")}
             value={statusFilter}
             options={[
               { value: "ALL", label: t("eventPricing.allStatuses") },
@@ -822,11 +732,13 @@ export default function EventPricingCalendar() {
               { value: "EXPIRED", label: t("eventPricing.expired") },
             ]}
             onChange={(value) => setStatusFilter(value as typeof statusFilter)}
-            searchLabel={t("eventPricing.searchStatus")}
-            noResultsLabel={t("eventPricing.noFilterResults")}
+            className="w-full lg:w-44"
           />
 
-          <SearchablePricingFilter
+          <SearchableFilter
+            ariaLabel={t("eventPricing.allRoomTypes")}
+            searchPlaceholder={t("eventPricing.searchRoomType")}
+            emptyMessage={t("eventPricing.noFilterResults")}
             value={selectedRoomTypeFilter}
             options={[
               { value: "ALL", label: t("eventPricing.allRoomTypes") },
@@ -836,9 +748,22 @@ export default function EventPricingCalendar() {
               })),
             ]}
             onChange={(value) => setSelectedRoomTypeFilter(value === "ALL" ? "ALL" : value as RoomType)}
-            searchLabel={t("eventPricing.searchRoomType")}
-            noResultsLabel={t("eventPricing.noFilterResults")}
+            className="w-full lg:w-44"
           />
+          {(searchQuery || statusFilter !== "ALL" || selectedRoomTypeFilter !== "ALL" || isDateFilterActive) && <FilterResetButton
+            label={t("common.resetFilter")}
+            onClick={() => {
+              const todayDate = new Date();
+              setSearchQuery("");
+              setStatusFilter("ALL");
+              setSelectedRoomTypeFilter("ALL");
+              setSelectedDate(today);
+              setVisibleMonth(todayDate);
+              setCalendarMonth(todayDate);
+              setIsDateFilterActive(false);
+              setCurrentPage(0);
+            }}
+          />}
         </div>
 
       </div>
@@ -849,7 +774,7 @@ export default function EventPricingCalendar() {
           {t("eventPricing.loading")}
         </div>
       ) : filteredEvents.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
+        <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter, selectedRoomTypeFilter, selectedDate, isDateFilterActive])}><div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
           <Sparkles size={32} className="mx-auto text-slate-400 opacity-60 mb-2" />
           <h5 className="text-sm font-bold text-slate-700">{t("eventPricing.emptyTitle")}</h5>
           <p className="mt-1 text-xs text-slate-500">{t("eventPricing.emptyDescription")}</p>
@@ -860,7 +785,7 @@ export default function EventPricingCalendar() {
           >
             <Plus size={15} /> {t("eventPricing.createNew")}
           </button>
-        </div>
+        </div></FilterResultStatus>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full min-w-[1100px] text-left text-xs">

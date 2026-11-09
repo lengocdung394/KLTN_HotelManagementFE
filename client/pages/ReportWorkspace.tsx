@@ -20,6 +20,7 @@ import { useGetSuperAdminBranchesQuery } from "../services/superAdminApi";
 import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
 import ListPagination from "../components/ListPagination";
+import FilterSelect from "../components/FilterSelect";
 import {
   buildRevenueChartData,
   getReportDateRange,
@@ -279,7 +280,7 @@ export default function ReportWorkspace() {
         <div className="flex flex-wrap items-end gap-3">
           <label className="block text-xs font-semibold text-slate-500">
             {localizedText("Theo", "By")}
-            <select
+            <FilterSelect
               value={comparisonUnit}
               onChange={(event) => {
                 const nextUnit = event.target.value as "day" | "week" | "month";
@@ -294,11 +295,11 @@ export default function ReportWorkspace() {
               <option value="day">{localizedText("Ngày", "Day")}</option>
               <option value="week">{localizedText("Tuần", "Week")}</option>
               <option value="month">{localizedText("Tháng", "Month")}</option>
-            </select>
+            </FilterSelect>
           </label>
           <label className="block text-xs font-semibold text-slate-500">
             {localizedText("Trong", "Within")}
-            <select
+            <FilterSelect
               value={comparisonScope}
               onChange={(event) => {
                 const nextPeriod = reportPeriodOptions.find(
@@ -320,12 +321,12 @@ export default function ReportWorkspace() {
                         : localizedText("Năm", "Year")}
                   </option>
                 ))}
-            </select>
+            </FilterSelect>
           </label>
           {isSystemAdmin && (
             <label className="block text-xs font-semibold text-slate-500">
               {localizedText("Chi nhánh", "Branch")}
-              <select
+              <FilterSelect
                 value={selectedBranchId}
                 onChange={(event) => setSelectedBranchId(event.target.value)}
                 aria-label={localizedText("Chọn chi nhánh xem báo cáo", "Select a branch for the report")}
@@ -335,29 +336,33 @@ export default function ReportWorkspace() {
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
-              </select>
+              </FilterSelect>
             </label>
           )}
           <label className="block text-xs font-semibold text-slate-500">
             {localizedText("Từ ngày", "From")}
-            <input
-              type="date"
-              value={startDate}
-              max={endDate || undefined}
-              onChange={(event) => { setStartDate(event.target.value); setReportPeriod("custom"); }}
-              className="ml-2 mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
-            />
+            <div className="relative ml-2 mt-1">
+              <input
+                type="date"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(event) => { setStartDate(event.target.value); setReportPeriod("custom"); }}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              />
+            </div>
           </label>
           <label className="block text-xs font-semibold text-slate-500">
             {localizedText("Đến ngày", "To")}
-            <input
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              max={today}
-              onChange={(event) => { setEndDate(event.target.value); setReportPeriod("custom"); }}
-              className="ml-2 mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
-            />
+            <div className="relative ml-2 mt-1">
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                max={today}
+                onChange={(event) => { setEndDate(event.target.value); setReportPeriod("custom"); }}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              />
+            </div>
           </label>
           {startDate > endDate && (
             <p role="alert" className="w-full text-xs text-rose-600">{localizedText("Ngày bắt đầu không được sau ngày kết thúc.", "The start date must be on or before the end date.")}</p>

@@ -12,6 +12,7 @@ import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailM
 import BulkImportDialog from "../components/BulkImportDialog";
 import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
+import ClearSearchButton from "../components/ClearSearchButton";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation, useUpdateRoomStatusMutation } from "../services/roomApi";
 import { useGetAllAmenitiesQuery } from "../services/amenityApi.ts";
@@ -2362,14 +2363,15 @@ export default function RoomWorkspace() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="relative mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                   <Search size={15} className="text-slate-400" />
                   <input
                     value={amenitySearch}
                     onChange={(event) => setAmenitySearch(event.target.value)}
                     placeholder={t("room.searchAmenities")}
-                    className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                    className="w-full border-0 bg-transparent pr-9 text-sm text-slate-700 outline-none placeholder:text-slate-400"
                   />
+                  <ClearSearchButton value={amenitySearch} onClear={() => setAmenitySearch("")} label={t("common.clearSearch")} />
                 </div>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

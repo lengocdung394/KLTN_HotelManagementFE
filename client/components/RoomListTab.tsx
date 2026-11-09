@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { BedDouble, Check, ChevronDown, Eye, MoreHorizontal, Pencil, Search, SlidersHorizontal, Sparkles, Users } from "lucide-react";
+import { useState, type Dispatch, type SetStateAction } from "react";
+import { BedDouble, Check, Eye, MoreHorizontal, Pencil, Search, Sparkles, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import ListPagination from "./ListPagination";
+import SearchableFilter, { FilterResetButton } from "./SearchableFilter";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 
 export type RoomListItem = {
   id: string;
@@ -60,101 +63,6 @@ type RoomListTabProps = {
 };
 
 const statusesForRoom = ["Sẵn sàng", "Bảo trì"];
-type FilterOption = { value: string; label: string };
-
-function SearchableRoomFilter({
-  value,
-  options,
-  onChange,
-  className,
-}: {
-  value: string;
-  options: FilterOption[];
-  onChange: (value: string) => void;
-  className: string;
-}) {
-  const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const normalizedQuery = query.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const filteredOptions = options.filter((option) =>
-    option.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normalizedQuery));
-  const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (event.target instanceof Node && !containerRef.current?.contains(event.target)) {
-        setIsOpen(false);
-        setQuery("");
-      }
-    };
-    document.addEventListener("pointerdown", closeOnOutsideClick);
-    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
-  }, [isOpen]);
-
-  return (
-    <div ref={containerRef} className={`relative ${className}`}>
-      <SlidersHorizontal size={15} className="pointer-events-none absolute left-3 top-3 z-10 text-slate-400" />
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        onClick={() => { setIsOpen((open) => !open); setQuery(""); }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setIsOpen(false);
-            setQuery("");
-          }
-        }}
-        className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-left text-sm text-slate-600 outline-none transition hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-      >
-        <span className="truncate">{selectedLabel}</span>
-        <ChevronDown size={15} className="shrink-0 text-slate-400" />
-      </button>
-      {isOpen && <div className="absolute left-0 top-full z-30 mt-1 w-full min-w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-        <div className="border-b border-slate-100 p-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  setIsOpen(false);
-                  setQuery("");
-                }
-              }}
-              placeholder={t("common.search")}
-              aria-label={t("common.search")}
-              className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-2 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-        </div>
-        <div role="listbox" className="max-h-60 overflow-y-auto p-1">
-          {filteredOptions.map((option) => <button
-            type="button"
-            role="option"
-            aria-selected={value === option.value}
-            key={option.value}
-            onClick={() => {
-              onChange(option.value);
-              setIsOpen(false);
-              setQuery("");
-            }}
-            className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition hover:bg-blue-50 ${value === option.value ? "bg-blue-50 font-semibold text-blue-700" : "text-slate-600"}`}
-          >
-            <span className="truncate">{option.label}</span>
-            {value === option.value && <Check size={14} className="shrink-0" />}
-          </button>)}
-          {filteredOptions.length === 0 && <p className="px-3 py-4 text-center text-xs text-slate-400">{t("room.noFilterOptions")}</p>}
-        </div>
-      </div>}
-    </div>
-  );
-}
 
 export default function RoomListTab({
   canManageRooms,
@@ -221,8 +129,11 @@ export default function RoomListTab({
   return (
     <>
       <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row">
-        <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></div>
-        <SearchableRoomFilter
+        <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /><ClearSearchButton value={query} onClear={() => onQueryChange("")} label={t("common.clearSearch")} /></div>
+        <SearchableFilter
+          ariaLabel={t("room.building")}
+          searchPlaceholder={t("common.search")}
+          emptyMessage={t("room.noFilterOptions")}
           value={building}
           options={[
             { value: "Tất cả các tòa", label: t("room.allBuildings") },
@@ -231,7 +142,10 @@ export default function RoomListTab({
           onChange={onBuildingChange}
           className="sm:w-44"
         />
-        <SearchableRoomFilter
+        <SearchableFilter
+          ariaLabel={t("room.floor")}
+          searchPlaceholder={t("common.search")}
+          emptyMessage={t("room.noFilterOptions")}
           value={floor}
           options={[
             { value: "Tất cả các tầng", label: t("room.allFloors") },
@@ -240,7 +154,10 @@ export default function RoomListTab({
           onChange={onFloorChange}
           className="sm:w-44"
         />
-        <SearchableRoomFilter
+        <SearchableFilter
+          ariaLabel={t("room.roomType")}
+          searchPlaceholder={t("common.search")}
+          emptyMessage={t("room.noFilterOptions")}
           value={roomType}
           options={[
             { value: "Tất cả loại phòng", label: t("room.allRoomTypes") },
@@ -249,7 +166,10 @@ export default function RoomListTab({
           onChange={onRoomTypeChange}
           className="sm:w-52"
         />
-        <SearchableRoomFilter
+        <SearchableFilter
+          ariaLabel={t("room.roomStatus")}
+          searchPlaceholder={t("common.search")}
+          emptyMessage={t("room.noFilterOptions")}
           value={status}
           options={[
             { value: "Tất cả trạng thái", label: t("room.allStatuses") },
@@ -258,6 +178,16 @@ export default function RoomListTab({
           onChange={onStatusChange}
           className="sm:w-52"
         />
+        {(query || building !== "Tất cả các tòa" || floor !== "Tất cả các tầng" || roomType !== "Tất cả loại phòng" || status !== "Tất cả trạng thái") && <FilterResetButton
+          label={t("common.resetFilter")}
+          onClick={() => {
+            onQueryChange("");
+            onBuildingChange("Tất cả các tòa");
+            onFloorChange("Tất cả các tầng");
+            onRoomTypeChange("Tất cả loại phòng");
+            onStatusChange("Tất cả trạng thái");
+          }}
+        />}
       </div>
 
       <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
@@ -279,7 +209,7 @@ export default function RoomListTab({
       </div>
 
       <ListPagination totalItems={filtered.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
-      {filtered.length === 0 && <div className="p-10 text-center"><p className="font-semibold text-slate-700">{t("room.noRooms")}</p><p className="mt-1 text-xs text-slate-400">{t("room.changeFilters")}</p></div>}
+      {filtered.length === 0 && <FilterResultStatus filterKey={JSON.stringify([query, building, floor, roomType, status])}><div className="p-10 text-center"><p className="font-semibold text-slate-700">{t("room.noRooms")}</p><p className="mt-1 text-xs text-slate-400">{t("room.changeFilters")}</p></div></FilterResultStatus>}
     </>
   );
 }

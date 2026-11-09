@@ -20,6 +20,9 @@ import type { SuperAdminBranch } from "../services/superAdminApi";
 import { useConfirmServiceUsedMutation, useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
 import BulkImportDialog from "../components/BulkImportDialog";
 import ServiceImportProgressCard from "../components/ServiceImportProgressCard";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterSelect from "../components/FilterSelect";
+import FilterResultStatus from "../components/FilterResultStatus";
 
 const getSaveErrorMessage = (error: unknown) => {
   if (typeof error === "object" && error !== null && "data" in error) {
@@ -798,7 +801,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               {isLoadingUsage && <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingHistory")}</p>}
               {isUsageError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-4 text-sm text-rose-700">{t("serviceWorkspace.historyLoadError")}</p>}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length === 0 && (
-                <p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noUsedInRange")}</p>
+                <FilterResultStatus filterKey={JSON.stringify([usedDateFrom, usedDateTo])}><p className="rounded-lg bg-white p-4 text-center text-sm text-slate-500">{t("serviceWorkspace.noUsedInRange")}</p></FilterResultStatus>
               )}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -880,7 +883,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         {isSystemAdmin && (
           <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
             <span>{t("serviceWorkspace.branch")}</span>
-            <select
+            <FilterSelect
               value={selectedBranchId}
               onChange={(event) => setSelectedBranchId(event.target.value)}
               aria-label={t("serviceWorkspace.filterByBranch")}
@@ -890,22 +893,23 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>{branch.name}</option>
               ))}
-            </select>
+            </FilterSelect>
           </label>
         )}
-        <label className="relative min-w-[220px] flex-1 sm:max-w-sm">
+        <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            type="search"
+            type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={t("serviceWorkspace.searchPlaceholder")}
             aria-label={t("serviceWorkspace.searchServices")}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
-        </label>
+          <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={t("common.clearSearch")} />
+        </div>
         <label className="flex items-center">
-          <select
+          <FilterSelect
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
             aria-label={t("serviceWorkspace.filterByStatus")}
@@ -914,14 +918,14 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             <option value="all">{t("serviceWorkspace.allStatuses")}</option>
             <option value="active">{t("serviceWorkspace.active")}</option>
             <option value="inactive">{t("serviceWorkspace.inactive")}</option>
-          </select>
+          </FilterSelect>
         </label>
       </div>
       {isLoading && <p className="m-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingServices")}</p>}
       {isError && <p className="m-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{t("serviceWorkspace.servicesLoadError")}</p>}
       {!isLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="m-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.branchUnknown")}</p>}
       {!isLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noServices")}</p>}
-      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noMatchingServices")}</p>}
+      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter])}><p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noMatchingServices")}</p></FilterResultStatus>}
       {filteredServices.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse text-left text-sm">

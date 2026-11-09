@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BedDouble, CalendarDays, ChevronDown, CreditCard, Mail, Pencil, Phone, Plus, Search, UserRound, X } from "lucide-react";
 import ListPagination from "../components/ListPagination";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterSelect from "../components/FilterSelect";
+import FilterResultStatus from "../components/FilterResultStatus";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import { useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
@@ -154,11 +157,11 @@ export default function CustomerWorkspace() {
   };
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
     <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="font-bold text-slate-900">{t("customer.listTitle")}</h3><p className="mt-1 text-sm text-slate-500">{t("customer.listDescription")}</p></div>{canManageCustomers && <button type="button" onClick={openCreate} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} />{t("customer.add")}</button>}</div>
-    <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row"><div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("customer.searchPlaceholder")} className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm" /></div><select value={tier} onChange={(event) => setTier(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="all">{t("customer.allTiers")}</option>{(["loyal", "potential", "new"] as Tier[]).map((value) => <option key={value} value={value}>{tierLabel(value)}</option>)}</select></div>
+    <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row"><div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("customer.searchPlaceholder")} className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm" /><ClearSearchButton value={search} onClear={() => setSearch("")} label={t("common.clearSearch")} /></div><FilterSelect value={tier} onChange={(event) => setTier(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm sm:w-auto"><option value="all">{t("customer.allTiers")}</option>{(["loyal", "potential", "new"] as Tier[]).map((value) => <option key={value} value={value}>{tierLabel(value)}</option>)}</FilterSelect></div>
     <div className="grid gap-3 p-4">
       {isLoading ? <p className="p-6 text-sm text-slate-500">{t("common.loading")}</p>
         : isError ? <p className="p-6 text-sm text-rose-600">{t("customer.loadError")}</p>
-          : filtered.length === 0 ? <p className="p-6 text-sm text-slate-500">{t("customer.noResults")}</p>
+          : filtered.length === 0 ? <FilterResultStatus filterKey={JSON.stringify([search, tier])}><p className="p-6 text-sm text-slate-500">{t("customer.noResults")}</p></FilterResultStatus>
             : paginatedCustomers.map((customer) => {
               const isExpanded = expandedCustomerId === customer.id;
               const bookings = bookingsForCustomer(customer.id);
