@@ -465,7 +465,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                   <th className="px-4 py-3 font-semibold">Email</th>
                   <th className="px-4 py-3 font-semibold">Số điện thoại</th>
                   <th className="px-4 py-3 font-semibold">Chi nhánh</th>
-                  <th className="px-4 py-3 text-right font-semibold">Thao tác</th>
+                  <th className="min-w-[112px] whitespace-nowrap px-4 py-3 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -480,11 +480,11 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                     <td className="px-4 py-3">{account.email || "Chưa cập nhật"}</td>
                     <td className="px-4 py-3">{account.phone || "Chưa cập nhật"}</td>
                     <td className="px-4 py-3">{account.hotelName || "—"}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="min-w-[112px] whitespace-nowrap px-4 py-3 text-right">
                       <button
                         type="button"
                         onClick={() => void openDetails(account)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        className="inline-flex whitespace-nowrap items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
                         <Eye size={14} />
                         Chi tiết

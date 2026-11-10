@@ -103,6 +103,7 @@ type AdminSection =
   | "amenities"
   | "bed-types"
   | "permissions"
+  | "roles"
   | "resource-stats"
   | "promotions"
   | "services"
@@ -285,6 +286,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isCatalogMenuOpen, setIsCatalogMenuOpen] = useState(false);
   const [isSalesMenuOpen, setIsSalesMenuOpen] = useState(false);
+  const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [expandedBranchGroup, setExpandedBranchGroup] = useState<string | null>(null);
   const [isBranchFormOpen, setIsBranchFormOpen] = useState(false);
@@ -777,6 +779,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   ];
   const isAccountSection =
     section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
+  const isRoleSection = section === "roles" || section === "permissions";
   const isCatalogSection = section === "amenities" || section === "bed-types";
   const isSalesSection = section === "promotions" || section === "services";
 
@@ -983,6 +986,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     } else {
       setIsAccountMenuOpen(false);
     }
+    if (id === "roles" || id === "permissions") {
+      setIsRoleMenuOpen(true);
+    } else {
+      setIsRoleMenuOpen(false);
+    }
     if (id === "amenities" || id === "bed-types") {
       setIsCatalogMenuOpen(true);
     } else {
@@ -1061,6 +1069,41 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   )}
                 </div>
               )}
+              {id === "permissions" && (
+                <div className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsRoleMenuOpen((isOpen) => !isOpen)}
+                    aria-expanded={isRoleMenuOpen}
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                      isRoleSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <ShieldCheck size={18} />
+                    <span className="flex-1">Quản lý Role và quyền</span>
+                    {isRoleMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </button>
+                  {isRoleMenuOpen && (
+                    <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
+                      {([
+                        { id: "roles", label: "Quản lý vai trò" },
+                        { id: "permissions", label: "Quản lý quyền" },
+                      ] as const).map(({ id: childId, label: childLabel }) => (
+                        <button
+                          key={childId}
+                          type="button"
+                          onClick={() => handleSectionSelect(childId)}
+                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
+                            section === childId ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          {childLabel}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {id === "resource-stats" && (
                 <div className="mb-1">
                   <button
@@ -1078,9 +1121,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   {isSalesMenuOpen && (
                     <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
                       {([
-                        { id: "promotions", label: "Khuyến mãi", icon: Tag },
-                        { id: "services", label: "Dịch vụ", icon: ConciergeBell },
-                      ] as const).map(({ id: childId, label: childLabel, icon: ChildIcon }) => (
+                        { id: "promotions", label: "Khuyến mãi" },
+                        { id: "services", label: "Dịch vụ" },
+                      ] as const).map(({ id: childId, label: childLabel }) => (
                         <button
                           key={childId}
                           type="button"
@@ -1089,7 +1132,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                             section === childId ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
                           }`}
                         >
-                          <ChildIcon size={15} />
                           {childLabel}
                         </button>
                       ))}
@@ -1097,7 +1139,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   )}
                 </div>
               )}
-              <button
+              {id !== "permissions" && <button
                 type="button"
                 onClick={() => handleSectionSelect(id)}
                 aria-expanded={id === "branches" ? section === "branches" && isBranchMenuOpen : undefined}
@@ -1113,7 +1155,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   </span>
                 )}
                 {id === "branches" && (section === "branches" && isBranchMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />)}
-              </button>
+              </button>}
               {id === "branches" && section === "branches" && isBranchMenuOpen && (
                 <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
                   <button
@@ -1283,13 +1325,14 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             <button
               type="button"
               key={id}
-              onClick={() => handleSectionSelect(id)}
+              onClick={() => id === "permissions" ? setIsRoleMenuOpen((isOpen) => !isOpen) : handleSectionSelect(id)}
+              aria-expanded={id === "permissions" ? isRoleMenuOpen : undefined}
               className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-                section === id ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                (id === "permissions" ? isRoleSection : section === id) ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               <Icon size={15} />
-              {label}
+              {id === "permissions" ? "Quản lý Role và quyền" : label}
               {id === "notifications" && notifications.some((notification) => !notification.read) && (
                 <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] text-white">
                   {notifications.filter((notification) => !notification.read).length}
@@ -1354,12 +1397,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             ))}
           </nav>
         )}
-        {isSalesMenuOpen && (
-          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý kinh doanh">
+        {isRoleMenuOpen && (
+          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý Role và quyền">
             {([
-              { id: "promotions", label: "Khuyến mãi", icon: Tag },
-              { id: "services", label: "Dịch vụ", icon: ConciergeBell },
-            ] as const).map(({ id, label, icon: Icon }) => (
+              { id: "roles", label: "Quản lý vai trò" },
+              { id: "permissions", label: "Quản lý quyền" },
+            ] as const).map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
@@ -1368,7 +1411,25 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   section === id ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-white"
                 }`}
               >
-                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+        {isSalesMenuOpen && (
+          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý kinh doanh">
+            {([
+              { id: "promotions", label: "Khuyến mãi" },
+              { id: "services", label: "Dịch vụ" },
+            ] as const).map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleSectionSelect(id)}
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
+                  section === id ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-white"
+                }`}
+              >
                 {label}
               </button>
             ))}
@@ -1982,7 +2043,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             />
           )}
 
-          {section === "permissions" && <SuperAdminRolePermissionsPanel />}
+          {(section === "roles" || section === "permissions") && (
+            <SuperAdminRolePermissionsPanel
+              key={section}
+              view={section === "roles" ? "roles" : "permissions"}
+            />
+          )}
 
           {section === "resource-stats" && (
             <SuperAdminResourceStatsPanel

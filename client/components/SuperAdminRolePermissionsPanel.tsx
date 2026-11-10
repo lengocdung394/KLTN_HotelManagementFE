@@ -5,15 +5,16 @@ import {
   CirclePlus,
   ChevronsUpDown,
   FileSpreadsheet,
-  LayoutDashboard,
   Plus,
   Search,
   ShieldCheck,
   Upload,
+  X,
 } from "lucide-react";
 import { createXlsxWorkbook, downloadFile } from "../lib/bulkImportFiles";
 import { parseSuperAdminPermissionCatalogFile } from "../lib/superAdminPermissionCatalogImport";
 import { parseSuperAdminRolePermissionsFile } from "../lib/superAdminRolePermissionsImport";
+import { parseSuperAdminRolesFile } from "../lib/superAdminRolesImport";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 import { localizedText } from "../i18n";
@@ -28,6 +29,7 @@ import {
   useImportSuperAdminRolePermissionsMutation,
   useRemoveSuperAdminPermissionFromRoleMutation,
   type SuperAdminPermissionAssignment,
+  type SuperAdminPermissionCatalogItem,
   type SuperAdminRole,
 } from "../services/superAdminApi";
 import {
@@ -41,18 +43,63 @@ import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from ".
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 type WorkflowStep = "catalog" | "permissions" | "overview";
+type Props = {
+  view: "roles" | "permissions";
+};
 
-const PERMISSION_HEADERS = ["Role", "Mã quyền", "Tên quyền", "Mô tả quyền", "Danh mục", "Cấp quyền (Có/Không)"];
+const PERMISSION_HEADERS = ["Role", "Mã quyền", "Tên quyền", "Mô tả quyền", "Danh mục"];
 const CATALOG_HEADERS = ["Mã quyền", "Tên quyền", "Danh mục", "Mô tả quyền"];
+const ROLE_HEADERS = ["Mã role", "Tên role", "Mô tả"];
 const UNCATEGORIZED = "Chưa phân loại";
+const CATALOG_TABLE_COLUMNS = [
+  { id: "category", label: "Phân loại", width: 190 },
+  { id: "name", label: "Tên quyền", width: 250 },
+  { id: "code", label: "Mã quyền", width: 240 },
+  { id: "description", label: "Mô tả", width: 340 },
+  { id: "roles", label: "Vai trò được gán", width: 480 },
+  { id: "actions", label: "Thao tác", width: 160 },
+] as const;
+type CatalogTableColumnId = (typeof CATALOG_TABLE_COLUMNS)[number]["id"];
+const ROLE_TABLE_COLUMNS = [
+  { id: "name", label: "Tên vai trò", width: 180 },
+  { id: "code", label: "Mã vai trò", width: 200 },
+  { id: "description", label: "Mô tả", width: 240 },
+  { id: "count", label: "Quyền đã gán", width: 140 },
+  { id: "permissions", label: "Danh sách quyền", width: 740 },
+] as const;
+type RoleTableColumnId = (typeof ROLE_TABLE_COLUMNS)[number]["id"];
 
 const normalizeCode = (value: string) => value.trim().toLocaleUpperCase();
 const categoryOf = (category?: string) => category?.trim() || UNCATEGORIZED;
 
+const downloadRoleTemplate = () => {
+  const workbook = createXlsxWorkbook([
+    {
+      name: "Danh sách vai trò",
+      rows: [
+        ROLE_HEADERS,
+        ["ROLE_RECEPTIONIST", "Lễ tân", "Tiếp nhận khách và quản lý đặt phòng"],
+      ],
+    },
+    {
+      name: "Hướng dẫn",
+      rows: [
+        ["HƯỚNG DẪN NHẬP VAI TRÒ"],
+        ["Mỗi dòng khai báo một vai trò."],
+        ["Giữ nguyên ba cột: Mã role, Tên role, Mô tả."],
+        ["Mã role phải bắt đầu bằng ROLE_ và chỉ gồm chữ in hoa, số hoặc dấu gạch dưới."],
+        ["Mã role không được trùng với role đã có trong hệ thống."],
+        ["Cả ba trường đều bắt buộc."],
+      ],
+    },
+  ]);
+  downloadFile("mau-danh-sach-vai-tro.xlsx", workbook);
+};
+
 const downloadPermissionTemplate = (roles: SuperAdminRole[]) => {
   const rows: Array<Array<string | number>> = [
     PERMISSION_HEADERS,
-    ...Array.from({ length: 10 }, () => ["", "", "", "", "", "Có"]),
+    ...Array.from({ length: 10 }, () => ["", "", "", "", ""]),
   ];
   const workbook = createXlsxWorkbook([
     {
@@ -60,7 +107,6 @@ const downloadPermissionTemplate = (roles: SuperAdminRole[]) => {
       rows,
       validations: [
         { range: "A2:A1000", type: "list", formula1: "=RoleList" },
-        { range: "F2:F1000", type: "list", formula1: '"Có,Không"' },
       ],
     },
     {
@@ -77,7 +123,7 @@ const downloadPermissionTemplate = (roles: SuperAdminRole[]) => {
         ["Tạo role trước, sau đó tải file mẫu để tự động lấy danh sách role."],
         ["Chọn role bằng danh sách thả xuống ở cột Role; sheet Danh sách role được tạo tự động."],
         ["Nhập Mã quyền, Tên quyền, Mô tả quyền và Danh mục. Mỗi dòng là một quyền của một role."],
-        ["Cấp quyền chọn Có hoặc Không. Nếu một role có nhiều quyền, thêm mỗi quyền vào một dòng riêng."],
+        ["Mỗi dòng sẽ thêm một quyền mới cho role đã chọn. Nếu một role có nhiều quyền, thêm mỗi quyền vào một dòng riêng."],
         ["Mã quyền chỉ dùng chữ, số, dấu gạch dưới, chấm, hai chấm hoặc gạch ngang."],
         ["Không nhập mật khẩu hay dữ liệu nhạy cảm vào file."],
       ],
@@ -115,7 +161,7 @@ const downloadPermissionCatalogTemplate = () => {
   downloadFile("mau-danh-muc-quyen.xlsx", workbook);
 };
 
-export default function SuperAdminRolePermissionsPanel() {
+export default function SuperAdminRolePermissionsPanel({ view }: Props) {
   const {
     data: roles = [],
     isLoading: isRolesLoading,
@@ -146,10 +192,23 @@ export default function SuperAdminRolePermissionsPanel() {
   const [removePermissionFromRole, { isLoading: isRemovingPermission }] =
     useRemoveSuperAdminPermissionFromRoleMutation();
   const [activeStep, setActiveStep] = useState<WorkflowStep>("catalog");
+  const [showAllRolePermissions, setShowAllRolePermissions] = useState(false);
+  const [visibleRoleColumns, setVisibleRoleColumns] = useState<Record<RoleTableColumnId, boolean>>({
+    name: true,
+    code: true,
+    description: true,
+    count: true,
+    permissions: true,
+  });
   const [roleCode, setRoleCode] = useState("");
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [roleError, setRoleError] = useState("");
+  const [roleFieldErrors, setRoleFieldErrors] = useState<Record<string, string>>({});
+  const [addRoleMode, setAddRoleMode] = useState<"single" | "excel">("single");
+  const [roleFileError, setRoleFileError] = useState("");
+  const [roleFileMessage, setRoleFileMessage] = useState("");
+  const [isImportingRoles, setIsImportingRoles] = useState(false);
   const [assignmentRoleCode, setAssignmentRoleCode] = useState("");
   const [assignmentCategory, setAssignmentCategory] = useState("all");
   const [isAssignmentCategoryOpen, setIsAssignmentCategoryOpen] = useState(false);
@@ -159,12 +218,22 @@ export default function SuperAdminRolePermissionsPanel() {
   const [permissionCategory, setPermissionCategory] = useState("");
   const [permissionDescription, setPermissionDescription] = useState("");
   const [catalogError, setCatalogError] = useState("");
+  const [permissionFieldErrors, setPermissionFieldErrors] = useState<Record<string, string>>({});
   const [catalogMessage, setCatalogMessage] = useState("");
   const [catalogSearch, setCatalogSearch] = useState("");
+  const [visibleCatalogColumns, setVisibleCatalogColumns] = useState<Record<CatalogTableColumnId, boolean>>({
+    category: true,
+    name: true,
+    code: true,
+    description: true,
+    roles: true,
+    actions: true,
+  });
   const [catalogFileError, setCatalogFileError] = useState("");
   const [catalogFileMessage, setCatalogFileMessage] = useState("");
   const [isAddPermissionDialogOpen, setIsAddPermissionDialogOpen] = useState(false);
   const [isAddRoleDialogOpen, setIsAddRoleDialogOpen] = useState(false);
+  const [isImportRolePermissionsDialogOpen, setIsImportRolePermissionsDialogOpen] = useState(false);
   const [addPermissionMode, setAddPermissionMode] = useState<"single" | "excel">("single");
   const [importError, setImportError] = useState("");
   const [importMessage, setImportMessage] = useState("");
@@ -173,13 +242,21 @@ export default function SuperAdminRolePermissionsPanel() {
     roleCode: string;
     permission: SuperAdminPermissionAssignment;
   } | null>(null);
+  const [pendingBulkPermissionAssignment, setPendingBulkPermissionAssignment] = useState<{
+    permission: SuperAdminPermissionCatalogItem;
+    roleCodes: string[];
+  } | null>(null);
+  const [permissionToAssign, setPermissionToAssign] = useState<SuperAdminPermissionCatalogItem | null>(null);
+  const [catalogAssignmentRoleCode, setCatalogAssignmentRoleCode] = useState("");
   const [isConfirmingPermissionChange, setIsConfirmingPermissionChange] = useState(false);
+  const [isConfirmingBulkAssignment, setIsConfirmingBulkAssignment] = useState(false);
   const [updatingAssignment, setUpdatingAssignment] = useState<string | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [overviewSearch, setOverviewSearch] = useState("");
   const [showOnlyGranted, setShowOnlyGranted] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const catalogFileInputRef = useRef<HTMLInputElement>(null);
+  const roleFileInputRef = useRef<HTMLInputElement>(null);
   const isImporting = isReadingFile || isSavingPermissions || isSavingPermissionCatalog;
   const isUpdatingAssignment = isAddingPermission || isRemovingPermission;
 
@@ -197,17 +274,18 @@ export default function SuperAdminRolePermissionsPanel() {
   const createRole = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setRoleError("");
+    const fieldErrors: Record<string, string> = {};
     const code = normalizeCode(roleCode);
     if (!/^ROLE_[A-Z0-9_]+$/.test(code)) {
-      setRoleError(localizedText("Mã role cần bắt đầu bằng ROLE_ và chỉ gồm chữ in hoa, số hoặc dấu gạch dưới.", "Role codes must start with ROLE_ and contain only uppercase letters, numbers, or underscores."));
-      return;
+      fieldErrors.code = localizedText("Mã role cần bắt đầu bằng ROLE_ và chỉ gồm chữ in hoa, số hoặc dấu gạch dưới.", "Role codes must start with ROLE_ and contain only uppercase letters, numbers, or underscores.");
     }
-    if (roles.some((role) => role.code === code)) {
-      setRoleError(localizedText(`Role ${code} đã tồn tại.`, `Role ${code} already exists.`));
-      return;
+    if (!fieldErrors.code && roles.some((role) => role.code === code)) {
+      fieldErrors.code = localizedText(`Role ${code} đã tồn tại.`, `Role ${code} already exists.`);
     }
-    if (!roleName.trim()) {
-      setRoleError(localizedText("Vui lòng nhập tên role.", "Enter a role name."));
+    if (!roleName.trim()) fieldErrors.name = localizedText("Vui lòng nhập tên role.", "Enter a role name.");
+    if (!roleDescription.trim()) fieldErrors.description = localizedText("Vui lòng nhập mô tả role.", "Enter a role description.");
+    setRoleFieldErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) {
       return;
     }
     try {
@@ -219,6 +297,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setRoleCode("");
       setRoleName("");
       setRoleDescription("");
+      setRoleFieldErrors({});
       setIsAddRoleDialogOpen(false);
       setActiveStep("catalog");
     } catch (error) {
@@ -226,21 +305,56 @@ export default function SuperAdminRolePermissionsPanel() {
     }
   };
 
+  const importRoles = async (file?: File) => {
+    setRoleFileError("");
+    setRoleFileMessage("");
+    if (!file) return;
+
+    setIsImportingRoles(true);
+    let createdCount = 0;
+    try {
+      const importedRoles = await parseSuperAdminRolesFile(file, roles);
+      for (const role of importedRoles) {
+        try {
+          await createRoleRequest(role).unwrap();
+          createdCount += 1;
+        } catch (error) {
+          const reason = getErrorMessage(error, "Lỗi không xác định.");
+          const progress = createdCount > 0
+            ? ` Đã tạo ${createdCount}/${importedRoles.length} vai trò trước khi gặp lỗi.`
+            : "";
+          setRoleFileError(`Không thể tạo role ${role.code}: ${reason}${progress}`);
+          return;
+        }
+      }
+
+      setRoleFileMessage(`Đã tạo ${createdCount} vai trò từ ${file.name}.`);
+      setIsAddRoleDialogOpen(false);
+    } catch (error) {
+      setRoleFileError(getErrorMessage(error, "Không thể đọc file hoặc nhập danh sách vai trò."));
+    } finally {
+      setIsImportingRoles(false);
+      if (roleFileInputRef.current) roleFileInputRef.current.value = "";
+    }
+  };
+
   const createPermission = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCatalogError("");
     setCatalogMessage("");
+    const fieldErrors: Record<string, string> = {};
     const code = normalizeCode(permissionCode);
     if (!/^[A-Z][A-Z0-9_.:-]*$/.test(code)) {
-      setCatalogError(localizedText("Mã quyền phải bắt đầu bằng chữ và chỉ gồm chữ in hoa, số, dấu gạch dưới, chấm, hai chấm hoặc gạch ngang.", "Permission codes must start with a letter and contain only uppercase letters, numbers, underscores, periods, colons, or hyphens."));
-      return;
+      fieldErrors.code = localizedText("Mã quyền phải bắt đầu bằng chữ và chỉ gồm chữ in hoa, số, dấu gạch dưới, chấm, hai chấm hoặc gạch ngang.", "Permission codes must start with a letter and contain only uppercase letters, numbers, underscores, periods, colons, or hyphens.");
     }
-    if (!permissionName.trim()) {
-      setCatalogError(localizedText("Vui lòng nhập tên quyền.", "Enter a permission name."));
-      return;
+    if (!fieldErrors.code && permissions.some((permission) => normalizeCode(permission.code) === code)) {
+      fieldErrors.code = localizedText(`Mã quyền ${code} đã tồn tại.`, `Permission code ${code} already exists.`);
     }
-    if (!permissionCategory.trim()) {
-      setCatalogError(localizedText("Vui lòng nhập danh mục quyền.", "Enter a permission category."));
+    if (!permissionName.trim()) fieldErrors.name = localizedText("Vui lòng nhập tên quyền.", "Enter a permission name.");
+    if (!permissionCategory.trim()) fieldErrors.category = localizedText("Vui lòng nhập danh mục quyền.", "Enter a permission category.");
+    if (!permissionDescription.trim()) fieldErrors.description = localizedText("Vui lòng nhập mô tả quyền.", "Enter a permission description.");
+    setPermissionFieldErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) {
       return;
     }
     try {
@@ -254,6 +368,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setPermissionName("");
       setPermissionCategory("");
       setPermissionDescription("");
+      setPermissionFieldErrors({});
       setCatalogMessage(`Đã tạo quyền ${code}.`);
       setIsAddPermissionDialogOpen(false);
     } catch (error) {
@@ -311,6 +426,41 @@ export default function SuperAdminRolePermissionsPanel() {
     if (succeeded) setPendingPermissionChange(null);
   };
 
+  const confirmBulkPermissionAssignment = async () => {
+    if (!pendingBulkPermissionAssignment) return;
+    setIsConfirmingBulkAssignment(true);
+    setPermissionActionError("");
+    const failedRoles: string[] = [];
+
+    for (const roleCode of pendingBulkPermissionAssignment.roleCodes) {
+      try {
+        await addPermissionToRole({
+          roleCode,
+          permissionCode: pendingBulkPermissionAssignment.permission.code,
+        }).unwrap();
+      } catch {
+        failedRoles.push(roleCode);
+      }
+    }
+
+    const assignedCount = pendingBulkPermissionAssignment.roleCodes.length - failedRoles.length;
+    if (failedRoles.length > 0) {
+      setPermissionActionError(
+        `Đã gán quyền cho ${assignedCount}/${pendingBulkPermissionAssignment.roleCodes.length} vai trò. Không thể gán cho: ${failedRoles.join(", ")}.`,
+      );
+      setPendingBulkPermissionAssignment({
+        ...pendingBulkPermissionAssignment,
+        roleCodes: failedRoles,
+      });
+    } else {
+      setCatalogMessage(
+        `Đã gán quyền ${pendingBulkPermissionAssignment.permission.name} cho ${assignedCount} vai trò.`,
+      );
+      setPendingBulkPermissionAssignment(null);
+    }
+    setIsConfirmingBulkAssignment(false);
+  };
+
   const importPermissions = async (file?: File) => {
     setImportError("");
     setImportMessage("");
@@ -320,7 +470,6 @@ export default function SuperAdminRolePermissionsPanel() {
       const parsed = await parseSuperAdminRolePermissionsFile(file, roles);
       await importRolePermissionsRequest(parsed.rolePermissions).unwrap();
       setImportMessage(`Đã nạp ${parsed.importedRowCount} dòng phân quyền từ ${file.name}.`);
-      setActiveStep("overview");
     } catch (error) {
       setImportError(getErrorMessage(error, localizedText("Không thể đọc file hoặc nạp quyền. Vui lòng thử lại.", "Could not read the file or load the permissions. Please try again.")));
     } finally {
@@ -345,12 +494,28 @@ export default function SuperAdminRolePermissionsPanel() {
     categoryPermissions.push(permission);
     catalogPermissionsByCategory.set(category, categoryPermissions);
   });
+  const shownCatalogColumns = CATALOG_TABLE_COLUMNS.filter((column) => visibleCatalogColumns[column.id]);
+  const shownCatalogTableWidth = shownCatalogColumns.reduce((total, column) => total + column.width, 0);
+  const shownRoleColumns = ROLE_TABLE_COLUMNS.filter((column) => visibleRoleColumns[column.id]);
+  const shownRoleTableWidth = shownRoleColumns.reduce((total, column) => total + column.width, 0);
   const selectedAssignmentRoleCode = assignmentRoleCode || roles[0]?.code || "";
   const assignmentCategories = [...new Set(permissions.map((permission) => categoryOf(permission.category)))]
     .sort((left, right) => left.localeCompare(right, "vi"));
   const selectedRolePermissionGroup = rolePermissionGroups.find(
     (group) => group.roleCode === selectedAssignmentRoleCode,
   );
+  const isPermissionAlreadyAssignedToSelectedRole = permissionToAssign
+    ? rolePermissionGroups
+      .find((group) => group.roleCode === catalogAssignmentRoleCode)
+      ?.permissions.some((permission) => permission.code === permissionToAssign.code && permission.granted) ?? false
+    : false;
+  const rolesMissingPermission = permissionToAssign
+    ? roles.filter((role) =>
+      !rolePermissionGroups
+        .find((group) => group.roleCode === role.code)
+        ?.permissions.some((permission) => permission.code === permissionToAssign.code && permission.granted),
+    )
+    : [];
   const permissionsForAssignment = permissions
     .filter((permission) =>
       assignmentCategory === "all" || categoryOf(permission.category) === assignmentCategory,
@@ -365,10 +530,14 @@ export default function SuperAdminRolePermissionsPanel() {
       <header className="border-b border-slate-100 p-5 sm:p-6">
         <div className="flex items-center gap-2">
           <ShieldCheck size={19} className="text-blue-600" />
-          <h2 className="text-lg font-bold text-slate-900">Cấu hình role và phân quyền</h2>
+          <h2 className="text-lg font-bold text-slate-900">
+            {view === "roles" ? "Quản lý vai trò" : "Quản lý quyền"}
+          </h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          Quản lý danh mục quyền độc lập, tạo role, phân quyền và xem tổng quan.
+          {view === "roles"
+            ? "Tạo và xem các vai trò được sử dụng trong hệ thống."
+            : "Quản lý danh mục quyền, gán quyền cho vai trò và xem tổng quan phân quyền."}
         </p>
       </header>
 
@@ -383,28 +552,221 @@ export default function SuperAdminRolePermissionsPanel() {
         </div>
       )}
 
-      <nav className="grid grid-cols-1 gap-2 px-4 sm:grid-cols-3 sm:px-5" aria-label="Các bước cấu hình role và quyền">
-        {([
-          ["catalog", "1. Quản lý role & quyền", ShieldCheck],
-          ["permissions", "2. Gán quyền & Excel", FileSpreadsheet],
-          ["overview", "3. Tổng quan", LayoutDashboard],
-        ] as const).map(([step, label, Icon]) => (
-          <button
-            key={step}
-            type="button"
-            onClick={() => navigateToStep(step)}
-            aria-current={activeStep === step ? "step" : undefined}
-            className={`flex items-center gap-2 rounded-lg px-3 py-3 text-sm font-semibold ${
-              activeStep === step ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            <Icon size={16} />
-            {label}
-          </button>
-        ))}
-      </nav>
+      {view === "roles" && (
+        <div className="p-4 sm:p-5">
+          <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900">Các vai trò hiện có</h3>
+                <p className="mt-1 text-sm text-slate-500">{roles.length} vai trò trong hệ thống</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Tùy chỉnh cột bảng vai trò"
+                      className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Cột
+                      <ChevronDown size={16} />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 p-2">
+                    <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Hiển thị cột
+                    </p>
+                    {ROLE_TABLE_COLUMNS.map((column) => {
+                      const isLastVisibleColumn = shownRoleColumns.length === 1 && visibleRoleColumns[column.id];
+                      return (
+                        <label
+                          key={column.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={visibleRoleColumns[column.id]}
+                            disabled={isLastVisibleColumn}
+                            onChange={(event) => {
+                              setVisibleRoleColumns((current) => ({
+                                ...current,
+                                [column.id]: event.target.checked,
+                              }));
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                          />
+                          {column.label}
+                        </label>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setVisibleRoleColumns({
+                        name: true,
+                        code: true,
+                        description: true,
+                        count: true,
+                        permissions: true,
+                      })}
+                      className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+                    >
+                      Hiện tất cả cột
+                    </button>
+                  </PopoverContent>
+                </Popover>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoleError("");
+                    setRoleFieldErrors({});
+                    setRoleFileError("");
+                    setRoleFileMessage("");
+                    setAddRoleMode("single");
+                    setIsAddRoleDialogOpen(true);
+                  }}
+                  className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <CirclePlus size={17} />
+                  Thêm vai trò
+                </button>
+              </div>
+            </div>
+            {roleError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleError}</p>}
+            {roleFileError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleFileError}</p>}
+            {roleFileMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{roleFileMessage}</p>}
+            {isRolesLoading ? (
+              <p className="py-10 text-center text-sm text-slate-500">Đang tải vai trò...</p>
+            ) : roles.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center">
+                <p className="font-semibold text-slate-700">Chưa có vai trò nào</p>
+                <p className="mt-1 text-sm text-slate-500">Tạo vai trò để bắt đầu phân quyền cho tài khoản.</p>
+              </div>
+            ) : (
+              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                <table
+                  className="min-w-full table-fixed text-left text-sm"
+                  style={{ width: `${shownRoleTableWidth}px` }}
+                >
+                  <colgroup>
+                    {shownRoleColumns.map((column) => (
+                      <col key={column.id} style={{ width: `${column.width}px` }} />
+                    ))}
+                  </colgroup>
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      {shownRoleColumns.map((column) => (
+                        <th
+                          key={column.id}
+                          scope="col"
+                          className={`px-4 py-3 font-semibold ${column.id === "count" ? "whitespace-nowrap text-center" : ""}`}
+                        >
+                          {column.id === "permissions" ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <span>{column.label}</span>
+                          <div className="inline-flex shrink-0 rounded-lg bg-slate-200/70 p-0.5 normal-case tracking-normal">
+                            <button
+                              type="button"
+                              aria-pressed={!showAllRolePermissions}
+                              onClick={() => setShowAllRolePermissions(false)}
+                              className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+                                !showAllRolePermissions ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                              }`}
+                            >
+                              Đã gán
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={showAllRolePermissions}
+                              onClick={() => setShowAllRolePermissions(true)}
+                              className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+                                showAllRolePermissions ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                              }`}
+                            >
+                              Tất cả
+                            </button>
+                          </div>
+                        </div>
+                          ) : column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {roles.map((role) => {
+                      const assignedPermissions = rolePermissionGroups.find((group) => group.roleCode === role.code)?.permissions ?? [];
+                      const grantedPermissions = assignedPermissions.filter((permission) => permission.granted);
+                      const grantedCount = grantedPermissions.length;
+                      const permissionAssignments = new Map(assignedPermissions.map((permission) => [permission.code, permission]));
+                      const visibleRolePermissions = showAllRolePermissions
+                        ? permissions.map((permission) => ({
+                            ...permission,
+                            granted: permissionAssignments.get(permission.code)?.granted ?? false,
+                          }))
+                        : grantedPermissions;
+                      return (
+                        <tr key={role.code} className="text-slate-700 transition-colors hover:bg-slate-50/60">
+                            {visibleRoleColumns.name && <td className="break-words px-4 py-3 font-semibold text-slate-900">
+                            <span className="flex flex-wrap items-center gap-2">
+                              {role.name}
+                              {role.system && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Hệ thống</span>}
+                            </span>
+                            </td>}
+                            {visibleRoleColumns.code && <td className="break-all px-4 py-3 font-mono text-xs text-slate-600">{role.code}</td>}
+                            {visibleRoleColumns.description && <td className="break-words px-4 py-3 text-slate-600">{role.description || "—"}</td>}
+                            {visibleRoleColumns.count && <td className="px-4 py-3 text-center">
+                            <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              {grantedCount} quyền
+                            </span>
+                            </td>}
+                            {visibleRoleColumns.permissions && <td className="px-4 py-3 align-top">
+                            {visibleRolePermissions.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {visibleRolePermissions.map((permission) => (
+                                  <span
+                                    key={permission.code}
+                                    title={`${permission.name} (${permission.code})`}
+                                    className={`inline-flex items-center gap-1 rounded-md py-1 pl-2 pr-1 text-xs font-medium ${
+                                      permission.granted ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-600"
+                                    }`}
+                                  >
+                                    <span>{permission.name}</span>
+                                    <button
+                                      type="button"
+                                      aria-label={`${permission.granted ? "Gỡ" : "Gán"} quyền ${permission.name} ${permission.granted ? "khỏi" : "cho"} vai trò ${role.name}`}
+                                      title={`${permission.granted ? "Gỡ" : "Gán"} quyền ${permission.name}`}
+                                      disabled={isUpdatingAssignment}
+                                      onClick={() => setPendingPermissionChange({ roleCode: role.code, permission })}
+                                      className={`rounded p-0.5 focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                                        permission.granted
+                                          ? "text-blue-500 hover:bg-rose-100 hover:text-rose-700 focus-visible:outline-rose-500"
+                                          : "text-slate-500 hover:bg-emerald-100 hover:text-emerald-700 focus-visible:outline-emerald-500"
+                                      }`}
+                                    >
+                                      {permission.granted ? <X size={12} /> : <Plus size={12} />}
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">
+                                {showAllRolePermissions
+                                  ? isPermissionCatalogLoading ? "Đang tải quyền..." : "Chưa có quyền trong danh mục"
+                                  : "Chưa gán quyền"}
+                              </span>
+                            )}
+                          </td>}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-      {activeStep === "catalog" && (
+      {view === "permissions" && activeStep === "catalog" && (
         <div className="p-4 sm:p-5">
           <div className="min-w-0 rounded-xl border border-slate-200 p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -427,21 +789,77 @@ export default function SuperAdminRolePermissionsPanel() {
                   />
                     <ClearSearchButton value={catalogSearch} onClear={() => setCatalogSearch("")} label="Xóa tìm kiếm" />
                   </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Tùy chỉnh cột bảng"
+                      className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Cột
+                      <ChevronDown size={16} />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-56 p-2">
+                    <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Hiển thị cột
+                    </p>
+                    {CATALOG_TABLE_COLUMNS.map((column) => {
+                      const isLastVisibleColumn = shownCatalogColumns.length === 1 && visibleCatalogColumns[column.id];
+                      return (
+                        <label
+                          key={column.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={visibleCatalogColumns[column.id]}
+                            disabled={isLastVisibleColumn}
+                            onChange={(event) => {
+                              setVisibleCatalogColumns((current) => ({
+                                ...current,
+                                [column.id]: event.target.checked,
+                              }));
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                          />
+                          {column.label}
+                        </label>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCatalogColumns({
+                        category: true,
+                        name: true,
+                        code: true,
+                        description: true,
+                        roles: true,
+                        actions: true,
+                      })}
+                      className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+                    >
+                      Hiện tất cả cột
+                    </button>
+                  </PopoverContent>
+                </Popover>
                 <button
                   type="button"
                   onClick={() => {
-                    setRoleError("");
-                    setIsAddRoleDialogOpen(true);
+                    setImportError("");
+                    setImportMessage("");
+                    setIsImportRolePermissionsDialogOpen(true);
                   }}
-                  className="flex h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                  className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  <CirclePlus size={17} />
-                  Thêm role
+                  <FileSpreadsheet size={16} />
+                  Nạp quyền
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setCatalogError("");
+                    setPermissionFieldErrors({});
                     setCatalogFileError("");
                     setIsAddPermissionDialogOpen(true);
                   }}
@@ -462,53 +880,92 @@ export default function SuperAdminRolePermissionsPanel() {
                 <p className="mt-1 text-sm text-slate-500">Dùng nút “Thêm quyền” để tạo quyền hoặc nhập danh mục từ Excel.</p>
               </div>
             ) : (
-              <div className="mt-4 space-y-3">
-                {[...catalogPermissionsByCategory].map(([category, categoryPermissions]) => (
-                  <details key={category} open={Boolean(catalogSearch.trim())} className="group rounded-xl border border-slate-200">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
-                          <ShieldCheck size={17} />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate font-semibold text-slate-800">{category}</span>
-                          <span className="block text-xs text-slate-500">{categoryPermissions.length} quyền</span>
-                        </span>
-                      </span>
-                      <ChevronDown size={18} className="shrink-0 text-slate-400 transition-transform group-open:rotate-180" />
-                    </summary>
-                    <div className="grid gap-2 border-t border-slate-100 p-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {categoryPermissions.map((permission) => {
+              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                <table
+                  className="min-w-full table-fixed text-left text-sm"
+                  style={{ width: `${shownCatalogTableWidth}px` }}
+                >
+                  <colgroup>
+                    {shownCatalogColumns.map((column) => (
+                      <col key={column.id} style={{ width: `${column.width}px` }} />
+                    ))}
+                  </colgroup>
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      {shownCatalogColumns.map((column) => (
+                        <th
+                          key={column.id}
+                          scope="col"
+                          className={`px-4 py-3 font-semibold ${column.id === "actions" ? "text-right" : ""}`}
+                        >
+                          {column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  {[...catalogPermissionsByCategory].map(([category, categoryPermissions], categoryIndex) => (
+                    <tbody key={category} className="divide-y divide-slate-100">
+                      {categoryPermissions.map((permission, index) => {
                         const assignedRoles = rolePermissionGroups
                           .filter((group) => group.permissions.some((item) =>
                             item.code === permission.code && item.granted,
                           ))
                           .map((group) => roles.find((role) => role.code === group.roleCode)?.name ?? group.roleCode);
                         return (
-                          <article key={permission.code} className="min-w-0 rounded-lg border border-slate-200 bg-white p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <h4 className="truncate text-sm font-semibold text-slate-900" title={permission.name}>{permission.name}</h4>
-                                <p className="mt-1 break-all text-xs tracking-wide text-slate-500">{permission.code}</p>
-                              </div>
-                              <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${
-                                assignedRoles.length ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-800"
-                              }`}>
-                                {assignedRoles.length ? `${assignedRoles.length} role` : "Chưa gán"}
-                              </span>
-                            </div>
-                            {permission.description && <p className="mt-2 line-clamp-2 text-sm leading-5 text-slate-600" title={permission.description}>{permission.description}</p>}
-                            {assignedRoles.length > 0 && (
-                              <p className="mt-2 truncate text-xs text-slate-500" title={assignedRoles.join(", ")}>
-                                {assignedRoles.join(", ")}
-                              </p>
+                          <tr
+                            key={permission.code}
+                            className={`align-top text-slate-700 transition-colors hover:bg-slate-50/60 ${
+                              index === 0 && categoryIndex > 0 ? "border-t border-slate-200" : ""
+                            }`}
+                          >
+                            {visibleCatalogColumns.category && index === 0 && (
+                              <td rowSpan={categoryPermissions.length} className="border-r border-slate-200 bg-slate-50/60 px-4 py-3 align-middle">
+                                <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                                  {category}
+                                </span>
+                              </td>
                             )}
-                          </article>
+                            {visibleCatalogColumns.name && (
+                              <td className="px-4 py-3 font-semibold text-slate-900">{permission.name}</td>
+                            )}
+                            {visibleCatalogColumns.code && (
+                              <td className="break-all px-4 py-3 font-mono text-xs text-slate-600">{permission.code}</td>
+                            )}
+                            {visibleCatalogColumns.description && (
+                              <td className="px-4 py-3 text-slate-600">{permission.description || "—"}</td>
+                            )}
+                            {visibleCatalogColumns.roles && <td className="px-4 py-3">
+                              {assignedRoles.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {assignedRoles.map((roleName) => (
+                                    <span key={roleName} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+                                      {roleName}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">Chưa gán</span>
+                              )}
+                            </td>}
+                            {visibleCatalogColumns.actions && <td className="whitespace-nowrap px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                disabled={roles.length === 0 || isUpdatingAssignment}
+                                onClick={() => {
+                                  setCatalogAssignmentRoleCode(roles[0]?.code ?? "");
+                                  setPermissionToAssign(permission);
+                                }}
+                                className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Gán quyền
+                              </button>
+                            </td>}
+                          </tr>
                         );
                       })}
-                    </div>
-                  </details>
-                ))}
+                    </tbody>
+                  ))}
+                </table>
                 {filteredCatalogPermissions.length === 0 && (
                   <FilterResultStatus filterKey={catalogSearch}><p className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
                     Không tìm thấy quyền phù hợp.
@@ -520,7 +977,7 @@ export default function SuperAdminRolePermissionsPanel() {
         </div>
       )}
 
-      {activeStep === "catalog" && (
+      {view === "permissions" && activeStep === "catalog" && (
         <Dialog open={isAddPermissionDialogOpen} onOpenChange={setIsAddPermissionDialogOpen}>
           <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
@@ -554,49 +1011,74 @@ export default function SuperAdminRolePermissionsPanel() {
               </button>
             </div>
             {addPermissionMode === "single" ? (
-              <form onSubmit={(event) => void createPermission(event)}>
+              <form noValidate onSubmit={(event) => void createPermission(event)}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Mã quyền
+                    Mã quyền <span aria-hidden="true" className="text-rose-600">*</span>
                     <input
-                      required
                       value={permissionCode}
-                      onChange={(event) => setPermissionCode(event.target.value)}
+                      aria-invalid={Boolean(permissionFieldErrors.code)}
+                      aria-describedby={permissionFieldErrors.code ? "permission-code-error" : undefined}
+                      onChange={(event) => {
+                        setPermissionCode(event.target.value);
+                        setPermissionFieldErrors((current) => ({ ...current, code: "" }));
+                        setCatalogError("");
+                      }}
                       placeholder="VIEW_SPECIAL_REPORT"
                       autoComplete="off"
-                      className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm font-normal outline-none focus:border-blue-400"
+                      className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
                     />
+                    {permissionFieldErrors.code && <span id="permission-code-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.code}</span>}
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    Tên quyền
+                    Tên quyền <span aria-hidden="true" className="text-rose-600">*</span>
                     <input
-                      required
                       value={permissionName}
-                      onChange={(event) => setPermissionName(event.target.value)}
+                      aria-invalid={Boolean(permissionFieldErrors.name)}
+                      aria-describedby={permissionFieldErrors.name ? "permission-name-error" : undefined}
+                      onChange={(event) => {
+                        setPermissionName(event.target.value);
+                        setPermissionFieldErrors((current) => ({ ...current, name: "" }));
+                        setCatalogError("");
+                      }}
                       placeholder="Xem báo cáo đặc biệt"
-                      className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                      className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.name ? "border-rose-400" : "border-slate-200"}`}
                     />
+                    {permissionFieldErrors.name && <span id="permission-name-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.name}</span>}
                   </label>
                 </div>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Danh mục
+                  Danh mục <span aria-hidden="true" className="text-rose-600">*</span>
                   <input
-                    required
                     value={permissionCategory}
-                    onChange={(event) => setPermissionCategory(event.target.value)}
+                    aria-invalid={Boolean(permissionFieldErrors.category)}
+                    aria-describedby={permissionFieldErrors.category ? "permission-category-error" : undefined}
+                    onChange={(event) => {
+                      setPermissionCategory(event.target.value);
+                      setPermissionFieldErrors((current) => ({ ...current, category: "" }));
+                      setCatalogError("");
+                    }}
                     placeholder="Ví dụ: Đặt phòng, Khách hàng, Báo cáo"
-                    className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
+                    className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.category ? "border-rose-400" : "border-slate-200"}`}
                   />
+                  {permissionFieldErrors.category && <span id="permission-category-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.category}</span>}
                 </label>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Mô tả
+                  Mô tả <span aria-hidden="true" className="text-rose-600">*</span>
                   <textarea
                     value={permissionDescription}
-                    onChange={(event) => setPermissionDescription(event.target.value)}
+                    aria-invalid={Boolean(permissionFieldErrors.description)}
+                    aria-describedby={permissionFieldErrors.description ? "permission-description-error" : undefined}
+                    onChange={(event) => {
+                      setPermissionDescription(event.target.value);
+                      setPermissionFieldErrors((current) => ({ ...current, description: "" }));
+                      setCatalogError("");
+                    }}
                     rows={3}
                     placeholder="Mô tả chức năng mà quyền này cho phép"
-                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-blue-400"
+                    className={`mt-1.5 w-full rounded-lg border px-3 py-2 text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.description ? "border-rose-400" : "border-slate-200"}`}
                   />
+                  {permissionFieldErrors.description && <span id="permission-description-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.description}</span>}
                 </label>
                 {catalogError && <p role="alert" className="mt-3 text-sm text-rose-600">{catalogError}</p>}
                 <button
@@ -640,95 +1122,276 @@ export default function SuperAdminRolePermissionsPanel() {
         </Dialog>
       )}
 
-      {activeStep === "catalog" && (
-        <div className="p-4 pt-0 sm:p-5 sm:pt-0">
-          <div className="rounded-xl border border-slate-200 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-slate-900">Các role hiện có</h3>
-                <p className="mt-1 text-sm text-slate-500">{roles.length} role trong hệ thống</p>
+      {view === "permissions" && (
+        <Dialog
+          open={isImportRolePermissionsDialogOpen}
+          onOpenChange={setIsImportRolePermissionsDialogOpen}
+        >
+          <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Nạp quyền</DialogTitle>
+              <DialogDescription>
+                Thêm quyền mới cho vai trò đã có sẵn. Chọn role hiện có trong file rồi nhập các quyền cần cấp.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl border border-slate-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-slate-900">Định dạng file Excel</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Mỗi dòng là một quyền mới cần thêm cho role đã tồn tại.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => downloadPermissionTemplate(roles)}
+                  disabled={roles.length === 0}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FileSpreadsheet size={16} />
+                  Tải file Excel mẫu
+                </button>
+              </div>
+              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full min-w-[680px] text-left text-xs">
+                  <thead className="bg-slate-50 font-bold text-slate-600">
+                    <tr>{PERMISSION_HEADERS.map((header) => <th key={header} className="px-3 py-2">{header}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    <tr className="divide-x divide-slate-100 text-slate-600">
+                      {["ROLE_MANAGER", "VIEW_BOOKINGS", "Xem đặt phòng", "Cho phép xem đặt phòng", "Đặt phòng"].map((value) => (
+                        <td key={value} className="px-3 py-2">{value}</td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-            {isRolesLoading ? <p className="mt-3 text-sm text-slate-500">Đang tải role...</p> : (
-            <div className="mt-3 divide-y divide-slate-100">
-              {roles.map((role) => (
-                <div key={role.code} className="py-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-800">{role.name}</p>
-                    {role.system && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">Hệ thống</span>}
-                  </div>
-                  <p className="mt-1 font-mono text-xs text-slate-500">{role.code}</p>
-                  {role.description && <p className="mt-1 text-sm text-slate-500">{role.description}</p>}
-                </div>
-              ))}
-            </div>
-            )}
-            <button
-              type="button"
-              onClick={() => navigateToStep("permissions")}
-              disabled={roles.length === 0}
-              className="mt-3 text-sm font-semibold text-blue-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Tiếp tục nhập quyền bằng Excel →
-            </button>
+            <label className="block text-sm font-semibold text-slate-700">
+              Chọn file phân quyền (.xlsx)
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                disabled={roles.length === 0 || isImporting}
+                onChange={(event) => void importPermissions(event.currentTarget.files?.[0])}
+                className="mt-1.5 block w-full rounded-lg border border-slate-200 p-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:font-semibold file:text-blue-700 disabled:opacity-50"
+              />
+            </label>
             {roles.length === 0 && (
-              <p className="mt-2 text-xs text-amber-700">Cần có ít nhất một role trước khi nhập phân quyền.</p>
+              <p className="text-sm text-amber-700">Hãy tạo role trước để nhập phân quyền.</p>
             )}
-          </div>
-        </div>
+            {isImporting && <p role="status" className="text-sm text-blue-700">Đang đọc file phân quyền...</p>}
+            {importError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{importError}</p>}
+            {importMessage && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{importMessage}</p>}
+          </DialogContent>
+        </Dialog>
       )}
 
-      {activeStep === "catalog" && (
+      {view === "roles" && (
         <Dialog open={isAddRoleDialogOpen} onOpenChange={setIsAddRoleDialogOpen}>
           <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Thêm role</DialogTitle>
+              <DialogTitle>Thêm vai trò</DialogTitle>
               <DialogDescription>
-                Tạo role mới trước, sau đó bạn có thể gán quyền cho role ở tab Gán quyền.
+                Tạo vai trò thủ công hoặc nhập danh sách vai trò từ Excel.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={(event) => void createRole(event)}>
-              <label className="block text-sm font-semibold text-slate-700">
-                Mã role
-                <input
-                  required
-                  value={roleCode}
-                  onChange={(event) => setRoleCode(event.target.value)}
-                  placeholder="ROLE_RECEPTIONIST"
-                  autoComplete="off"
-                  className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm font-normal outline-none focus:border-blue-400"
-                />
-              </label>
-              <label className="mt-3 block text-sm font-semibold text-slate-700">
-                Tên role
-                <input
-                  required
-                  value={roleName}
-                  onChange={(event) => setRoleName(event.target.value)}
-                  placeholder="Lễ tân"
-                  className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400"
-                />
-              </label>
-              <label className="mt-3 block text-sm font-semibold text-slate-700">
-                Mô tả
-                <textarea
-                  value={roleDescription}
-                  onChange={(event) => setRoleDescription(event.target.value)}
-                  rows={3}
-                  placeholder="Mô tả trách nhiệm của role"
-                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal outline-none focus:border-blue-400"
-                />
-              </label>
-              {roleError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleError}</p>}
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
               <button
-                type="submit"
-                disabled={isCreatingRole || isRolesLoading || isRolesError}
-                className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                type="button"
+                onClick={() => setAddRoleMode("single")}
+                aria-pressed={addRoleMode === "single"}
+                className={`flex items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-semibold ${
+                  addRoleMode === "single" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
               >
-                <Plus size={16} />
-                {isCreatingRole ? "Đang tạo..." : "Tạo role"}
+                <CirclePlus size={16} />
+                Tạo vai trò lẻ
               </button>
-            </form>
+              <button
+                type="button"
+                onClick={() => setAddRoleMode("excel")}
+                aria-pressed={addRoleMode === "excel"}
+                className={`flex items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-semibold ${
+                  addRoleMode === "excel" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <FileSpreadsheet size={16} />
+                Nhập từ Excel
+              </button>
+            </div>
+            {addRoleMode === "single" ? (
+              <form noValidate onSubmit={(event) => void createRole(event)} className="mt-4">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Mã role <span aria-hidden="true" className="text-rose-600">*</span>
+                  <input
+                    value={roleCode}
+                    aria-invalid={Boolean(roleFieldErrors.code)}
+                    aria-describedby={roleFieldErrors.code ? "role-code-error" : undefined}
+                    onChange={(event) => {
+                      setRoleCode(event.target.value);
+                      setRoleFieldErrors((current) => ({ ...current, code: "" }));
+                      setRoleError("");
+                    }}
+                    placeholder="ROLE_RECEPTIONIST"
+                    autoComplete="off"
+                    className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 ${roleFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
+                  />
+                  {roleFieldErrors.code && <span id="role-code-error" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.code}</span>}
+                </label>
+                <label className="mt-3 block text-sm font-semibold text-slate-700">
+                  Tên role <span aria-hidden="true" className="text-rose-600">*</span>
+                  <input
+                    value={roleName}
+                    aria-invalid={Boolean(roleFieldErrors.name)}
+                    aria-describedby={roleFieldErrors.name ? "role-name-error" : undefined}
+                    onChange={(event) => {
+                      setRoleName(event.target.value);
+                      setRoleFieldErrors((current) => ({ ...current, name: "" }));
+                      setRoleError("");
+                    }}
+                    placeholder="Lễ tân"
+                    className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${roleFieldErrors.name ? "border-rose-400" : "border-slate-200"}`}
+                  />
+                  {roleFieldErrors.name && <span id="role-name-error" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.name}</span>}
+                </label>
+                <label className="mt-3 block text-sm font-semibold text-slate-700">
+                  Mô tả <span aria-hidden="true" className="text-rose-600">*</span>
+                  <textarea
+                    value={roleDescription}
+                    aria-invalid={Boolean(roleFieldErrors.description)}
+                    aria-describedby={roleFieldErrors.description ? "role-description-error" : undefined}
+                    onChange={(event) => {
+                      setRoleDescription(event.target.value);
+                      setRoleFieldErrors((current) => ({ ...current, description: "" }));
+                      setRoleError("");
+                    }}
+                    rows={3}
+                    placeholder="Mô tả trách nhiệm của role"
+                    className={`mt-1.5 w-full rounded-lg border px-3 py-2 text-sm font-normal outline-none focus:border-blue-400 ${roleFieldErrors.description ? "border-rose-400" : "border-slate-200"}`}
+                  />
+                  {roleFieldErrors.description && <span id="role-description-error" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.description}</span>}
+                </label>
+                {roleError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleError}</p>}
+                <button
+                  type="submit"
+                  disabled={isCreatingRole || isRolesLoading || isRolesError}
+                  className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Plus size={16} />
+                  {isCreatingRole ? "Đang tạo..." : "Tạo vai trò"}
+                </button>
+              </form>
+            ) : (
+              <div className="mt-4">
+                <p className="text-sm leading-5 text-slate-600">
+                  File Excel gồm ba cột bắt buộc: mã role, tên role và mô tả. Mã role phải duy nhất và bắt đầu bằng ROLE_.
+                </p>
+                <button
+                  type="button"
+                  onClick={downloadRoleTemplate}
+                  className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <FileSpreadsheet size={16} />
+                  Tải file Excel mẫu
+                </button>
+                <label className="mt-4 block text-sm font-semibold text-slate-700">
+                  Chọn file danh sách vai trò (.xlsx)
+                  <input
+                    ref={roleFileInputRef}
+                    type="file"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    disabled={isImportingRoles || isRolesLoading || isRolesError}
+                    onChange={(event) => void importRoles(event.currentTarget.files?.[0])}
+                    className="mt-1.5 block w-full rounded-lg border border-slate-200 p-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:font-semibold file:text-blue-700"
+                  />
+                </label>
+                {isImportingRoles && <p role="status" className="mt-3 text-sm text-blue-700">Đang kiểm tra và tạo vai trò...</p>}
+                {roleFileError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleFileError}</p>}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {view === "permissions" && (
+        <Dialog
+          open={permissionToAssign !== null}
+          onOpenChange={(open) => {
+            if (!open) setPermissionToAssign(null);
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Gán quyền cho vai trò</DialogTitle>
+              <DialogDescription>
+                Chọn vai trò để gán quyền {permissionToAssign?.name ? <strong>{permissionToAssign.name}</strong> : "này"}.
+              </DialogDescription>
+            </DialogHeader>
+            <label className="block text-sm font-semibold text-slate-700">
+              Vai trò
+              <select
+                value={catalogAssignmentRoleCode}
+                onChange={(event) => setCatalogAssignmentRoleCode(event.target.value)}
+                disabled={roles.length === 0}
+                className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+              >
+                {roles.map((role) => (
+                  <option key={role.code} value={role.code}>{role.name} ({role.code})</option>
+                ))}
+              </select>
+            </label>
+            {isPermissionAlreadyAssignedToSelectedRole && (
+              <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Quyền này đã được gán cho vai trò đang chọn.
+              </p>
+            )}
+            <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+              <p className="text-sm text-slate-700">
+                Chưa có quyền này: <strong>{rolesMissingPermission.length}</strong> / {roles.length} vai trò
+              </p>
+              <button
+                type="button"
+                disabled={!permissionToAssign || rolesMissingPermission.length === 0 || isUpdatingAssignment}
+                onClick={() => {
+                  if (!permissionToAssign || rolesMissingPermission.length === 0) return;
+                  setPermissionActionError("");
+                  setPendingBulkPermissionAssignment({
+                    permission: permissionToAssign,
+                    roleCodes: rolesMissingPermission.map((role) => role.code),
+                  });
+                  setPermissionToAssign(null);
+                }}
+                className="mt-2 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Gán cho tất cả vai trò còn thiếu
+              </button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPermissionToAssign(null)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={!catalogAssignmentRoleCode || roles.length === 0 || isUpdatingAssignment || isPermissionAlreadyAssignedToSelectedRole}
+                onClick={() => {
+                  if (!permissionToAssign) return;
+                  setPendingPermissionChange({
+                    roleCode: catalogAssignmentRoleCode,
+                    permission: { ...permissionToAssign, granted: false },
+                  });
+                  setPermissionToAssign(null);
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Tiếp tục
+              </button>
+            </div>
           </DialogContent>
         </Dialog>
       )}
@@ -784,8 +1447,77 @@ export default function SuperAdminRolePermissionsPanel() {
         </DialogContent>
       </Dialog>
 
-      {activeStep === "permissions" && (
+      <Dialog
+        open={pendingBulkPermissionAssignment !== null}
+        onOpenChange={(open) => {
+          if (!open && !isConfirmingBulkAssignment) {
+            setPendingBulkPermissionAssignment(null);
+            setPermissionActionError("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Xác nhận gán quyền hàng loạt</DialogTitle>
+            <DialogDescription>
+              {pendingBulkPermissionAssignment && (
+                <>
+                  Gán quyền <strong>{pendingBulkPermissionAssignment.permission.name}</strong> (
+                  {pendingBulkPermissionAssignment.permission.code}) cho{" "}
+                  <strong>{pendingBulkPermissionAssignment.roleCodes.length} vai trò chưa có quyền này</strong>.
+                  Chỉ cần xác nhận một lần để áp dụng cho toàn bộ danh sách bên dưới.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {pendingBulkPermissionAssignment && (
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 p-3 text-sm text-slate-600">
+              {pendingBulkPermissionAssignment.roleCodes.map((roleCode) => {
+                const role = roles.find((item) => item.code === roleCode);
+                return <div key={roleCode}>{role?.name ?? roleCode} ({roleCode})</div>;
+              })}
+            </div>
+          )}
+          {permissionActionError && (
+            <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
+              {permissionActionError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPendingBulkPermissionAssignment(null);
+                setPermissionActionError("");
+              }}
+              disabled={isConfirmingBulkAssignment}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmBulkPermissionAssignment()}
+              disabled={isConfirmingBulkAssignment || !pendingBulkPermissionAssignment?.roleCodes.length}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isConfirmingBulkAssignment
+                ? "Đang gán..."
+                : `Gán cho tất cả (${pendingBulkPermissionAssignment?.roleCodes.length ?? 0})`}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {view === "permissions" && activeStep === "permissions" && (
         <div className="space-y-5 p-4 sm:p-5">
+          <button
+            type="button"
+            onClick={() => navigateToStep("catalog")}
+            className="text-sm font-semibold text-blue-700 hover:underline"
+          >
+            ← Quay lại danh sách quyền
+          </button>
           <section className="mb-5 rounded-xl border border-slate-200 p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1030,15 +1762,13 @@ export default function SuperAdminRolePermissionsPanel() {
                       <td className="px-2 py-2">Xem đặt phòng</td>
                       <td className="px-2 py-2">Xem danh sách đặt phòng</td>
                       <td className="px-2 py-2">Đặt phòng</td>
-                      <td className="px-2 py-2">Có</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <p className="mt-3 text-xs leading-5 text-slate-500">
-                Chọn role bằng dropdown. Mã, tên, mô tả và danh mục quyền được nhập thủ công. Có thể dùng Có/Không,
-                Yes/No hoặc True/False. Một quyền được cấp khi giá trị là Có;
-                dòng Không sẽ bỏ quyền đó khỏi role.
+                Chọn role bằng dropdown. Mã, tên, mô tả và danh mục quyền được nhập thủ công.
+                Mỗi dòng hợp lệ sẽ thêm quyền đó cho role đã chọn.
               </p>
             </div>
           </div>
@@ -1057,8 +1787,15 @@ export default function SuperAdminRolePermissionsPanel() {
         </div>
       )}
 
-      {activeStep === "overview" && (
+      {view === "permissions" && activeStep === "overview" && (
         <div className="p-4 sm:p-5">
+          <button
+            type="button"
+            onClick={() => navigateToStep("catalog")}
+            className="mb-4 text-sm font-semibold text-blue-700 hover:underline"
+          >
+            ← Quay lại danh sách quyền
+          </button>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-bold text-slate-900">Bản tổng quan role và quyền</h3>
