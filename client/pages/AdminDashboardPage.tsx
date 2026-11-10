@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   BarChart3,
   Building2,
   CalendarDays,
   CheckCheck,
+  Check,
+  Columns3,
   ConciergeBell,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   CircleUserRound,
   Eye,
   LayoutDashboard,
@@ -17,6 +20,7 @@ import {
   MapPin,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   Plus,
   Pencil,
   FileSpreadsheet,
@@ -40,7 +44,6 @@ import {
   isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
-import { uploadProvinceBackgroundToCloudinary } from "../services/cloudinaryUploadApi";
 import {
   useGetNotificationsQuery,
   useGetNotificationSummaryQuery,
@@ -50,13 +53,9 @@ import {
 } from "../services/notificationApi";
 import {
   useCreateSuperAdminBranchMutation,
-  useCreateSuperAdminProvinceMutation,
   useGetSuperAdminBranchDetailsQuery,
   useGetSuperAdminBranchesQuery,
-  useGetSuperAdminBranchesByProvinceQuery,
-  useGetSuperAdminProvincesQuery,
   useSaveSuperAdminBranchRoomPoliciesMutation,
-  useUpdateSuperAdminProvinceBackgroundMutation,
   type SuperAdminRoomPolicy,
   type SuperAdminBranch,
   type SuperAdminBranchDetails,
@@ -87,18 +86,29 @@ import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } f
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
 import SuperAdminResourceStatsPanel from "../components/SuperAdminResourceStatsPanel";
+import SuperAdminProvinceMapPanel from "../components/SuperAdminProvinceMapPanel";
 import SuperAdminAmenitiesPanel from "../components/SuperAdminAmenitiesPanel";
+import ListPagination from "../components/ListPagination";
 import CatalogEntryDialog, { type CatalogEntryMode } from "../components/CatalogEntryDialog";
 import PromotionWorkspace from "./PromotionWorkspace";
 import ServiceWorkspace from "./ServiceWorkspace";
 import SuperAdminProfileSettings from "../components/SuperAdminProfileSettings";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { VIETNAM_PROVINCES } from "../lib/vietnamProvinces";
 
 type AdminSection =
   | "overview"
   | "profile"
   | "notifications"
   | "branches"
-  | "provinces"
   | "amenities"
   | "bed-types"
   | "permissions"
@@ -116,9 +126,11 @@ type AdminNotification = {
   description: string;
   occurredAt: Date;
   read: boolean;
-  category: "booking" | "room" | "service" | "staff" | "promotion" | "other";
+  category: "booking" | "room" | "floor" | "service" | "staff" | "promotion" | "other";
   type: NotificationRecord["type"];
   hotelId: number | null;
+  referenceType: string | null;
+  referenceId: string | null;
 };
 
 type NotificationCategoryFilter = "all" | AdminNotification["category"];
@@ -126,72 +138,19 @@ type NotificationCategoryFilter = "all" | AdminNotification["category"];
 const formatMoney = (amount: number) => `${amount.toLocaleString("vi-VN")} đ`;
 
 const getNotificationCategory = (type: NotificationRecord["type"]): AdminNotification["category"] => {
-  if (type.startsWith("BOOKING_")) return "booking";
+  if (type.startsWith("BOOKING_") || type === "PAYMENT_RECEIVED") return "booking";
+  if (type.startsWith("FLOOR_")) return "floor";
   if (
     type.startsWith("ROOM_")
     || type.startsWith("BUILDING_")
-    || type.startsWith("FLOOR_")
+    || type.startsWith("ROOM_POLICY_")
+    || type.startsWith("HOUSEKEEPING_TASK_")
   ) return "room";
   if (type.startsWith("SERVICE_")) return "service";
   if (type.startsWith("EMPLOYEE_")) return "staff";
   if (type.startsWith("PROMOTION_")) return "promotion";
   return "other";
 };
-
-const provinceColorThemes = [
-  {
-    sidebarActive: "bg-sky-500/15 text-sky-300",
-    sidebarHover: "hover:bg-sky-500/10 hover:text-sky-200",
-    pillActive: "bg-sky-100 text-sky-700",
-    pillIdle: "bg-sky-50 text-sky-700 hover:bg-sky-100",
-    card: "border-sky-100 bg-sky-50/70 hover:border-sky-200",
-    icon: "bg-sky-100 text-sky-700",
-    badge: "bg-sky-100 text-sky-700",
-    button: "border-sky-200 text-sky-700 hover:bg-sky-100",
-  },
-  {
-    sidebarActive: "bg-violet-500/15 text-violet-300",
-    sidebarHover: "hover:bg-violet-500/10 hover:text-violet-200",
-    pillActive: "bg-violet-100 text-violet-700",
-    pillIdle: "bg-violet-50 text-violet-700 hover:bg-violet-100",
-    card: "border-violet-100 bg-violet-50/70 hover:border-violet-200",
-    icon: "bg-violet-100 text-violet-700",
-    badge: "bg-violet-100 text-violet-700",
-    button: "border-violet-200 text-violet-700 hover:bg-violet-100",
-  },
-  {
-    sidebarActive: "bg-emerald-500/15 text-emerald-300",
-    sidebarHover: "hover:bg-emerald-500/10 hover:text-emerald-200",
-    pillActive: "bg-emerald-100 text-emerald-700",
-    pillIdle: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
-    card: "border-emerald-100 bg-emerald-50/70 hover:border-emerald-200",
-    icon: "bg-emerald-100 text-emerald-700",
-    badge: "bg-emerald-100 text-emerald-700",
-    button: "border-emerald-200 text-emerald-700 hover:bg-emerald-100",
-  },
-  {
-    sidebarActive: "bg-amber-500/15 text-amber-300",
-    sidebarHover: "hover:bg-amber-500/10 hover:text-amber-200",
-    pillActive: "bg-amber-100 text-amber-800",
-    pillIdle: "bg-amber-50 text-amber-800 hover:bg-amber-100",
-    card: "border-amber-100 bg-amber-50/70 hover:border-amber-200",
-    icon: "bg-amber-100 text-amber-700",
-    badge: "bg-amber-100 text-amber-700",
-    button: "border-amber-200 text-amber-700 hover:bg-amber-100",
-  },
-  {
-    sidebarActive: "bg-rose-500/15 text-rose-300",
-    sidebarHover: "hover:bg-rose-500/10 hover:text-rose-200",
-    pillActive: "bg-rose-100 text-rose-700",
-    pillIdle: "bg-rose-50 text-rose-700 hover:bg-rose-100",
-    card: "border-rose-100 bg-rose-50/70 hover:border-rose-200",
-    icon: "bg-rose-100 text-rose-700",
-    badge: "bg-rose-100 text-rose-700",
-    button: "border-rose-200 text-rose-700 hover:bg-rose-100",
-  },
-] as const;
-
-const DEFAULT_PROVINCE_COVER = "/province-covers/city.svg";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error) return error.message;
@@ -240,6 +199,43 @@ const initialBranchForm = {
   managerAccount: { fullName: "", email: "", phone: "", password: "" },
 };
 
+type BranchFormField =
+  | "name"
+  | "phone"
+  | "address"
+  | "provinceName"
+  | "adminUsername"
+  | "adminPassword"
+  | "managerFullName"
+  | "managerEmail"
+  | "managerPhone"
+  | "managerPassword";
+
+const branchAdminErrorKeys: Record<keyof CreateBranchAdminAccountRequest, BranchFormField> = {
+  username: "adminUsername",
+  password: "adminPassword",
+};
+
+const branchManagerErrorKeys: Record<keyof CreateBranchAccountRequest, BranchFormField> = {
+  fullName: "managerFullName",
+  email: "managerEmail",
+  phone: "managerPhone",
+  password: "managerPassword",
+};
+
+const branchFieldErrorIds: Record<BranchFormField, string> = {
+  name: "branch-name-error",
+  phone: "branch-phone-error",
+  address: "branch-address-error",
+  provinceName: "branch-province-error",
+  adminUsername: "admin-username-error",
+  adminPassword: "admin-password-error",
+  managerFullName: "manager-fullname-error",
+  managerEmail: "manager-email-error",
+  managerPhone: "manager-phone-error",
+  managerPassword: "manager-password-error",
+};
+
 const initialBedTypeForm: BedTypeRequest = {
   name: "",
   description: "",
@@ -281,32 +277,32 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const dispatch = useAppDispatch();
   const { fullName, email } = useAppSelector((state) => state.auth);
   const [section, setSection] = useState<AdminSection>("overview");
-  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isCatalogMenuOpen, setIsCatalogMenuOpen] = useState(false);
   const [isSalesMenuOpen, setIsSalesMenuOpen] = useState(false);
   const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [expandedBranchGroup, setExpandedBranchGroup] = useState<string | null>(null);
   const [isBranchFormOpen, setIsBranchFormOpen] = useState(false);
-  const [isProvinceFormOpen, setIsProvinceFormOpen] = useState(false);
   const [branchForm, setBranchForm] = useState(initialBranchForm);
+  const [branchFieldErrors, setBranchFieldErrors] = useState<Partial<Record<BranchFormField, string>>>({});
   const [branchFormError, setBranchFormError] = useState("");
-  const [provinceName, setProvinceName] = useState("");
-  const [provinceBackgroundFile, setProvinceBackgroundFile] = useState<File | null>(null);
-  const [provinceFormError, setProvinceFormError] = useState("");
-  const [isUploadingProvinceBackground, setIsUploadingProvinceBackground] = useState(false);
-  const [uploadingProvinceId, setUploadingProvinceId] = useState<string | null>(null);
-  const [provinceCardUploadError, setProvinceCardUploadError] = useState("");
+  const [isProvincePickerOpen, setIsProvincePickerOpen] = useState(false);
+  const [provinceSearch, setProvinceSearch] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
+  const [branchDetailsReturnSection, setBranchDetailsReturnSection] = useState<AdminSection>("branches");
   const [branchDetailInitialCategory, setBranchDetailInitialCategory] = useState<BranchDetailCategory>("employees");
-  const [selectedProvinceId, setSelectedProvinceId] = useState("");
+  const [highlightedDetailReference, setHighlightedDetailReference] = useState<{
+    category: BranchDetailCategory;
+    id: string;
+  } | null>(null);
   const [branchRoomPolicies, setBranchRoomPolicies] = useState<SuperAdminRoomPolicy[]>([]);
   const [branchPolicyFileName, setBranchPolicyFileName] = useState("");
   const [branchPolicyError, setBranchPolicyError] = useState("");
   const [isParsingBranchPolicy, setIsParsingBranchPolicy] = useState(false);
   const [notificationCategoryFilter, setNotificationCategoryFilter] = useState<NotificationCategoryFilter>("all");
   const [notificationBranchFilter, setNotificationBranchFilter] = useState("all");
+  const [notificationListPage, setNotificationListPage] = useState(1);
+  const [notificationPageSize, setNotificationPageSize] = useState(10);
   const [isNotificationSoundEnabled, setIsNotificationSoundEnabled] = useState(false);
   const recentRoomCreateEventsRef = useRef(new Map<string, number>());
   const notificationSoundEnabledRef = useRef(false);
@@ -345,6 +341,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       category: getNotificationCategory(notification.type),
       type: notification.type,
       hotelId: notification.hotelId,
+      referenceType: notification.referenceType,
+      referenceId: notification.referenceId,
     })),
     [notificationPageResponse],
   );
@@ -618,19 +616,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     isError: isBranchesError,
     refetch: refetchBranches,
   } = useGetSuperAdminBranchesQuery();
-  const {
-    data: provinces = [],
-    isLoading: isProvincesLoading,
-    isError: isProvincesError,
-  } = useGetSuperAdminProvincesQuery();
-  const {
-    data: branchesByProvince = [],
-    isLoading: isProvinceBranchesLoading,
-    isError: isProvinceBranchesError,
-  } = useGetSuperAdminBranchesByProvinceQuery(selectedProvinceId, { skip: !selectedProvinceId });
   const [createBranch, { isLoading: isCreatingBranch }] = useCreateSuperAdminBranchMutation();
-  const [createProvince, { isLoading: isCreatingProvince }] = useCreateSuperAdminProvinceMutation();
-  const [updateProvinceBackground] = useUpdateSuperAdminProvinceBackgroundMutation();
   const { data: bedTypes = [], isLoading: isBedTypesLoading, isError: isBedTypesError } = useGetAllBedTypesQuery();
   const [createBedType, { isLoading: isCreatingBedType }] = useCreateBedTypeMutation();
   const [updateBedType, { isLoading: isUpdatingBedType }] = useUpdateBedTypeMutation();
@@ -653,26 +639,112 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     () => branches.reduce((sum, branch) => sum + (Number(branch.bookingCount) || 0), 0),
     [branches],
   );
-  const provinceDashboardBranches =
-    section === "branches" && selectedProvinceId ? branchesByProvince : branches;
-  const isProvinceDashboardLoading =
-    section === "branches" && selectedProvinceId ? isProvinceBranchesLoading : isBranchesLoading;
   const dashboardRevenue = useMemo(
-    () => provinceDashboardBranches.reduce((sum, branch) => sum + (Number(branch.totalRevenue) || 0), 0),
-    [provinceDashboardBranches],
+    () => branches.reduce((sum, branch) => sum + (Number(branch.totalRevenue) || 0), 0),
+    [branches],
   );
   const dashboardEmployees = useMemo(
-    () => provinceDashboardBranches.reduce((sum, branch) => sum + (Number(branch.employeeCount) || 0), 0),
-    [provinceDashboardBranches],
+    () => branches.reduce((sum, branch) => sum + (Number(branch.employeeCount) || 0), 0),
+    [branches],
   );
   const dashboardBookings = useMemo(
-    () => provinceDashboardBranches.reduce((sum, branch) => sum + (Number(branch.bookingCount) || 0), 0),
-    [provinceDashboardBranches],
+    () => branches.reduce((sum, branch) => sum + (Number(branch.bookingCount) || 0), 0),
+    [branches],
   );
+  const selectedBranchSummary = selectedBranchId === null
+    ? null
+    : branchDetails?.branch ?? branches.find((branch) => branch.id === selectedBranchId) ?? null;
+  const summaryCards = selectedBranchSummary
+    ? [
+        {
+          label: "Nhân sự chi nhánh",
+          value: selectedBranchSummary.employeeCount.toLocaleString("vi-VN"),
+          icon: Users,
+          cardClass: "border-indigo-200",
+          headerClass: "border-indigo-200 bg-indigo-100 text-indigo-800",
+        },
+        {
+          label: "Booking chi nhánh",
+          value: selectedBranchSummary.bookingCount.toLocaleString("vi-VN"),
+          icon: CalendarDays,
+          cardClass: "border-violet-200",
+          headerClass: "border-violet-200 bg-violet-100 text-violet-800",
+        },
+        {
+          label: "Doanh thu chi nhánh",
+          value: formatMoney(Number(selectedBranchSummary.totalRevenue) || 0),
+          icon: Wallet,
+          cardClass: "border-emerald-200",
+          headerClass: "border-emerald-200 bg-emerald-100 text-emerald-800",
+        },
+        {
+          label: "Phòng chi nhánh",
+          value: isBranchDetailsLoading
+            ? "..."
+            : isBranchDetailsError
+              ? "—"
+              : (branchDetails?.rooms.length ?? 0).toLocaleString("vi-VN"),
+          icon: Building2,
+          cardClass: "border-blue-200",
+          headerClass: "border-blue-200 bg-blue-100 text-blue-800",
+        },
+      ]
+    : [
+        {
+          label: "Chi nhánh",
+          value: isBranchesLoading ? "..." : branches.length.toLocaleString("vi-VN"),
+          icon: Building2,
+          cardClass: "border-blue-200",
+          headerClass: "border-blue-200 bg-blue-100 text-blue-800",
+        },
+        {
+          label: "Nhân sự toàn hệ thống",
+          value: isBranchesLoading ? "..." : totalEmployees.toLocaleString("vi-VN"),
+          icon: Users,
+          cardClass: "border-indigo-200",
+          headerClass: "border-indigo-200 bg-indigo-100 text-indigo-800",
+        },
+        {
+          label: "Tổng lượt đặt phòng",
+          value: isBranchesLoading ? "..." : totalBookings.toLocaleString("vi-VN"),
+          icon: CalendarDays,
+          cardClass: "border-violet-200",
+          headerClass: "border-violet-200 bg-violet-100 text-violet-800",
+        },
+        {
+          label: "Tổng doanh thu đã thu",
+          value: isBranchesLoading ? "..." : formatMoney(totalRevenue),
+          icon: Wallet,
+          cardClass: "border-emerald-200",
+          headerClass: "border-emerald-200 bg-emerald-100 text-emerald-800",
+        },
+      ];
 
   const submitBranch = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBranchFormError("");
+    const errors: Partial<Record<BranchFormField, string>> = {};
+    if (!branchForm.name.trim()) errors.name = "Vui lòng nhập tên chi nhánh.";
+    if (!branchForm.phone.trim()) errors.phone = "Vui lòng nhập số điện thoại chi nhánh.";
+    else if (!/^(0\d{9}|\+84\d{9})$/.test(branchForm.phone.trim().replace(/[\s().-]/g, ""))) {
+      errors.phone = "Số điện thoại phải có 10 số và bắt đầu bằng 0 hoặc mã +84.";
+    }
+    if (!branchForm.address.trim()) errors.address = "Vui lòng nhập địa chỉ.";
+    if (!branchForm.provinceName) errors.provinceName = "Vui lòng chọn tỉnh/thành.";
+    if (!branchForm.adminAccount.username.trim()) errors.adminUsername = "Vui lòng nhập tên tài khoản admin.";
+    if (!branchForm.adminAccount.password) errors.adminPassword = "Vui lòng nhập mật khẩu admin.";
+    if (!branchForm.managerAccount.fullName.trim()) errors.managerFullName = "Vui lòng nhập họ tên quản lý.";
+    if (!branchForm.managerAccount.email.trim()) errors.managerEmail = "Vui lòng nhập email quản lý.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(branchForm.managerAccount.email.trim())) {
+      errors.managerEmail = "Email không đúng định dạng.";
+    }
+    if (!branchForm.managerAccount.phone.trim()) errors.managerPhone = "Vui lòng nhập số điện thoại quản lý.";
+    else if (!/^(0\d{9}|\+84\d{9})$/.test(branchForm.managerAccount.phone.trim().replace(/[\s().-]/g, ""))) {
+      errors.managerPhone = "Số điện thoại phải có 10 số và bắt đầu bằng 0 hoặc mã +84.";
+    }
+    if (!branchForm.managerAccount.password) errors.managerPassword = "Vui lòng nhập mật khẩu quản lý.";
+    setBranchFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     if (isParsingBranchPolicy) {
       setBranchPolicyError(localizedText("Đang đọc file Excel, vui lòng đợi đọc xong rồi tạo chi nhánh.", "The Excel file is still being processed. Wait for it to finish before creating the branch."));
       return;
@@ -686,6 +758,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     try {
       await createBranch({ ...branchForm, roomPolicies: branchRoomPolicies }).unwrap();
       setBranchForm(initialBranchForm);
+      setBranchFieldErrors({});
       setBranchRoomPolicies([]);
       setBranchPolicyFileName("");
       setBranchPolicyError("");
@@ -693,42 +766,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       setIsBranchFormOpen(false);
     } catch (error) {
       setBranchFormError(getErrorMessage(error, localizedText("Không thể tạo chi nhánh. Vui lòng thử lại.", "Could not create the branch. Please try again.")));
-    }
-  };
-
-  const submitProvince = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setProvinceFormError("");
-    if (!provinceBackgroundFile) {
-      setProvinceFormError(localizedText("Vui lòng chọn ảnh nền cho tỉnh/thành.", "Select a background image for the province."));
-      return;
-    }
-    setIsUploadingProvinceBackground(true);
-    try {
-      const backgroundImageUrl = await uploadProvinceBackgroundToCloudinary(provinceBackgroundFile, provinceName);
-      const province = await createProvince({ name: provinceName.trim(), backgroundImageUrl }).unwrap();
-      setBranchForm((current) => ({ ...current, provinceName: province.name }));
-      setProvinceName("");
-      setProvinceBackgroundFile(null);
-      setIsProvinceFormOpen(false);
-    } catch (error) {
-      setProvinceFormError(getErrorMessage(error, localizedText("Không thể tải ảnh hoặc thêm tỉnh/thành. Vui lòng thử lại.", "Could not upload the image or add the province. Please try again.")));
-    } finally {
-      setIsUploadingProvinceBackground(false);
-    }
-  };
-
-  const replaceProvinceBackground = async (provinceId: string, provinceName: string, file?: File) => {
-    if (!file) return;
-    setUploadingProvinceId(provinceId);
-    setProvinceCardUploadError("");
-    try {
-      const backgroundImageUrl = await uploadProvinceBackgroundToCloudinary(file, provinceName);
-      await updateProvinceBackground({ provinceId, backgroundImageUrl }).unwrap();
-    } catch (error) {
-      setProvinceCardUploadError(getErrorMessage(error, localizedText(`Không thể cập nhật ảnh nền cho ${provinceName}.`, `Could not update the background image for ${provinceName}.`)));
-    } finally {
-      setUploadingProvinceId(null);
     }
   };
 
@@ -773,7 +810,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "overview", label: "Tổng quan", icon: LayoutDashboard },
     { id: "notifications", label: "Thông báo", icon: Bell },
     { id: "branches", label: "Quản lý chi nhánh", icon: Building2 },
-    { id: "provinces", label: "Quản lý tỉnh/thành", icon: MapPin },
     { id: "permissions", label: "Quản lý Role và quyền", icon: ShieldCheck },
     { id: "resource-stats", label: "Thống kê", icon: BarChart3 },
     { id: "profile", label: "Cá nhân", icon: CircleUserRound },
@@ -788,7 +824,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     setSection("staff-accounts");
     setIsAccountMenuOpen(true);
     setIsRoleMenuOpen(false);
-    setIsBranchMenuOpen(false);
     setIsCatalogMenuOpen(false);
     setIsSalesMenuOpen(false);
     setSelectedBranchId(null);
@@ -798,7 +833,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     setSection("roles");
     setIsRoleMenuOpen(true);
     setIsAccountMenuOpen(false);
-    setIsBranchMenuOpen(false);
     setIsCatalogMenuOpen(false);
     setIsSalesMenuOpen(false);
     setSelectedBranchId(null);
@@ -809,72 +843,64 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     setIsCatalogMenuOpen(true);
     setIsAccountMenuOpen(false);
     setIsRoleMenuOpen(false);
-    setIsBranchMenuOpen(false);
     setIsSalesMenuOpen(false);
     setSelectedBranchId(null);
   };
 
-  const selectProvince = (provinceId: string) => {
-    setSelectedProvinceId(provinceId);
-    setSection("branches");
-    setIsBranchMenuOpen(true);
-  };
-
-  const toggleProvinceGroup = (provinceId: string) => {
-    selectProvince(provinceId);
-    setExpandedBranchGroup((current) => current === provinceId ? null : provinceId);
-  };
-
   const openBranchDetails = (branch: SuperAdminBranch) => {
-    setSelectedProvinceId(provinces.find((province) => province.name === branch.provinceName)?.id ?? "");
     setSection("branches");
-    setIsBranchMenuOpen(true);
+    setBranchDetailsReturnSection("branches");
     setSelectedBranchId(branch.id);
+    setHighlightedDetailReference(null);
     setBranchDetailInitialCategory("employees");
   };
 
   const openBranchDetailsById = (
     branchId: number,
     initialCategory: BranchDetailCategory = "employees",
+    returnSection: AdminSection = "branches",
   ) => {
+    if (returnSection !== "notifications") setHighlightedDetailReference(null);
     const branch = branches.find((item) => item.id === branchId);
     if (branch) {
       openBranchDetails(branch);
+      setBranchDetailsReturnSection(returnSection);
       setBranchDetailInitialCategory(initialCategory);
       return;
     }
-    setSelectedProvinceId("");
     setSection("branches");
-    setIsBranchMenuOpen(true);
+    setBranchDetailsReturnSection(returnSection);
     setSelectedBranchId(branchId);
     setBranchDetailInitialCategory(initialCategory);
   };
-  const getNotificationDetailCategory = (notification: AdminNotification): BranchDetailCategory => {
-    if (notification.type.startsWith("BOOKING_")) return "bookings";
+  const getNotificationDetailCategory = (notification: AdminNotification): BranchDetailCategory | null => {
+    if (notification.type.startsWith("BOOKING_") || notification.type === "PAYMENT_RECEIVED") return "bookings";
     if (notification.type.startsWith("SERVICE_")) return "services";
     if (notification.type.startsWith("PROMOTION_")) return "promotions";
     if (notification.type.startsWith("EMPLOYEE_")) return "employees";
     if (notification.type.startsWith("ROOM_POLICY_")) return "roomPolicies";
     if (notification.type.startsWith("BUILDING_")) return "buildings";
     if (notification.type.startsWith("FLOOR_")) return "floors";
-    return "rooms";
-  };
-  const getNotificationDetailLabel = (notification: AdminNotification) => {
-    const category = getNotificationDetailCategory(notification);
-    return ({
-      bookings: "booking",
-      services: "dịch vụ",
-      promotions: "khuyến mãi",
-      employees: "nhân viên",
-      roomPolicies: "cấu hình loại phòng",
-      buildings: "tòa nhà",
-      floors: "tầng",
-      rooms: "phòng",
-    })[category];
+    if (notification.type.startsWith("ROOM_")) return "rooms";
+
+    const referenceType = notification.referenceType?.trim().toLocaleUpperCase().replace(/[\s-]+/g, "_");
+    const referenceCategories: Record<string, BranchDetailCategory> = {
+      BOOKING: "bookings",
+      BUILDING: "buildings",
+      EMPLOYEE: "employees",
+      FLOOR: "floors",
+      PROMOTION: "promotions",
+      ROOM: "rooms",
+      ROOM_POLICY: "roomPolicies",
+      SERVICE: "services",
+    };
+    return referenceType ? referenceCategories[referenceType] ?? null : null;
   };
   const openNotificationDetails = (notification: AdminNotification) => {
-    if (notification.hotelId === null) return;
-    openBranchDetailsById(notification.hotelId, getNotificationDetailCategory(notification));
+    const category = getNotificationDetailCategory(notification);
+    if (notification.hotelId === null || category === null) return;
+    openBranchDetailsById(notification.hotelId, category, "notifications");
+    setHighlightedDetailReference(notification.referenceId ? { category, id: notification.referenceId } : null);
   };
 
   const handleMarkNotificationRead = (notificationId: number) => {
@@ -890,25 +916,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     });
   };
 
-  const getBranchesForProvince = (provinceId: string) => {
-    if (!provinceId) return branches;
-    const province = provinces.find((item) => item.id === provinceId);
-    return branches.filter((branch) => branch.provinceName === province?.name);
-  };
-
-  const getProvinceTheme = (provinceId: string) => {
-    const provinceIndex = provinces.findIndex((province) => province.id === provinceId);
-    return provinceColorThemes[(provinceIndex < 0 ? 0 : provinceIndex) % provinceColorThemes.length];
-  };
-
-  const getProvinceCoverImage = (provinceId: string) => {
-    const province = provinces.find((item) => item.id === provinceId);
-    return province?.backgroundImageUrl || DEFAULT_PROVINCE_COVER;
-  };
   const notificationCategoryLabels: Record<NotificationCategoryFilter, string> = {
     all: "Tất cả",
     booking: "Booking",
     room: "Phòng",
+    floor: "Tầng",
     service: "Dịch vụ",
     staff: "Nhân viên",
     promotion: "Khuyến mãi",
@@ -934,6 +946,13 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       badge: "bg-sky-600 text-white",
       tabActive: "bg-sky-600 text-white ring-sky-200",
       tabIdle: "bg-sky-50 text-sky-700 hover:bg-sky-100",
+    },
+    floor: {
+      card: "border-indigo-600 bg-indigo-50/50",
+      icon: "bg-indigo-600 text-white",
+      badge: "bg-indigo-600 text-white",
+      tabActive: "bg-indigo-600 text-white ring-indigo-200",
+      tabIdle: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
     },
     service: {
       card: "border-amber-500 bg-amber-50/50",
@@ -975,10 +994,29 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     return Object.entries(summary.totalByType).reduce((count, [type, total]) =>
       getNotificationCategory(type as NotificationRecord["type"]) === category ? count + total : count, 0);
   };
+  const selectedNotificationBranch = branches.find((branch) => String(branch.id) === notificationBranchFilter);
+  const selectedNotificationBranchCounts = selectedNotificationBranch
+    ? allNotificationsSummaryResponse?.result.branches.find((item) => item.hotelId === selectedNotificationBranch.id)
+    : undefined;
+  const selectedNotificationBranchLabel = selectedNotificationBranch
+    ? `${selectedNotificationBranch.name} (${selectedNotificationBranchCounts?.readCount ?? 0} đã đọc / ${selectedNotificationBranchCounts?.unreadCount ?? 0} chưa đọc)`
+    : "Tất cả chi nhánh";
   const filteredNotifications = notifications.filter((notification) =>
     (notificationCategoryFilter === "all" || notification.category === notificationCategoryFilter)
     && (notificationBranchFilter === "all" || String(notification.hotelId ?? "") === notificationBranchFilter),
   );
+  const notificationTotalPages = Math.max(1, Math.ceil(filteredNotifications.length / notificationPageSize));
+  const safeNotificationPage = Math.min(notificationListPage, notificationTotalPages);
+  const paginatedNotifications = filteredNotifications.slice(
+    (safeNotificationPage - 1) * notificationPageSize,
+    safeNotificationPage * notificationPageSize,
+  );
+  useEffect(() => {
+    setNotificationListPage(1);
+  }, [notificationCategoryFilter, notificationBranchFilter]);
+  useEffect(() => {
+    if (notificationListPage > notificationTotalPages) setNotificationListPage(notificationTotalPages);
+  }, [notificationListPage, notificationTotalPages]);
   const getNotificationBranch = (notification: AdminNotification) =>
     notification.hotelId === null
       ? undefined
@@ -996,9 +1034,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       setIsRoleMenuOpen(false);
       setIsCatalogMenuOpen(false);
       setIsSalesMenuOpen(false);
-      setSelectedProvinceId("");
       setSection("branches");
-      setIsBranchMenuOpen(true);
       setSelectedBranchId(null);
       return;
     }
@@ -1023,9 +1059,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       setIsSalesMenuOpen(false);
     }
     setSection(id);
-    setIsBranchMenuOpen(false);
     setSelectedBranchId(null);
   };
+
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [section]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
@@ -1177,29 +1216,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   )}
                 </div>
               )}
-              {id === "branches" ? (
-                <div className={`flex w-full items-center rounded-xl text-sm font-semibold transition ${
-                  section === id ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                }`}>
-                  <button
-                    type="button"
-                    onClick={() => handleSectionSelect(id)}
-                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
-                  >
-                    <Icon size={18} />
-                    <span className="flex-1">{label}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsBranchMenuOpen((isOpen) => !isOpen)}
-                    aria-label={isBranchMenuOpen ? "Thu gọn menu chi nhánh" : "Mở menu chi nhánh"}
-                    aria-expanded={isBranchMenuOpen}
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-white/10"
-                  >
-                    {isBranchMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </button>
-                </div>
-              ) : id !== "permissions" && <button
+              {id !== "permissions" && <button
                 type="button"
                 onClick={() => handleSectionSelect(id)}
                 className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
@@ -1214,90 +1231,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   </span>
                 )}
               </button>}
-              {id === "branches" && isBranchMenuOpen && (
-                <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleProvinceGroup("")}
-                    aria-expanded={expandedBranchGroup === ""}
-                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
-                      selectedProvinceId === "" ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                    }`}
-                  >
-                    {expandedBranchGroup === "" ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    <span className="flex-1">Tổng chi nhánh</span>
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs">{branches.length}</span>
-                  </button>
-                  {expandedBranchGroup === "" && (
-                    <div className="ml-3 space-y-1 border-l border-slate-700/80 py-1 pl-3">
-                      {isBranchesLoading ? (
-                        <p className="px-2 py-1.5 text-xs text-slate-500">Đang tải chi nhánh...</p>
-                      ) : isBranchesError ? (
-                        <p className="px-2 py-1.5 text-xs text-rose-300">Không thể tải chi nhánh.</p>
-                      ) : branches.length === 0 ? (
-                        <p className="px-2 py-1.5 text-xs text-slate-500">Chưa có chi nhánh.</p>
-                      ) : branches.map((branch) => (
-                        <button
-                          type="button"
-                          key={branch.id}
-                          onClick={() => openBranchDetails(branch)}
-                          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-400 transition hover:bg-white/5 hover:text-white"
-                          title={branch.name}
-                        >
-                          <Building2 size={13} className="shrink-0 text-blue-300" />
-                          <span className="min-w-0 flex-1 truncate">{branch.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {isProvincesLoading ? (
-                    <p className="px-3 py-2 text-xs text-slate-500">Đang tải tỉnh/thành...</p>
-                  ) : isProvincesError ? (
-                    <p className="px-3 py-2 text-xs text-rose-300">Không thể tải tỉnh/thành.</p>
-                  ) : provinces.map((province) => {
-                    const theme = getProvinceTheme(province.id);
-                    return (
-                    <div key={province.id}>
-                      <button
-                        type="button"
-                        onClick={() => toggleProvinceGroup(province.id)}
-                        aria-expanded={expandedBranchGroup === province.id}
-                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition ${
-                          selectedProvinceId === province.id ? `${theme.sidebarActive} font-semibold` : `text-slate-400 ${theme.sidebarHover}`
-                        }`}
-                      >
-                        {expandedBranchGroup === province.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        <MapPin size={14} className={`shrink-0 ${selectedProvinceId === province.id ? "" : "text-slate-500"}`} />
-                        <span className="min-w-0 flex-1 truncate">{province.name}</span>
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs">{getBranchesForProvince(province.id).length}</span>
-                      </button>
-                      {expandedBranchGroup === province.id && (
-                        <div className="ml-3 space-y-1 border-l border-slate-700/80 py-1 pl-3">
-                          {isBranchesLoading ? (
-                            <p className="px-2 py-1.5 text-xs text-slate-500">Đang tải chi nhánh...</p>
-                          ) : isBranchesError ? (
-                            <p className="px-2 py-1.5 text-xs text-rose-300">Không thể tải chi nhánh.</p>
-                          ) : getBranchesForProvince(province.id).length === 0 ? (
-                            <p className="px-2 py-1.5 text-xs text-slate-500">Chưa có chi nhánh.</p>
-                          ) : getBranchesForProvince(province.id).map((branch) => (
-                            <button
-                              type="button"
-                              key={branch.id}
-                              onClick={() => openBranchDetails(branch)}
-                              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-400 transition hover:bg-white/5 hover:text-white"
-                              title={branch.name}
-                            >
-                              <Building2 size={13} className="shrink-0 text-blue-300" />
-                              <span className="min-w-0 flex-1 truncate">{branch.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           ))}
           <div>
@@ -1387,25 +1320,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           </div>
         </header>
         <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Điều hướng quản trị">
-          {navItems.map(({ id, label, icon: Icon }) => id === "branches" ? (
-            <div key={id} className={`flex shrink-0 items-center rounded-lg text-xs font-semibold ${
-              section === "branches" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-            }`}>
-              <button type="button" onClick={() => handleSectionSelect(id)} className="flex items-center gap-2 py-2 pl-3">
-                <Icon size={15} />
-                {label}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsBranchMenuOpen((isOpen) => !isOpen)}
-                aria-label={isBranchMenuOpen ? "Thu gọn menu chi nhánh" : "Mở menu chi nhánh"}
-                aria-expanded={isBranchMenuOpen}
-                className="grid h-9 w-8 place-items-center rounded-r-lg"
-              >
-                {isBranchMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-            </div>
-          ) : id === "permissions" ? (
+          {navItems.map(({ id, label, icon: Icon }) => id === "permissions" ? (
             <div key={id} className={`flex shrink-0 items-center rounded-lg text-xs font-semibold ${
               isRoleSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
             }`}>
@@ -1564,65 +1479,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             ))}
           </nav>
         )}
-        {isBranchMenuOpen && (
-          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Lọc chi nhánh theo tỉnh/thành">
-            <button
-              type="button"
-              onClick={() => selectProvince("")}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                selectedProvinceId === "" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
-              }`}
-            >
-              Tổng chi nhánh
-            </button>
-            {provinces.map((province) => {
-              const theme = getProvinceTheme(province.id);
-              return (
-              <button
-                type="button"
-                key={province.id}
-                onClick={() => toggleProvinceGroup(province.id)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${selectedProvinceId === province.id ? theme.pillActive : theme.pillIdle}`}
-              >
-                {province.name} · {getBranchesForProvince(province.id).length}
-              </button>
-              );
-            })}
-          </nav>
-        )}
-        {section === "branches" && expandedBranchGroup !== null && (
-          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Chi nhánh">
-            {getBranchesForProvince(expandedBranchGroup).map((branch) => (
-              <button
-                type="button"
-                key={branch.id}
-                onClick={() => openBranchDetails(branch)}
-                className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
-              >
-                <Building2 size={12} className="text-blue-600" />
-                {branch.name}
-              </button>
-            ))}
-          </nav>
-        )}
-
         <div className="relative isolate min-h-[calc(100vh-5rem)]">
-          {section === "branches" && selectedProvinceId && selectedBranchId === null && (
-            <>
-              <img
-                src={getProvinceCoverImage(selectedProvinceId)}
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover opacity-50"
-                onError={(event) => {
-                  if (!event.currentTarget.src.endsWith(DEFAULT_PROVINCE_COVER)) {
-                    event.currentTarget.src = DEFAULT_PROVINCE_COVER;
-                  }
-                }}
-              />
-              <div className="pointer-events-none absolute inset-0 z-0 bg-white/30" />
-            </>
-          )}
           <div className={`relative z-10 pt-4 pb-8 sm:pt-5 sm:pb-10 ${
             section === "resource-stats" && !isSidebarOpen
               ? "w-full max-w-none px-3 sm:px-5"
@@ -1631,22 +1488,28 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           {section === "profile" && <SuperAdminProfileSettings onLogout={onLogout} />}
           {section === "notifications" && (
             <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Thông báo hệ thống</h2>
+                  <h2 className="text-lg font-bold tracking-tight text-slate-900">Thông báo hệ thống</h2>
                   <p className="mt-1 text-sm text-slate-500">
                     Thông báo được lưu lại và đồng bộ realtime giữa các phiên đăng nhập.
                   </p>
-                  <p className="mt-1 text-xs font-medium text-slate-600">
-                    {notificationSummaryResponse?.result.readCount ?? 0} đã đọc ·{" "}
-                    {notificationSummaryResponse?.result.unreadCount ?? 0} chưa đọc
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      <CheckCheck size={13} />
+                      {notificationSummaryResponse?.result.readCount ?? 0} đã đọc
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                      {notificationSummaryResponse?.result.unreadCount ?? 0} chưa đọc
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => void toggleNotificationSound()}
                   aria-pressed={isNotificationSoundEnabled}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                  className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold transition ${
                     isNotificationSoundEnabled
                       ? "border-blue-200 bg-blue-50 text-blue-700"
                       : "border-slate-200 text-slate-700 hover:bg-slate-50"
@@ -1657,50 +1520,56 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 </button>
               </div>
 
-              <div className="mt-5 flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Loại thông báo</span>
-                {(Object.keys(notificationCategoryLabels) as NotificationCategoryFilter[]).map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    aria-pressed={notificationCategoryFilter === category}
-                    onClick={() => setNotificationCategoryFilter(category)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition ${
-                      category === "all"
-                        ? notificationCategoryFilter === category
-                          ? `${allNotificationFilterStyle.active} ring-current/20`
-                          : `${allNotificationFilterStyle.idle} ring-transparent`
-                        : notificationCategoryFilter === category
-                          ? `${notificationCategoryStyles[category].tabActive} ring-current/20`
-                          : `${notificationCategoryStyles[category].tabIdle} ring-transparent`
-                    }`}
-                  >
-                    {notificationCategoryLabels[category]}
-                    <span className={`ml-1.5 inline-flex min-w-5 justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none ${
-                      notificationCategoryFilter === category ? "bg-white/20" : "bg-black/5"
-                    }`}>
-                      {notificationCountForCategory(category)}
-                    </span>
-                  </button>
-                ))}
+              <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/70 p-3 sm:p-4">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
+                  <span className="mr-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Loại thông báo</span>
+                  {(Object.keys(notificationCategoryLabels) as NotificationCategoryFilter[]).map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      aria-pressed={notificationCategoryFilter === category}
+                      onClick={() => setNotificationCategoryFilter(category)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition ${
+                        category === "all"
+                          ? notificationCategoryFilter === category
+                            ? `${allNotificationFilterStyle.active} ring-current/20`
+                            : `${allNotificationFilterStyle.idle} ring-transparent`
+                          : notificationCategoryFilter === category
+                            ? `${notificationCategoryStyles[category].tabActive} ring-current/20`
+                            : `${notificationCategoryStyles[category].tabIdle} ring-transparent`
+                      }`}
+                    >
+                      {notificationCategoryLabels[category]}
+                      <span className={`ml-1.5 inline-flex min-w-5 justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none ${
+                        notificationCategoryFilter === category ? "bg-white/20" : "bg-black/5"
+                      }`}>
+                        {notificationCountForCategory(category)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex flex-col gap-2 border-t border-slate-200/80 pt-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
                   onClick={handleMarkAllNotificationsRead}
                   disabled={(notificationSummaryResponse?.result.unreadCount ?? 0) === 0}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 w-fit items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-700"
                 >
                   <CheckCheck size={15} />
                   Đánh dấu tất cả đã đọc
                 </button>
-                <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-slate-500">
+                <label className="flex w-full items-center gap-2 text-xs font-semibold text-slate-500 sm:w-auto">
+                  <span className="shrink-0">Chi nhánh</span>
                   <select
                     value={notificationBranchFilter}
                     onChange={(event) => setNotificationBranchFilter(event.target.value)}
-                    className="h-9 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-400"
+                    title={selectedNotificationBranchLabel}
+                    className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-[27rem] sm:flex-none"
                   >
                     <option value="all">Tất cả chi nhánh</option>
                     {branches.map((branch) => {
-                      const counts = notificationSummaryResponse?.result.branches.find(
+                      const counts = allNotificationsSummaryResponse?.result.branches.find(
                         (item) => item.hotelId === branch.id,
                       );
                       return (
@@ -1711,6 +1580,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                     })}
                   </select>
                 </label>
+                </div>
               </div>
 
               {isNotificationsError ? (
@@ -1729,7 +1599,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 </div>
               ) : (
                 <div className="mt-5 flex flex-col gap-3">
-                  {filteredNotifications.map((notification) => (
+                  {paginatedNotifications.map((notification) => (
                     <article
                       key={notification.id}
                       className={`grid grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-xl border border-l-4 p-4 shadow-sm transition-shadow hover:shadow-md sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-4 ${notificationCategoryStyles[notification.category].card}`}
@@ -1746,7 +1616,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                           {!notification.read && <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Chưa đọc" />}
                         </div>
                         <p className="mt-1 break-words text-sm leading-6 text-slate-700">{getNotificationDescription(notification)}</p>
-                        {notification.hotelId !== null && (
+                        {notification.hotelId !== null && getNotificationDetailCategory(notification) !== null && (
                           <p className="mt-2 text-xs text-slate-500">
                             Chi nhánh: <span className="font-semibold text-slate-700">{getNotificationBranch(notification)?.name ?? `#${notification.hotelId}`}</span>
                           </p>
@@ -1763,9 +1633,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                           <button
                             type="button"
                             onClick={() => openNotificationDetails(notification)}
-                            className="rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-200 hover:bg-blue-50"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-200 hover:bg-blue-50"
                           >
-                            Xem {getNotificationDetailLabel(notification)}
+                            <Eye size={14} />
+                            Chi tiết
                           </button>
                         )}
                         {!notification.read && (
@@ -1780,6 +1651,14 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       </div>
                     </article>
                   ))}
+                  <ListPagination
+                    totalItems={filteredNotifications.length}
+                    page={safeNotificationPage}
+                    pageSize={notificationPageSize}
+                    mode="table"
+                    onPageChange={setNotificationListPage}
+                    onPageSizeChange={setNotificationPageSize}
+                  />
                 </div>
               )}
             </section>
@@ -1787,7 +1666,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
           {section !== "amenities" &&
             section !== "bed-types" &&
-            section !== "provinces" &&
+            section !== "roles" &&
             section !== "permissions" &&
             section !== "resource-stats" &&
             section !== "notifications" &&
@@ -1804,26 +1683,37 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   <button type="button" onClick={() => void refetchBranches()} className="font-semibold underline">Thử tải lại</button>
                 </div>
               )}
-              <section className="mt-0 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard label={selectedProvinceId && section === "branches" ? "Chi nhánh tại tỉnh/thành" : "Chi nhánh"} value={isProvinceDashboardLoading ? "..." : provinceDashboardBranches.length} icon={Building2} />
-                <SummaryCard label={selectedProvinceId && section === "branches" ? "Nhân sự tại tỉnh/thành" : "Nhân sự toàn hệ thống"} value={isProvinceDashboardLoading ? "..." : selectedProvinceId && section === "branches" ? dashboardEmployees : totalEmployees} icon={Users} />
-                <SummaryCard label={selectedProvinceId && section === "branches" ? "Lượt đặt phòng tại tỉnh/thành" : "Tổng lượt đặt phòng"} value={isProvinceDashboardLoading ? "..." : selectedProvinceId && section === "branches" ? dashboardBookings : totalBookings} icon={CalendarDays} />
-                <SummaryCard label={selectedProvinceId && section === "branches" ? "Doanh thu tại tỉnh/thành" : "Tổng doanh thu đã thu"} value={isProvinceDashboardLoading ? "..." : formatMoney(selectedProvinceId && section === "branches" ? dashboardRevenue : totalRevenue)} icon={Wallet} />
+              <section
+                className="mt-0 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                aria-label={selectedBranchSummary ? `Thống kê ${selectedBranchSummary.name}` : "Thống kê toàn hệ thống"}
+              >
+                {summaryCards.map(({ label, value, icon: Icon, cardClass, headerClass }) => (
+                  <article key={label} className={`overflow-hidden rounded-xl border ${cardClass} bg-white shadow-sm`}>
+                    <h2 className={`flex min-h-12 items-center gap-2 border-b px-5 py-3 text-xs font-semibold ${headerClass}`}>
+                      <Icon size={15} />
+                      {label}
+                    </h2>
+                    <p className="px-5 py-4 text-xl font-bold tracking-tight text-slate-900">{value}</p>
+                  </article>
+                ))}
               </section>
             </>
           )}
 
           {section === "overview" && (
-            <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">Chi nhánh</h2>
-                  <p className="mt-1 text-sm text-slate-500">Tổng doanh thu tính theo số tiền đã thanh toán ở tất cả booking.</p>
+            <>
+              <SuperAdminProvinceMapPanel branches={branches} isLoading={isBranchesLoading} />
+              <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Chi nhánh</h2>
+                    <p className="mt-1 text-sm text-slate-500">Tổng doanh thu tính theo số tiền đã thanh toán ở tất cả booking.</p>
+                  </div>
+                  <button type="button" onClick={() => handleSectionSelect("branches")} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Xem danh sách</button>
                 </div>
-                <button type="button" onClick={() => handleSectionSelect("branches")} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Xem danh sách</button>
-              </div>
-              <BranchList branches={branches.slice(0, 5)} isLoading={isBranchesLoading} onSelect={openBranchDetailsById} />
-            </section>
+                <BranchList branches={branches.slice(0, 5)} isLoading={isBranchesLoading} onSelect={openBranchDetailsById} />
+              </section>
+            </>
           )}
 
           {section === "branches" && selectedBranchId !== null && (
@@ -1833,128 +1723,31 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               isLoading={isBranchDetailsLoading}
               isError={isBranchDetailsError}
               initialCategory={branchDetailInitialCategory}
-              onBack={() => setSelectedBranchId(null)}
+              highlightedDetailReference={highlightedDetailReference}
+              backLabel={branchDetailsReturnSection === "notifications" ? "Quay lại trang thông báo" : "Quay lại danh sách chi nhánh"}
+              onBack={() => {
+                setSelectedBranchId(null);
+                setSection(branchDetailsReturnSection);
+              }}
             />
           )}
 
           {section === "branches" && selectedBranchId === null && (
-            <section
-              className={`relative isolate mt-4 overflow-hidden rounded-2xl border border-white/70 shadow-sm ${
-                selectedProvinceId ? "bg-white/55 backdrop-blur-[1px]" : "bg-white"
-              }`}
-            >
-              <div className="relative z-10 p-5 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">{selectedProvinceId ? `Chi nhánh tại ${provinces.find((province) => province.id === selectedProvinceId)?.name ?? "tỉnh/thành đã chọn"}` : "Tổng chi nhánh"}</h2>
-                  <p className="mt-1 text-sm text-slate-500">Xem doanh thu, nhân viên, booking hoặc tạo chi nhánh mới.</p>
-                </div>
-                <button type="button" onClick={() => { setBranchFormError(""); setIsBranchFormOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-                  <Plus size={16} /> Thêm chi nhánh
-                </button>
-              </div>
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-500">
-                  Đang xem: <span className="font-semibold text-slate-700">{selectedProvinceId ? provinces.find((province) => province.id === selectedProvinceId)?.name ?? "Tỉnh/thành đã chọn" : "Tất cả tỉnh/thành"}</span>
-                </p>
-                <button type="button" onClick={() => { setProvinceFormError(""); setIsProvinceFormOpen(true); }} className="inline-flex h-10 items-center gap-2 rounded-lg border border-blue-200 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">
-                  <Plus size={16} /> Thêm tỉnh/thành
-                </button>
-              </div>
-              {isProvinceBranchesError && selectedProvinceId && <p role="alert" className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">Không thể tải khách sạn theo tỉnh/thành đã chọn.</p>}
-              <BranchList
-                branches={selectedProvinceId ? branchesByProvince : branches}
-                isLoading={selectedProvinceId ? isProvinceBranchesLoading : isBranchesLoading}
-                onSelect={openBranchDetailsById}
-              />
-              </div>
-            </section>
-          )}
-
-          {section === "provinces" && (
             <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Danh sách tỉnh/thành</h2>
-                  <p className="mt-1 text-sm text-slate-500">Có {provinces.length} tỉnh/thành trong hệ thống.</p>
+                  <h2 className="text-lg font-bold text-slate-900">Danh sách chi nhánh</h2>
+                  <p className="mt-1 text-sm text-slate-500">Xem doanh thu, nhân viên, booking hoặc tạo chi nhánh mới.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setProvinceFormError(""); setIsProvinceFormOpen(true); }}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
-                >
-                  <Plus size={16} /> Thêm tỉnh/thành
+                <button type="button" onClick={() => { setBranchFormError(""); setBranchFieldErrors({}); setIsBranchFormOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                  <Plus size={16} /> Thêm chi nhánh
                 </button>
               </div>
-              {isProvincesLoading ? (
-                <p className="py-10 text-center text-sm text-slate-500">Đang tải danh sách tỉnh/thành...</p>
-              ) : isProvincesError ? (
-                <p role="alert" className="py-10 text-center text-sm text-rose-600">Không thể tải danh sách tỉnh/thành.</p>
-              ) : provinces.length === 0 ? (
-                <p className="py-10 text-center text-sm text-slate-500">Chưa có tỉnh/thành nào.</p>
-              ) : (
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {provinces.map((province) => {
-                    const provinceBranches = getBranchesForProvince(province.id);
-                    const theme = getProvinceTheme(province.id);
-                    const coverImage = getProvinceCoverImage(province.id);
-                    return (
-                      <article key={province.id} className={`overflow-hidden rounded-xl border transition hover:shadow-sm ${theme.card}`}>
-                        <div className="relative h-28 overflow-hidden">
-                          <img src={coverImage} alt={`Ảnh nền ${province.name}`} className="h-full w-full object-cover" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/35 via-transparent to-white/10" />
-                          <span className="absolute bottom-3 left-4 inline-flex items-center gap-1.5 rounded-full bg-white/85 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur">
-                            <MapPin size={13} className="text-blue-600" />
-                            {province.name}
-                          </span>
-                          <label
-                            htmlFor={`province-cover-${province.id}`}
-                            className="absolute right-3 top-3 cursor-pointer rounded-lg bg-white/90 px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white"
-                          >
-                            {uploadingProvinceId === province.id ? "Đang tải..." : "Đổi ảnh"}
-                          </label>
-                          <input
-                            id={`province-cover-${province.id}`}
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            className="sr-only"
-                            disabled={uploadingProvinceId === province.id}
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              void replaceProvinceBackground(province.id, province.name, file);
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                        </div>
-                        <div className="p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex min-w-0 items-start gap-3">
-                              <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${theme.icon}`}>
-                                <MapPin size={18} />
-                              </span>
-                              <div className="min-w-0">
-                                <h3 className="truncate font-semibold text-slate-900">{province.name}</h3>
-                                <p className="mt-1 truncate text-xs text-slate-500">{province.id}</p>
-                              </div>
-                            </div>
-                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${theme.badge}`}>
-                              {provinceBranches.length} chi nhánh
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => selectProvince(province.id)}
-                            className={`mt-4 w-full rounded-lg border px-3 py-2 text-sm font-semibold transition ${theme.button}`}
-                          >
-                            Xem chi nhánh
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-              {provinceCardUploadError && <p role="alert" className="mt-4 text-sm text-rose-600">{provinceCardUploadError}</p>}
+              <BranchList
+                branches={branches}
+                isLoading={isBranchesLoading}
+                onSelect={openBranchDetailsById}
+              />
             </section>
           )}
 
@@ -1979,22 +1772,22 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   : isBedTypesError ? <p className="py-8 text-center text-sm text-rose-600">Không thể tải danh sách loại giường.</p>
                     : bedTypes.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chưa có loại giường nào.</p>
                       : <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-                        <table className="w-full min-w-[620px] text-left text-sm">
+                        <table className="w-full min-w-[560px] text-left text-sm">
                           <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                             <tr>
+                              <th scope="col" className="px-4 py-3">STT</th>
                               <th className="px-4 py-3">Tên loại giường</th>
                               <th className="px-4 py-3">Mô tả</th>
-                              <th className="px-4 py-3 text-center">Sức chứa</th>
                               <th className="px-4 py-3">Phân loại</th>
                               <th className="px-4 py-3 text-right">Thao tác</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {bedTypes.map((bedType) => (
+                            {bedTypes.map((bedType, index) => (
                               <tr key={bedType.id} className="text-slate-700 transition hover:bg-slate-50/70">
+                                <td className="px-4 py-3.5 tabular-nums text-slate-500">{index + 1}</td>
                                 <td className="px-4 py-3.5 font-semibold text-slate-900">{bedType.name}</td>
                                 <td className="px-4 py-3.5 text-slate-500">{bedType.description || "Không có mô tả"}</td>
-                                <td className="px-4 py-3.5 text-center tabular-nums">{bedType.capacity ?? "—"} người</td>
                                 <td className="px-4 py-3.5">
                                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bedType.isExtraBed ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}>
                                     {bedType.isExtraBed ? "Giường phụ" : "Giường thường"}
@@ -2045,16 +1838,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   }}
                   manualContent={
                     <form onSubmit={(event) => void submitBedType(event)} className="space-y-4">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="block text-sm font-semibold text-slate-700">
-                          Tên loại giường <span className="text-rose-600">*</span>
-                          <input required autoFocus value={bedTypeForm.name} onChange={(event) => setBedTypeForm({ ...bedTypeForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" placeholder="Ví dụ: Giường Queen" />
-                        </label>
-                        <label className="block text-sm font-semibold text-slate-700">
-                          Sức chứa (người) <span className="text-rose-600">*</span>
-                          <input required type="number" min="1" step="1" value={bedTypeForm.capacity} onChange={(event) => setBedTypeForm({ ...bedTypeForm, capacity: Number(event.target.value) })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
-                        </label>
-                      </div>
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Tên loại giường <span className="text-rose-600">*</span>
+                        <input required autoFocus value={bedTypeForm.name} onChange={(event) => setBedTypeForm({ ...bedTypeForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" placeholder="Ví dụ: Giường Queen" />
+                      </label>
                       <label className="block text-sm font-semibold text-slate-700">
                         Mô tả
                         <input value={bedTypeForm.description} onChange={(event) => setBedTypeForm({ ...bedTypeForm, description: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" placeholder="Mô tả ngắn (không bắt buộc)" />
@@ -2168,7 +1955,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
 
       {isBranchFormOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/50 p-4" onMouseDown={() => setIsBranchFormOpen(false)}>
-          <form onSubmit={(event) => void submitBranch(event)} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+          <form noValidate onSubmit={(event) => void submitBranch(event)} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Quản lý chi nhánh</p><h2 className="mt-1 text-xl font-bold text-slate-900">Thêm chi nhánh mới</h2></div>
               <button type="button" onClick={() => setIsBranchFormOpen(false)} aria-label="Đóng" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -2176,15 +1963,95 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             <section className="mt-5 rounded-xl border border-slate-200 p-4">
               <h3 className="font-semibold text-slate-900">Thông tin chi nhánh</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="text-sm font-semibold text-slate-700">Tên chi nhánh<span className="text-rose-500" aria-hidden="true"> *</span><input required value={branchForm.name} onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
-                <label className="text-sm font-semibold text-slate-700">Số điện thoại chi nhánh<span className="text-rose-500" aria-hidden="true"> *</span><input required type="tel" value={branchForm.phone} onChange={(event) => setBranchForm({ ...branchForm, phone: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
-                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Địa chỉ<span className="text-rose-500" aria-hidden="true"> *</span><input required value={branchForm.address} onChange={(event) => setBranchForm({ ...branchForm, address: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" /></label>
-                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Tỉnh/thành<span className="text-rose-500" aria-hidden="true"> *</span>
-                  <select required value={branchForm.provinceName} onChange={(event) => setBranchForm({ ...branchForm, provinceName: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal outline-none focus:border-blue-400">
-                    <option value="">Chọn tỉnh/thành</option>
-                    {provinces.map((province) => <option key={province.id} value={province.name}>{province.name}</option>)}
-                  </select>
+                <label className="text-sm font-semibold text-slate-700">
+                  Tên chi nhánh<span className="text-rose-500" aria-hidden="true"> *</span>
+                  <input value={branchForm.name} onChange={(event) => {
+                    setBranchForm({ ...branchForm, name: event.target.value });
+                    setBranchFieldErrors((current) => ({ ...current, name: undefined }));
+                  }} aria-invalid={Boolean(branchFieldErrors.name)} aria-describedby={branchFieldErrors.name ? "branch-name-error" : undefined} className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-normal outline-none focus:border-blue-400 ${branchFieldErrors.name ? "border-rose-400" : "border-slate-200"}`} />
+                  {branchFieldErrors.name && <span id="branch-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{branchFieldErrors.name}</span>}
                 </label>
+                <label className="text-sm font-semibold text-slate-700">
+                  Số điện thoại chi nhánh<span className="text-rose-500" aria-hidden="true"> *</span>
+                  <input type="tel" value={branchForm.phone} onChange={(event) => {
+                    setBranchForm({ ...branchForm, phone: event.target.value });
+                    setBranchFieldErrors((current) => ({ ...current, phone: undefined }));
+                  }} aria-invalid={Boolean(branchFieldErrors.phone)} aria-describedby={branchFieldErrors.phone ? "branch-phone-error" : undefined} className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-normal outline-none focus:border-blue-400 ${branchFieldErrors.phone ? "border-rose-400" : "border-slate-200"}`} />
+                  {branchFieldErrors.phone && <span id="branch-phone-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{branchFieldErrors.phone}</span>}
+                </label>
+                <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                  Địa chỉ<span className="text-rose-500" aria-hidden="true"> *</span>
+                  <input value={branchForm.address} onChange={(event) => {
+                    setBranchForm({ ...branchForm, address: event.target.value });
+                    setBranchFieldErrors((current) => ({ ...current, address: undefined }));
+                  }} aria-invalid={Boolean(branchFieldErrors.address)} aria-describedby={branchFieldErrors.address ? "branch-address-error" : undefined} className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-normal outline-none focus:border-blue-400 ${branchFieldErrors.address ? "border-rose-400" : "border-slate-200"}`} />
+                  {branchFieldErrors.address && <span id="branch-address-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{branchFieldErrors.address}</span>}
+                </label>
+                <div className="text-sm font-semibold text-slate-700 sm:col-span-2">
+                  <span>Tỉnh/thành<span className="text-rose-500" aria-hidden="true"> *</span></span>
+                  <Popover
+                    open={isProvincePickerOpen}
+                    onOpenChange={(open) => {
+                      setIsProvincePickerOpen(open);
+                      if (!open) setProvinceSearch("");
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        role="combobox"
+                        aria-expanded={isProvincePickerOpen}
+                        aria-required="true"
+                        aria-invalid={Boolean(branchFieldErrors.provinceName)}
+                        aria-describedby={branchFieldErrors.provinceName ? "branch-province-error" : undefined}
+                        aria-label="Chọn tỉnh/thành"
+                        className={`mt-1.5 flex h-10 w-full items-center justify-between gap-3 rounded-lg border bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${branchFieldErrors.provinceName ? "border-rose-400" : "border-slate-200"}`}
+                      >
+                        <span className={branchForm.provinceName ? "truncate" : "truncate text-slate-500"}>
+                          {branchForm.provinceName || "Chọn tỉnh/thành"}
+                        </span>
+                        <ChevronsUpDown size={16} className="shrink-0 text-slate-400" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+                      <Command shouldFilter>
+                        <CommandInput
+                          value={provinceSearch}
+                          onValueChange={setProvinceSearch}
+                          placeholder="Tìm tỉnh/thành..."
+                          aria-label="Tìm tỉnh/thành"
+                        />
+                        <CommandList>
+                          <CommandEmpty>Không tìm thấy tỉnh/thành.</CommandEmpty>
+                          <CommandGroup>
+                            {VIETNAM_PROVINCES.map((province) => {
+                              const searchableName = province
+                                .normalize("NFD")
+                                .replace(/[\u0300-\u036f]/g, "")
+                                .toLocaleLowerCase("vi");
+                              return (
+                                <CommandItem
+                                  key={province}
+                                  value={`${province} ${searchableName}`}
+                                  onSelect={() => {
+                                    setBranchForm((current) => ({ ...current, provinceName: province }));
+                                    setBranchFieldErrors((current) => ({ ...current, provinceName: undefined }));
+                                    setIsProvincePickerOpen(false);
+                                    setProvinceSearch("");
+                                  }}
+                                >
+                                  <Check className={`mr-2 h-4 w-4 ${branchForm.provinceName === province ? "opacity-100" : "opacity-0"}`} />
+                                  {province}
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {branchFieldErrors.provinceName && <span id="branch-province-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{branchFieldErrors.provinceName}</span>}
+                </div>
               </div>
             </section>
             <section className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
@@ -2244,91 +2111,69 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             <section className="mt-4 rounded-xl border border-slate-200 p-4">
               <h3 className="font-semibold text-slate-900">Tài khoản admin chi nhánh <span className="font-mono text-xs font-medium text-slate-500">(ROLE_ADMIN)</span></h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {branchAdminAccountFields.map((field) => (
-                  <label key={field.key} className="text-sm font-semibold text-slate-700">
-                    {field.label}<span className="text-rose-500" aria-hidden="true"> *</span>
-                    <input
-                      required
-                      type={field.type}
-                      autoComplete={field.autoComplete}
-                      value={branchForm.adminAccount[field.key]}
-                      onChange={(event) => setBranchForm((current) => ({
-                        ...current,
-                        adminAccount: { ...current.adminAccount, [field.key]: event.target.value },
-                      }))}
-                      className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400"
-                    />
-                  </label>
-                ))}
+                {branchAdminAccountFields.map((field) => {
+                  const errorKey = branchAdminErrorKeys[field.key];
+                  const error = branchFieldErrors[errorKey];
+                  return (
+                    <label key={field.key} className="text-sm font-semibold text-slate-700">
+                      {field.label}<span className="text-rose-500" aria-hidden="true"> *</span>
+                      <input
+                        type={field.type}
+                        autoComplete={field.autoComplete}
+                        value={branchForm.adminAccount[field.key]}
+                        onChange={(event) => {
+                          setBranchForm((current) => ({
+                            ...current,
+                            adminAccount: { ...current.adminAccount, [field.key]: event.target.value },
+                          }));
+                          setBranchFieldErrors((current) => ({ ...current, [errorKey]: undefined }));
+                        }}
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={error ? branchFieldErrorIds[errorKey] : undefined}
+                        className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-normal outline-none focus:border-blue-400 ${error ? "border-rose-400" : "border-slate-200"}`}
+                      />
+                      {error && <span id={branchFieldErrorIds[errorKey]} role="alert" className="mt-1 block text-xs font-normal text-rose-600">{error}</span>}
+                    </label>
+                  );
+                })}
               </div>
             </section>
             {branchAccountSections.map(({ key, title }) => (
               <section key={key} className="mt-4 rounded-xl border border-slate-200 p-4">
                 <h3 className="font-semibold text-slate-900">{title} <span className="font-mono text-xs font-medium text-slate-500">(ROLE_MANAGER)</span></h3>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {branchAccountFields.map((field) => (
-                    <label key={field.key} className="text-sm font-semibold text-slate-700">
-                      {field.label}<span className="text-rose-500" aria-hidden="true"> *</span>
-                      <input
-                        required
-                        type={field.type}
-                        autoComplete={field.autoComplete}
-                        value={branchForm[key][field.key]}
-                        onChange={(event) => setBranchForm((current) => ({
-                          ...current,
-                          [key]: { ...current[key], [field.key]: event.target.value },
-                        }))}
-                        className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400"
-                      />
-                    </label>
-                  ))}
+                  {branchAccountFields.map((field) => {
+                    const errorKey = branchManagerErrorKeys[field.key];
+                    const error = branchFieldErrors[errorKey];
+                    return (
+                      <label key={field.key} className="text-sm font-semibold text-slate-700">
+                        {field.label}<span className="text-rose-500" aria-hidden="true"> *</span>
+                        <input
+                          type={field.type}
+                          autoComplete={field.autoComplete}
+                          value={branchForm[key][field.key]}
+                          onChange={(event) => {
+                            setBranchForm((current) => ({
+                              ...current,
+                              [key]: { ...current[key], [field.key]: event.target.value },
+                            }));
+                            setBranchFieldErrors((current) => ({ ...current, [errorKey]: undefined }));
+                          }}
+                          aria-invalid={Boolean(error)}
+                          aria-describedby={error ? branchFieldErrorIds[errorKey] : undefined}
+                          className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-normal outline-none focus:border-blue-400 ${error ? "border-rose-400" : "border-slate-200"}`}
+                        />
+                        {error && <span id={branchFieldErrorIds[errorKey]} role="alert" className="mt-1 block text-xs font-normal text-rose-600">{error}</span>}
+                      </label>
+                    );
+                  })}
                 </div>
               </section>
             ))}
             {branchFormError && <p role="alert" className="mt-3 text-sm text-rose-600">{branchFormError}</p>}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setIsBranchFormOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
-              <button type="submit" disabled={isCreatingBranch || isParsingBranchPolicy || provinces.length === 0} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isParsingBranchPolicy ? "Đang đọc file..." : isCreatingBranch ? "Đang tạo..." : "Tạo chi nhánh"}</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {isProvinceFormOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" onMouseDown={() => setIsProvinceFormOpen(false)}>
-          <form onSubmit={(event) => void submitProvince(event)} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Quản lý địa điểm</p><h2 className="mt-1 text-xl font-bold text-slate-900">Thêm tỉnh/thành</h2></div>
-              <button type="button" onClick={() => setIsProvinceFormOpen(false)} aria-label="Đóng" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
-            </div>
-            <label className="mt-5 block text-sm font-semibold text-slate-700">
-              Tên tỉnh/thành
-              <input required value={provinceName} onChange={(event) => setProvinceName(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" placeholder="Ví dụ: Hồ Chí Minh" />
-            </label>
-            <label className="mt-4 block text-sm font-semibold text-slate-700">
-              Ảnh nền tỉnh/thành
-              <input
-                required
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => {
-                  setProvinceBackgroundFile(event.target.files?.[0] ?? null);
-                  setProvinceFormError("");
-                }}
-                className="mt-1.5 block w-full rounded-lg border border-slate-200 p-2 text-sm font-normal text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:font-semibold file:text-blue-700"
-              />
-              <span className="mt-1 block text-xs font-normal text-slate-500">JPG, PNG hoặc WebP, tối đa 5 MB. Ảnh sẽ được lưu trong thư mục riêng của tỉnh/thành trên Cloudinary.</span>
-            </label>
-            {provinceBackgroundFile && (
-              <p className="mt-2 truncate text-xs text-slate-500">Đã chọn: {provinceBackgroundFile.name}</p>
-            )}
-            {isUploadingProvinceBackground && (
-              <p role="status" className="mt-3 text-sm text-blue-700">Đang tải ảnh lên Cloudinary và lưu tỉnh/thành...</p>
-            )}
-            {provinceFormError && <p role="alert" className="mt-3 text-sm text-rose-600">{provinceFormError}</p>}
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={() => setIsProvinceFormOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
-              <button type="submit" disabled={isCreatingProvince || isUploadingProvinceBackground || !provinceName.trim() || !provinceBackgroundFile} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isUploadingProvinceBackground ? "Đang tải ảnh..." : isCreatingProvince ? "Đang tạo..." : "Thêm tỉnh/thành"}</button>
+              <button type="submit" disabled={isCreatingBranch || isParsingBranchPolicy} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isParsingBranchPolicy ? "Đang đọc file..." : isCreatingBranch ? "Đang tạo..." : "Tạo chi nhánh"}</button>
             </div>
           </form>
         </div>
@@ -2338,36 +2183,50 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   );
 }
 
-function SummaryCard({ label, value, icon: Icon }: { label: string; value: number | string; icon: typeof Building2 }) {
-  return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-500">{label}</p>
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700"><Icon size={18} /></span>
-      </div>
-      <p className="mt-3 text-2xl font-bold text-slate-900">{value}</p>
-    </article>
-  );
-}
-
 function BranchList({ branches, isLoading, onSelect }: { branches: SuperAdminBranch[]; isLoading: boolean; onSelect: (id: number) => void }) {
   if (isLoading) return <p className="py-8 text-center text-sm text-slate-500">Đang tải danh sách chi nhánh...</p>;
   if (branches.length === 0) return <p className="py-8 text-center text-sm text-slate-500">Chưa có chi nhánh.</p>;
   return (
-    <div className="mt-4 divide-y divide-slate-100">
-      {branches.map((branch) => (
-        <article key={branch.id} className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h3 className="font-bold text-slate-900">{branch.name}</h3>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500"><MapPin size={14} />{[branch.address, branch.provinceName].filter(Boolean).join(", ")}</p>
-            <p className="mt-2 text-xs text-slate-500">{branch.employeeCount} nhân sự · {branch.bookingCount} booking · {branch.phone}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-4">
-            <p className="text-sm font-bold text-emerald-700">{formatMoney(Number(branch.totalRevenue) || 0)}</p>
-            <button type="button" onClick={() => onSelect(branch.id)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Chi tiết</button>
-          </div>
-        </article>
-      ))}
+    <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+      <table className="w-full min-w-[1250px] table-fixed text-left text-sm">
+        <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            <th scope="col" className="w-16 whitespace-nowrap px-4 py-3">STT</th>
+            <th scope="col" className="w-48 whitespace-nowrap px-4 py-3">Tên chi nhánh</th>
+            <th scope="col" className="w-64 whitespace-nowrap px-4 py-3">Địa chỉ</th>
+            <th scope="col" className="w-40 whitespace-nowrap px-4 py-3">Tỉnh/thành</th>
+            <th scope="col" className="w-36 whitespace-nowrap px-4 py-3">Số điện thoại</th>
+            <th scope="col" className="w-28 whitespace-nowrap px-4 py-3 text-center">Nhân sự</th>
+            <th scope="col" className="w-28 whitespace-nowrap px-4 py-3 text-center">Booking</th>
+            <th scope="col" className="w-40 whitespace-nowrap px-4 py-3 text-right">Doanh thu</th>
+            <th scope="col" className="w-32 whitespace-nowrap px-4 py-3 text-center">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {branches.map((branch, index) => (
+            <tr key={branch.id} className="text-slate-700 transition hover:bg-slate-50/70">
+              <td className="px-4 py-3.5 tabular-nums text-slate-500">{index + 1}</td>
+              <td className="truncate px-4 py-3.5 font-semibold text-slate-900" title={branch.name}>{branch.name}</td>
+              <td className="truncate px-4 py-3.5 text-slate-600" title={branch.address}>{branch.address || "—"}</td>
+              <td className="whitespace-nowrap px-4 py-3.5">{branch.provinceName || "—"}</td>
+              <td className="whitespace-nowrap px-4 py-3.5">{branch.phone || "—"}</td>
+              <td className="px-4 py-3.5 text-center tabular-nums">{branch.employeeCount}</td>
+              <td className="px-4 py-3.5 text-center tabular-nums">{branch.bookingCount}</td>
+              <td className="whitespace-nowrap px-4 py-3.5 text-right font-semibold text-emerald-700">{formatMoney(Number(branch.totalRevenue) || 0)}</td>
+              <td className="px-4 py-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => onSelect(branch.id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                >
+                  <Eye size={14} />
+                  Chi tiết
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -2377,12 +2236,16 @@ function BranchDetailsPanel({
   isLoading,
   isError,
   initialCategory,
+  highlightedDetailReference,
+  backLabel,
   onBack,
 }: {
   details?: SuperAdminBranchDetails;
   isLoading: boolean;
   isError: boolean;
   initialCategory: BranchDetailCategory;
+  highlightedDetailReference: { category: BranchDetailCategory; id: string } | null;
+  backLabel: string;
   onBack: () => void;
 }) {
   const [saveRoomPolicies, { isLoading: isSavingRoomPolicies }] = useSaveSuperAdminBranchRoomPoliciesMutation();
@@ -2427,7 +2290,52 @@ function BranchDetailsPanel({
   const [activeCategory, setActiveCategory] = useState<BranchDetailCategory>(initialCategory);
   const [viewingItem, setViewingItem] = useState<{ title: string; fields: DetailField[] } | null>(null);
   const viewItem = (title: string, fields: DetailField[]) => setViewingItem({ title, fields });
-
+  const highlightedItemIndex = (() => {
+    if (!details || !highlightedDetailReference || highlightedDetailReference.category !== activeCategory) return -1;
+    switch (activeCategory) {
+      case "employees":
+        return details.employees.findIndex((employee) => employee.id === highlightedDetailReference.id);
+      case "buildings": {
+        const referenceId = highlightedDetailReference.id.trim();
+        const normalizedReferenceId = referenceId.replace(/^BUILDING[:#/_-]*/i, "").trim().toLocaleLowerCase();
+        const buildingById = details.buildings.findIndex((building) => {
+          const buildingId = building.id.trim();
+          return buildingId.toLocaleLowerCase() === referenceId.toLocaleLowerCase()
+            || buildingId.toLocaleLowerCase() === normalizedReferenceId;
+        });
+        if (buildingById >= 0) return buildingById;
+        const buildingNumber = Number(normalizedReferenceId);
+        return normalizedReferenceId !== "" && Number.isFinite(buildingNumber)
+          ? details.buildings.findIndex((building) => Number(building.id) === buildingNumber)
+          : -1;
+      }
+      case "floors": {
+        const referenceId = highlightedDetailReference.id.trim();
+        const normalizedReferenceId = referenceId.replace(/^FLOOR[:#/_-]*/i, "").trim();
+        const floorById = details.floors.findIndex((floor) =>
+          floor.id.trim().toLocaleLowerCase() === referenceId.toLocaleLowerCase()
+          || floor.id.trim().toLocaleLowerCase() === normalizedReferenceId.toLocaleLowerCase(),
+        );
+        if (floorById >= 0) return floorById;
+        const floorNumber = Number(normalizedReferenceId);
+        return Number.isInteger(floorNumber)
+          ? details.floors.findIndex((floor) => floor.floorNumber === floorNumber)
+          : -1;
+      }
+      case "rooms":
+        return details.rooms.findIndex((room) =>
+          room.id === highlightedDetailReference.id || room.roomNumber === highlightedDetailReference.id);
+      case "bookings":
+        return details.bookings.findIndex((booking) => booking.bookingId === highlightedDetailReference.id);
+      case "services":
+        return details.services.findIndex((service) => service.id === highlightedDetailReference.id);
+      case "promotions":
+        return details.promotions.findIndex((promotion) =>
+          promotion.id === highlightedDetailReference.id || promotion.code === highlightedDetailReference.id);
+      case "roomPolicies":
+        return -1;
+    }
+  })();
   const categories: { id: BranchDetailCategory; label: string; count: number; icon: typeof LayoutDashboard }[] = [
     { id: "employees", label: "Nhân viên", count: details?.employees.length ?? 0, icon: Users },
     { id: "buildings", label: "Tòa nhà", count: details?.buildings.length ?? 0, icon: Building2 },
@@ -2454,29 +2362,29 @@ function BranchDetailsPanel({
           )}
         </div>
         <button type="button" onClick={onBack} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
-          Quay lại danh sách
+          {backLabel}
         </button>
       </div>
         {isLoading ? <p className="py-12 text-center text-sm text-slate-500">Đang tải chi tiết chi nhánh...</p>
           : isError || !details ? <p role="alert" className="py-12 text-center text-sm text-rose-600">Không thể tải hồ sơ chi nhánh.</p>
             : <>
-              <div className="mt-4 grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-                <nav className="flex gap-2 overflow-x-auto rounded-xl bg-slate-50 p-1 md:flex-col md:gap-1" aria-label="Danh mục chi tiết chi nhánh">
+              <div className="mt-4 space-y-3">
+                <nav className="flex flex-wrap gap-2 rounded-xl bg-slate-50 p-2" aria-label="Danh mục chi tiết chi nhánh">
                   {categories.map(({ id, label, count, icon: Icon }) => (
                     <button
                       type="button"
                       key={id}
                       onClick={() => setActiveCategory(id)}
                       aria-current={activeCategory === id ? "page" : undefined}
-                      className={`flex shrink-0 items-center gap-2 rounded-lg px-2 py-2.5 text-left text-xs font-semibold transition md:grid md:w-full md:grid-cols-[17px_minmax(0,1fr)_28px] md:gap-2 md:px-1 ${
+                      className={`inline-flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
                         activeCategory === id
                           ? "bg-blue-600 text-white shadow-sm shadow-blue-900/15"
                           : "text-slate-600 hover:bg-white hover:text-slate-900"
                       }`}
                     >
                       <Icon size={17} className="shrink-0" />
-                      <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{label}</span>
-                      <span className={`flex h-5 w-7 shrink-0 items-center justify-center rounded-full text-xs md:justify-self-end ${
+                      <span className="whitespace-nowrap">{label}</span>
+                      <span className={`flex h-5 min-w-7 items-center justify-center rounded-full px-1 text-xs ${
                         activeCategory === id ? "bg-white/20 text-white" : "bg-slate-200/70 text-slate-500"
                       }`}>{count}</span>
                     </button>
@@ -2488,11 +2396,12 @@ function BranchDetailsPanel({
                     <p className="text-xs text-slate-500">{activeCategoryInfo.count} mục</p>
                   </div>
                   {activeCategory === "employees" && (
-                    <DetailList count={details.employees.length}>
-                      {details.employees.map((employee) => <DetailRow
+                    <DetailList count={details.employees.length} columns={["Họ tên", "Chức vụ", "Email", "Số điện thoại"]} minWidth={950} showEdit={false}>
+                      {details.employees.map((employee, index) => <DetailRow
                         key={employee.id}
-                        title={employee.fullName}
-                        subtitle={`${employee.position || "Nhân viên"} · ${employee.email} · ${employee.phone || "Chưa có SĐT"}`}
+                        highlighted={index === highlightedItemIndex}
+                        cells={[employee.fullName, employee.position || "Nhân viên", employee.email, employee.phone || "Chưa có SĐT"]}
+                        showEdit={false}
                         onView={() => viewItem(employee.fullName, [
                           { label: "Mã nhân viên", value: employee.id },
                           { label: "Chức vụ", value: employee.position || "Nhân viên" },
@@ -2504,11 +2413,11 @@ function BranchDetailsPanel({
                     </DetailList>
                   )}
                   {activeCategory === "buildings" && (
-                    <DetailList count={details.buildings.length}>
-                      {details.buildings.map((building) => <DetailRow
+                    <DetailList count={details.buildings.length} columns={["Tên tòa nhà", "Số tầng"]} minWidth={700}>
+                      {details.buildings.map((building, index) => <DetailRow
                         key={building.id}
-                        title={building.name}
-                        subtitle={`${building.floorCount} tầng · Mã ${building.id}`}
+                        highlighted={index === highlightedItemIndex}
+                        cells={[building.name, `${building.floorCount}`]}
                         onEdit={() => {
                           setEditingBuilding({ id: building.id, name: building.name });
                           setBuildingName(building.name);
@@ -2523,11 +2432,11 @@ function BranchDetailsPanel({
                     </DetailList>
                   )}
                   {activeCategory === "floors" && (
-                    <DetailList count={details.floors.length}>
-                      {details.floors.map((floor) => <DetailRow
+                    <DetailList count={details.floors.length} columns={["Tầng", "Tòa nhà", "Số phòng"]} minWidth={800}>
+                      {details.floors.map((floor, index) => <DetailRow
                         key={floor.id}
-                        title={`Tầng ${floor.floorNumber}`}
-                        subtitle={`${floor.buildingName} · ${floor.roomCount} phòng · ${floor.id}`}
+                        highlighted={index === highlightedItemIndex}
+                        cells={[String(floor.floorNumber), floor.buildingName, String(floor.roomCount)]}
                         onEdit={() => {
                           setEditingFloor({ id: floor.id, floorNumber: floor.floorNumber });
                           setFloorNumber(String(floor.floorNumber));
@@ -2543,11 +2452,11 @@ function BranchDetailsPanel({
                     </DetailList>
                   )}
                   {activeCategory === "rooms" && (
-                    <DetailList count={details.rooms.length}>
-                      {details.rooms.map((room) => <DetailRow
+                    <DetailList count={details.rooms.length} columns={["Phòng", "Tòa nhà", "Tầng", "Loại phòng", "Trạng thái"]} minWidth={1100}>
+                      {details.rooms.map((room, index) => <DetailRow
                         key={room.id}
-                        title={`Phòng ${room.roomNumber}`}
-                        subtitle={`${room.buildingName} · Tầng ${room.floorNumber} · ${room.roomType || "Chưa phân loại"} · ${room.roomStatus || "Chưa có trạng thái"}`}
+                        highlighted={index === highlightedItemIndex}
+                        cells={[room.roomNumber, room.buildingName, String(room.floorNumber), room.roomType || "Chưa phân loại", room.roomStatus || "Chưa có trạng thái"]}
                         editLoading={loadingRoomId === room.id}
                         onEdit={() => {
                           setRoomEditError("");
@@ -2691,11 +2600,26 @@ function BranchDetailsPanel({
                     </DetailList>
                   )}
                   {activeCategory === "bookings" && (
-                    <DetailList count={details.bookings.length}>
+                    <DetailList
+                      count={details.bookings.length}
+                      columns={["Mã booking", "Khách hàng", "Trạng thái", "Kênh đặt", "Ngày tạo", "Tổng tiền", "Đã thu", "Còn lại"]}
+                      minWidth={1550}
+                      showEdit={false}
+                    >
                       {details.bookings.map((booking, index) => <DetailRow
                         key={booking.bookingId ?? index}
-                        title={`${booking.bookingId || "Booking"} · ${booking.customerName || "Khách"}`}
-                        subtitle={`${booking.bookingStatus || "N/A"} · ${booking.createdAt ? new Date(booking.createdAt).toLocaleString("vi-VN") : "Không có ngày tạo"} · Đã thu ${formatMoney(Number(booking.paidAmount) || 0)}`}
+                        showEdit={false}
+                        highlighted={index === highlightedItemIndex}
+                        cells={[
+                          booking.bookingId || "—",
+                          booking.customerName || "Chưa có",
+                          booking.bookingStatus || "Chưa có",
+                          booking.bookingChannel || "Chưa có",
+                          booking.createdAt ? new Date(booking.createdAt).toLocaleString("vi-VN") : "Chưa có",
+                          formatMoney(Number(booking.finalAmount) || 0),
+                          formatMoney(Number(booking.paidAmount) || 0),
+                          formatMoney(Number(booking.remainingAmount) || 0),
+                        ]}
                         onView={() => viewItem(booking.bookingId || "Chi tiết booking", [
                           { label: "Mã booking", value: booking.bookingId || "Chưa có" },
                           { label: "Khách hàng", value: booking.customerName || "Chưa có" },
@@ -2710,11 +2634,18 @@ function BranchDetailsPanel({
                     </DetailList>
                   )}
                   {activeCategory === "services" && (
-                    <DetailList count={details.services.length}>
-                      {details.services.map((service) => <DetailRow
+                    <DetailList count={details.services.length} columns={["Tên dịch vụ", "Danh mục", "Giá", "Đơn vị", "Phạm vi"]} minWidth={1100} showEdit={false}>
+                      {details.services.map((service, index) => <DetailRow
                         key={service.id}
-                        title={service.name}
-                        subtitle={`${service.category || "Chưa phân loại"} · ${service.price == null ? "Chưa có giá" : formatMoney(service.price)}${service.unit ? `/${service.unit}` : ""} · ${service.shared ? "Dùng chung" : "Riêng chi nhánh"}`}
+                        showEdit={false}
+                        highlighted={index === highlightedItemIndex}
+                        cells={[
+                          service.name,
+                          service.category || "Chưa phân loại",
+                          service.price == null ? "Chưa có giá" : formatMoney(service.price),
+                          service.unit || "—",
+                          service.shared ? "Dùng chung" : "Riêng chi nhánh",
+                        ]}
                         onView={() => viewItem(service.name, [
                           { label: "Mã dịch vụ", value: service.id },
                           { label: "Tên dịch vụ", value: service.name },
@@ -2726,11 +2657,18 @@ function BranchDetailsPanel({
                     </DetailList>
                   )}
                   {activeCategory === "promotions" && (
-                    <DetailList count={details.promotions.length}>
-                      {details.promotions.map((promotion) => <DetailRow
+                    <DetailList count={details.promotions.length} columns={["Tên khuyến mãi", "Mã", "Trạng thái", "Ngày bắt đầu", "Ngày kết thúc"]} minWidth={1200} showEdit={false}>
+                      {details.promotions.map((promotion, index) => <DetailRow
                         key={promotion.id}
-                        title={`${promotion.name} · ${promotion.code}`}
-                        subtitle={`${promotion.status || "N/A"} · ${promotion.startDate ? new Date(promotion.startDate).toLocaleDateString("vi-VN") : "?"} – ${promotion.endDate ? new Date(promotion.endDate).toLocaleDateString("vi-VN") : "?"}`}
+                        showEdit={false}
+                        highlighted={index === highlightedItemIndex}
+                        cells={[
+                          promotion.name,
+                          promotion.code,
+                          promotion.status || "Chưa có",
+                          promotion.startDate ? new Date(promotion.startDate).toLocaleDateString("vi-VN") : "Chưa có",
+                          promotion.endDate ? new Date(promotion.endDate).toLocaleDateString("vi-VN") : "Chưa có",
+                        ]}
                         onView={() => viewItem(promotion.name, [
                           { label: "Mã khuyến mãi", value: promotion.code },
                           { label: "Tên", value: promotion.name },
@@ -2745,6 +2683,7 @@ function BranchDetailsPanel({
                     <RoomPolicyEditor
                       hotelId={details.branch.id}
                       policies={details.roomPolicies ?? []}
+                      highlightedReference={highlightedDetailReference?.category === "roomPolicies" ? highlightedDetailReference.id : null}
                       isSaving={isSavingRoomPolicy}
                       message={roomPolicyMessage}
                       error={roomPolicyError}
@@ -3084,6 +3023,7 @@ const roomTypes = Object.keys(roomTypeNames) as SuperAdminRoomPolicy["roomType"]
 function RoomPolicyEditor({
   hotelId,
   policies,
+  highlightedReference,
   isSaving,
   message,
   error,
@@ -3091,6 +3031,7 @@ function RoomPolicyEditor({
 }: {
   hotelId: number;
   policies: SuperAdminRoomPolicy[];
+  highlightedReference: string | null;
   isSaving: boolean;
   message: string;
   error: string;
@@ -3126,6 +3067,17 @@ function RoomPolicyEditor({
     })) as Record<SuperAdminRoomPolicy["roomType"], SuperAdminRoomPolicy>);
   }, [hotelId, policies]);
 
+  const highlightedRoomType = highlightedReference
+    ? policies.find((policy) => policy.id === highlightedReference)?.roomType
+      ?? roomTypes.find((roomType) => roomType === highlightedReference.toLocaleUpperCase())
+    : undefined;
+
+  useLayoutEffect(() => {
+    if (highlightedRoomType) {
+      document.getElementById("highlighted-branch-detail-row")?.scrollIntoView({ block: "center" });
+    }
+  }, [highlightedRoomType]);
+
   const change = (roomType: SuperAdminRoomPolicy["roomType"], field: keyof Omit<SuperAdminRoomPolicy, "id" | "roomType">, value: string) => {
     setDrafts((current) => ({
       ...current,
@@ -3136,35 +3088,60 @@ function RoomPolicyEditor({
   return (
     <section className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 md:col-span-2">
       <p className="mt-1 text-xs leading-5 text-slate-500">Super Admin thiết lập ban đầu. Quản lý chi nhánh có thể điều chỉnh lại trong phần cấu hình giá.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {roomTypes.map((roomType) => {
-          const policy = drafts[roomType];
-          const exists = policies.some((item) => item.roomType === roomType);
-          return (
-            <div key={roomType} className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <p className="text-sm font-bold text-slate-800">{roomTypeNames[roomType]}</p>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${exists ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{exists ? "Đã cấu hình" : "Chưa cấu hình"}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <PolicyInput label="Giá cơ bản" value={policy.basePrice} onChange={(value) => change(roomType, "basePrice", value)} />
-                <PolicyInput label="Diện tích (m²)" value={policy.area} onChange={(value) => change(roomType, "area", value)} />
-                <PolicyInput label="Sức chứa chuẩn" value={policy.standardCapacity} min={1} onChange={(value) => change(roomType, "standardCapacity", value)} />
-                <PolicyInput label="Khách thêm tối đa" value={policy.maxExtraGuests} onChange={(value) => change(roomType, "maxExtraGuests", value)} />
-                <PolicyInput label="Phụ thu người lớn" value={policy.extraAdultFee} onChange={(value) => change(roomType, "extraAdultFee", value)} />
-                <PolicyInput label="Phụ thu trẻ em" value={policy.extraChildFee} onChange={(value) => change(roomType, "extraChildFee", value)} />
-              </div>
-              <button
-                type="button"
-                disabled={isSaving || policy.area <= 0 || policy.basePrice < 0 || policy.standardCapacity < 1}
-                onClick={() => void onSave(policy)}
-                className="mt-3 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSaving ? "Đang lưu..." : exists ? "Cập nhật cấu hình" : "Thêm cấu hình"}
-              </button>
-            </div>
-          );
-        })}
+      <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table className="w-full min-w-[1250px] text-left text-xs">
+          <thead className="bg-slate-50 font-semibold text-slate-500">
+            <tr>
+              <th scope="col" className="px-3 py-3">STT</th>
+              <th scope="col" className="px-3 py-3">Loại phòng</th>
+              <th scope="col" className="px-3 py-3">Trạng thái</th>
+              <th scope="col" className="px-3 py-3">Giá cơ bản</th>
+              <th scope="col" className="px-3 py-3">Diện tích (m²)</th>
+              <th scope="col" className="px-3 py-3">Sức chứa chuẩn</th>
+              <th scope="col" className="px-3 py-3">Khách thêm tối đa</th>
+              <th scope="col" className="px-3 py-3">Phụ thu người lớn</th>
+              <th scope="col" className="px-3 py-3">Phụ thu trẻ em</th>
+              <th scope="col" className="px-3 py-3 text-center">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {roomTypes.map((roomType, index) => {
+              const policy = drafts[roomType];
+              const exists = policies.some((item) => item.roomType === roomType);
+              return (
+                <tr
+                  key={roomType}
+                  id={highlightedRoomType === roomType ? "highlighted-branch-detail-row" : undefined}
+                  className={`align-middle text-slate-700 ${highlightedRoomType === roomType ? "bg-amber-100 outline outline-2 outline-amber-400" : ""}`}
+                >
+                  <td className="px-3 py-3 tabular-nums text-slate-500">{index + 1}</td>
+                  <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{roomTypeNames[roomType]}</td>
+                  <td className="px-3 py-3">
+                    <span className={`whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${exists ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {exists ? "Đã cấu hình" : "Chưa cấu hình"}
+                    </span>
+                  </td>
+                  <td className="min-w-32 px-3 py-2"><PolicyInput label="Giá cơ bản" value={policy.basePrice} onChange={(value) => change(roomType, "basePrice", value)} /></td>
+                  <td className="min-w-28 px-3 py-2"><PolicyInput label="Diện tích (m²)" value={policy.area} onChange={(value) => change(roomType, "area", value)} /></td>
+                  <td className="min-w-28 px-3 py-2"><PolicyInput label="Sức chứa chuẩn" value={policy.standardCapacity} min={1} onChange={(value) => change(roomType, "standardCapacity", value)} /></td>
+                  <td className="min-w-32 px-3 py-2"><PolicyInput label="Khách thêm tối đa" value={policy.maxExtraGuests} onChange={(value) => change(roomType, "maxExtraGuests", value)} /></td>
+                  <td className="min-w-32 px-3 py-2"><PolicyInput label="Phụ thu người lớn" value={policy.extraAdultFee} onChange={(value) => change(roomType, "extraAdultFee", value)} /></td>
+                  <td className="min-w-32 px-3 py-2"><PolicyInput label="Phụ thu trẻ em" value={policy.extraChildFee} onChange={(value) => change(roomType, "extraChildFee", value)} /></td>
+                  <td className="whitespace-nowrap px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      disabled={isSaving || policy.area <= 0 || policy.basePrice < 0 || policy.standardCapacity < 1}
+                      onClick={() => void onSave(policy)}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isSaving ? "Đang lưu..." : exists ? "Cập nhật" : "Thêm"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
       {message && <p role="status" className="mt-3 text-sm font-medium text-emerald-700">{message}</p>}
       {error && <p role="alert" className="mt-3 text-sm font-medium text-rose-700">{error}</p>}
@@ -3184,38 +3161,206 @@ function PolicyInput({ label, value, min = 0, onChange }: { label: string; value
 type BranchDetailCategory = "employees" | "buildings" | "floors" | "rooms" | "bookings" | "services" | "promotions" | "roomPolicies";
 type DetailField = { label: string; value: string };
 
-function DetailList({ count, children }: { count: number; children: React.ReactNode }) {
+function DetailList({
+  count,
+  columns,
+  minWidth = 900,
+  showEdit = true,
+  emptyMessage = "Chưa có dữ liệu trong danh mục này.",
+  children,
+}: {
+  count: number;
+  columns: string[];
+  minWidth?: number;
+  showEdit?: boolean;
+  emptyMessage?: string;
+  children: React.ReactNode;
+}) {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [visibleColumns, setVisibleColumns] = useState<boolean[]>(() => columns.map(() => true));
+  const pageSize = 20;
+  const rows = Children.toArray(children);
+  const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("vi");
+  const filteredRows = normalizedSearch
+    ? rows.filter((row) => {
+      if (!isValidElement<{ cells?: React.ReactNode[] }>(row)) return false;
+      return (row.props.cells ?? []).some((cell) =>
+        getDetailCellText(cell).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("vi").includes(normalizedSearch),
+      );
+    })
+    : rows;
+  const filteredHighlightedIndex = filteredRows.findIndex((row) =>
+    isValidElement<{ highlighted?: boolean }>(row) && row.props.highlighted,
+  );
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const visibleRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const visibleCellIndexes = columns
+    .map((_, index) => index)
+    .filter((index) => visibleColumns[index] !== false);
+  const shownColumns = visibleCellIndexes.length > 0 ? visibleCellIndexes : [0];
+
+  useLayoutEffect(() => {
+    setPage(filteredHighlightedIndex >= 0 ? Math.floor(filteredHighlightedIndex / pageSize) + 1 : 1);
+  }, [columns.join("|"), filteredHighlightedIndex, normalizedSearch]);
+
+  useLayoutEffect(() => {
+    if (filteredHighlightedIndex >= 0 && Math.floor(filteredHighlightedIndex / pageSize) + 1 === safePage) {
+      const animationFrame = window.requestAnimationFrame(() => {
+        document.getElementById("highlighted-branch-detail-row")?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+      return () => window.cancelAnimationFrame(animationFrame);
+    }
+  }, [filteredHighlightedIndex, safePage]);
+
   return (
     <section className="min-w-0">
-      <div className="max-h-[32rem] overflow-y-auto pr-1">
-        {count === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">Chưa có dữ liệu trong danh mục này.</p>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="relative min-w-56 flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Tìm kiếm..."
+            aria-label="Tìm kiếm trong danh sách"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Tùy chỉnh cột hiển thị"
+              className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Columns3 size={16} />
+              Cột
+              <ChevronDown size={16} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-56 p-2">
+            <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Hiển thị cột</p>
+            {columns.map((column, index) => {
+              const isVisible = visibleColumns[index] !== false;
+              const isLastVisibleColumn = shownColumns.length === 1 && isVisible;
+              return (
+                <label key={column} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    checked={isVisible}
+                    disabled={isLastVisibleColumn}
+                    onChange={(event) => {
+                      setVisibleColumns((current) => columns.map((_, columnIndex) =>
+                        columnIndex === index ? event.target.checked : current[columnIndex] !== false,
+                      ));
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                  />
+                  {column}
+                </label>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
+        <span className="ml-auto text-xs text-slate-500">
+          {normalizedSearch ? `${filteredRows.length}/${count} kết quả` : `${count} mục`}
+        </span>
+      </div>
+      <div className="max-h-[32rem] overflow-auto rounded-lg border border-slate-200">
+        {filteredRows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">{normalizedSearch ? "Không tìm thấy kết quả phù hợp." : emptyMessage}</p>
         ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{children}</div>
+          <table className="w-full text-left text-sm" style={{ minWidth }}>
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-500">
+              <tr>
+                <th scope="col" className="w-16 whitespace-nowrap px-4 py-3">STT</th>
+                {shownColumns.map((index) => (
+                  <th scope="col" key={columns[index]} className="whitespace-nowrap px-4 py-3">{columns[index]}</th>
+                ))}
+                <th scope="col" className="px-4 py-3 text-right">{showEdit ? "Thao tác" : "Chi tiết"}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibleRows.map((row, index) => isValidElement<{ serialNumber?: number; visibleCellIndexes?: number[] }>(row)
+                ? cloneElement(row, { serialNumber: (safePage - 1) * pageSize + index + 1, visibleCellIndexes: shownColumns })
+                : row)}
+            </tbody>
+          </table>
         )}
       </div>
+      {filteredRows.length > pageSize && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+          <span>
+            Hiển thị {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filteredRows.length)} / {filteredRows.length} mục
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={safePage === 1}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Trước
+            </button>
+            <span className="tabular-nums">Trang {safePage} / {totalPages}</span>
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={safePage === totalPages}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Sau
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
 function DetailRow({
-  title,
-  subtitle,
+  cells,
   onView,
   onEdit,
   editLoading = false,
+  showEdit = true,
+  highlighted = false,
+  serialNumber = 0,
+  visibleCellIndexes,
 }: {
-  title: string;
-  subtitle: string;
+  cells: React.ReactNode[];
   onView: () => void;
   onEdit?: () => void;
   editLoading?: boolean;
+  showEdit?: boolean;
+  highlighted?: boolean;
+  serialNumber?: number;
+  visibleCellIndexes?: number[];
 }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-lg border border-slate-300 bg-white p-3 shadow-sm">
-      <p className="break-words text-sm font-semibold text-slate-800">{title}</p>
-      <p className="mt-1 break-words text-xs leading-5 text-slate-500">{subtitle}</p>
-      <div className="mt-3 flex justify-end gap-2">
+    <tr
+      id={highlighted ? "highlighted-branch-detail-row" : undefined}
+      className={`text-slate-700 transition ${highlighted ? "bg-amber-100 outline outline-2 outline-amber-400" : "hover:bg-slate-50/70"}`}
+    >
+      <td className="w-16 whitespace-nowrap px-4 py-3.5 text-xs font-semibold tabular-nums text-slate-500">
+        {serialNumber}
+      </td>
+      {cells.map((cell, index) => (
+        visibleCellIndexes && !visibleCellIndexes.includes(index) ? null :
+        <td
+          key={index}
+          className={`max-w-72 px-4 py-3.5 ${index === 0 ? "font-semibold text-slate-900" : "text-xs text-slate-600"} ${index > 0 ? "break-words" : ""}`}
+        >
+          {cell}
+        </td>
+      ))}
+      <td className="px-4 py-3 text-right">
+        <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={onView}
@@ -3224,7 +3369,7 @@ function DetailRow({
           <Eye size={14} />
           Xem chi tiết
         </button>
-        <button
+        {showEdit && <button
           type="button"
           disabled={!onEdit || editLoading}
           title={onEdit ? "Chỉnh sửa" : "Chưa kết nối API chỉnh sửa"}
@@ -3237,8 +3382,16 @@ function DetailRow({
         >
           <Pencil size={14} />
           {editLoading ? "Đang tải..." : "Chỉnh sửa"}
-        </button>
-      </div>
-    </div>
+        </button>}
+        </div>
+      </td>
+    </tr>
   );
+}
+
+function getDetailCellText(value: React.ReactNode): string {
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(getDetailCellText).join(" ");
+  if (isValidElement<{ children?: React.ReactNode }>(value)) return getDetailCellText(value.props.children);
+  return "";
 }

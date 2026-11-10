@@ -499,6 +499,9 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
   const shownCatalogTableWidth = shownCatalogColumns.reduce((total, column) => total + column.width, 0);
   const shownRoleColumns = ROLE_TABLE_COLUMNS.filter((column) => visibleRoleColumns[column.id]);
   const shownRoleTableWidth = shownRoleColumns.reduce((total, column) => total + column.width, 0);
+  const permissionSerialNumbers = new Map(
+    filteredCatalogPermissions.map((permission, index) => [permission.code, index + 1]),
+  );
   const selectedAssignmentRoleCode = assignmentRoleCode || roles[0]?.code || "";
   const assignmentCategories = [...new Set(permissions.map((permission) => categoryOf(permission.category)))]
     .sort((left, right) => left.localeCompare(right, "vi"));
@@ -647,15 +650,17 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
                 <table
                   className="min-w-full table-fixed text-left text-sm"
-                  style={{ width: `${shownRoleTableWidth}px` }}
+                  style={{ width: `${shownRoleTableWidth + 64}px` }}
                 >
                   <colgroup>
+                    <col style={{ width: "64px" }} />
                     {shownRoleColumns.map((column) => (
                       <col key={column.id} style={{ width: `${column.width}px` }} />
                     ))}
                   </colgroup>
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
+                      <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">STT</th>
                       {shownRoleColumns.map((column) => (
                         <th
                           key={column.id}
@@ -694,7 +699,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {roles.map((role) => {
+                    {roles.map((role, index) => {
                       const assignedPermissions = rolePermissionGroups.find((group) => group.roleCode === role.code)?.permissions ?? [];
                       const grantedPermissions = assignedPermissions.filter((permission) => permission.granted);
                       const grantedCount = grantedPermissions.length;
@@ -707,6 +712,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                         : grantedPermissions;
                       return (
                         <tr key={role.code} className="text-slate-700 transition-colors hover:bg-slate-50/60">
+                            <td className="px-4 py-3 tabular-nums text-slate-500">{index + 1}</td>
                             {visibleRoleColumns.name && <td className="break-words px-4 py-3 font-semibold text-slate-900">
                             <span className="flex flex-wrap items-center gap-2">
                               {role.name}
@@ -886,15 +892,17 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
                 <table
                   className="min-w-full table-fixed text-left text-sm"
-                  style={{ width: `${shownCatalogTableWidth}px` }}
+                  style={{ width: `${shownCatalogTableWidth + 64}px` }}
                 >
                   <colgroup>
+                    <col style={{ width: "64px" }} />
                     {shownCatalogColumns.map((column) => (
                       <col key={column.id} style={{ width: `${column.width}px` }} />
                     ))}
                   </colgroup>
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
+                      <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">STT</th>
                       {shownCatalogColumns.map((column) => (
                         <th
                           key={column.id}
@@ -921,6 +929,9 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                               index === 0 && categoryIndex > 0 ? "border-t border-slate-200" : ""
                             }`}
                           >
+                            <td className="px-4 py-3 tabular-nums text-slate-500">
+                              {permissionSerialNumbers.get(permission.code)}
+                            </td>
                             {visibleCatalogColumns.category && index === 0 && (
                               <td rowSpan={categoryPermissions.length} className="border-r border-slate-200 bg-slate-50/60 px-4 py-3 align-middle">
                                 <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">

@@ -285,6 +285,17 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       format: (value: number) => value.toLocaleString(locale),
     },
   ];
+  const summaryValues = summaryCards.map((card) => ({
+    ...card,
+    displayValue: isPromotionSummaryLoading
+      ? "Đang tải…"
+      : isPromotionSummaryError || card.value === undefined
+        ? "—"
+        : card.format(card.value),
+    description: card.label === "Tiết kiệm cho khách" || card.label.startsWith("Lượt sử dụng")
+      ? monthLabel
+      : "Dữ liệu cập nhật từ hệ thống",
+  }));
 
   useEffect(() => {
     setPage(1);
@@ -516,21 +527,29 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   };
   return (
     <div className="mt-2 space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê khuyến mãi">
-        {summaryCards.map((card) => (
-          <div key={card.label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${card.accent ? "bg-[#28233f] text-white" : "bg-white"}`}>
-            <p className={`text-xs font-medium ${card.accent ? "text-blue-200" : "text-slate-500"}`}>{card.label}</p>
-            <p className="mt-2 text-xl font-bold tracking-tight">
-              {isPromotionSummaryLoading ? "Đang tải…" : isPromotionSummaryError || card.value === undefined ? "—" : card.format(card.value)}
-            </p>
-            <p className={`mt-1 text-[11px] ${card.accent ? "text-blue-200" : "text-slate-400"}`}>
-              {card.label === "Tiết kiệm cho khách" || card.label.startsWith("Lượt sử dụng")
-                ? monthLabel
-                : "Dữ liệu cập nhật từ hệ thống"}
-            </p>
-          </div>
-        ))}
-      </section>
+      {isSystemAdmin ? (
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê khuyến mãi">
+          {summaryValues.map((card) => (
+            <article key={card.label} className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+              <h3 className="border-b border-blue-100 bg-blue-50 px-5 py-3.5 text-xs font-semibold text-blue-800">{card.label}</h3>
+              <div className="px-5 py-4">
+                <p className="text-xl font-bold tracking-tight text-slate-900">{card.displayValue}</p>
+                <p className="mt-1 text-[11px] text-slate-400">{card.description}</p>
+              </div>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê khuyến mãi">
+          {summaryValues.map((card) => (
+            <div key={card.label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${card.accent ? "bg-[#28233f] text-white" : "bg-white"}`}>
+              <p className={`text-xs font-medium ${card.accent ? "text-blue-200" : "text-slate-500"}`}>{card.label}</p>
+              <p className="mt-2 text-xl font-bold tracking-tight">{card.displayValue}</p>
+              <p className={`mt-1 text-[11px] ${card.accent ? "text-blue-200" : "text-slate-400"}`}>{card.description}</p>
+            </div>
+          ))}
+        </section>
+      )}
       {isPromotionSummaryError && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           <span>Không tải được thống kê khuyến mãi.</span>
@@ -1052,15 +1071,17 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
             <div className="overflow-x-auto">
               <table
                 className="min-w-full table-fixed border-collapse text-left text-sm"
-                style={{ width: `${promotionTableWidth}px` }}
+                style={{ width: `${promotionTableWidth + (isSystemAdmin ? 64 : 0)}px` }}
               >
                 <colgroup>
+                  {isSystemAdmin && <col style={{ width: "64px" }} />}
                   {shownPromotionColumns.map((column) => (
                     <col key={column.id} style={{ width: `${column.width}px` }} />
                   ))}
                 </colgroup>
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
                   <tr>
+                    {isSystemAdmin && <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>}
                     {shownPromotionColumns.map((column) => (
                       <th
                         key={column.id}
@@ -1073,7 +1094,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paginatedPromotions.map((promotion) => {
+                  {paginatedPromotions.map((promotion, index) => {
                     const scope = promotionScopeOf(promotion);
                     const status = promotionStatusOf(promotion);
                     const expired = isPromotionExpired(promotion);
@@ -1081,6 +1102,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     const editDisabledReason = expired ? label("editDisabledExpired") : label("editDisabledUsed");
                     return (
                       <tr key={promotion.id} className="text-slate-700 transition hover:bg-slate-50/70">
+                      {isSystemAdmin && <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>}
                       {visiblePromotionColumns.program && <td className="max-w-80 px-5 py-3">
                           <p className="truncate font-semibold text-slate-900" title={promotion.name}>{promotion.name}</p>
                           {promotion.description && <p className="mt-1 truncate text-xs text-slate-500" title={promotion.description}>{promotion.description}</p>}

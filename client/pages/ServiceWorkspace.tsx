@@ -291,6 +291,20 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     { skip: mode !== "catalog" || (!hasHotelId && !isSystemAdmin) },
   );
   const allServices = services;
+  const serviceCatalogStats = useMemo(() => {
+    const activeCount = allServices.filter((service) => service.active).length;
+    const categories = new Set(
+      allServices
+        .map((service) => service.category.trim().toLocaleLowerCase(i18n.language))
+        .filter(Boolean),
+    );
+    return {
+      total: allServices.length,
+      active: activeCount,
+      inactive: allServices.length - activeCount,
+      categories: categories.size,
+    };
+  }, [allServices, i18n.language]);
   const todayServiceStats = useMemo(() => getTodayServiceStats(bookings), [bookings]);
   const pendingUsageRows = useMemo(() => getServiceUsageRows(bookings), [bookings]);
   const pendingUsageGroups = useMemo(() => {
@@ -681,6 +695,25 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
             <p className="mt-1 text-xs text-slate-500">{t("serviceWorkspace.pendingHelp")}</p>
           </article>
         </div>
+      )}
+      {mode === "catalog" && isSystemAdmin && (
+        <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê danh mục dịch vụ">
+          {([
+            { label: "Tổng dịch vụ", value: serviceCatalogStats.total },
+            { label: "Đang hoạt động", value: serviceCatalogStats.active },
+            { label: "Tạm ngưng", value: serviceCatalogStats.inactive },
+            { label: "Danh mục", value: serviceCatalogStats.categories },
+          ]).map((stat) => (
+            <article key={stat.label} className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+              <h3 className="border-b border-blue-100 bg-blue-50 px-5 py-3.5 text-xs font-semibold text-blue-800">{stat.label}</h3>
+              <div className="px-5 py-4">
+                <p className="text-xl font-bold tracking-tight text-slate-900">
+                  {isLoading || isError ? "—" : stat.value.toLocaleString(i18n.language)}
+                </p>
+              </div>
+            </article>
+          ))}
+        </section>
       )}
     <section className={`${mode === "usage" ? "p-5" : "mt-2"} rounded-2xl border border-slate-200/80 bg-white shadow-sm`}>
       {mode === "usage" && canConfirmServiceUsage && (
@@ -1121,15 +1154,17 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         <div className="overflow-x-auto">
           <table
             className="min-w-full table-fixed border-collapse text-left text-sm"
-            style={{ width: `${serviceTableWidth}px` }}
+            style={{ width: `${serviceTableWidth + (isSystemAdmin ? 64 : 0)}px` }}
           >
             <colgroup>
+              {isSystemAdmin && <col style={{ width: "64px" }} />}
               {shownServiceColumns.map((column) => (
                 <col key={column.id} style={{ width: `${column.width}px` }} />
               ))}
             </colgroup>
             <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
               <tr>
+                {isSystemAdmin && <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>}
                 {shownServiceColumns.map((column) => (
                   <th
                     key={column.id}
@@ -1142,10 +1177,11 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedServices.map((service) => {
+              {paginatedServices.map((service, index) => {
                 const isActive = service.active;
                 return (
                   <tr key={service.id} className="text-slate-700 transition hover:bg-slate-50/70">
+                    {isSystemAdmin && <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>}
                     {visibleServiceColumns.name && <td className="max-w-56 px-5 py-3 font-semibold text-slate-900">
                       <p className="truncate" title={service.name}>{service.name}</p>
                     </td>}

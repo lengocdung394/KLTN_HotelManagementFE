@@ -93,17 +93,19 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
         <FilterResultStatus filterKey={search}><p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p></FilterResultStatus>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-105 text-left text-sm">
+          <table className="w-full min-w-[26rem] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr className="border-b border-slate-200">
+                <th scope="col" className="whitespace-nowrap px-4 py-3.5 font-semibold">STT</th>
                 <th className="px-4 py-3.5 font-semibold">Tên tiện ích</th>
                 <th className="px-4 py-3.5 text-right font-semibold">Giá</th>
                 {canManage && <th className="px-4 py-3.5 text-right font-semibold">Thao tác</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {paginatedAmenities.map((amenity) => (
+              {paginatedAmenities.map((amenity, index) => (
                 <tr key={amenity.id} className="transition-colors hover:bg-blue-50/40">
+                  <td className="px-4 py-4 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                   <td className="px-4 py-4 font-medium text-slate-800">{amenity.name}</td>
                   <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-800">{money(amenity.price)}</td>
                   {canManage && <td className="px-3 py-3 text-right">

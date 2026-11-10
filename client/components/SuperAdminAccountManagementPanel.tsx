@@ -27,6 +27,7 @@ import ListPagination from "./ListPagination";
 import { localizedText } from "../i18n";
 
 type AccountView = "all" | "staff" | "customers";
+type AccountTypeFilter = "ALL" | SuperAdminAccount["accountType"];
 const ACCOUNT_TABLE_COLUMNS = [
   { id: "name", label: "Họ và tên", width: 190 },
   { id: "type", label: "Loại tài khoản", width: 170 },
@@ -133,6 +134,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   const [updateCustomer, { isLoading: isUpdatingCustomer }] = useUpdateSuperAdminCustomerMutation();
   const [requestPasswordReset, { isLoading: isRequestingReset }] = useRequestSuperAdminPasswordResetMutation();
   const [search, setSearch] = useState("");
+  const [accountTypeFilter, setAccountTypeFilter] = useState<AccountTypeFilter>("ALL");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [branchSearch, setBranchSearch] = useState("");
@@ -171,7 +173,10 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   );
   const filteredAccounts = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase();
+    if (accountTypeFilter === "ALL" && !normalizedSearch) return branchFilteredAccounts;
+
     return branchFilteredAccounts.filter((account) => {
+      if (accountTypeFilter !== "ALL" && getDisplayAccountType(account) !== accountTypeFilter) return false;
       if (!normalizedSearch) return true;
       return [
         account.fullName,
@@ -183,14 +188,14 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
         getAccountTypeLabel(account),
       ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch));
     });
-  }, [branchFilteredAccounts, search]);
+  }, [accountTypeFilter, branchFilteredAccounts, search]);
   const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedAccounts = filteredAccounts.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   useEffect(() => {
     setPage(1);
-  }, [search, branchFilter, view, pageSize]);
+  }, [search, accountTypeFilter, branchFilter, view, pageSize]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -235,8 +240,8 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
     const emailChanged = form.email.trim().toLowerCase() !== (selectedAccount.email ?? "").trim().toLowerCase();
     if (isStaff && emailChanged && !selectedAccount.accountId) {
       setActionError(localizedText(
-        "Không thể gửi OTP vì tài khoản nhân viên chưa có mã tài khoản.",
-        "Cannot send an OTP because this employee account has no account ID.",
+        "Không thể gửi liên kết đặt lại vì tài khoản nhân viên chưa có mã tài khoản.",
+        "Cannot send a reset link because this employee account has no account ID.",
       ));
       return;
     }
@@ -276,21 +281,21 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
       setSelectedAccount(updated);
       setForm(toAccountForm(updated));
       setActionMessage(isStaff && emailChanged
-        ? localizedText("Đã lưu thông tin và đổi email. Đang gửi OTP đặt lại mật khẩu.", "Information and email saved. Sending a password reset OTP.")
+        ? localizedText("Đã lưu thông tin và đổi email. Đang tạo mật khẩu mới và gửi đến email mới.", "Information and email saved. Generating a new password and sending it to the new email.")
         : localizedText("Cập nhật thông tin thành công.", "Information updated successfully."));
       if (isStaff && emailChanged && selectedAccount.accountId) {
         try {
           await requestPasswordReset(selectedAccount.accountId).unwrap();
           setActionMessage(localizedText(
-            `Đã lưu thông tin và gửi OTP đặt lại mật khẩu đến ${form.email.trim()}.`,
-            `Information saved and a password reset OTP was sent to ${form.email.trim()}.`,
+            `Đã lưu thông tin và gửi mật khẩu mới đến ${form.email.trim()}.`,
+            `Information saved and a new password was sent to ${form.email.trim()}.`,
           ));
         } catch (resetError) {
           setActionError(getErrorMessage(
             resetError,
             localizedText(
-              "Email đã được đổi nhưng không gửi được OTP đặt lại mật khẩu. Vui lòng gửi lại.",
-              "The email was updated, but the password reset OTP could not be sent. Please retry.",
+              "Email đã được đổi nhưng không gửi được mật khẩu mới. Vui lòng thử cấp lại mật khẩu.",
+              "The email was updated, but the new password could not be sent. Please retry the password reset.",
             ),
           ));
         }
@@ -308,11 +313,11 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
     try {
       await requestPasswordReset(selectedAccount.accountId).unwrap();
       setActionMessage(localizedText(
-        `Đã gửi mã OTP đặt lại mật khẩu đến ${selectedAccount.email}.`,
-        `A password reset OTP was sent to ${selectedAccount.email}.`,
+        `Đã tạo mật khẩu mới và gửi đến ${selectedAccount.email}.`,
+        `A new password was generated and sent to ${selectedAccount.email}.`,
       ));
     } catch (error) {
-      setActionError(getErrorMessage(error, localizedText("Không thể gửi yêu cầu đặt lại mật khẩu.", "Could not send the password reset request.")));
+      setActionError(getErrorMessage(error, localizedText("Không thể cấp lại mật khẩu.", "Could not reset the password.")));
     }
   };
 
@@ -326,7 +331,31 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   const canEdit = selectedAccount?.accountType !== "SUPER_ADMIN";
   const isSaving = isUpdatingAccount || isUpdatingCustomer;
   const isBusy = isLoading || isFetching;
-  const hasAccountFilters = Boolean(search.trim() || (view === "staff" && branchFilter !== ALL_BRANCHES));
+  const hasAccountFilters = Boolean(
+    search.trim()
+    || accountTypeFilter !== "ALL"
+    || (view === "staff" && branchFilter !== ALL_BRANCHES),
+  );
+  const accountTypeOptions: { value: AccountTypeFilter; label: string }[] = view === "staff"
+    ? [
+        { value: "ADMIN", label: "Admin chi nhánh" },
+        { value: "MANAGER", label: "Quản lý" },
+        { value: "EMPLOYEE", label: "Nhân viên" },
+      ]
+    : view === "customers"
+      ? [
+          { value: "CUSTOMER", label: "Khách hàng có tài khoản" },
+          { value: "WALK_IN_CUSTOMER", label: "Khách vãng lai" },
+        ]
+      : [
+          { value: "SUPER_ADMIN", label: "Super Admin" },
+          { value: "ADMIN", label: "Admin chi nhánh" },
+          { value: "MANAGER", label: "Quản lý" },
+          { value: "EMPLOYEE", label: "Nhân viên" },
+          { value: "CUSTOMER", label: "Khách hàng có tài khoản" },
+          { value: "WALK_IN_CUSTOMER", label: "Khách vãng lai" },
+          { value: "OTHER", label: "Khác" },
+        ];
 
   return (
     <>
@@ -345,7 +374,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
           </div>
         </div>
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-5 flex flex-col gap-3">
           <div className="flex flex-wrap gap-2 text-xs">
             <span className="rounded-full bg-slate-100 px-3 py-1.5 font-semibold text-slate-700">Tổng: {branchFilteredAccounts.length}</span>
             {view !== "customers" && (
@@ -371,8 +400,8 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
               </>
             )}
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <div className="relative block w-full sm:w-72">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative block w-full sm:w-72 sm:flex-none">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
@@ -383,6 +412,18 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
               />
               <ClearSearchButton value={search} onClear={() => setSearch("")} label="Xóa tìm kiếm" />
             </div>
+          <div className="flex w-full flex-col gap-2 sm:w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:flex-nowrap">
+            <select
+              value={accountTypeFilter}
+              onChange={(event) => setAccountTypeFilter(event.target.value as AccountTypeFilter)}
+              aria-label="Lọc theo loại tài khoản"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-52 sm:flex-none"
+            >
+              <option value="ALL">Tất cả loại tài khoản</option>
+              {accountTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
             {view === "staff" && (
               <Popover
                 open={isBranchFilterOpen}
@@ -395,7 +436,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                   <button
                     type="button"
                     aria-label="Lọc nhân sự theo chi nhánh"
-                    className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-56"
+                    className="flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-56 sm:flex-none"
                   >
                     <span className="truncate">{selectedBranchName ?? "Tất cả chi nhánh"}</span>
                     <ChevronDown size={15} className="shrink-0 text-slate-400" />
@@ -455,7 +496,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 <button
                   type="button"
                   aria-label="Tùy chỉnh cột bảng tài khoản"
-                  className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <Columns3 size={16} />
                   Cột
@@ -511,6 +552,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 if (isBusy) return;
                 if (hasAccountFilters) {
                   setSearch("");
+                  setAccountTypeFilter("ALL");
                   setBranchFilter(ALL_BRANCHES);
                 }
                 void refetch();
@@ -528,6 +570,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                   : <RefreshCw size={16} />}
             </button>
           </div>
+          </div>
         </div>
 
         {isBusy ? (
@@ -541,7 +584,7 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
             <button type="button" onClick={() => void refetch()} className="font-semibold underline">Thử lại</button>
           </div>
         ) : filteredAccounts.length === 0 ? (
-          <FilterResultStatus filterKey={JSON.stringify([search, branchFilter])}><div className="py-12 text-center">
+          <FilterResultStatus filterKey={JSON.stringify([search, accountTypeFilter, branchFilter])}><div className="py-12 text-center">
             <Users size={25} className="mx-auto text-slate-300" />
             <p className="mt-3 text-sm font-medium text-slate-600">
               {accountsInView.length === 0 ? "Chưa có tài khoản hoặc hồ sơ phù hợp." : "Không tìm thấy hồ sơ phù hợp với bộ lọc."}
@@ -551,15 +594,17 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
           <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
             <table
               className="min-w-full table-fixed text-left text-sm"
-              style={{ width: `${tableWidth}px` }}
+              style={{ width: `${tableWidth + 64}px` }}
             >
               <colgroup>
+                <col style={{ width: "64px" }} />
                 {shownColumns.map((column) => (
                   <col key={column.id} style={{ width: `${column.width}px` }} />
                 ))}
               </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
+                  <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">STT</th>
                   {shownColumns.map((column) => (
                     <th
                       key={column.id}
@@ -571,8 +616,9 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {paginatedAccounts.map((account) => (
+                {paginatedAccounts.map((account, index) => (
                   <tr key={`${account.accountId ?? account.profileId}-${account.accountType}`} className="text-slate-700">
+                    <td className="px-4 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                     {visibleColumns.name && <td className="px-4 py-3 font-semibold text-slate-900">{account.fullName || "Chưa cập nhật"}</td>}
                     {visibleColumns.type && <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getAccountTypeBadgeClass(account)}`}>
@@ -703,11 +749,11 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
                   {isStaff
                     ? localizedText(
-                        "Không nhập mật khẩu tại đây. Khi đổi email, OTP đặt lại mật khẩu sẽ được gửi tới email mới.",
-                        "Passwords cannot be entered here. When the email changes, a password reset OTP will be sent to the new address.",
+                      "Không nhập mật khẩu tại đây. Khi đổi email, mật khẩu mới sẽ được tạo và gửi tới email mới.",
+                      "Passwords cannot be entered here. When the email changes, a new password will be generated and sent to the new address.",
                       )
                     : isCustomer && selectedAccount.accountType === "CUSTOMER"
-                      ? "Mật khẩu và mã hash không được hiển thị. Cấp lại mật khẩu sẽ gửi OTP tới email đang lưu trong tài khoản."
+                    ? "Mật khẩu và mã hash không được hiển thị. Cấp lại mật khẩu sẽ tạo mật khẩu mới và gửi tới email tài khoản."
                       : "Mật khẩu và mã hash không được hiển thị."}
                 </p>
                 {actionError && <p role="alert" className="mt-3 text-sm text-rose-600">{actionError}</p>}
@@ -723,8 +769,8 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                     >
                       <KeyRound size={15} />
                       {isRequestingReset
-                        ? localizedText("Đang gửi OTP...", "Sending OTP...")
-                        : localizedText("Gửi OTP đặt lại mật khẩu", "Send password reset OTP")}
+                        ? localizedText("Đang gửi mật khẩu mới...", "Sending new password...")
+                        : localizedText("Cấp lại mật khẩu", "Reset password")}
                     </button>
                   )}
                   <div className="ml-auto flex gap-2">

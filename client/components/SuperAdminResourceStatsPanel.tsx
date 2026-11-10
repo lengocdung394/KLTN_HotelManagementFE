@@ -91,6 +91,16 @@ const promotionScopeLabels: Record<PromotionScope, string> = {
   UNKNOWN: "Chưa xác định",
 };
 
+const statCardSurfaceColors: Record<string, string> = {
+  blue: "border-blue-200 bg-gradient-to-br from-blue-50 to-white",
+  cyan: "border-cyan-200 bg-gradient-to-br from-cyan-50 to-white",
+  rose: "border-rose-200 bg-gradient-to-br from-rose-50 to-white",
+  violet: "border-violet-200 bg-gradient-to-br from-violet-50 to-white",
+  amber: "border-amber-200 bg-gradient-to-br from-amber-50 to-white",
+  emerald: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white",
+  orange: "border-orange-200 bg-gradient-to-br from-orange-50 to-white",
+};
+
 const StatCard = ({
   label,
   value,
@@ -103,20 +113,24 @@ const StatCard = ({
   detail: string;
   icon: typeof Building2;
   color: string;
-}) => (
-  <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <p className="text-sm font-medium text-slate-500">{label}</p>
-        <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">{value}</p>
-        <p className="mt-1 text-xs text-slate-400">{detail}</p>
+}) => {
+  const tone = color.match(/text-([a-z]+)-/)?.[1] ?? "blue";
+
+  return (
+    <article className={`flex min-h-[172px] flex-col justify-between rounded-2xl border p-5 shadow-sm ring-1 ring-white/80 transition hover:-translate-y-0.5 hover:shadow-md ${statCardSurfaceColors[tone] ?? statCardSurfaceColors.blue}`}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-h-10 text-sm font-bold leading-5 text-slate-600">{label}</p>
+        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl shadow-sm ${color}`}>
+          <Icon size={21} />
+        </span>
       </div>
-      <span className={`grid h-11 w-11 place-items-center rounded-xl ${color}`}>
-        <Icon size={20} />
-      </span>
-    </div>
-  </article>
-);
+      <div>
+        <p className="mt-3 break-words text-3xl font-extrabold leading-tight tracking-tight text-slate-900">{value}</p>
+        <p className="mt-2 min-h-8 text-xs leading-4 text-slate-500">{detail}</p>
+      </div>
+    </article>
+  );
+};
 
 export default function SuperAdminResourceStatsPanel({ branches, isLoading, isError, onRetry }: Props) {
   const [selectedBranchId, setSelectedBranchId] = useState("all");
@@ -266,31 +280,6 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       "vi-VN",
     );
   }, [endDate, reportPeriod, reports, startDate]);
-  const promotionBreakdown = useMemo(() => {
-    const values = new Map<string, { id: string; name: string; code: string; scope: PromotionScope; usageCount: number; userCount: number; savings: number }>();
-    reports.forEach((report) => report.promotions.forEach((promotion) => {
-      const key = `${promotion.promotionId}:${promotion.promotionCode}`;
-      const current = values.get(key) ?? {
-        id: promotion.promotionId,
-        name: promotion.promotionName,
-        code: promotion.promotionCode,
-        scope: getPromotionScope(
-          promotionScopeById.get(promotion.promotionId)
-            ?? promotion.type
-            ?? promotion.scope
-            ?? promotion.promotionScope,
-        ),
-        usageCount: 0,
-        userCount: 0,
-        savings: 0,
-      };
-      current.usageCount += promotion.usageCount;
-      current.userCount += promotion.userCount;
-      current.savings += Number(promotion.savings ?? 0);
-      values.set(key, current);
-    }));
-    return [...values.values()].sort((left, right) => right.usageCount - left.usageCount);
-  }, [promotionScopeById, reports]);
   const promotionScopeBreakdown = useMemo(
     () => buildPromotionScopeBreakdown(
       reports.flatMap((report) => report.promotions),
@@ -298,7 +287,6 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     ),
     [promotionScopeById, reports],
   );
-  const promotionScopesTotalSavings = promotionScopeBreakdown.reduce((total, item) => total + item.savings, 0);
   const dailyReportHotelIds = useMemo(
     () => visibleBranches.map((branch) => branch.id),
     [visibleBranches],
@@ -416,9 +404,6 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     setRetryCount((count) => count + 1);
     void refetchPromotionCatalog();
   };
-  const reportDateScopeLabel = reportPeriod === "custom"
-    ? "trong khoảng tùy chọn"
-    : `trong ${comparisonScope === "week" ? "tuần" : comparisonScope === "month" ? "tháng" : "năm"}`;
   const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, string> = {
     "day-week": "Ngày trong tuần",
     "day-month": "Ngày trong tháng",
@@ -427,6 +412,9 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     "week-year": "Tuần trong năm",
     "month-year": "Tháng trong năm",
   };
+  const reportDateScopeLabel = reportPeriod === "custom"
+    ? "trong khoảng tùy chọn"
+    : `trong ${comparisonScope === "week" ? "tuần" : comparisonScope === "month" ? "tháng" : "năm"}`;
   const reportPeriodLabel = reportPeriod === "custom"
     ? "ngày trong khoảng tùy chọn"
     : reportPeriodOptionLabels[reportPeriod].toLowerCase();
@@ -448,13 +436,12 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       )
     : [{
         label: reportDateScopeLabel,
-        fullDate: reportDateScopeLabel,
+        fullDate: `${startDate} – ${endDate}`,
         ROOM: promotionSavingsByScope.find((item) => item.scope === "ROOM")?.savings ?? 0,
         SERVICE: promotionSavingsByScope.find((item) => item.scope === "SERVICE")?.savings ?? 0,
         TOTAL: promotionSavingsByScope.find((item) => item.scope === "TOTAL")?.savings ?? 0,
         UNKNOWN: promotionSavingsByScope.find((item) => item.scope === "UNKNOWN")?.savings ?? 0,
       }];
-
   return (
     <section className="mt-2 space-y-5" aria-labelledby="resource-stats-title">
       <header className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
@@ -697,7 +684,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       <section id="super-admin-stats-overview" data-super-admin-report-section className="scroll-mt-24 space-y-5">
         <div>
           <h3 className="mb-2 text-sm font-bold text-slate-700">Hoạt động</h3>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
             <StatCard
               label="Chi nhánh"
               value={isLoading || isError ? "—" : visibleBranches.length}
@@ -731,7 +718,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
         <div>
           <h3 className="mb-2 text-sm font-bold text-slate-700">Doanh thu vận hành</h3>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <StatCard
               label="Tiền phòng"
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRoomRevenue)}
@@ -772,7 +759,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
         <div>
           <h3 className="mb-2 text-sm font-bold text-slate-700">Dòng tiền</h3>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
             <StatCard
               label="Tổng tiền đã thu booking"
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRevenue)}
@@ -860,6 +847,10 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               </div>
               {dailyServiceRevenue.every((item) => item.revenue === 0) && reportPeriod === "custom" ? (
                 <p className="py-12 text-center text-sm text-slate-400">Không có dữ liệu doanh thu dịch vụ trong kỳ.</p>
+              ) : reportPeriod !== "custom" && periodReportData.isLoading ? (
+                <p className="py-12 text-center text-sm text-slate-400">Đang tải doanh thu dịch vụ…</p>
+              ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                <p role="alert" className="py-12 text-center text-sm text-rose-600">Không thể tải doanh thu dịch vụ theo kỳ.</p>
               ) : (
                 <ResponsiveContainer width="100%" height={reportPeriod === "day-month" ? 320 : 290}>
                   <BarChart data={dailyServiceRevenue}>
@@ -906,59 +897,51 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                   Không tải được loại khuyến mãi; một số chương trình có thể hiện là chưa xác định.
                 </p>
               )}
-              {promotionBreakdown.length === 0
-                && reportPeriod === "custom" ? (
+              {promotionScopeBreakdown.length === 0 && reportPeriod === "custom" ? (
                 <p className="py-12 text-center text-sm text-slate-400">Không có khuyến mãi được áp dụng trong kỳ.</p>
+              ) : reportPeriod !== "custom" && periodReportData.isLoading ? (
+                <p className="py-12 text-center text-sm text-slate-400">Đang tải dữ liệu khuyến mãi…</p>
+              ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                <p role="alert" className="py-12 text-center text-sm text-rose-600">Không thể tải dữ liệu khuyến mãi theo ngày.</p>
               ) : (
                 <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
                   <p className="mb-2 text-center text-xs font-semibold text-slate-600">
                     {reportPeriod !== "custom" ? "Tiền giảm theo thời gian" : "Số tiền giảm theo loại"}
                   </p>
-                  {reportPeriod !== "custom" && periodReportData.isLoading ? (
-                    <p className="py-12 text-center text-xs text-slate-400">Đang tải dữ liệu khuyến mãi…</p>
-                  ) : reportPeriod !== "custom" && periodReportData.isError ? (
-                    <p role="alert" className="py-12 text-center text-xs text-rose-600">Không thể tải dữ liệu khuyến mãi theo ngày.</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={promotionChartData} margin={{ top: 8, right: 12, left: 0, bottom: reportPeriod === "day-month" ? 22 : 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
-                        <XAxis
-                          dataKey="label"
-                          axisLine={false}
-                          tickLine={false}
-                          interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
-                          angle={reportPeriod === "day-month" ? -45 : 0}
-                          textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
-                          height={reportPeriod === "day-month" ? 48 : 30}
-                          tick={{ fontSize: 10, fill: "#64748b" }}
-                        />
-                        <YAxis
-                          type="number"
-                          domain={[0, "dataMax"]}
-                          allowDecimals={false}
-                          axisLine={false}
-                          tickLine={false}
-                          width={52}
-                          tick={{ fontSize: 9, fill: "#94a3b8" }}
-                          tickFormatter={(value) => formatReportCurrencyAxis(Number(value), "vi")}
-                        />
-                        <Tooltip
-                          labelFormatter={(_label, entries) => {
-                            return entries[0]?.payload.fullDate ?? "";
-                          }}
-                          formatter={(value, name) => [formatMoney(Number(value)), name]}
-                        />
-                        <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="ROOM" name={promotionScopeLabels.ROOM} fill={promotionScopeColors.ROOM} stackId="savings" radius={[3, 3, 0, 0]} />
-                        <Bar dataKey="SERVICE" name={promotionScopeLabels.SERVICE} fill={promotionScopeColors.SERVICE} stackId="savings" radius={[3, 3, 0, 0]} />
-                        <Bar dataKey="TOTAL" name={promotionScopeLabels.TOTAL} fill={promotionScopeColors.TOTAL} stackId="savings" radius={[3, 3, 0, 0]} />
-                        <Bar dataKey="UNKNOWN" name={promotionScopeLabels.UNKNOWN} fill={promotionScopeColors.UNKNOWN} stackId="savings" radius={[3, 3, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                  {promotionScopesTotalSavings === 0 && !periodReportData.isLoading && !periodReportData.isError && (
-                    <p className="py-3 text-center text-xs text-slate-400">Chưa có số tiền giảm để so sánh.</p>
-                  )}
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={promotionChartData} margin={{ top: 8, right: 12, left: 0, bottom: reportPeriod === "day-month" ? 22 : 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
+                      <XAxis
+                        dataKey="label"
+                        axisLine={false}
+                        tickLine={false}
+                        interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                        angle={reportPeriod === "day-month" ? -45 : 0}
+                        textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                        height={reportPeriod === "day-month" ? 48 : 30}
+                        tick={{ fontSize: 10, fill: "#64748b" }}
+                      />
+                      <YAxis
+                        type="number"
+                        domain={[0, "dataMax"]}
+                        allowDecimals={false}
+                        axisLine={false}
+                        tickLine={false}
+                        width={52}
+                        tick={{ fontSize: 9, fill: "#94a3b8" }}
+                        tickFormatter={(value) => formatReportCurrencyAxis(Number(value), "vi")}
+                      />
+                      <Tooltip
+                        labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""}
+                        formatter={(value, name) => [formatMoney(Number(value)), name]}
+                      />
+                      <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="ROOM" name={promotionScopeLabels.ROOM} fill={promotionScopeColors.ROOM} stackId="savings" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="SERVICE" name={promotionScopeLabels.SERVICE} fill={promotionScopeColors.SERVICE} stackId="savings" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="TOTAL" name={promotionScopeLabels.TOTAL} fill={promotionScopeColors.TOTAL} stackId="savings" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="UNKNOWN" name={promotionScopeLabels.UNKNOWN} fill={promotionScopeColors.UNKNOWN} stackId="savings" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               )}
             </section>
@@ -1037,19 +1020,29 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             ) : (
               <>
                 <div className="max-h-[380px] overflow-auto">
-                  <table className="w-full min-w-[760px] text-left text-sm">
+                  <table className="w-full min-w-[1150px] table-fixed text-left text-sm">
+                  <colgroup>
+                    <col className="w-[72px]" />
+                    <col className="w-[190px]" />
+                    <col className="w-[180px]" />
+                    <col className="w-[130px]" />
+                    <col className="w-[350px]" />
+                    <col className="w-[230px]" />
+                  </colgroup>
                   <thead className="sticky top-0 bg-slate-50 text-xs font-semibold text-slate-500">
                     <tr>
-                      <th className="px-5 py-3">Chi nhánh</th>
-                      <th className="px-5 py-3">Mã booking</th>
-                      <th className="px-5 py-3">Kênh đặt</th>
-                      <th className="px-5 py-3">Lý do hủy</th>
-                      <th className="px-5 py-3">Thời điểm</th>
+                      <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>
+                      <th className="whitespace-nowrap px-5 py-3">Chi nhánh</th>
+                      <th className="whitespace-nowrap px-5 py-3">Mã booking</th>
+                      <th className="whitespace-nowrap px-5 py-3">Kênh đặt</th>
+                      <th className="whitespace-nowrap px-5 py-3">Lý do hủy</th>
+                      <th className="whitespace-nowrap px-5 py-3">Thời điểm</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {paginatedCancelledBookings.map((booking) => (
+                    {paginatedCancelledBookings.map((booking, index) => (
                       <tr key={booking.rowKey} className="hover:bg-slate-50/70">
+                        <td className="whitespace-nowrap px-5 py-3 tabular-nums text-slate-500">{(safeCancelledPage - 1) * cancelledPageSize + index + 1}</td>
                         <td className="px-5 py-3 font-medium text-slate-700">{booking.branchName}</td>
                         <td className="whitespace-nowrap px-5 py-3 font-semibold text-slate-800">{booking.bookingId}</td>
                         <td className="px-5 py-3">
@@ -1103,20 +1096,31 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1120px] text-left">
+              <table className="w-full min-w-[1300px] table-fixed text-left">
+              <colgroup>
+                <col className="w-[72px]" />
+                <col className="w-[240px]" />
+                <col className="w-[170px]" />
+                <col className="w-[170px]" />
+                <col className="w-[170px]" />
+                <col className="w-[230px]" />
+                <col className="w-[130px]" />
+                <col className="w-[130px]" />
+              </colgroup>
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th scope="col" className="px-5 py-3">Chi nhánh</th>
-                  <th scope="col" className="px-5 py-3">Tỉnh / thành</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3">Chi nhánh</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3">Tỉnh / thành</th>
                   <th scope="col" className="px-5 py-3 text-right">Lượt đặt phòng</th>
                   <th scope="col" className="px-5 py-3 text-right">Booking đã hủy</th>
                   <th scope="col" className="px-5 py-3 text-right">Tiền booking đã thu</th>
-                  <th scope="col" className="px-5 py-3 text-center">Dịch vụ</th>
-                  <th scope="col" className="px-5 py-3 text-center">Khuyến mãi</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3 text-center">Dịch vụ</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3 text-center">Khuyến mãi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {paginatedBranches.map((branch) => {
+                {paginatedBranches.map((branch, index) => {
                   const branchReport = branchReports[branch.id];
                   const report = branchReport?.report;
                   const hasBranchReportError = branchReport?.hasError;
@@ -1125,6 +1129,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                     hasBranchReportError || isBranchLoading || !report ? "—" : formatCount(count ?? 0);
                   return (
                     <tr key={branch.id} className="transition hover:bg-slate-50/70">
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-slate-500">{(safeBranchPage - 1) * branchPageSize + index + 1}</td>
                       <th scope="row" className="px-5 py-4 font-semibold text-slate-800">
                         <div className="flex items-center gap-3">
                           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">

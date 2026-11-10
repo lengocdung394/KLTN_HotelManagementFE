@@ -2,10 +2,9 @@ import { useState } from "react";
 import { Check, CircleUserRound, KeyRound, LoaderCircle, Save, ShieldCheck } from "lucide-react";
 import { useUpdateMyProfileMutation } from "../services/employeeApi";
 import {
-  useGetSuperAdminAccountsQuery,
-  useUpdateSuperAdminAccountMutation,
+  useRequestOwnSuperAdminPasswordResetMutation,
+  useUpdateOwnSuperAdminProfileMutation,
 } from "../services/superAdminApi";
-import { useRequestPasswordResetLinkMutation } from "../services/authApi";
 import { logout, updateProfile } from "../store/authSlice";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
@@ -18,8 +17,8 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
   const dispatch = useAppDispatch();
   const { fullName, email, position } = useAppSelector((state) => state.auth);
   const [updateMyProfile, { isLoading }] = useUpdateMyProfileMutation();
-  const [updateSuperAdminAccount, { isLoading: isUpdatingAccount }] = useUpdateSuperAdminAccountMutation();
-  const [requestPasswordResetLink, { isLoading: isRequestingPasswordReset }] = useRequestPasswordResetLinkMutation();
+  const [updateOwnSuperAdminProfile, { isLoading: isUpdatingOwnProfile }] = useUpdateOwnSuperAdminProfileMutation();
+  const [requestOwnPasswordReset, { isLoading: isRequestingPasswordReset }] = useRequestOwnSuperAdminPasswordResetMutation();
   const [form, setForm] = useState({
     fullName: fullName ?? "",
     email: email ?? "",
@@ -34,14 +33,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
   const passwordChanged = Boolean(form.newPassword);
   const isNameOnlyUpdate = nameChanged && !emailChanged && !passwordChanged;
   const requiresCurrentPassword = emailChanged || passwordChanged;
-  const { data: accounts = [], isLoading: isLoadingAccounts } = useGetSuperAdminAccountsQuery("ALL", {
-    skip: !isNameOnlyUpdate,
-  });
-  const currentSuperAdmin = accounts.find((account) =>
-    account.email?.trim().toLocaleLowerCase() === (email ?? "").trim().toLocaleLowerCase()
-    && (account.accountType === "SUPER_ADMIN" || account.roles.includes("ROLE_SUPER_ADMIN")),
-  );
-  const isSaving = isLoading || isUpdatingAccount;
+  const isSaving = isLoading || isUpdatingOwnProfile;
 
   const updateField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -73,18 +65,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
 
     try {
       if (isNameOnlyUpdate) {
-        if (isLoadingAccounts) {
-          setError(localizedText("Đang tải thông tin tài khoản, vui lòng thử lại.", "Account information is still loading. Please try again."));
-          return;
-        }
-        if (!currentSuperAdmin?.accountId) {
-          setError(localizedText("Không tìm thấy tài khoản Super Admin để cập nhật tên.", "Could not find the Super Admin account to update the name."));
-          return;
-        }
-        const result = await updateSuperAdminAccount({
-          accountId: currentSuperAdmin.accountId,
-          request: { fullName: form.fullName.trim() },
-        }).unwrap();
+        const result = await updateOwnSuperAdminProfile({ fullName: form.fullName.trim() }).unwrap();
         dispatch(updateProfile({
           fullName: result.fullName ?? form.fullName.trim(),
           email: result.email ?? email ?? "",
@@ -143,18 +124,18 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
     setError("");
     setSaved(false);
     if (!email?.trim()) {
-      setError(localizedText("Không tìm thấy email tài khoản để gửi yêu cầu đặt lại mật khẩu.", "No account email is available for a password reset request."));
+      setError(localizedText("Không tìm thấy email tài khoản để nhận mật khẩu mới.", "No account email is available to receive the new password."));
       return;
     }
     try {
-      await requestPasswordResetLink({ email: email.trim() }).unwrap();
+      await requestOwnPasswordReset().unwrap();
       dispatch(logout());
       onLogout();
     } catch (resetError) {
       const message = resetError && typeof resetError === "object" && "data" in resetError
         ? (resetError as { data?: { message?: string } }).data?.message
         : undefined;
-      setError(message ?? localizedText("Không thể gửi liên kết đặt lại mật khẩu. Vui lòng thử lại.", "Could not send the password reset link. Please try again."));
+      setError(message ?? localizedText("Không thể cấp lại mật khẩu. Vui lòng thử lại.", "Could not reset the password. Please try again."));
     }
   };
 
@@ -217,7 +198,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
             <div>
               <h3 className="text-sm font-bold text-slate-800">Bảo mật tài khoản</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                Tên cập nhật riêng; đổi email cần mật khẩu mới. Có thể gửi liên kết đặt lại mật khẩu qua email.
+                Tên cập nhật riêng; đổi email cần mật khẩu mới. Có thể cấp lại mật khẩu và gửi mật khẩu mới qua email.
               </p>
             </div>
           </div>
@@ -268,19 +249,19 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
             <button
               type="button"
               onClick={() => void sendPasswordReset()}
-              disabled={isSaving || isRequestingPasswordReset || isLoadingAccounts}
+              disabled={isSaving || isRequestingPasswordReset}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
             >
               {isRequestingPasswordReset && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              Gửi liên kết đặt lại mật khẩu và đăng xuất
+              {isRequestingPasswordReset ? "Đang cấp lại mật khẩu..." : "Cấp lại mật khẩu và đăng xuất"}
             </button>
             <button
               type="submit"
-              disabled={isSaving || isRequestingPasswordReset || isLoadingAccounts || !form.fullName.trim() || !form.email.trim() || (requiresCurrentPassword && !form.currentPassword) || (emailChanged && !passwordChanged)}
+              disabled={isSaving || isRequestingPasswordReset || !form.fullName.trim() || !form.email.trim() || (requiresCurrentPassword && !form.currentPassword) || (emailChanged && !passwordChanged)}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
             >
-              {isSaving || isLoadingAccounts ? <LoaderCircle className="h-4 w-4 animate-spin" /> : saved ? <Check size={16} /> : <Save size={16} />}
-              {isSaving || isLoadingAccounts ? "Đang lưu..." : "Lưu thay đổi"}
+              {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : saved ? <Check size={16} /> : <Save size={16} />}
+              {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
             </button>
           </div>
         </div>
