@@ -1,10 +1,11 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { BedDouble, Check, Eye, MoreHorizontal, Pencil, Search, Sparkles, Users } from "lucide-react";
+import { BedDouble, Check, Eye, MoreHorizontal, Pencil, RefreshCw, RotateCcw, Search, Sparkles, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import ListPagination from "./ListPagination";
-import SearchableFilter, { FilterResetButton } from "./SearchableFilter";
+import SearchableFilter from "./SearchableFilter";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
+import { localizedText } from "../i18n";
 
 export type RoomListItem = {
   id: string;
@@ -60,6 +61,9 @@ type RoomListTabProps = {
   onEditRoom: (room: RoomListItem) => void;
   onShowGallery: (room: RoomListItem) => void;
   onShowDetails: (room: RoomListItem) => void;
+  isLoading: boolean;
+  isError: boolean;
+  onRefresh: () => Promise<void>;
 };
 
 const statusesForRoom = ["Sẵn sàng", "Bảo trì"];
@@ -95,8 +99,45 @@ export default function RoomListTab({
   onEditRoom,
   onShowGallery,
   onShowDetails,
+  isLoading,
+  isError,
+  onRefresh,
 }: RoomListTabProps) {
   const { t, i18n } = useTranslation();
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false);
+  const hasActiveFilters = Boolean(
+    query
+    || building !== "Tất cả các tòa"
+    || floor !== "Tất cả các tầng"
+    || roomType !== "Tất cả loại phòng"
+    || status !== "Tất cả trạng thái",
+  );
+  const isRoomListLoading = isLoading || isManuallyRefreshing;
+  const refreshOrResetFilters = async () => {
+    if (isRoomListLoading) return;
+    const refreshStartedAt = Date.now();
+    setIsManuallyRefreshing(true);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    if (hasActiveFilters) {
+      onQueryChange("");
+      onBuildingChange("Tất cả các tòa");
+      onFloorChange("Tất cả các tầng");
+      onRoomTypeChange("Tất cả loại phòng");
+      onStatusChange("Tất cả trạng thái");
+      onPageChange(1);
+    }
+    try {
+      await onRefresh();
+    } finally {
+      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+      if (remainingLoadingTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+      }
+      setIsManuallyRefreshing(false);
+    }
+  };
   const money = (value: number) =>
     `${value.toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
   const translateBed = (bed: string) => bed.split(" · ").map((item) => {
@@ -128,7 +169,7 @@ export default function RoomListTab({
 
   return (
     <>
-      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row">
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row sm:flex-wrap xl:flex-nowrap">
         <div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /><ClearSearchButton value={query} onClear={() => onQueryChange("")} label={t("common.clearSearch")} /></div>
         <SearchableFilter
           ariaLabel={t("room.building")}
@@ -178,18 +219,24 @@ export default function RoomListTab({
           onChange={onStatusChange}
           className="sm:w-52"
         />
-        {(query || building !== "Tất cả các tòa" || floor !== "Tất cả các tầng" || roomType !== "Tất cả loại phòng" || status !== "Tất cả trạng thái") && <FilterResetButton
-          label={t("common.resetFilter")}
-          onClick={() => {
-            onQueryChange("");
-            onBuildingChange("Tất cả các tòa");
-            onFloorChange("Tất cả các tầng");
-            onRoomTypeChange("Tất cả loại phòng");
-            onStatusChange("Tất cả trạng thái");
-          }}
-        />}
+        <button type="button" onClick={() => void refreshOrResetFilters()} disabled={isRoomListLoading} aria-label={hasActiveFilters ? localizedText("Xóa bộ lọc", "Reset filters") : localizedText("Tải lại danh sách phòng", "Reload rooms")} title={hasActiveFilters ? localizedText("Xóa bộ lọc", "Reset filters") : localizedText("Tải lại danh sách phòng", "Reload rooms")} aria-busy={isRoomListLoading} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60">
+          {isRoomListLoading ? <RefreshCw size={16} className="animate-spin" /> : hasActiveFilters ? <RotateCcw size={15} /> : <RefreshCw size={16} />}
+        </button>
       </div>
 
+      {isRoomListLoading ? (
+        <div role="status" aria-live="polite" className="mx-4 my-4 flex min-h-48 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-8 text-sm text-blue-700">
+          <RefreshCw size={17} className="animate-spin" />
+          <span>{t("common.loading")}</span>
+        </div>
+      ) : isError ? (
+        <div role="alert" className="m-4 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
+          <p className="text-sm text-rose-700">{localizedText("Không thể tải danh sách phòng.", "Could not load rooms.")}</p>
+          <button type="button" onClick={onRefresh} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            {localizedText("Thử lại", "Try again")}
+          </button>
+        </div>
+      ) : <>
       <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
         {paginatedRooms.map((room) => (
           <article key={room.id} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50">
@@ -210,6 +257,7 @@ export default function RoomListTab({
 
       <ListPagination totalItems={filtered.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
       {filtered.length === 0 && <FilterResultStatus filterKey={JSON.stringify([query, building, floor, roomType, status])}><div className="p-10 text-center"><p className="font-semibold text-slate-700">{t("room.noRooms")}</p><p className="mt-1 text-xs text-slate-400">{t("room.changeFilters")}</p></div></FilterResultStatus>}
+      </>}
     </>
   );
 }

@@ -1,10 +1,13 @@
 import { useAppSelector } from "../store/hooks";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Banknote, Check, LoaderCircle, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, Banknote, Check, Columns3, LoaderCircle, RefreshCw, RotateCcw, Save, Search } from "lucide-react";
 import BankSelectionField from "./BankSelectionField";
 import ListPagination from "./ListPagination";
+import SearchableFilter from "./SearchableFilter";
 import { localizedText } from "../i18n";
+import { toast } from "@/components/ui/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
   useApproveCheckoutRefundMutation,
   useConfirmCheckoutRefundMutation,
@@ -31,26 +34,99 @@ const getErrorMessage = (error: unknown) => {
   return apiError.data?.message ?? apiError.message ?? apiError.error ?? localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "Something went wrong. Please try again.");
 };
 
+const CHECKOUT_REFUND_COLUMNS = [
+  { id: "booking", label: ["Mã booking", "Booking ID"], width: 190 },
+  { id: "customer", label: ["Khách hàng", "Guest"], width: 200 },
+  { id: "channel", label: ["Kênh đặt", "Booking channel"], width: 220 },
+  { id: "date", label: ["Ngày yêu cầu", "Request date"], width: 170 },
+  { id: "paid", label: ["Đã thu / hóa đơn", "Paid / invoice"], width: 190 },
+  { id: "amount", label: ["Số tiền hoàn", "Refund amount"], width: 160 },
+  { id: "method", label: ["Kênh hoàn tiền", "Refund method"], width: 165 },
+  { id: "account", label: ["Hình thức / tài khoản", "Method / account"], width: 250 },
+  { id: "refundedAt", label: ["Thời gian hoàn", "Refund time"], width: 180 },
+  { id: "refundedBy", label: ["Người hoàn tiền", "Refunded by"], width: 180 },
+  { id: "status", label: ["Trạng thái / thao tác", "Status / actions"], width: 290 },
+] as const;
+type CheckoutRefundColumnId = (typeof CHECKOUT_REFUND_COLUMNS)[number]["id"];
+
 export default function CheckoutRefundApprovalsPanel() {
   useTranslation();
   const { data: refunds = [], isLoading, isFetching, isError, error, refetch } = useGetCheckoutRefundsQuery();
-  const [channelFilter, setChannelFilter] = useState<"ALL" | "ONLINE" | "OFFLINE">("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | CheckoutRefund["status"]>("ALL");
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<CheckoutRefundColumnId, boolean>>({
+    booking: true,
+    customer: true,
+    channel: true,
+    date: true,
+    paid: true,
+    amount: true,
+    method: true,
+    account: true,
+    refundedAt: true,
+    refundedBy: true,
+    status: true,
+  });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const pending = refunds.filter((refund) => refund.status === "PENDING");
   const approved = refunds.filter((refund) => refund.status === "APPROVED");
   const refunded = refunds.filter((refund) => refund.status === "REFUNDED");
-  const visibleRefunds = channelFilter === "ALL"
-    ? refunds
-    : refunds.filter((refund) => refund.bookingChannel === channelFilter);
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  const visibleRefunds = refunds.filter((refund) => {
+    if (statusFilter !== "ALL" && refund.status !== statusFilter) return false;
+    if (!normalizedSearch) return true;
+    return [
+      refund.bookingId,
+      refund.customerName,
+      refund.customerPhone,
+      refund.bookingChannel,
+      refund.refundMethod,
+      refund.status,
+      refund.refundedBy,
+      refund.note,
+    ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch));
+  });
   const totalPages = Math.max(1, Math.ceil(visibleRefunds.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedRefunds = visibleRefunds.slice((safePage - 1) * pageSize, safePage * pageSize);
   const pendingCashRefunds = refunds.filter((refund) => refund.refundMethod === "CASH" && refund.status === "PENDING");
+  const hasActiveFilters = Boolean(searchQuery.trim()) || statusFilter !== "ALL";
+  const shownColumns = CHECKOUT_REFUND_COLUMNS.filter((column) => visibleColumns[column.id]);
+  const isListLoading = isLoading || isFetching || isManuallyRefreshing;
+
+  const refreshOrResetFilters = async () => {
+    if (isListLoading) return;
+    const refreshStartedAt = Date.now();
+    setIsManuallyRefreshing(true);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    if (hasActiveFilters) {
+      setSearchQuery("");
+      setStatusFilter("ALL");
+      setPage(1);
+    }
+    try {
+      await refetch().unwrap();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể tải lại danh sách hoàn dư", "Could not reload surplus refunds"),
+      });
+    } finally {
+      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+      if (remainingLoadingTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+      }
+      setIsManuallyRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     setPage(1);
-  }, [channelFilter, pageSize]);
+  }, [pageSize, searchQuery, statusFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -73,70 +149,143 @@ export default function CheckoutRefundApprovalsPanel() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          disabled={isFetching}
-          className="inline-flex w-fit items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-amber-50 disabled:opacity-60"
-        >
-          <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
-          {localizedText("Làm mới", "Refresh")}
-        </button>
       </header>
-      {isLoading ? (
-        <div className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500">
-          <LoaderCircle size={18} className="animate-spin" /> {localizedText("Đang tải yêu cầu hoàn dư...", "Loading refund requests...")}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
+        <label className="relative min-w-[220px] flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={localizedText("Tìm mã booking, khách hàng...", "Search booking ID or guest...")}
+            aria-label={localizedText("Tìm khoản hoàn tiền", "Search refunds")}
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <SearchableFilter
+          value={statusFilter}
+          options={[
+            { value: "ALL", label: localizedText("Tất cả trạng thái", "All statuses") },
+            { value: "PENDING", label: localizedText("Chờ xử lý", "Pending") },
+            { value: "APPROVED", label: localizedText("Chờ chuyển khoản", "Awaiting transfer") },
+            { value: "REFUNDED", label: localizedText("Đã hoàn", "Refunded") },
+          ]}
+          onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+          ariaLabel={localizedText("Lọc theo trạng thái", "Filter by status")}
+          searchPlaceholder={localizedText("Tìm trạng thái...", "Search statuses...")}
+          emptyMessage={localizedText("Không tìm thấy trạng thái.", "No statuses found.")}
+          className="w-full sm:w-52"
+        />
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label={localizedText("Tùy chỉnh cột", "Customize columns")}
+                className="flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Columns3 size={16} />
+                {localizedText("Cột", "Columns")}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-60 p-2">
+              <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {localizedText("Hiển thị cột", "Show columns")}
+              </p>
+              {CHECKOUT_REFUND_COLUMNS.map((column) => {
+                const isLastVisibleColumn = shownColumns.length === 1 && visibleColumns[column.id];
+                return (
+                  <label key={column.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns[column.id]}
+                      disabled={isLastVisibleColumn}
+                      onChange={(event) => {
+                        setVisibleColumns((current) => ({ ...current, [column.id]: event.target.checked }));
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                    />
+                    {localizedText(column.label[0], column.label[1])}
+                  </label>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setVisibleColumns({
+                  booking: true,
+                  customer: true,
+                  channel: true,
+                  date: true,
+                  paid: true,
+                  amount: true,
+                  method: true,
+                  account: true,
+                  refundedAt: true,
+                  refundedBy: true,
+                  status: true,
+                })}
+                className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+              >
+                {localizedText("Hiện tất cả cột", "Show all columns")}
+              </button>
+            </PopoverContent>
+          </Popover>
+          <button
+            type="button"
+            onClick={() => void refreshOrResetFilters()}
+            disabled={isListLoading}
+            aria-label={hasActiveFilters
+              ? localizedText("Xóa bộ lọc", "Reset filters")
+              : localizedText("Tải lại danh sách hoàn dư", "Reload surplus refunds")}
+            title={hasActiveFilters
+              ? localizedText("Xóa bộ lọc", "Reset filters")
+              : localizedText("Tải lại danh sách hoàn dư", "Reload surplus refunds")}
+            aria-busy={isListLoading}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+          >
+            {isListLoading
+              ? <RefreshCw size={16} className="animate-spin" />
+              : hasActiveFilters
+              ? <RotateCcw size={15} />
+              : <RefreshCw size={16} />}
+          </button>
+        </div>
+      </div>
+      {isListLoading ? (
+        <div role="status" aria-live="polite" className="mx-5 my-4 flex min-h-48 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-8 text-sm text-blue-700">
+          <RefreshCw size={17} className="animate-spin" />
+          <span>{localizedText("Đang tải yêu cầu hoàn dư...", "Loading refund requests...")}</span>
         </div>
       ) : isError ? (
-        <div className="p-6 text-center">
+        <div role="alert" className="p-6 text-center">
           <p className="text-sm font-semibold text-rose-700">{localizedText("Không tải được yêu cầu hoàn dư", "Could not load refund requests")}</p>
           <p className="mt-1 text-sm text-slate-500">{getErrorMessage(error)}</p>
+          <button type="button" onClick={() => void refetch()} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            {localizedText("Thử lại", "Try again")}
+          </button>
         </div>
       ) : refunds.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có khoản hoàn dư nào.", "There are no surplus refunds.")}</p>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-            <span className="mr-1 text-xs font-semibold text-slate-500">{localizedText("Kênh đặt:", "Booking channel:")}</span>
-            {([
-              ["ALL", localizedText("Tất cả", "All")],
-              ["ONLINE", localizedText("Online", "Online")],
-              ["OFFLINE", localizedText("Tại quầy / Offline", "Front desk / Offline")],
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setChannelFilter(value)}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                  channelFilter === value
-                    ? "bg-violet-600 text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
           {visibleRefunds.length === 0 ? (
             <p className="p-8 text-center text-sm text-slate-500">
-              {localizedText("Không có khoản hoàn nào thuộc kênh đặt phòng này.", "There are no refunds for this booking channel.")}
+              {localizedText("Không tìm thấy khoản hoàn tiền phù hợp.", "No matching refunds found.")}
             </p>
           ) : (
             <>
               <div className="max-w-full overflow-x-auto">
-                <table className="w-full min-w-[1240px] text-left text-sm">
+                <table className="table-fixed text-left text-sm" style={{ width: `max(100%, ${shownColumns.reduce((width, column) => width + column.width, 0)}px)` }}>
+                <colgroup>
+                  {shownColumns.map((column) => <col key={column.id} style={{ width: `${column.width}px` }} />)}
+                </colgroup>
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="w-[230px] px-4 py-3">{localizedText("Booking / khách hàng", "Booking / guest")}</th>
-                    <th className="w-[150px] px-4 py-3">{localizedText("Ngày yêu cầu", "Request date")}</th>
-                    <th className="w-[190px] px-4 py-3">{localizedText("Đã thu / hóa đơn", "Paid / invoice")}</th>
-                    <th className="w-[150px] px-4 py-3 text-right">{localizedText("Cần hoàn", "Refund due")}</th>
-                    <th className="w-[250px] px-4 py-3">{localizedText("Hình thức / tài khoản", "Method / account")}</th>
-                    <th className="w-[270px] px-4 py-3">{localizedText("Trạng thái / thao tác", "Status / actions")}</th>
+                    {shownColumns.map((column) => <th key={column.id} className={`px-4 py-3 ${column.id === "amount" ? "text-right" : ""}`}>{localizedText(column.label[0], column.label[1])}</th>)}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paginatedRefunds.map((refund) => <CheckoutRefundRow key={refund.id} refund={refund} />)}
+                  {paginatedRefunds.map((refund) => <CheckoutRefundRow key={refund.id} refund={refund} visibleColumns={visibleColumns} />)}
                 </tbody>
                 </table>
               </div>
@@ -149,7 +298,13 @@ export default function CheckoutRefundApprovalsPanel() {
   );
 }
 
-function CheckoutRefundRow({ refund }: { refund: CheckoutRefund }) {
+function CheckoutRefundRow({
+  refund,
+  visibleColumns,
+}: {
+  refund: CheckoutRefund;
+  visibleColumns: Record<CheckoutRefundColumnId, boolean>;
+}) {
   const roles = useAppSelector((state) => state.auth.roles);
   const canApproveRefund = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
   const canConfirmCashRefund = canApproveRefund || roles.includes("ROLE_RECEPTIONIST") || roles.includes("ROLE_STAFF") || roles.includes("ROLE_EMPLOYEE");
@@ -230,32 +385,42 @@ function CheckoutRefundRow({ refund }: { refund: CheckoutRefund }) {
 
   return (
     <tr className="align-top hover:bg-slate-50/70">
-      <td className="px-4 py-4">
-        <p className="font-semibold text-blue-700">Booking {refund.bookingId}</p>
-        <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+      {visibleColumns.booking && <td className="px-4 py-4">
+        <p className="break-all font-semibold text-blue-700">{refund.bookingId}</p>
+      </td>}
+      {visibleColumns.customer && <td className="px-4 py-4">
+        <p className="font-medium text-slate-800">{refund.customerName || localizedText("Khách hàng", "Guest")}</p>
+        {refund.customerPhone && <p className="mt-1 text-xs text-slate-500">{refund.customerPhone}</p>}
+      </td>}
+      {visibleColumns.channel && <td className="px-4 py-4">
+        <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
           refund.bookingChannel === "ONLINE" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700"
         }`}>
           {refund.bookingChannel === "ONLINE"
             ? localizedText("Đặt online", "Online booking")
-            : localizedText("Đặt tại quầy", "Front-desk booking")}
+            : refund.bookingChannel === "OFFLINE"
+              ? localizedText("Đặt tại quầy", "Front-desk booking")
+              : "—"}
         </span>
-        <p className="mt-2 font-medium text-slate-800">{refund.customerName || localizedText("Khách hàng", "Guest")}</p>
-        {refund.customerPhone && <p className="mt-0.5 text-xs text-slate-500">{refund.customerPhone}</p>}
-      </td>
-      <td className="px-4 py-4 text-slate-600">{dateTime(refund.requestedAt)}</td>
-      <td className="space-y-1 px-4 py-4">
+      </td>}
+      {visibleColumns.date && <td className="px-4 py-4 text-slate-600">{dateTime(refund.requestedAt)}</td>}
+      {visibleColumns.paid && <td className="space-y-1 px-4 py-4">
         <p><span className="text-xs text-slate-500">{localizedText("Đã thu", "Paid")}</span><br /><strong>{money(refund.paidAmount)}</strong></p>
         <p><span className="text-xs text-slate-500">{localizedText("Hóa đơn cuối", "Final invoice")}</span><br /><strong>{money(refund.finalAmount)}</strong></p>
-      </td>
-      <td className="px-4 py-4 text-right">
+      </td>}
+      {visibleColumns.amount && <td className="px-4 py-4 text-right">
         <strong className="text-base text-blue-700">{money(refund.refundAmount)}</strong>
-        <span className={`mt-2 block text-xs font-semibold ${isCashRefund ? "text-emerald-700" : "text-indigo-700"}`}>
+      </td>}
+      {visibleColumns.method && <td className="px-4 py-4">
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+          isCashRefund ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700"
+        }`}>
           {isCashRefund
-            ? localizedText("Tiền mặt tại quầy", "Cash at front desk")
+            ? localizedText("Tiền mặt", "Cash")
             : refund.refundMethod === "EWALLET" ? localizedText("Ví điện tử", "E-wallet") : localizedText("Chuyển khoản", "Bank transfer")}
         </span>
-      </td>
-      <td className="px-4 py-4">
+      </td>}
+      {visibleColumns.account && <td className="px-4 py-4">
         {isCashRefund ? (
           <span className="text-sm text-slate-600">{localizedText("Hoàn trực tiếp cho khách", "Refund directly to guest")}</span>
         ) : editingBank ? (
@@ -321,8 +486,14 @@ function CheckoutRefundRow({ refund }: { refund: CheckoutRefund }) {
             )}
           </>
         )}
-      </td>
-      <td className="px-4 py-4">
+      </td>}
+      {visibleColumns.refundedAt && <td className="px-4 py-4 text-slate-600">
+        {refund.status === "REFUNDED" ? dateTime(refund.refundedAt) : "—"}
+      </td>}
+      {visibleColumns.refundedBy && <td className="px-4 py-4 text-slate-700">
+        {refund.status === "REFUNDED" ? refund.refundedBy || "—" : "—"}
+      </td>}
+      {visibleColumns.status && <td className="px-4 py-4">
         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
           refund.status === "PENDING"
             ? "bg-amber-100 text-amber-800"
@@ -400,7 +571,7 @@ function CheckoutRefundRow({ refund }: { refund: CheckoutRefund }) {
             <AlertCircle size={13} className="mt-0.5 shrink-0" />{errorMessage}
           </p>
         )}
-      </td>
+      </td>}
     </tr>
   );
 }

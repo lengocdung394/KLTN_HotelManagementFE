@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
-  BedDouble,
   BarChart3,
   Building2,
   CalendarDays,
@@ -22,7 +21,6 @@ import {
   Pencil,
   FileSpreadsheet,
   ShieldCheck,
-  Sparkles,
   Tag,
   Upload,
   Users,
@@ -90,6 +88,7 @@ import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissi
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
 import SuperAdminResourceStatsPanel from "../components/SuperAdminResourceStatsPanel";
 import SuperAdminAmenitiesPanel from "../components/SuperAdminAmenitiesPanel";
+import CatalogEntryDialog, { type CatalogEntryMode } from "../components/CatalogEntryDialog";
 import PromotionWorkspace from "./PromotionWorkspace";
 import ServiceWorkspace from "./ServiceWorkspace";
 import SuperAdminProfileSettings from "../components/SuperAdminProfileSettings";
@@ -317,7 +316,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [editingBedTypeId, setEditingBedTypeId] = useState<number | null>(null);
   const [bedTypeError, setBedTypeError] = useState("");
   const [bedTypeMessage, setBedTypeMessage] = useState("");
-  const [isBedTypeImportDialogOpen, setIsBedTypeImportDialogOpen] = useState(false);
+  const [isBedTypeDialogOpen, setIsBedTypeDialogOpen] = useState(false);
+  const [bedTypeDialogMode, setBedTypeDialogMode] = useState<CatalogEntryMode>("manual");
   const [isParsingBedTypeFile, setIsParsingBedTypeFile] = useState(false);
   const notificationHotelId = notificationBranchFilter === "all" ? undefined : Number(notificationBranchFilter);
   const {
@@ -747,6 +747,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       }
       setBedTypeForm(initialBedTypeForm);
       setEditingBedTypeId(null);
+      setIsBedTypeDialogOpen(false);
     } catch (error) {
       setBedTypeError(getErrorMessage(error, localizedText("Không thể lưu loại giường.", "Could not save the bed type.")));
     }
@@ -784,10 +785,31 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const isSalesSection = section === "promotions" || section === "services";
 
   const handleAccountMenuSelect = () => {
-    setSection("accounts-overview");
-    setIsAccountMenuOpen((isOpen) => !isOpen);
+    setSection("staff-accounts");
+    setIsAccountMenuOpen(true);
+    setIsRoleMenuOpen(false);
     setIsBranchMenuOpen(false);
     setIsCatalogMenuOpen(false);
+    setIsSalesMenuOpen(false);
+    setSelectedBranchId(null);
+  };
+
+  const handleRoleMenuSelect = () => {
+    setSection("roles");
+    setIsRoleMenuOpen(true);
+    setIsAccountMenuOpen(false);
+    setIsBranchMenuOpen(false);
+    setIsCatalogMenuOpen(false);
+    setIsSalesMenuOpen(false);
+    setSelectedBranchId(null);
+  };
+
+  const handleCatalogMenuSelect = () => {
+    setSection("amenities");
+    setIsCatalogMenuOpen(true);
+    setIsAccountMenuOpen(false);
+    setIsRoleMenuOpen(false);
+    setIsBranchMenuOpen(false);
     setIsSalesMenuOpen(false);
     setSelectedBranchId(null);
   };
@@ -971,14 +993,13 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const handleSectionSelect = (id: AdminSection) => {
     if (id === "branches") {
       setIsAccountMenuOpen(false);
+      setIsRoleMenuOpen(false);
       setIsCatalogMenuOpen(false);
-      if (section === "branches") {
-        setIsBranchMenuOpen((isOpen) => !isOpen);
-      } else {
-        setSelectedProvinceId("");
-        setSection("branches");
-        setIsBranchMenuOpen(true);
-      }
+      setIsSalesMenuOpen(false);
+      setSelectedProvinceId("");
+      setSection("branches");
+      setIsBranchMenuOpen(true);
+      setSelectedBranchId(null);
       return;
     }
     if (id === "staff-accounts" || id === "customer-accounts" || id === "accounts-overview") {
@@ -1035,24 +1056,33 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             <div key={id}>
               {id === "permissions" && (
                 <div className="mb-1">
-                  <button
-                    type="button"
-                    onClick={() => setIsCatalogMenuOpen((isOpen) => !isOpen)}
-                    aria-expanded={isCatalogMenuOpen}
-                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
-                      isCatalogSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                    }`}
-                  >
-                    <Layers size={18} />
-                    <span className="flex-1">Quản lý danh mục</span>
-                    {isCatalogMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </button>
+                  <div className={`flex w-full items-center rounded-xl text-sm font-semibold transition ${
+                    isCatalogSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={handleCatalogMenuSelect}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+                    >
+                      <Layers size={18} />
+                      <span className="flex-1">Quản lý danh mục</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsCatalogMenuOpen((isOpen) => !isOpen)}
+                      aria-label={isCatalogMenuOpen ? "Thu gọn menu danh mục" : "Mở menu danh mục"}
+                      aria-expanded={isCatalogMenuOpen}
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-white/10"
+                    >
+                      {isCatalogMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                  </div>
                   {isCatalogMenuOpen && (
                     <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
                       {([
-                        { id: "amenities", label: "Tiện ích", icon: Sparkles },
-                        { id: "bed-types", label: "Loại giường", icon: BedDouble },
-                      ] as const).map(({ id: childId, label: childLabel, icon: ChildIcon }) => (
+                        { id: "amenities", label: "Tiện ích" },
+                        { id: "bed-types", label: "Loại giường" },
+                      ] as const).map(({ id: childId, label: childLabel }) => (
                         <button
                           key={childId}
                           type="button"
@@ -1061,7 +1091,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                             section === childId ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
                           }`}
                         >
-                          <ChildIcon size={15} />
                           {childLabel}
                         </button>
                       ))}
@@ -1071,18 +1100,27 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               )}
               {id === "permissions" && (
                 <div className="mb-1">
-                  <button
-                    type="button"
-                    onClick={() => setIsRoleMenuOpen((isOpen) => !isOpen)}
-                    aria-expanded={isRoleMenuOpen}
-                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
-                      isRoleSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                    }`}
-                  >
-                    <ShieldCheck size={18} />
-                    <span className="flex-1">Quản lý Role và quyền</span>
-                    {isRoleMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </button>
+                  <div className={`flex w-full items-center rounded-xl text-sm font-semibold transition ${
+                    isRoleSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={handleRoleMenuSelect}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+                    >
+                      <ShieldCheck size={18} />
+                      <span className="flex-1">Quản lý Role và quyền</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsRoleMenuOpen((isOpen) => !isOpen)}
+                      aria-label={isRoleMenuOpen ? "Thu gọn menu vai trò và quyền" : "Mở menu vai trò và quyền"}
+                      aria-expanded={isRoleMenuOpen}
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-white/10"
+                    >
+                      {isRoleMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                  </div>
                   {isRoleMenuOpen && (
                     <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
                       {([
@@ -1139,10 +1177,31 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   )}
                 </div>
               )}
-              {id !== "permissions" && <button
+              {id === "branches" ? (
+                <div className={`flex w-full items-center rounded-xl text-sm font-semibold transition ${
+                  section === id ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                }`}>
+                  <button
+                    type="button"
+                    onClick={() => handleSectionSelect(id)}
+                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+                  >
+                    <Icon size={18} />
+                    <span className="flex-1">{label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsBranchMenuOpen((isOpen) => !isOpen)}
+                    aria-label={isBranchMenuOpen ? "Thu gọn menu chi nhánh" : "Mở menu chi nhánh"}
+                    aria-expanded={isBranchMenuOpen}
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-white/10"
+                  >
+                    {isBranchMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </button>
+                </div>
+              ) : id !== "permissions" && <button
                 type="button"
                 onClick={() => handleSectionSelect(id)}
-                aria-expanded={id === "branches" ? section === "branches" && isBranchMenuOpen : undefined}
                 className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
                   section === id ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
                 }`}
@@ -1154,9 +1213,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                     {allNotificationsSummaryResponse?.result.unreadCount}
                   </span>
                 )}
-                {id === "branches" && (section === "branches" && isBranchMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />)}
               </button>}
-              {id === "branches" && section === "branches" && isBranchMenuOpen && (
+              {id === "branches" && isBranchMenuOpen && (
                 <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
                   <button
                     type="button"
@@ -1243,24 +1301,33 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             </div>
           ))}
           <div>
-            <button
-              type="button"
-              onClick={handleAccountMenuSelect}
-              aria-expanded={isAccountMenuOpen}
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
-                isAccountSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <CircleUserRound size={18} />
-              <span className="flex-1">Quản lý tài khoản</span>
-              {isAccountMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            </button>
+            <div className={`flex w-full items-center rounded-xl text-sm font-semibold transition ${
+              isAccountSection ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
+            }`}>
+              <button
+                type="button"
+                onClick={handleAccountMenuSelect}
+                className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+              >
+                <CircleUserRound size={18} />
+                <span className="flex-1">Quản lý tài khoản</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAccountMenuOpen((isOpen) => !isOpen)}
+                aria-label={isAccountMenuOpen ? "Thu gọn menu tài khoản" : "Mở menu tài khoản"}
+                aria-expanded={isAccountMenuOpen}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-lg hover:bg-white/10"
+              >
+                {isAccountMenuOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </button>
+            </div>
             {isAccountMenuOpen && (
               <div className="ml-6 mt-1 space-y-1 border-l border-slate-700 pl-3">
                 {([
-                  { id: "staff-accounts", label: "Tài khoản nhân sự", icon: Users },
-                  { id: "customer-accounts", label: "Tài khoản khách hàng", icon: CircleUserRound },
-                ] as const).map(({ id, label, icon: Icon }) => (
+                  { id: "staff-accounts", label: "Tài khoản nhân sự" },
+                  { id: "customer-accounts", label: "Tài khoản khách hàng" },
+                ] as const).map(({ id, label }) => (
                   <button
                     key={id}
                     type="button"
@@ -1269,7 +1336,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       section === id ? "bg-blue-500/15 font-semibold text-blue-300" : "text-slate-400 hover:bg-white/5 hover:text-white"
                     }`}
                   >
-                    <Icon size={15} />
                     {label}
                   </button>
                 ))}
@@ -1321,18 +1387,53 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           </div>
         </header>
         <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Điều hướng quản trị">
-          {navItems.map(({ id, label, icon: Icon }) => (
+          {navItems.map(({ id, label, icon: Icon }) => id === "branches" ? (
+            <div key={id} className={`flex shrink-0 items-center rounded-lg text-xs font-semibold ${
+              section === "branches" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+            }`}>
+              <button type="button" onClick={() => handleSectionSelect(id)} className="flex items-center gap-2 py-2 pl-3">
+                <Icon size={15} />
+                {label}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBranchMenuOpen((isOpen) => !isOpen)}
+                aria-label={isBranchMenuOpen ? "Thu gọn menu chi nhánh" : "Mở menu chi nhánh"}
+                aria-expanded={isBranchMenuOpen}
+                className="grid h-9 w-8 place-items-center rounded-r-lg"
+              >
+                {isBranchMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+            </div>
+          ) : id === "permissions" ? (
+            <div key={id} className={`flex shrink-0 items-center rounded-lg text-xs font-semibold ${
+              isRoleSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+            }`}>
+              <button type="button" onClick={handleRoleMenuSelect} className="flex items-center gap-2 py-2 pl-3">
+                <Icon size={15} />
+                Quản lý Role và quyền
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRoleMenuOpen((isOpen) => !isOpen)}
+                aria-label={isRoleMenuOpen ? "Thu gọn menu vai trò và quyền" : "Mở menu vai trò và quyền"}
+                aria-expanded={isRoleMenuOpen}
+                className="grid h-9 w-8 place-items-center rounded-r-lg"
+              >
+                {isRoleMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
               key={id}
-              onClick={() => id === "permissions" ? setIsRoleMenuOpen((isOpen) => !isOpen) : handleSectionSelect(id)}
-              aria-expanded={id === "permissions" ? isRoleMenuOpen : undefined}
+              onClick={() => handleSectionSelect(id)}
               className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-                (id === "permissions" ? isRoleSection : section === id) ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                section === id ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               <Icon size={15} />
-              {id === "permissions" ? "Quản lý Role và quyền" : label}
+              {label}
               {id === "notifications" && notifications.some((notification) => !notification.read) && (
                 <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] text-white">
                   {notifications.filter((notification) => !notification.read).length}
@@ -1340,18 +1441,23 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               )}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setIsCatalogMenuOpen((isOpen) => !isOpen)}
-            aria-expanded={isCatalogMenuOpen}
-            className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-              isCatalogSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <Layers size={15} />
-            Quản lý danh mục
-            {isCatalogMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
+          <div className={`flex shrink-0 items-center rounded-lg text-xs font-semibold ${
+            isCatalogSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+          }`}>
+            <button type="button" onClick={handleCatalogMenuSelect} className="flex items-center gap-2 py-2 pl-3">
+              <Layers size={15} />
+              Quản lý danh mục
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCatalogMenuOpen((isOpen) => !isOpen)}
+              aria-label={isCatalogMenuOpen ? "Thu gọn menu danh mục" : "Mở menu danh mục"}
+              aria-expanded={isCatalogMenuOpen}
+              className="grid h-9 w-8 place-items-center rounded-r-lg"
+            >
+              {isCatalogMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setIsSalesMenuOpen((isOpen) => !isOpen)}
@@ -1364,25 +1470,30 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             Quản lý kinh doanh
             {isSalesMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
-          <button
-            type="button"
-            onClick={handleAccountMenuSelect}
-            aria-expanded={isAccountMenuOpen}
-            className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${
-              isAccountSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            <CircleUserRound size={15} />
-            Quản lý tài khoản
-            {isAccountMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
+          <div className={`flex shrink-0 items-center rounded-lg text-xs font-semibold ${
+            isAccountSection ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+          }`}>
+            <button type="button" onClick={handleAccountMenuSelect} className="flex items-center gap-2 py-2 pl-3">
+              <CircleUserRound size={15} />
+              Quản lý tài khoản
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAccountMenuOpen((isOpen) => !isOpen)}
+              aria-label={isAccountMenuOpen ? "Thu gọn menu tài khoản" : "Mở menu tài khoản"}
+              aria-expanded={isAccountMenuOpen}
+              className="grid h-9 w-8 place-items-center rounded-r-lg"
+            >
+              {isAccountMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          </div>
         </nav>
         {isCatalogMenuOpen && (
           <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý danh mục">
             {([
-              { id: "amenities", label: "Tiện ích", icon: Sparkles },
-              { id: "bed-types", label: "Loại giường", icon: BedDouble },
-            ] as const).map(({ id, label, icon: Icon }) => (
+              { id: "amenities", label: "Tiện ích" },
+              { id: "bed-types", label: "Loại giường" },
+            ] as const).map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
@@ -1391,7 +1502,6 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   section === id ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-white"
                 }`}
               >
-                <Icon size={14} />
                 {label}
               </button>
             ))}
@@ -1438,9 +1548,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         {isAccountMenuOpen && (
           <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label="Quản lý tài khoản">
             {([
-              { id: "staff-accounts", label: "Tài khoản nhân sự", icon: Users },
-              { id: "customer-accounts", label: "Tài khoản khách hàng", icon: CircleUserRound },
-            ] as const).map(({ id, label, icon: Icon }) => (
+              { id: "staff-accounts", label: "Tài khoản nhân sự" },
+              { id: "customer-accounts", label: "Tài khoản khách hàng" },
+            ] as const).map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
@@ -1449,13 +1559,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   section === id ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-white"
                 }`}
               >
-                <Icon size={14} />
                 {label}
               </button>
             ))}
           </nav>
         )}
-        {section === "branches" && isBranchMenuOpen && (
+        {isBranchMenuOpen && (
           <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Lọc chi nhánh theo tỉnh/thành">
             <button
               type="button"
@@ -1852,134 +1961,120 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           {section === "amenities" && <SuperAdminAmenitiesPanel />}
 
           {section === "bed-types" && (
-            <section className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="mt-4 space-y-5">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">Danh sách loại giường</h2>
                     <p className="mt-1 text-sm text-slate-500">Danh mục loại giường dùng chung để chọn khi cấu hình phòng.</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBedTypeError("");
-                        setBedTypeMessage("");
-                        setIsBedTypeImportDialogOpen(true);
-                      }}
-                      disabled={isParsingBedTypeFile || isImportingBedTypes}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Upload size={16} /> Nhập từ file
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{bedTypes.length} loại</span>
+                    <button type="button" onClick={() => { setBedTypeDialogMode("manual"); setBedTypeError(""); setBedTypeMessage(""); setIsBedTypeDialogOpen(true); }} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                      <Plus size={16} /> Thêm loại giường
                     </button>
                   </div>
                 </div>
                 {isBedTypesLoading ? <p className="py-8 text-center text-sm text-slate-500">Đang tải danh sách...</p>
                   : isBedTypesError ? <p className="py-8 text-center text-sm text-rose-600">Không thể tải danh sách loại giường.</p>
-                    : bedTypes.length === 0 ? <p className="py-8 text-center text-sm text-slate-500">Chưa có loại giường nào.</p>
-                      : <div className="mt-4 divide-y divide-slate-100">
-                        {bedTypes.map((bedType) => (
-                          <div key={bedType.id} className="flex items-center justify-between gap-3 py-3">
-                            <div className="min-w-0">
-                              <p className="font-medium text-slate-800">{bedType.name}</p>
-                              <p className="mt-0.5 text-sm text-slate-500">{bedType.description || "Không có mô tả"} · Sức chứa {bedType.capacity ?? "—"} người</p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bedType.isExtraBed ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}>
-                                {bedType.isExtraBed ? "Giường phụ" : "Giường thường"}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label={`Chỉnh sửa ${bedType.name}`}
-                                disabled={bedType.id == null}
-                                onClick={() => {
-                                  if (bedType.id == null) return;
-                                  setEditingBedTypeId(bedType.id);
-                                  setBedTypeForm({
-                                    name: bedType.name ?? "",
-                                    description: bedType.description ?? "",
-                                    capacity: bedType.capacity ?? 1,
-                                    isExtraBed: bedType.isExtraBed ?? false,
-                                  });
-                                  setBedTypeError("");
-                                  setBedTypeMessage("");
-                                }}
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                              >
-                                <Pencil size={15} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                    : bedTypes.length === 0 ? <p className="mt-4 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Chưa có loại giường nào.</p>
+                      : <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full min-w-[620px] text-left text-sm">
+                          <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <tr>
+                              <th className="px-4 py-3">Tên loại giường</th>
+                              <th className="px-4 py-3">Mô tả</th>
+                              <th className="px-4 py-3 text-center">Sức chứa</th>
+                              <th className="px-4 py-3">Phân loại</th>
+                              <th className="px-4 py-3 text-right">Thao tác</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {bedTypes.map((bedType) => (
+                              <tr key={bedType.id} className="text-slate-700 transition hover:bg-slate-50/70">
+                                <td className="px-4 py-3.5 font-semibold text-slate-900">{bedType.name}</td>
+                                <td className="px-4 py-3.5 text-slate-500">{bedType.description || "Không có mô tả"}</td>
+                                <td className="px-4 py-3.5 text-center tabular-nums">{bedType.capacity ?? "—"} người</td>
+                                <td className="px-4 py-3.5">
+                                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bedType.isExtraBed ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}>
+                                    {bedType.isExtraBed ? "Giường phụ" : "Giường thường"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <button
+                                    type="button"
+                                    aria-label={`Chỉnh sửa ${bedType.name}`}
+                                    disabled={bedType.id == null}
+                                    onClick={() => {
+                                      if (bedType.id == null) return;
+                                      setEditingBedTypeId(bedType.id);
+                                      setBedTypeForm({
+                                        name: bedType.name ?? "",
+                                        description: bedType.description ?? "",
+                                        capacity: bedType.capacity ?? 1,
+                                        isExtraBed: bedType.isExtraBed ?? false,
+                                      });
+                                      setBedTypeError("");
+                                      setBedTypeMessage("");
+                                      setBedTypeDialogMode("manual");
+                                      setIsBedTypeDialogOpen(true);
+                                    }}
+                                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                                  >
+                                    <Pencil size={14} /> Chỉnh sửa
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>}
               </div>
-              <form onSubmit={(event) => void submitBedType(event)} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <h2 className="text-lg font-bold text-slate-900">{editingBedTypeId !== null ? "Chỉnh sửa loại giường" : "Thêm loại giường"}</h2>
-                <label className="mt-4 block text-sm font-semibold text-slate-700">
-                  Tên loại giường
-                  <input required value={bedTypeForm.name} onChange={(event) => setBedTypeForm({ ...bedTypeForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" placeholder="Ví dụ: Giường Queen" />
-                </label>
-                <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Mô tả
-                  <input value={bedTypeForm.description} onChange={(event) => setBedTypeForm({ ...bedTypeForm, description: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" placeholder="Mô tả ngắn (không bắt buộc)" />
-                </label>
-                <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Sức chứa (người)
-                  <input required type="number" min="1" step="1" value={bedTypeForm.capacity} onChange={(event) => setBedTypeForm({ ...bedTypeForm, capacity: Number(event.target.value) })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 font-normal outline-none focus:border-blue-400" />
-                </label>
-                <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Loại giường
-                  <select value={String(bedTypeForm.isExtraBed)} onChange={(event) => setBedTypeForm({ ...bedTypeForm, isExtraBed: event.target.value === "true" })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-normal outline-none focus:border-blue-400">
-                    <option value="false">Giường thường</option>
-                    <option value="true">Giường phụ</option>
-                  </select>
-                </label>
-                {bedTypeError && <p role="alert" className="mt-3 text-sm text-rose-600">{bedTypeError}</p>}
-                {bedTypeMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{bedTypeMessage}</p>}
-                <button type="submit" disabled={isCreatingBedType || isUpdatingBedType} className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                  {isCreatingBedType || isUpdatingBedType ? "Đang lưu..." : editingBedTypeId !== null ? "Lưu thay đổi" : "Thêm loại giường"}
-                </button>
-                {editingBedTypeId !== null && (
-                  <button type="button" onClick={() => { setEditingBedTypeId(null); setBedTypeForm(initialBedTypeForm); setBedTypeError(""); }} className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                    Hủy chỉnh sửa
-                  </button>
-                )}
-              </form>
-              {isBedTypeImportDialogOpen && (
-                <div
-                  className="fixed inset-0 z-70 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
-                  onMouseDown={() => {
-                    if (!isParsingBedTypeFile && !isImportingBedTypes) setIsBedTypeImportDialogOpen(false);
+              {isBedTypeDialogOpen && (
+                <CatalogEntryDialog
+                  title={editingBedTypeId !== null ? "Chỉnh sửa loại giường" : "Thêm loại giường vào danh mục"}
+                  description="Tạo một loại giường mới hoặc nhập nhiều loại giường từ Excel."
+                  mode={bedTypeDialogMode}
+                  onModeChange={(mode) => { setBedTypeDialogMode(mode); setBedTypeError(""); setBedTypeMessage(""); }}
+                  onClose={() => {
+                    if (!isParsingBedTypeFile && !isImportingBedTypes && !isCreatingBedType && !isUpdatingBedType) {
+                      setIsBedTypeDialogOpen(false);
+                      setEditingBedTypeId(null);
+                      setBedTypeForm(initialBedTypeForm);
+                    }
                   }}
-                >
-                  <section
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="bed-type-import-title"
-                    className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
-                    onMouseDown={(event) => event.stopPropagation()}
-                  >
-                    <header className="flex items-start justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
-                      <div className="flex items-center gap-3">
-                        <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-                          <Upload size={19} />
-                        </span>
-                        <div>
-                          <h3 id="bed-type-import-title" className="font-bold text-slate-900">Nhập loại giường từ file</h3>
-                          <p className="mt-1 text-xs text-slate-500">Tải file mẫu và chọn file Excel để nhập</p>
-                        </div>
+                  manualContent={
+                    <form onSubmit={(event) => void submitBedType(event)} className="space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block text-sm font-semibold text-slate-700">
+                          Tên loại giường <span className="text-rose-600">*</span>
+                          <input required autoFocus value={bedTypeForm.name} onChange={(event) => setBedTypeForm({ ...bedTypeForm, name: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" placeholder="Ví dụ: Giường Queen" />
+                        </label>
+                        <label className="block text-sm font-semibold text-slate-700">
+                          Sức chứa (người) <span className="text-rose-600">*</span>
+                          <input required type="number" min="1" step="1" value={bedTypeForm.capacity} onChange={(event) => setBedTypeForm({ ...bedTypeForm, capacity: Number(event.target.value) })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
+                        </label>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsBedTypeImportDialogOpen(false)}
-                        disabled={isParsingBedTypeFile || isImportingBedTypes}
-                        aria-label="Đóng"
-                        className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <X size={18} />
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Mô tả
+                        <input value={bedTypeForm.description} onChange={(event) => setBedTypeForm({ ...bedTypeForm, description: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" placeholder="Mô tả ngắn (không bắt buộc)" />
+                      </label>
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Loại giường
+                        <select value={String(bedTypeForm.isExtraBed)} onChange={(event) => setBedTypeForm({ ...bedTypeForm, isExtraBed: event.target.value === "true" })} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400">
+                          <option value="false">Giường thường</option>
+                          <option value="true">Giường phụ</option>
+                        </select>
+                      </label>
+                      {bedTypeError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{bedTypeError}</p>}
+                      {bedTypeMessage && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{bedTypeMessage}</p>}
+                      <button type="submit" disabled={isCreatingBedType || isUpdatingBedType} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                        <Plus size={15} /> {isCreatingBedType || isUpdatingBedType ? "Đang lưu..." : editingBedTypeId !== null ? "Lưu thay đổi" : "Thêm loại giường"}
                       </button>
-                    </header>
-                    <div className="space-y-4 p-5 sm:p-6">
+                    </form>
+                  }
+                  fileContent={
+                    <div className="space-y-4">
                       <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
                         <div className="flex items-start gap-3">
                           <FileSpreadsheet size={19} className="mt-0.5 shrink-0 text-blue-700" />
@@ -2031,8 +2126,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                         <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{bedTypeMessage}</p>
                       )}
                     </div>
-                  </section>
-                </div>
+                  }
+                />
               )}
             </section>
           )}

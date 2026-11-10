@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { FileSpreadsheet, LoaderCircle, Plus, Sparkles, Upload, X } from "lucide-react";
+import { FileSpreadsheet, LoaderCircle, Plus, Save, Sparkles, Upload } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import RoomAmenitiesTab from "./RoomAmenitiesTab";
+import CatalogEntryDialog, { type CatalogEntryMode } from "./CatalogEntryDialog";
 import { downloadAmenityTemplate, parseAmenityImportFile } from "../lib/amenityBulkImport";
 import {
   getAmenityImportStatus,
@@ -23,8 +24,10 @@ export default function SuperAdminAmenitiesPanel() {
   const [createAmenity, { isLoading: isCreating }] = useCreateAmenityMutation();
   const [updateAmenity] = useUpdateAmenityMutation();
   const [importAmenities] = useImportAmenitiesFromFileMutation();
-  const [isCreatingFormOpen, setIsCreatingFormOpen] = useState(false);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isEntryDialogOpen, setIsEntryDialogOpen] = useState(false);
+  const [entryMode, setEntryMode] = useState<CatalogEntryMode>("manual");
+  const [newAmenity, setNewAmenity] = useState({ name: "", price: "" });
+  const [createError, setCreateError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
 
@@ -43,6 +46,24 @@ export default function SuperAdminAmenitiesPanel() {
       toast({ variant: "success", title: "Thêm tiện ích thành công", description: `Đã thêm “${amenity.name}”.` });
     } catch (error) {
       throw new Error(errorMessage(error));
+    }
+  };
+
+  const submitNewAmenity = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = newAmenity.name.trim();
+    const price = Number(newAmenity.price);
+    if (!name || !newAmenity.price || !Number.isFinite(price) || price < 0) {
+      setCreateError(!name ? "Vui lòng nhập tên tiện ích." : "Vui lòng nhập mức giá hợp lệ không âm.");
+      return;
+    }
+    setCreateError("");
+    try {
+      await addAmenity({ name, price });
+      setNewAmenity({ name: "", price: "" });
+      setIsEntryDialogOpen(false);
+    } catch (error) {
+      setCreateError(errorMessage(error));
     }
   };
 
@@ -71,7 +92,7 @@ export default function SuperAdminAmenitiesPanel() {
         title: savedCount > 0 ? "Nhập tiện ích thành công" : "Không có tiện ích mới",
         description: savedCount > 0 ? `Đã thêm ${savedCount} tiện ích.` : "Các tiện ích trong file đã tồn tại.",
       });
-      setIsImportDialogOpen(false);
+      setIsEntryDialogOpen(false);
     } catch (error) {
       const message = errorMessage(error);
       setImportMessage(message);
@@ -88,75 +109,53 @@ export default function SuperAdminAmenitiesPanel() {
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-700">
             <Sparkles size={20} />
           </span>
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold text-slate-900">Danh mục tiện ích toàn hệ thống</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Quản lý danh mục tiện ích dùng chung cho các chi nhánh. Chỉ Super Admin được thêm, chỉnh sửa hoặc nhập dữ liệu.
-            </p>
+          <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Danh mục tiện ích toàn hệ thống</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+                Quản lý danh mục tiện ích dùng chung cho các chi nhánh. Chỉ Super Admin được thêm, chỉnh sửa hoặc nhập dữ liệu.
+              </p>
+            </div>
+            <button type="button" onClick={() => { setEntryMode("manual"); setCreateError(""); setIsEntryDialogOpen(true); }} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
+              <Plus size={16} /> Thêm tiện ích
+            </button>
           </div>
-        </div>
-        <div className="mt-5 flex flex-col gap-2 border-t border-blue-100/80 pt-4 sm:flex-row sm:flex-wrap sm:justify-end">
-          <button type="button" onClick={() => setIsCreatingFormOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
-            <Plus size={16} /> Thêm tiện ích
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setImportMessage("");
-              setIsImportDialogOpen(true);
-            }}
-            disabled={isImporting}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Upload size={16} /> Nhập từ file
-          </button>
         </div>
       </header>
       <RoomAmenitiesTab
         amenities={amenities}
-        isLoading={isLoading || isCreating}
+        isLoading={isLoading}
         isError={isError}
         canManage
-        isCreating={isCreatingFormOpen}
-        onCreateOpenChange={setIsCreatingFormOpen}
         onSave={(amenity, changes) => saveAmenity(amenity.id, changes)}
-        onAdd={addAmenity}
       />
-      {isImportDialogOpen && (
-        <div
-          className="fixed inset-0 z-70 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
-          onMouseDown={() => {
-            if (!isImporting) setIsImportDialogOpen(false);
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="amenity-import-title"
-            className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header className="flex items-start justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
-              <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-                  <Upload size={19} />
-                </span>
-                <div>
-                  <h3 id="amenity-import-title" className="font-bold text-slate-900">Nhập tiện ích từ file</h3>
-                  <p className="mt-1 text-xs text-slate-500">Tải file mẫu hoặc chọn file dữ liệu của bạn</p>
-                </div>
+      {isEntryDialogOpen && (
+        <CatalogEntryDialog
+          title="Thêm tiện ích vào danh mục"
+          description="Thêm thủ công một tiện ích hoặc nhập nhiều tiện ích từ file Excel."
+          mode={entryMode}
+          onModeChange={(mode) => { setEntryMode(mode); setImportMessage(""); setCreateError(""); }}
+          onClose={() => { if (!isImporting && !isCreating) setIsEntryDialogOpen(false); }}
+          manualContent={
+            <form onSubmit={(event) => void submitNewAmenity(event)} className="space-y-4">
+              {createError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{createError}</p>}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Tên tiện ích <span className="text-rose-600">*</span>
+                  <input required autoFocus value={newAmenity.name} onChange={(event) => setNewAmenity((current) => ({ ...current, name: event.target.value }))} placeholder="Ví dụ: Minibar" className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Giá <span className="text-rose-600">*</span>
+                  <input required type="number" min="0" value={newAmenity.price} onChange={(event) => setNewAmenity((current) => ({ ...current, price: event.target.value }))} placeholder="Nhập giá" className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
+                </label>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsImportDialogOpen(false)}
-                disabled={isImporting}
-                aria-label="Đóng"
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <X size={18} />
+              <button type="submit" disabled={isCreating || !newAmenity.name.trim() || !newAmenity.price || !Number.isFinite(Number(newAmenity.price)) || Number(newAmenity.price) < 0} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                <Save size={15} /> {isCreating ? "Đang lưu..." : "Thêm tiện ích"}
               </button>
-            </header>
-            <div className="space-y-4 p-5 sm:p-6">
+            </form>
+          }
+          fileContent={
+            <div className="space-y-4">
               <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
                 <div className="flex items-start gap-3">
                   <FileSpreadsheet size={19} className="mt-0.5 shrink-0 text-blue-700" />
@@ -209,8 +208,8 @@ export default function SuperAdminAmenitiesPanel() {
                 </p>
               )}
             </div>
-          </section>
-        </div>
+          }
+        />
       )}
     </section>
   );

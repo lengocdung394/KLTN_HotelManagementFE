@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Search, Save, X } from "lucide-react";
+import { Pencil, Search, Save, X } from "lucide-react";
 import ListPagination from "./ListPagination";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
@@ -11,20 +11,16 @@ type RoomAmenitiesTabProps = {
   isLoading: boolean;
   isError: boolean;
   canManage: boolean;
-  isCreating: boolean;
-  onCreateOpenChange: (open: boolean) => void;
   onSave: (amenity: AmenityResponse, changes: Pick<AmenityResponse, "name" | "price">) => void | Promise<void>;
-  onAdd: (amenity: Pick<AmenityResponse, "name" | "price">) => void | Promise<void>;
 };
 
 const normalizeText = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 const money = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
 
-export default function RoomAmenitiesTab({ amenities, isLoading, isError, canManage, isCreating, onCreateOpenChange, onSave, onAdd }: RoomAmenitiesTabProps) {
+export default function RoomAmenitiesTab({ amenities, isLoading, isError, canManage, onSave }: RoomAmenitiesTabProps) {
   const [search, setSearch] = useState("");
   const [editingAmenity, setEditingAmenity] = useState<AmenityResponse | null>(null);
   const [editForm, setEditForm] = useState({ name: "", price: "" });
-  const [createForm, setCreateForm] = useState({ name: "", price: "" });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [page, setPage] = useState(1);
@@ -47,31 +43,6 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   }, [page, totalPages]);
 
   const closeEditor = () => setEditingAmenity(null);
-  const closeCreateForm = () => {
-    onCreateOpenChange(false);
-    setCreateForm({ name: "", price: "" });
-  };
-  const saveNewAmenity = async () => {
-    const name = createForm.name.trim();
-    const price = Number(createForm.price);
-    if (!name || !createForm.price || !Number.isFinite(price) || price < 0) {
-      setSaveError(!name
-        ? localizedText("Vui lòng nhập tên tiện ích.", "Enter an amenity name.")
-        : localizedText("Vui lòng nhập mức giá hợp lệ không âm.", "Enter a valid non-negative price."));
-      return;
-    }
-    setIsSaving(true);
-    setSaveError("");
-    try {
-      await onAdd({ name, price });
-      closeCreateForm();
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : localizedText("Không thể thêm tiện ích.", "Could not add the amenity."));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const saveEdit = async () => {
     if (!editingAmenity) return;
     const name = editForm.name.trim();
@@ -114,11 +85,6 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
           </div>
         </div>
       </div>
-      {canManage && (
-        <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-          File CSV/Excel cần có hai cột <strong className="font-semibold text-slate-700">Tên tiện ích</strong> và <strong className="font-semibold text-slate-700">Giá</strong>.
-        </p>
-      )}
       {isLoading ? (
         <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách tiện nghi...</p>
       ) : isError ? (
@@ -170,36 +136,6 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
         </div>
       )}
 
-      {canManage && isCreating && (
-        <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeCreateForm}>
-          <form
-            onSubmit={(event) => { event.preventDefault(); saveNewAmenity(); }}
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Danh sách tiện nghi</p>
-                <h4 className="mt-1 text-xl font-bold text-slate-900">Thêm tiện nghi</h4>
-              </div>
-              <button type="button" onClick={closeCreateForm} aria-label="Đóng" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={18} /></button>
-            </div>
-            {saveError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{saveError}</p>}
-            <label className="mt-4 block text-sm font-semibold text-slate-700">
-              Tên tiện nghi
-              <input required autoFocus value={createForm.name} onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
-            </label>
-            <label className="mt-4 block text-sm font-semibold text-slate-700">
-              Giá
-              <input required type="number" min="0" value={createForm.price} onChange={(event) => setCreateForm((current) => ({ ...current, price: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" />
-            </label>
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={closeCreateForm} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
-              <button type="submit" disabled={isSaving || !createForm.name.trim() || !createForm.price || !Number.isFinite(Number(createForm.price)) || Number(createForm.price) < 0} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={15} />{isSaving ? "Đang lưu..." : "Thêm tiện nghi"}</button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

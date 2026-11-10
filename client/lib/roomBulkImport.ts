@@ -11,6 +11,7 @@ export type RoomImportOptions = {
   bedTypes: RoomImportBedType[];
   buildings: RoomImportBuilding[];
   floors: RoomImportFloor[];
+  language?: "en" | "vi";
 };
 
 export type ImportedRoomData = {
@@ -50,9 +51,94 @@ const ROOM_HEADERS = [
   "Số phòng", "Loại phòng", "Tòa", "Tầng", "Trạng thái",
   "Tiện ích (ID)", "Mô tả", ...IMAGE_HEADERS,
 ];
+const ENGLISH_ROOM_HEADERS: Record<string, string> = {
+  "Số phòng": "Room number",
+  "Loại phòng": "Room type",
+  "Tòa": "Building",
+  "Tầng": "Floor",
+  "Trạng thái": "Status",
+  "Tiện ích (ID)": "Amenity IDs",
+  "Mô tả": "Description",
+  ...Object.fromEntries(IMAGE_HEADERS.map((header, index) => [header, `Image ${index + 1}`])),
+};
+const ENGLISH_BED_HEADERS = ["Room number", "Bed type", "Quantity"];
+const ROOM_TYPE_ENGLISH: Record<string, string> = {
+  STANDARD: "Standard Room",
+  DELUXE: "Deluxe Room",
+  SUITE: "Suite Room",
+  FAMILY: "Family Room",
+  "Phòng Tiêu Chuẩn": "Standard Room",
+  "Phòng Cao Cấp": "Deluxe Room",
+  "Phòng Thượng Hạng": "Suite Room",
+  "Phòng Gia Đình": "Family Room",
+  "Standard Room": "Standard Room",
+  "Deluxe Room": "Deluxe Room",
+  "Superior Room": "Deluxe Room",
+  "Suite Room": "Suite Room",
+  "Family Room": "Family Room",
+};
+const STATUS_ENGLISH: Record<string, string> = {
+  READY: "Ready",
+  CLEANING: "Cleaning",
+  IN_USE: "Occupied",
+  MAINTENANCE: "Maintenance",
+  "Sẵn sàng": "Ready",
+  "Đang dọn": "Cleaning",
+  "Đang ở": "Occupied",
+  "Bảo trì": "Maintenance",
+  Ready: "Ready",
+  Cleaning: "Cleaning",
+  Occupied: "Occupied",
+  Maintenance: "Maintenance",
+};
+const BED_TYPE_ENGLISH: Array<[RegExp, string]> = [
+  [/2giuongdon|2singlebeds/i, "2 single beds"],
+  [/giuongdon|singlebed/i, "Single bed"],
+  [/giuongking|kingsize/i, "King-size bed"],
+  [/giuongphu|extrabed/i, "Extra bed"],
+];
+const SHEET_NAMES = {
+  vi: { rooms: "Dữ liệu phòng", instructions: "Hướng dẫn", catalog: "Danh mục", beds: "Giường phòng" },
+  en: { rooms: "Room Data", instructions: "Instructions", catalog: "Catalog", beds: "Room Beds" },
+} as const;
 const REQUIRED_ROOM_HEADERS = ROOM_HEADERS.filter((header) => header !== "Số phòng");
 const normalize = (value: string) =>
   value.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
+const getRoomHeaders = (english: boolean) => ROOM_HEADERS.map((header) => english ? ENGLISH_ROOM_HEADERS[header] : header);
+const canonicalizeHeaders = (headers: string[], aliases: Record<string, string>) =>
+  headers.map((header) => aliases[normalize(header)] ?? normalize(header));
+const localizedBedType = (name: string, english: boolean) => english
+  ? BED_TYPE_ENGLISH.find(([pattern]) => pattern.test(normalize(name)))?.[1] ?? name
+  : name;
+const translatedValue = (value: string, translations: Record<string, string>) =>
+  Object.entries(translations).find(([source]) => normalize(source) === normalize(value))?.[1] ?? value;
+const localizedBuilding = (name: string, english: boolean) =>
+  english ? name.replace(/^Tòa\s*/i, "Building ") : name;
+const readFirstAvailableSheet = async (data: Uint8Array, names: string[]) => {
+  for (const name of names) {
+    try {
+      const rows = await readXlsxRowsByName(data, name);
+      if (rows.length > 0) return rows;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes(`Không tìm thấy sheet "${name}"`)) {
+        throw error;
+      }
+    }
+  }
+  return [];
+};
+const roomHeaderAliases = Object.fromEntries(ROOM_HEADERS.flatMap((header) => [
+  [normalize(header), normalize(header)],
+  [normalize(ENGLISH_ROOM_HEADERS[header]), normalize(header)],
+]));
+roomHeaderAliases[normalize("Mã phòng")] = normalize("Số phòng");
+roomHeaderAliases[normalize("Amenity")] = normalize("Tiện ích (ID)");
+roomHeaderAliases[normalize("Amenities")] = normalize("Tiện ích (ID)");
+roomHeaderAliases[normalize("Amenity IDs")] = normalize("Tiện ích (ID)");
+const bedHeaderAliases = Object.fromEntries(BED_HEADERS.flatMap((header, index) => [
+  [normalize(header), normalize(header)],
+  [normalize(ENGLISH_BED_HEADERS[index]), normalize(header)],
+]));
 const uniqueValues = (values: string[]) => [...new Map(values.map((value) => [normalize(value), value.trim()])).values()].filter(Boolean);
 const excelColumnName = (index: number) => {
   let value = index + 1;
@@ -74,14 +160,21 @@ const imageMimeType = (fileName: string) => {
 };
 
 export const downloadRoomTemplate = (options: RoomImportOptions) => {
+  const english = options.language === "en";
+  const sheetNames = english ? SHEET_NAMES.en : SHEET_NAMES.vi;
+  const roomHeaders = getRoomHeaders(english);
+  const bedHeaders = english ? ENGLISH_BED_HEADERS : BED_HEADERS;
   const roomTypes = uniqueValues(options.roomTypes);
   const statuses = uniqueValues(options.statuses);
+  const roomTypeChoices = roomTypes.map((value) => english ? translatedValue(value, ROOM_TYPE_ENGLISH) : value);
+  const statusChoices = statuses.map((value) => english ? translatedValue(value, STATUS_ENGLISH) : value);
   const amenities = [...new Map(options.amenities
     .filter((item) => item.id.trim() && item.name.trim())
     .map((item) => [item.id.trim(), { ...item, id: item.id.trim(), name: item.name.trim() }])).values()];
   const bedTypes = [...new Map(options.bedTypes
     .filter((item) => Number.isInteger(item.id) && item.id > 0 && item.name.trim())
     .map((item) => [normalize(item.name), { ...item, name: item.name.trim() }])).values()];
+  const bedTypeChoices = bedTypes.map((bedType) => localizedBedType(bedType.name, english));
   const buildings = options.buildings.filter((item) => item.id && item.name.trim());
   const floors = options.floors.filter((item) =>
     item.id && /^-?\d+$/.test(item.name.trim()) && buildings.some((building) => building.id === item.buildingId),
@@ -100,17 +193,19 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
   }
   const exampleValues: Record<string, string | number> = {
     "Số phòng": 101,
-    "Loại phòng": roomTypes[0] ?? "",
-    "Tòa": selectedBuilding?.name ?? "",
+    "Loại phòng": roomTypeChoices[0] ?? "",
+    "Tòa": selectedBuilding ? localizedBuilding(selectedBuilding.name, english) : "",
     "Tầng": selectedFloor ? Number(selectedFloor.name) : "",
-    "Trạng thái": statuses[0] ?? "",
-    "Mô tả": "Phòng nghỉ thoáng mát, đầy đủ tiện nghi",
+    "Trạng thái": statusChoices[0] ?? "",
+    "Mô tả": english ? "Comfortable room with full amenities" : "Phòng nghỉ thoáng mát, đầy đủ tiện nghi",
     "Tiện ích (ID)": amenities.slice(0, 2).map((item) => item.id).join("; "),
     ...Object.fromEntries(IMAGE_HEADERS.map((header, index) => [header, index < 4 ? `101-${index + 1}.jpg` : ""])),
   };
   const example = ROOM_HEADERS.map((header) => exampleValues[header] ?? "");
   const catalogRows: Array<Array<string | number>> = [[
-    "Danh mục", "ID / Giá trị", "Tên tiện ích", "Tòa nhà", "ID tòa nhà", "ID tầng", "floorNumber",
+    ...(english
+      ? ["Category", "ID / Value", "Amenity name", "Building", "Building ID", "Floor ID", "floorNumber"]
+      : ["Danh mục", "ID / Giá trị", "Tên tiện ích", "Tòa nhà", "ID tòa nhà", "ID tầng", "floorNumber"]),
   ]];
   const namedRanges: Array<{ name: string; formula: string }> = [];
   const addCatalog = (label: string, rangeName: string, values: string[]) => {
@@ -118,26 +213,26 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
     const startRow = catalogRows.length + 1;
     values.forEach((value, index) => catalogRows.push([index === 0 ? label : "", value]));
     const endRow = catalogRows.length;
-    namedRanges.push({ name: rangeName, formula: `'Danh mục'!$B$${startRow}:$B$${endRow}` });
+    namedRanges.push({ name: rangeName, formula: `'${sheetNames.catalog}'!$B$${startRow}:$B$${endRow}` });
   };
-  addCatalog("Loại phòng", "RoomTypes", roomTypes);
-  addCatalog("Trạng thái", "RoomStatuses", statuses);
-  addCatalog("Tòa", "BuildingList", buildings.map((item) => item.name));
-  addCatalog("Số tầng (floorNumber)", "FloorNumbers", floorNumbers);
+  addCatalog(english ? "Room type" : "Loại phòng", "RoomTypes", roomTypeChoices);
+  addCatalog(english ? "Status" : "Trạng thái", "RoomStatuses", statusChoices);
+  addCatalog(english ? "Building" : "Tòa", "BuildingList", buildings.map((item) => localizedBuilding(item.name, english)));
+  addCatalog(english ? "Floor number (floorNumber)" : "Số tầng (floorNumber)", "FloorNumbers", floorNumbers);
   floors.forEach((floor) => {
     const building = buildings.find((item) => item.id === floor.buildingId);
     if (building) {
-      catalogRows.push(["", "", "", building.name, building.id, floor.id, floor.name]);
+      catalogRows.push(["", "", "", localizedBuilding(building.name, english), building.id, floor.id, floor.name]);
     }
   });
   if (amenities.length > 0) {
-    amenities.forEach((amenity, index) => catalogRows.push([index === 0 ? "Tiện ích" : "", amenity.id, amenity.name]));
+    amenities.forEach((amenity, index) => catalogRows.push([index === 0 ? (english ? "Amenity" : "Tiện ích") : "", amenity.id, amenity.name]));
   }
   const bedTypeStartRow = catalogRows.length + 1;
-  bedTypes.forEach((bedType, index) => catalogRows.push([index === 0 ? "Loại giường" : "", bedType.name]));
+  bedTypes.forEach((bedType, index) => catalogRows.push([index === 0 ? (english ? "Bed type" : "Loại giường") : "", bedTypeChoices[index]]));
   const bedTypeEndRow = catalogRows.length;
-  namedRanges.push({ name: "BedTypes", formula: `'Danh mục'!$B$${bedTypeStartRow}:$B$${bedTypeEndRow}` });
-  namedRanges.push({ name: "RoomNumbers", formula: "'Dữ liệu phòng'!$A$2:$A$1000" });
+  namedRanges.push({ name: "BedTypes", formula: `'${sheetNames.catalog}'!$B$${bedTypeStartRow}:$B$${bedTypeEndRow}` });
+  namedRanges.push({ name: "RoomNumbers", formula: `'${sheetNames.rooms}'!$A$2:$A$1000` });
 
   const listValidation = (header: string, rangeName: string) => ({
     range: `${excelColumnName(ROOM_HEADERS.indexOf(header))}2:${excelColumnName(ROOM_HEADERS.indexOf(header))}1000`,
@@ -154,8 +249,8 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
 
   downloadFile("phong.xlsx", createXlsxWorkbook([
     {
-      name: "Dữ liệu phòng",
-      rows: [ROOM_HEADERS, example],
+      name: sheetNames.rooms,
+      rows: [roomHeaders, example],
       validations: [
         ...(roomTypes.length ? [listValidation("Loại phòng", "RoomTypes")] : []),
         ...(buildings.length ? [listValidation("Tòa", "BuildingList")] : []),
@@ -165,8 +260,24 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
       ],
     },
     {
-      name: "Hướng dẫn",
-      rows: [
+      name: sheetNames.instructions,
+      rows: english ? [
+        ["ROOM IMPORT INSTRUCTIONS"],
+        ["Each row in the Room Data sheet represents one room. Do not rename the columns."],
+        ["Room type, Building, Floor, and Status cells have dropdown lists. Choose a floor number that belongs to the selected building."],
+        ["The Catalog sheet lists the floors from the server with their building name, building ID, floor ID, and floorNumber. The system uses Building and floorNumber to find the correct floor."],
+        ["Room numbers must be positive whole numbers; this is validated in Excel."],
+        ["Enter amenity IDs in one cell, separated by semicolons (;). There is no limit to the number of IDs."],
+        ["Find amenity IDs and names in the Catalog sheet. Only IDs in the catalog are accepted."],
+        ["In the Room Beds sheet, choose the Room number and Bed type from the dropdown lists, then enter a whole-number quantity of at least 1."],
+        ["A room can have multiple bed types by adding multiple rows for the same room number. List each bed type only once per room."],
+        ["Each room must have at least one bed configuration. Available bed types come from the current catalog."],
+        ["Each room needs 4 to 8 images. Enter image filenames in the Image 1 through Image 8 columns."],
+        ["Image filenames must exactly match files in the images folder, including the extension, for example 101-1.jpg."],
+        ["Create a dulieuphong folder, place phong.xlsx and the images folder inside it, then zip the folder as dulieuphong.zip."],
+        ["Price, area, capacity, and extra guest fees are not required in this template."],
+        ["The data will be sent to the server for import when dulieuphong.zip is uploaded."],
+      ] : [
         ["HƯỚNG DẪN NHẬP PHÒNG"],
         ["Mỗi dòng trong sheet Dữ liệu phòng là một phòng. Không đổi tên các cột."],
         ["Ô Loại phòng, Tòa, Tầng và Trạng thái có danh sách xổ xuống; chọn Tầng theo đúng Tòa trong danh mục tầng ở sheet Danh mục."],
@@ -185,14 +296,14 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
       ],
     },
     {
-      name: "Danh mục",
+      name: sheetNames.catalog,
       rows: catalogRows,
     },
     {
-      name: "Giường phòng",
+      name: sheetNames.beds,
       rows: [
-        BED_HEADERS,
-        [101, bedTypes[0].name, 1],
+        bedHeaders,
+        [101, bedTypeChoices[0], 1],
       ],
       validations: [
         { range: "A2:A1000", type: "list", formula1: "=RoomNumbers" },
@@ -201,6 +312,65 @@ export const downloadRoomTemplate = (options: RoomImportOptions) => {
       ],
     },
   ], namedRanges));
+};
+
+export const downloadBuildingTemplate = (language: "en" | "vi") => {
+  const english = language === "en";
+  const headers = english ? ["Building name"] : ["Tên tòa nhà"];
+  const sheetName = english ? "Buildings" : "Danh sách tòa nhà";
+  const rows: Array<Array<string | number>> = [
+    headers,
+    [english ? "Sunrise Building" : "Tòa Sunrise"],
+    [english ? "Garden Building" : "Tòa Garden"],
+  ];
+  downloadFile(
+    english ? "building-template.xlsx" : "mau-nhap-toa-nha.xlsx",
+    createXlsxWorkbook([{ name: sheetName, rows }]),
+  );
+};
+
+export const downloadFloorTemplate = (
+  language: "en" | "vi",
+  buildings: RoomImportBuilding[],
+  selectedBuildingId: string,
+) => {
+  if (buildings.length === 0) {
+    throw new Error(language === "en" ? "No buildings are available to create floors." : "Chưa có tòa nhà để tạo tầng.");
+  }
+  const english = language === "en";
+  const sheetName = english ? "Floors" : "Danh sách tầng";
+  const buildingHeader = english ? "Building" : "Tòa nhà";
+  const floorHeader = english ? "Floor number" : "Số tầng";
+  const selectedBuilding = buildings.find((building) => building.id === selectedBuildingId) ?? buildings[0];
+  const buildingOptions = [...new Map(buildings.map((building) => {
+    const name = localizedBuilding(building.name, english);
+    return [name, name];
+  })).values()];
+  const selectedBuildingName = localizedBuilding(selectedBuilding.name, english);
+  const rows: Array<Array<string | number>> = [
+    [buildingHeader, floorHeader],
+    [selectedBuildingName, 1],
+    [selectedBuildingName, 2],
+  ];
+  const namedRanges = [{ name: "BuildingList", formula: `'${english ? "Buildings" : "Danh mục"}'!$A$2:$A$${buildingOptions.length + 1}` }];
+  const sheets = [
+    {
+      name: sheetName,
+      rows,
+      validations: [
+        { range: "A2:A1000", type: "list" as const, formula1: "=BuildingList" },
+        { range: "B2:B1000", type: "whole" as const, operator: "greaterThanOrEqual" as const, formula1: "1" },
+      ],
+    },
+    {
+      name: english ? "Buildings" : "Danh mục",
+      rows: [[buildingHeader], ...buildingOptions.map((name) => [name])],
+    },
+  ];
+  downloadFile(
+    english ? "floor-template.xlsx" : "mau-nhap-tang.xlsx",
+    createXlsxWorkbook(sheets, namedRanges),
+  );
 };
 
 export const parseRoomImportArchive = async (
@@ -229,9 +399,9 @@ export const parseRoomImportArchive = async (
   const imageDirectory = `${workbookDirectory}images/`.toLocaleLowerCase();
   const workbookBytes = new Uint8Array(workbook.content.byteLength);
   workbookBytes.set(workbook.content);
-  const rows = await readXlsxRowsByName(workbookBytes, "Dữ liệu phòng");
-  const bedRows = await readXlsxRowsByName(workbookBytes, "Giường phòng");
-  const headers = rows[0]?.map(normalize) ?? [];
+  const rows = await readFirstAvailableSheet(workbookBytes, [SHEET_NAMES.vi.rooms, SHEET_NAMES.en.rooms]);
+  const bedRows = await readFirstAvailableSheet(workbookBytes, [SHEET_NAMES.vi.beds, SHEET_NAMES.en.beds]);
+  const headers = canonicalizeHeaders(rows[0] ?? [], roomHeaderAliases);
   const missingHeaders = REQUIRED_ROOM_HEADERS.filter((header) => !headers.includes(normalize(header)));
   if (!headers.includes(normalize("Số phòng")) && !headers.includes(normalize("Mã phòng"))) missingHeaders.push("Số phòng");
   if (missingHeaders.length) throw new Error(`File phong.xlsx thiếu cột: ${missingHeaders.join(", ")}.`);
@@ -255,8 +425,11 @@ export const parseRoomImportArchive = async (
   const byValue = (list: string[]) => new Map(list.map((value) => [normalize(value), value]));
   const roomTypes = byValue(options.roomTypes);
   const statuses = byValue(options.statuses);
+  options.roomTypes.forEach((value) => roomTypes.set(normalize(translatedValue(value, ROOM_TYPE_ENGLISH)), value));
+  options.statuses.forEach((value) => statuses.set(normalize(translatedValue(value, STATUS_ENGLISH)), value));
   const amenities = new Map(options.amenities.map((amenity) => [amenity.id.trim(), amenity.name]));
   const bedTypes = new Map(options.bedTypes.map((bedType) => [normalize(bedType.name), bedType]));
+  options.bedTypes.forEach((bedType) => bedTypes.set(normalize(localizedBedType(bedType.name, true)), bedType));
   const roomNumbers = new Set(existingRoomNumbers.map(normalize));
   const rowResults: RoomImportRowResult[] = [];
   const importedRooms: ImportedRoomData[] = [];
@@ -282,7 +455,11 @@ export const parseRoomImportArchive = async (
       const roomType = roomTypes.get(normalize(rawType));
       if (!roomType) throw new Error(`Loại phòng "${rawType}" ở dòng ${rowNumber} không nằm trong danh mục.`);
       const rawBuilding = value("Tòa");
-      const building = options.buildings.find((item) => normalize(item.name) === normalize(rawBuilding) || normalize(item.id) === normalize(rawBuilding));
+      const building = options.buildings.find((item) =>
+        normalize(item.name) === normalize(rawBuilding)
+        || normalize(item.name.replace(/^Tòa\s*/i, "Building ")) === normalize(rawBuilding)
+        || normalize(item.id) === normalize(rawBuilding),
+      );
       if (!building) throw new Error(`Không tìm thấy tòa "${rawBuilding}" ở dòng ${rowNumber}.`);
       const rawFloor = value("Tầng");
       if (!/^-?\d+$/.test(rawFloor) || !Number.isSafeInteger(Number(rawFloor)) ||
@@ -350,7 +527,7 @@ export const parseRoomImportArchive = async (
     }
   });
 
-  const bedHeaders = bedRows[0]?.map(normalize) ?? [];
+  const bedHeaders = canonicalizeHeaders(bedRows[0] ?? [], bedHeaderAliases);
   const missingBedHeaders = BED_HEADERS.filter((header) => !bedHeaders.includes(normalize(header)));
   if (missingBedHeaders.length) {
     throw new Error(`Sheet Giường phòng thiếu cột: ${missingBedHeaders.join(", ")}.`);

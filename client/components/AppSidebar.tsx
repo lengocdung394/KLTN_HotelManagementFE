@@ -22,6 +22,12 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
 import { isEmployeePortalUser } from "../lib/employeeRoles";
+import { useGetHotelHousekeepingTasksQuery } from "../services/shiftApi";
+import { useGetCheckInOutSummaryQuery } from "../services/checkInOutApi";
+import {
+  useGetBookingCancellationsQuery,
+  useGetCheckoutRefundsQuery,
+} from "../services/managementBookingApi";
 import UserProfileCard from "./UserProfileCard";
 
 type AppSidebarProps = {
@@ -72,8 +78,38 @@ export default function AppSidebar({
   onToggleCollapse,
 }: AppSidebarProps) {
   const { t } = useTranslation();
-  const { hotelName, roles } = useAppSelector((state) => state.auth);
+  const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
   const isEmployee = isEmployeePortalUser(roles);
+  const canManageHousekeepingTasks = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_ADMIN");
+  const today = new Date();
+  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const { data: checkInOutSummary } = useGetCheckInOutSummaryQuery(
+    { date: todayDate },
+    { skip: !hotelId, pollingInterval: 30000 },
+  );
+  const pendingCheckInOutCount =
+    (checkInOutSummary?.waitingCheckIn ?? 0) + (checkInOutSummary?.waitingCheckOut ?? 0);
+  const { data: housekeepingTasks = [] } = useGetHotelHousekeepingTasksQuery(undefined, {
+    skip: !canManageHousekeepingTasks,
+    pollingInterval: 30000,
+  });
+  const pendingHousekeepingTaskCount = housekeepingTasks.filter((task) => task.status === "NEEDS_ASSIGNMENT").length;
+  const canApproveRefunds = roles.includes("ROLE_MANAGER")
+    || roles.includes("ROLE_SUPER_ADMIN")
+    || roles.includes("ROLE_ADMIN");
+  const { data: bookingCancellations = [] } = useGetBookingCancellationsQuery(undefined, {
+    skip: !canApproveRefunds,
+    pollingInterval: 30000,
+  });
+  const { data: checkoutRefunds = [] } = useGetCheckoutRefundsQuery(undefined, {
+    skip: !canApproveRefunds,
+    pollingInterval: 30000,
+  });
+  const pendingRefundApprovalCount =
+    bookingCancellations.filter((item) =>
+      item.status === "REFUND_REVIEW_PENDING" || item.status === "REFUND_BANK_DETAILS_REQUIRED",
+    ).length
+    + checkoutRefunds.filter((item) => item.status === "PENDING").length;
   const location = useLocation();
   const [bookingMenuOpen, setBookingMenuOpen] = useState(
     () =>
@@ -154,6 +190,11 @@ export default function AppSidebar({
                 <Icon size={17} />
                 {t(`navigation.${label}`)}
               </span>
+              {href === "/check-in-out" && pendingCheckInOutCount > 0 && (
+                <span className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white" aria-label={`${pendingCheckInOutCount} ${t("navigation.checkInOut")}`}>
+                  {pendingCheckInOutCount}
+                </span>
+              )}
             </Link>
           ))}
           <div
@@ -204,10 +245,17 @@ export default function AppSidebar({
           <Link
             to="/refund-approvals"
             onClick={onCloseMobile}
-            className={`order-8 flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+            className={`order-8 flex items-center justify-between gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
           >
-            <ClipboardCheck size={17} />
-            {t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}
+            <span className="flex items-center gap-3">
+              <ClipboardCheck size={17} />
+              {t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}
+            </span>
+            {pendingRefundApprovalCount > 0 && (
+              <span className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white" aria-label={`${pendingRefundApprovalCount} ${t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}`}>
+                {pendingRefundApprovalCount}
+              </span>
+            )}
           </Link>
           <Link
             to="/hotel-rules"
@@ -437,9 +485,14 @@ export default function AppSidebar({
                     <Link
                       to="/staff?tab=tasks"
                       onClick={onCloseMobile}
-                      className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                      className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                     >
                       {t("staff.assignTasks")}
+                      {pendingHousekeepingTaskCount > 0 && (
+                        <span className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white" aria-label={`${pendingHousekeepingTaskCount} ${t("staff.assignTasks")}`}>
+                          {pendingHousekeepingTaskCount}
+                        </span>
+                      )}
                     </Link>
                   )}
                 </div>

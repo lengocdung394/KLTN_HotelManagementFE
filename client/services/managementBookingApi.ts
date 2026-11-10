@@ -148,6 +148,7 @@ export type CheckoutRefund = {
   requestedAt?: string | null;
   approvedAt?: string | null;
   refundedAt?: string | null;
+  refundedBy?: string | null;
 };
 
 export type BookingCancellation = {

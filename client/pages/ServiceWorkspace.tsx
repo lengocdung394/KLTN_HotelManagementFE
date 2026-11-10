@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import { Banknote, CalendarDays, CheckCircle2, Clock3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, Upload, X, Search } from "lucide-react";
+import { Banknote, CalendarDays, CheckCircle2, Clock3, Columns3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, RefreshCw, RotateCcw, Upload, X, Search } from "lucide-react";
 import ListPagination from "../components/ListPagination";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { localizedText } from "../i18n";
@@ -26,6 +26,17 @@ import ClearSearchButton from "../components/ClearSearchButton";
 import FilterSelect from "../components/FilterSelect";
 import FilterResultStatus from "../components/FilterResultStatus";
 import { FilterResetButton } from "../components/SearchableFilter";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+
+const SERVICE_TABLE_COLUMNS = [
+  { id: "name", labelKey: "serviceWorkspace.serviceName", width: 240 },
+  { id: "category", labelKey: "serviceWorkspace.category", width: 190 },
+  { id: "description", labelKey: "serviceWorkspace.serviceDescription", width: 420 },
+  { id: "price", labelKey: "serviceWorkspace.price", width: 220 },
+  { id: "status", labelKey: "serviceWorkspace.status", width: 190 },
+  { id: "actions", labelKey: "serviceWorkspace.actions", width: 260 },
+] as const;
+type ServiceTableColumnId = (typeof SERVICE_TABLE_COLUMNS)[number]["id"];
 
 const getSaveErrorMessage = (error: unknown) => {
   if (typeof error === "object" && error !== null && "data" in error) {
@@ -240,8 +251,17 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [updateServiceRequest, { isLoading: isUpdating }] = useUpdateServiceMutation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [isManuallyRefreshingServices, setIsManuallyRefreshingServices] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [visibleServiceColumns, setVisibleServiceColumns] = useState<Record<ServiceTableColumnId, boolean>>({
+    name: true,
+    category: true,
+    description: true,
+    price: true,
+    status: true,
+    actions: true,
+  });
   const [expandedUsageBookingIds, setExpandedUsageBookingIds] = useState<Set<string>>(() => new Set());
   const [usageQuantities, setUsageQuantities] = useState<Record<string, string>>({});
   const [activeUsageTab, setActiveUsageTab] = useState<"pending" | "used-today">("pending");
@@ -266,7 +286,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     isError: isUsageError,
   } = useGetBookingsByHotelQuery(Number(hotelId), { skip: mode !== "usage" || !hasHotelId || isSystemAdmin });
   const [confirmServiceUsed, { isLoading: isConfirmingService }] = useConfirmServiceUsedMutation();
-  const { data: services = [], isLoading, isError } = useGetAllServicesQuery(
+  const { data: services = [], isLoading, isFetching, isError, refetch } = useGetAllServicesQuery(
     isSystemAdmin ? (selectedBranchId ? { hotelId: Number(selectedBranchId) } : undefined) : hasHotelId ? { hotelId: Number(hotelId) } : undefined,
     { skip: mode !== "catalog" || (!hasHotelId && !isSystemAdmin) },
   );
@@ -377,6 +397,10 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       return matchesStatus && (!normalizedQuery || searchableText.includes(normalizedQuery));
     });
   }, [allServices, searchQuery, statusFilter]);
+  const shownServiceColumns = SERVICE_TABLE_COLUMNS.filter((column) => visibleServiceColumns[column.id]);
+  const serviceTableWidth = shownServiceColumns.reduce((total, column) => total + column.width, 0);
+  const hasServiceFilters = Boolean(searchQuery.trim() || selectedBranchId || statusFilter !== "all");
+  const isServiceListLoading = isLoading || isFetching || isManuallyRefreshingServices;
   const isSaving = isCreating || isUpdating;
 
   const handleConfirmServiceUsed = async (row: ServiceUsageRow, quantity: number) => {
@@ -942,23 +966,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         )}
       </div>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
-        {isSystemAdmin && (
-          <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
-            <span>{t("serviceWorkspace.branch")}</span>
-            <FilterSelect
-              value={selectedBranchId}
-              onChange={(event) => setSelectedBranchId(event.target.value)}
-              aria-label={t("serviceWorkspace.filterByBranch")}
-              className="h-10 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-            >
-              <option value="">{t("serviceWorkspace.allBranches")}</option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
-              ))}
-            </FilterSelect>
-          </label>
-        )}
-        <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
+        <div className="relative w-full sm:w-64 sm:flex-none lg:w-72">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -970,35 +978,167 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           />
           <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={t("common.clearSearch")} />
         </div>
-        <label className="flex items-center">
-          <FilterSelect
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-            aria-label={t("serviceWorkspace.filterByStatus")}
-            className="h-10 min-w-44 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          {isSystemAdmin && (
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
+              <span>{t("serviceWorkspace.branch")}</span>
+              <FilterSelect
+                value={selectedBranchId}
+                onChange={(event) => setSelectedBranchId(event.target.value)}
+                aria-label={t("serviceWorkspace.filterByBranch")}
+                className="h-10 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">{t("serviceWorkspace.allBranches")}</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </FilterSelect>
+            </label>
+          )}
+          <label className="flex items-center">
+            <FilterSelect
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+              aria-label={t("serviceWorkspace.filterByStatus")}
+              className="h-10 min-w-44 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="all">{t("serviceWorkspace.allStatuses")}</option>
+              <option value="active">{t("serviceWorkspace.active")}</option>
+              <option value="inactive">{t("serviceWorkspace.inactive")}</option>
+            </FilterSelect>
+          </label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label={t("serviceWorkspace.customizeColumns", "Tùy chỉnh cột")}
+                className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Columns3 size={16} />
+                {t("common.columns", "Cột")}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-60 p-2">
+              <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {t("serviceWorkspace.showColumns", "Hiển thị cột")}
+              </p>
+              {SERVICE_TABLE_COLUMNS.map((column) => {
+                const isLastVisibleColumn = shownServiceColumns.length === 1 && visibleServiceColumns[column.id];
+                return (
+                  <label
+                    key={column.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visibleServiceColumns[column.id]}
+                      disabled={isLastVisibleColumn}
+                      onChange={(event) => {
+                        setVisibleServiceColumns((current) => ({
+                          ...current,
+                          [column.id]: event.target.checked,
+                        }));
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                    />
+                    {t(column.labelKey)}
+                  </label>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setVisibleServiceColumns({
+                  name: true,
+                  category: true,
+                  description: true,
+                  price: true,
+                  status: true,
+                  actions: true,
+                })}
+                className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+              >
+                {t("serviceWorkspace.showAllColumns", "Hiện tất cả cột")}
+              </button>
+            </PopoverContent>
+          </Popover>
+          <button
+            type="button"
+            onClick={async () => {
+              if (isFetching || isManuallyRefreshingServices) return;
+              const refreshStartedAt = Date.now();
+              setIsManuallyRefreshingServices(true);
+              await new Promise<void>((resolve) => {
+                window.requestAnimationFrame(() => resolve());
+              });
+              if (hasServiceFilters) {
+                setSearchQuery("");
+                setSelectedBranchId("");
+                setStatusFilter("all");
+              }
+              try {
+                await refetch().unwrap();
+              } catch {
+                toast({
+                  variant: "destructive",
+                  title: t("serviceWorkspace.servicesLoadError"),
+                });
+              } finally {
+                const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+                if (remainingLoadingTime > 0) {
+                  await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+                }
+                setIsManuallyRefreshingServices(false);
+              }
+            }}
+            aria-label={hasServiceFilters
+              ? t("common.resetFilter")
+              : localizedText("Tải lại danh sách dịch vụ", "Reload services")}
+            title={hasServiceFilters
+              ? t("common.resetFilter")
+              : localizedText("Tải lại danh sách dịch vụ", "Reload services")}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            aria-busy={isFetching || isManuallyRefreshingServices}
           >
-            <option value="all">{t("serviceWorkspace.allStatuses")}</option>
-            <option value="active">{t("serviceWorkspace.active")}</option>
-            <option value="inactive">{t("serviceWorkspace.inactive")}</option>
-          </FilterSelect>
-        </label>
+            {isFetching || isManuallyRefreshingServices
+              ? <RefreshCw size={16} className="animate-spin" />
+              : hasServiceFilters
+              ? <RotateCcw size={15} />
+              : <RefreshCw size={16} />}
+          </button>
+        </div>
       </div>
-      {isLoading && <p className="m-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.loadingServices")}</p>}
-      {isError && <p className="m-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{t("serviceWorkspace.servicesLoadError")}</p>}
-      {!isLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="m-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.branchUnknown")}</p>}
-      {!isLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noServices")}</p>}
-      {!isLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter])}><p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noMatchingServices")}</p></FilterResultStatus>}
-      {filteredServices.length > 0 && (
+      {isServiceListLoading && (
+        <div role="status" aria-live="polite" className="flex min-h-48 items-center justify-center gap-2 border-b border-slate-100 px-4 py-8 text-sm text-blue-700">
+          <RefreshCw size={17} className="animate-spin" />
+          <span>{localizedText("Đang tải danh sách dịch vụ...", "Loading services...")}</span>
+        </div>
+      )}
+      {!isServiceListLoading && isError && <p className="m-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{t("serviceWorkspace.servicesLoadError")}</p>}
+      {!isServiceListLoading && !isError && !hasHotelId && !isSystemAdmin && <p className="m-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.branchUnknown")}</p>}
+      {!isServiceListLoading && !isError && (hasHotelId || isSystemAdmin) && allServices.length === 0 && <p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noServices")}</p>}
+      {!isServiceListLoading && !isError && allServices.length > 0 && filteredServices.length === 0 && <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter])}><p className="m-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("serviceWorkspace.noMatchingServices")}</p></FilterResultStatus>}
+      {!isServiceListLoading && filteredServices.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+          <table
+            className="min-w-full table-fixed border-collapse text-left text-sm"
+            style={{ width: `${serviceTableWidth}px` }}
+          >
+            <colgroup>
+              {shownServiceColumns.map((column) => (
+                <col key={column.id} style={{ width: `${column.width}px` }} />
+              ))}
+            </colgroup>
             <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
               <tr>
-                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.serviceName")}</th>
-                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.category")}</th>
-                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.serviceDescription")}</th>
-                <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{t("serviceWorkspace.price")}</th>
-                <th scope="col" className="whitespace-nowrap px-5 py-3">{t("serviceWorkspace.status")}</th>
-                <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{t("serviceWorkspace.actions")}</th>
+                {shownServiceColumns.map((column) => (
+                  <th
+                    key={column.id}
+                    scope="col"
+                    className={`whitespace-nowrap px-5 py-3 ${column.id === "price" || column.id === "actions" ? "text-right" : ""}`}
+                  >
+                    {t(column.labelKey)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1006,19 +1146,19 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 const isActive = service.active;
                 return (
                   <tr key={service.id} className="text-slate-700 transition hover:bg-slate-50/70">
-                    <td className="max-w-56 px-5 py-3 font-semibold text-slate-900">
+                    {visibleServiceColumns.name && <td className="max-w-56 px-5 py-3 font-semibold text-slate-900">
                       <p className="truncate" title={service.name}>{service.name}</p>
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3 text-slate-600">{service.category}</td>
-                    <td className="max-w-80 px-5 py-3 text-slate-600">
+                    </td>}
+                    {visibleServiceColumns.category && <td className="whitespace-nowrap px-5 py-3 text-slate-600">{service.category}</td>}
+                    {visibleServiceColumns.description && <td className="max-w-80 px-5 py-3 text-slate-600">
                       <p className="truncate" title={service.detail}>{service.detail || "—"}</p>
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-slate-800">
+                    </td>}
+                    {visibleServiceColumns.price && <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-slate-800">
                       {service.price.toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}
                       {i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}
                       <span className="font-normal text-slate-400"> / {service.unit}</span>
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3">
+                    </td>}
+                    {visibleServiceColumns.status && <td className="whitespace-nowrap px-5 py-3">
                       {canManageServices ? (
                         <button
                           type="button"
@@ -1035,8 +1175,8 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                           {isActive ? t("serviceWorkspace.active") : t("serviceWorkspace.inactive")}
                         </span>
                       )}
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3">
+                    </td>}
+                    {visibleServiceColumns.actions && <td className="whitespace-nowrap px-5 py-3">
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
@@ -1057,7 +1197,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                           </button>
                         )}
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 );
               })}
@@ -1065,7 +1205,9 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           </table>
         </div>
       )}
-      <ListPagination totalItems={filteredServices.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
+      {!isServiceListLoading && !isError && filteredServices.length > 0 && (
+        <ListPagination totalItems={filteredServices.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
+      )}
       {detailService && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"
@@ -1183,10 +1325,10 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         onUpload={importServicesFromFile}
       />
       {showCreate && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/45 p-4" onMouseDown={() => setShowCreate(false)}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => setShowCreate(false)}>
           <form
             noValidate
-            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl shrink-0 overflow-y-auto rounded-2xl bg-white p-6 shadow-[0_25px_80px_rgba(15,23,42,0.18)]"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl shrink-0 overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
             onSubmit={(event) => {
               event.preventDefault();
               void saveService();
@@ -1195,8 +1337,8 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-600">{t("serviceWorkspace.serviceType")}</p>
-                <h4 className="mt-2 text-[28px] font-bold leading-tight text-slate-900">{editingService ? t("serviceWorkspace.editService") : t("serviceWorkspace.addService")}</h4>
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("serviceWorkspace.serviceType")}</p>
+                <h4 className="mt-1 font-serif text-lg font-bold leading-tight text-slate-900">{editingService ? t("serviceWorkspace.editService") : t("serviceWorkspace.addService")}</h4>
               </div>
               <button
                 type="button"
@@ -1215,7 +1357,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   <select
                     value={targetHotelId}
                     onChange={(event) => setTargetHotelId(event.target.value)}
-                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-800"
+                    className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   >
                     <option value="">{t("serviceWorkspace.entireSystem")}</option>
                     {branches.map((branch) => (
@@ -1235,7 +1377,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   onChange={(event) => { setNewService((current) => ({ ...current, name: event.target.value })); setFieldErrors((current) => ({ ...current, name: undefined })); }}
                   aria-invalid={Boolean(fieldErrors.name)}
                   aria-describedby={fieldErrors.name ? "service-name-error" : undefined}
-                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.name ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
+                  className={`mt-1.5 h-10 w-full rounded-lg border bg-white px-3 text-sm font-normal text-slate-800 transition placeholder:text-slate-400 focus:outline-none focus:ring-2 ${fieldErrors.name ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                   placeholder={t("serviceWorkspace.enterServiceName")}
                 />
                 {fieldErrors.name && <span id="service-name-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.name}</span>}
@@ -1251,7 +1393,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   onChange={(event) => { setNewService((current) => ({ ...current, price: event.target.value })); setFieldErrors((current) => ({ ...current, price: undefined })); }}
                   aria-invalid={Boolean(fieldErrors.price)}
                   aria-describedby={fieldErrors.price ? "service-price-error" : undefined}
-                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.price ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
+                  className={`mt-1.5 h-10 w-full rounded-lg border bg-white px-3 text-sm font-normal text-slate-800 transition focus:outline-none focus:ring-2 ${fieldErrors.price ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                   placeholder="0"
                 />
                 {fieldErrors.price && <span id="service-price-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.price}</span>}
@@ -1265,7 +1407,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   onChange={(event) => { setNewService((current) => ({ ...current, unit: event.target.value })); setFieldErrors((current) => ({ ...current, unit: undefined })); }}
                   aria-invalid={Boolean(fieldErrors.unit)}
                   aria-describedby={fieldErrors.unit ? "service-unit-error" : undefined}
-                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.unit ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
+                  className={`mt-1.5 h-10 w-full rounded-lg border bg-white px-3 text-sm font-normal text-slate-800 transition focus:outline-none focus:ring-2 ${fieldErrors.unit ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                 >
                   <option value="lần">{t("serviceWorkspace.unitOnce")}</option>
                   <option value="người">{t("booking.people")}</option>
@@ -1283,7 +1425,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   onChange={(event) => { setNewService((current) => ({ ...current, category: event.target.value })); setFieldErrors((current) => ({ ...current, category: undefined })); }}
                   aria-invalid={Boolean(fieldErrors.category)}
                   aria-describedby={fieldErrors.category ? "service-category-error" : undefined}
-                  className={`mt-2 h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-normal text-slate-800 shadow-sm transition focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.category ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
+                  className={`mt-1.5 h-10 w-full rounded-lg border bg-white px-3 text-sm font-normal text-slate-800 transition focus:outline-none focus:ring-2 ${fieldErrors.category ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                 >
                   <option value="Khác">{t("serviceWorkspace.other")}</option>
                   <option value="Dịch vụ phòng">{t("serviceWorkspace.roomService")}</option>
@@ -1321,7 +1463,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   {fieldErrors.image && <p id="service-image-error" className="text-xs font-normal text-rose-600" role="alert">{fieldErrors.image}</p>}
 
                   {newService.imageUrl && (
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-2">
                       <img src={newService.imageUrl} alt={t("serviceWorkspace.servicePreview")} className="h-28 w-full rounded-lg object-cover" />
                     </div>
                   )}
@@ -1338,13 +1480,13 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   aria-describedby={fieldErrors.detail ? "service-description-error" : undefined}
                   rows={3}
                   placeholder={t("serviceWorkspace.enterDescription")}
-                  className={`mt-2 w-full resize-none rounded-xl border bg-slate-50 px-3 py-2.5 text-sm font-normal text-slate-800 shadow-sm transition placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 ${fieldErrors.detail ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
+                  className={`mt-1.5 w-full resize-none rounded-lg border bg-white px-3 py-2.5 text-sm font-normal text-slate-800 transition placeholder:text-slate-400 focus:outline-none focus:ring-2 ${fieldErrors.detail ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100" : "border-slate-200 focus:border-blue-500 focus:ring-blue-100"}`}
                 />
                 {fieldErrors.detail && <span id="service-description-error" className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.detail}</span>}
               </label>
 
               <div className="sm:col-span-2">
-                <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300">
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300">
                   {t("serviceWorkspace.active")}
                   <input
                     type="checkbox"
@@ -1358,7 +1500,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
 
             {saveError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{saveError}</p>}
 
-            <div className="mt-7 flex items-center justify-end gap-3">
+            <div className="mt-6 flex items-center justify-start gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -1367,14 +1509,14 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                   setSelectedImage(null);
                 }}
                 disabled={isSaving}
-                className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+                className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
               >
                 {t("serviceWorkspace.cancel")}
               </button>
               <button
                 type="submit"
                 disabled={isSaving}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {editingService ? <Pencil size={16} /> : <Plus size={16} />}
                 {isSaving ? t("serviceWorkspace.saving") : editingService ? t("serviceWorkspace.saveChanges") : t("serviceWorkspace.addService")}

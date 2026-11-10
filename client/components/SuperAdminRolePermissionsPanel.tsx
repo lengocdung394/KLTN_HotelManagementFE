@@ -4,6 +4,7 @@ import {
   Check,
   CirclePlus,
   ChevronsUpDown,
+  Columns3,
   FileSpreadsheet,
   Plus,
   Search,
@@ -568,6 +569,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       aria-label="Tùy chỉnh cột bảng vai trò"
                       className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
+                      <Columns3 size={16} />
                       Cột
                       <ChevronDown size={16} />
                     </button>
@@ -796,6 +798,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       aria-label="Tùy chỉnh cột bảng"
                       className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
+                      <Columns3 size={16} />
                       Cột
                       <ChevronDown size={16} />
                     </button>

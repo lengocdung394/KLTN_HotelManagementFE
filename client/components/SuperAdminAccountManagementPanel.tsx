@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, Eye, KeyRound, RefreshCw, Search, Users, X } from "lucide-react";
+import { Check, ChevronDown, Columns3, Eye, KeyRound, RefreshCw, RotateCcw, Search, Users, X } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -27,6 +27,15 @@ import ListPagination from "./ListPagination";
 import { localizedText } from "../i18n";
 
 type AccountView = "all" | "staff" | "customers";
+const ACCOUNT_TABLE_COLUMNS = [
+  { id: "name", label: "Họ và tên", width: 190 },
+  { id: "type", label: "Loại tài khoản", width: 170 },
+  { id: "email", label: "Email", width: 220 },
+  { id: "phone", label: "Số điện thoại", width: 160 },
+  { id: "branch", label: "Chi nhánh", width: 200 },
+  { id: "actions", label: "Thao tác", width: 112 },
+] as const;
+type AccountTableColumnId = (typeof ACCOUNT_TABLE_COLUMNS)[number]["id"];
 
 type Props = {
   view: AccountView;
@@ -135,6 +144,19 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   const [detailError, setDetailError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
+  const [visibleColumns, setVisibleColumns] = useState<Record<AccountTableColumnId, boolean>>({
+    name: true,
+    type: true,
+    email: true,
+    phone: true,
+    branch: true,
+    actions: true,
+  });
+  const availableColumns = ACCOUNT_TABLE_COLUMNS.filter(
+    (column) => view !== "customers" || column.id !== "branch",
+  );
+  const shownColumns = availableColumns.filter((column) => visibleColumns[column.id]);
+  const tableWidth = shownColumns.reduce((total, column) => total + column.width, 0);
 
   const staffAccounts = useMemo(
     () => accounts.filter((account) => ["ADMIN", "MANAGER", "EMPLOYEE"].includes(getDisplayAccountType(account))),
@@ -304,11 +326,12 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
   const canEdit = selectedAccount?.accountType !== "SUPER_ADMIN";
   const isSaving = isUpdatingAccount || isUpdatingCustomer;
   const isBusy = isLoading || isFetching;
+  const hasAccountFilters = Boolean(search.trim() || (view === "staff" && branchFilter !== ALL_BRANCHES));
 
   return (
     <>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
           <div>
             <h2 className="text-lg font-bold text-slate-900">{title}</h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
@@ -320,15 +343,6 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
               {" "}Thông tin mật khẩu và mã hóa mật khẩu không được hiển thị.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            disabled={isBusy}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw size={15} className={isBusy ? "animate-spin" : ""} />
-            Tải lại
-          </button>
         </div>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -358,6 +372,17 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
             )}
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <div className="relative block w-full sm:w-72">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tìm tên, email, SĐT, mã hoặc chi nhánh"
+                aria-label="Tìm tài khoản"
+                className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
+              <ClearSearchButton value={search} onClear={() => setSearch("")} label="Xóa tìm kiếm" />
+            </div>
             {view === "staff" && (
               <Popover
                 open={isBranchFilterOpen}
@@ -425,29 +450,96 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                 </PopoverContent>
               </Popover>
             )}
-            <div className="relative block w-full sm:w-72">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Tìm tên, email, SĐT, mã hoặc chi nhánh"
-                aria-label="Tìm tài khoản"
-                className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              />
-              <ClearSearchButton value={search} onClear={() => setSearch("")} label="Xóa tìm kiếm" />
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Tùy chỉnh cột bảng tài khoản"
+                  className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <Columns3 size={16} />
+                  Cột
+                  <ChevronDown size={16} />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-2">
+                <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Hiển thị cột
+                </p>
+                {availableColumns.map((column) => {
+                  const isLastVisibleColumn = shownColumns.length === 1 && visibleColumns[column.id];
+                  return (
+                    <label
+                      key={column.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns[column.id]}
+                        disabled={isLastVisibleColumn}
+                        onChange={(event) => {
+                          setVisibleColumns((current) => ({
+                            ...current,
+                            [column.id]: event.target.checked,
+                          }));
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                      />
+                      {column.label}
+                    </label>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setVisibleColumns({
+                    name: true,
+                    type: true,
+                    email: true,
+                    phone: true,
+                    branch: true,
+                    actions: true,
+                  })}
+                  className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+                >
+                  Hiện tất cả cột
+                </button>
+              </PopoverContent>
+            </Popover>
+            <button
+              type="button"
+              onClick={() => {
+                if (isBusy) return;
+                if (hasAccountFilters) {
+                  setSearch("");
+                  setBranchFilter(ALL_BRANCHES);
+                }
+                void refetch();
+              }}
+              disabled={isBusy}
+              aria-label={hasAccountFilters ? "Đặt lại bộ lọc" : "Tải lại danh sách tài khoản"}
+              title={hasAccountFilters ? "Đặt lại bộ lọc" : "Tải lại danh sách tài khoản"}
+              aria-busy={isBusy}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-100"
+            >
+              {isBusy
+                ? <RefreshCw size={16} className="animate-spin" />
+                : hasAccountFilters
+                  ? <RotateCcw size={15} />
+                  : <RefreshCw size={16} />}
+            </button>
           </div>
         </div>
 
-        {isError && (
-          <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        {isBusy ? (
+          <div role="status" aria-live="polite" className="mt-4 flex min-h-48 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-8 text-sm text-blue-700">
+            <RefreshCw size={17} className="animate-spin" />
+            <span>Đang tải danh sách tài khoản...</span>
+          </div>
+        ) : isError ? (
+          <div role="alert" className="mt-4 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-700">
             <span>{getErrorMessage(listError, "Không thể tải danh sách tài khoản.")}</span>
             <button type="button" onClick={() => void refetch()} className="font-semibold underline">Thử lại</button>
           </div>
-        )}
-
-        {isLoading ? (
-          <p className="py-12 text-center text-sm text-slate-500">Đang tải danh sách tài khoản...</p>
         ) : filteredAccounts.length === 0 ? (
           <FilterResultStatus filterKey={JSON.stringify([search, branchFilter])}><div className="py-12 text-center">
             <Users size={25} className="mx-auto text-slate-300" />
@@ -457,30 +549,40 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
           </div></FilterResultStatus>
         ) : (
           <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[850px] text-left text-sm">
+            <table
+              className="min-w-full table-fixed text-left text-sm"
+              style={{ width: `${tableWidth}px` }}
+            >
+              <colgroup>
+                {shownColumns.map((column) => (
+                  <col key={column.id} style={{ width: `${column.width}px` }} />
+                ))}
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Họ và tên</th>
-                  <th className="px-4 py-3 font-semibold">Loại tài khoản</th>
-                  <th className="px-4 py-3 font-semibold">Email</th>
-                  <th className="px-4 py-3 font-semibold">Số điện thoại</th>
-                  <th className="px-4 py-3 font-semibold">Chi nhánh</th>
-                  <th className="min-w-[112px] whitespace-nowrap px-4 py-3 text-right font-semibold">Thao tác</th>
+                  {shownColumns.map((column) => (
+                    <th
+                      key={column.id}
+                      className={`px-4 py-3 font-semibold ${column.id === "actions" ? "whitespace-nowrap text-right" : ""}`}
+                    >
+                      {column.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginatedAccounts.map((account) => (
                   <tr key={`${account.accountId ?? account.profileId}-${account.accountType}`} className="text-slate-700">
-                    <td className="px-4 py-3 font-semibold text-slate-900">{account.fullName || "Chưa cập nhật"}</td>
-                    <td className="px-4 py-3">
+                    {visibleColumns.name && <td className="px-4 py-3 font-semibold text-slate-900">{account.fullName || "Chưa cập nhật"}</td>}
+                    {visibleColumns.type && <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getAccountTypeBadgeClass(account)}`}>
                         {getAccountTypeLabel(account)}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">{account.email || "Chưa cập nhật"}</td>
-                    <td className="px-4 py-3">{account.phone || "Chưa cập nhật"}</td>
-                    <td className="px-4 py-3">{account.hotelName || "—"}</td>
-                    <td className="min-w-[112px] whitespace-nowrap px-4 py-3 text-right">
+                    </td>}
+                    {visibleColumns.email && <td className="px-4 py-3">{account.email || "Chưa cập nhật"}</td>}
+                    {visibleColumns.phone && <td className="px-4 py-3">{account.phone || "Chưa cập nhật"}</td>}
+                    {view !== "customers" && visibleColumns.branch && <td className="px-4 py-3">{account.hotelName || "—"}</td>}
+                    {visibleColumns.actions && <td className="whitespace-nowrap px-4 py-3 text-right">
                       <button
                         type="button"
                         onClick={() => void openDetails(account)}
@@ -489,15 +591,19 @@ export default function SuperAdminAccountManagementPanel({ view }: Props) {
                         <Eye size={14} />
                         Chi tiết
                       </button>
-                    </td>
+                    </td>}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <ListPagination totalItems={filteredAccounts.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
-        <p className="mt-3 text-xs text-slate-400">Đang hiển thị {filteredAccounts.length} / {branchFilteredAccounts.length} hồ sơ.</p>
+        {!isBusy && !isError && filteredAccounts.length > 0 && (
+          <>
+            <ListPagination totalItems={filteredAccounts.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
+            <p className="mt-3 text-xs text-slate-400">Đang hiển thị {filteredAccounts.length} / {branchFilteredAccounts.length} hồ sơ.</p>
+          </>
+        )}
       </section>
 
       {(selectedAccount || isLoadingDetails || detailError) && (

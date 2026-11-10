@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
+import { CalendarDays, Columns3, Copy, Eye, Pencil, Plus, RefreshCw, RotateCcw, Search, Tag, X } from "lucide-react";
 import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -11,9 +11,24 @@ import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
+import SearchableFilter from "../components/SearchableFilter";
 import ClearSearchButton from "../components/ClearSearchButton";
 import FilterResultStatus from "../components/FilterResultStatus";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { localizedText } from "../i18n";
+
+const PROMOTION_TABLE_COLUMNS = [
+  { id: "program", labelKey: "promotion.programName", width: 320 },
+  { id: "scope", labelKey: "promotion.scope", width: 180 },
+  { id: "validity", labelKey: "promotion.validity", width: 260 },
+  { id: "offer", labelKey: "promotion.offerLevel", width: 190 },
+  { id: "claimed", labelKey: "promotion.claimedCount", width: 180 },
+  { id: "used", labelKey: "promotion.usedCount", width: 160 },
+  { id: "value", labelKey: "promotion.usedValue", width: 230 },
+  { id: "status", labelKey: "promotion.status", width: 170 },
+  { id: "actions", labelKey: "promotion.actions", width: 240 },
+] as const;
+type PromotionTableColumnId = (typeof PROMOTION_TABLE_COLUMNS)[number]["id"];
 
 type PromotionFormValues = {
   name: string;
@@ -120,7 +135,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [targetHotelId, setTargetHotelId] = useState("");
-  const { data: apiPromotions = [], isLoading, isError } = useGetPromotionsQuery(
+  const { data: apiPromotions = [], isLoading, isFetching, isError, refetch } = useGetPromotionsQuery(
     isSystemAdmin
       ? { ...(selectedBranchId ? { hotelId: Number(selectedBranchId) } : {}), page: 0, size: 100 }
       : hasHotelId ? { hotelId: Number(hotelId), page: 0, size: 100 } : undefined,
@@ -141,9 +156,21 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const pendingLocalPromotionName = useRef("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [isManuallyRefreshingPromotions, setIsManuallyRefreshingPromotions] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | PromotionStatus>("ALL");
   const [scopeFilter, setScopeFilter] = useState<"ALL" | PromotionScope>("ALL");
+  const [visiblePromotionColumns, setVisiblePromotionColumns] = useState<Record<PromotionTableColumnId, boolean>>({
+    program: true,
+    scope: true,
+    validity: true,
+    offer: true,
+    claimed: true,
+    used: true,
+    value: true,
+    status: true,
+    actions: true,
+  });
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [isDateFilterActive, setIsDateFilterActive] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -226,6 +253,11 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       .includes(normalizedSearchQuery);
     return matchesStatus && matchesScope && matchesSearch;
   });
+  const shownPromotionColumns = PROMOTION_TABLE_COLUMNS.filter((column) => visiblePromotionColumns[column.id]);
+  const promotionTableWidth = shownPromotionColumns.reduce((total, column) => total + column.width, 0);
+  const hasPromotionFilters = Boolean(
+    searchQuery.trim() || scopeFilter !== "ALL" || statusFilter !== "ALL" || isDateFilterActive,
+  );
   const totalPages = Math.max(1, Math.ceil(visiblePromotions.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedPromotions = visiblePromotions.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -840,15 +872,16 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
         </div>
       </section>
       <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="border-b border-slate-100 p-5">
           <div>
             <h3 className="font-bold text-slate-900">{label("codeList")}</h3>
             <p className="mt-1 text-sm text-slate-500">
               {label("codeListDescription")}
             </p>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <label className="relative block w-full sm:w-72">
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
+          <label className="relative block w-full sm:w-64 sm:flex-none lg:w-72">
             <span className="sr-only">{label("searchPromotion")}</span>
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -860,49 +893,146 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
             />
             <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={t("common.clearSearch")} />
           </label>
-          <SearchableFilter
-            ariaLabel={label("scope")}
-            searchPlaceholder={label("searchScopeFilter")}
-            emptyMessage={label("noFilterOptions")}
-            value={scopeFilter}
-            onChange={(value) => setScopeFilter(value as typeof scopeFilter)}
-            className="w-full sm:w-44"
-            options={[
-              { value: "ALL", label: label("allPromotionScopes") },
-              { value: "ROOM", label: label("scopeRoom") },
-              { value: "SERVICE", label: label("scopeService") },
-              { value: "TOTAL", label: label("scopeTotal") },
-            ]}
-          />
-          <SearchableFilter
-            ariaLabel={label("status")}
-            searchPlaceholder={label("searchStatusFilter")}
-            emptyMessage={label("noFilterOptions")}
-            value={statusFilter}
-            onChange={(value) => setStatusFilter(value as typeof statusFilter)}
-            className="w-full sm:w-48"
-            options={[
-              { value: "ALL", label: label("allPromotionStatuses") },
-              { value: "DRAFT", label: label("statusDraft") },
-              { value: "ACTIVE", label: label("statusActive") },
-              { value: "INACTIVE", label: label("statusInactive") },
-              { value: "EXPIRED", label: label("statusExpired") },
-            ]}
-          />
-          {(searchQuery || scopeFilter !== "ALL" || statusFilter !== "ALL") && <FilterResetButton
-            label={t("common.resetFilter")}
-            onClick={() => {
-              setSearchQuery("");
-              setScopeFilter("ALL");
-              setStatusFilter("ALL");
-            }}
-          />}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+            <SearchableFilter
+              ariaLabel={label("scope")}
+              searchPlaceholder={label("searchScopeFilter")}
+              emptyMessage={label("noFilterOptions")}
+              value={scopeFilter}
+              onChange={(value) => setScopeFilter(value as typeof scopeFilter)}
+              className="w-full sm:w-44"
+              options={[
+                { value: "ALL", label: label("allPromotionScopes") },
+                { value: "ROOM", label: label("scopeRoom") },
+                { value: "SERVICE", label: label("scopeService") },
+                { value: "TOTAL", label: label("scopeTotal") },
+              ]}
+            />
+            <SearchableFilter
+              ariaLabel={label("status")}
+              searchPlaceholder={label("searchStatusFilter")}
+              emptyMessage={label("noFilterOptions")}
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+              className="w-full sm:w-48"
+              options={[
+                { value: "ALL", label: label("allPromotionStatuses") },
+                { value: "DRAFT", label: label("statusDraft") },
+                { value: "ACTIVE", label: label("statusActive") },
+                { value: "INACTIVE", label: label("statusInactive") },
+                { value: "EXPIRED", label: label("statusExpired") },
+              ]}
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t("promotion.customizeColumns", "Tùy chỉnh cột")}
+                  className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <Columns3 size={16} />
+                  {t("common.columns", "Cột")}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-60 p-2">
+                <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {t("promotion.showColumns", "Hiển thị cột")}
+                </p>
+                {PROMOTION_TABLE_COLUMNS.map((column) => {
+                  const isLastVisibleColumn = shownPromotionColumns.length === 1 && visiblePromotionColumns[column.id];
+                  return (
+                    <label
+                      key={column.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visiblePromotionColumns[column.id]}
+                        disabled={isLastVisibleColumn}
+                        onChange={(event) => {
+                          setVisiblePromotionColumns((current) => ({
+                            ...current,
+                            [column.id]: event.target.checked,
+                          }));
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                      />
+                      {label(column.labelKey.replace("promotion.", ""))}
+                    </label>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setVisiblePromotionColumns({
+                    program: true,
+                    scope: true,
+                    validity: true,
+                    offer: true,
+                    claimed: true,
+                    used: true,
+                    value: true,
+                    status: true,
+                    actions: true,
+                  })}
+                  className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+                >
+                  {t("promotion.showAllColumns", "Hiện tất cả cột")}
+                </button>
+              </PopoverContent>
+            </Popover>
+            <button
+              type="button"
+              onClick={async () => {
+                if (isFetching || isManuallyRefreshingPromotions) return;
+                const refreshStartedAt = Date.now();
+                setIsManuallyRefreshingPromotions(true);
+                await new Promise<void>((resolve) => {
+                  window.requestAnimationFrame(() => resolve());
+                });
+                if (hasPromotionFilters) {
+                  setSearchQuery("");
+                  setScopeFilter("ALL");
+                  setStatusFilter("ALL");
+                  setIsDateFilterActive(false);
+                  setPage(1);
+                }
+                try {
+                  await refetch().unwrap();
+                } catch {
+                  toast({
+                    variant: "destructive",
+                    title: localizedText("Không thể tải lại danh sách khuyến mãi", "Could not reload promotions"),
+                  });
+                } finally {
+                  const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+                  if (remainingLoadingTime > 0) {
+                    await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+                  }
+                  setIsManuallyRefreshingPromotions(false);
+                }
+              }}
+              aria-label={hasPromotionFilters
+                ? t("common.resetFilter")
+                : localizedText("Tải lại danh sách khuyến mãi", "Reload promotions")}
+              title={hasPromotionFilters
+                ? t("common.resetFilter")
+                : localizedText("Tải lại danh sách khuyến mãi", "Reload promotions")}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              aria-busy={isFetching || isManuallyRefreshingPromotions}
+            >
+              {isFetching || isManuallyRefreshingPromotions
+                ? <RefreshCw size={16} className="animate-spin" />
+                : hasPromotionFilters
+                ? <RotateCcw size={15} />
+                : <RefreshCw size={16} />}
+            </button>
           </div>
         </div>
-        {isLoading ? (
-          <p className="p-8 text-center text-sm text-slate-500">
-            Đang tải danh sách khuyến mãi...
-          </p>
+        {isLoading || isFetching || isManuallyRefreshingPromotions ? (
+          <div role="status" aria-live="polite" className="flex min-h-48 items-center justify-center gap-2 border-b border-slate-100 px-4 py-8 text-sm text-blue-700">
+            <RefreshCw size={17} className="animate-spin" />
+            <span>{localizedText("Đang tải danh sách khuyến mãi...", "Loading promotions...")}</span>
+          </div>
         ) : isError ? (
           <p className="p-8 text-center text-sm text-rose-600">
             Không thể tải danh sách khuyến mãi.
@@ -920,18 +1050,26 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+              <table
+                className="min-w-full table-fixed border-collapse text-left text-sm"
+                style={{ width: `${promotionTableWidth}px` }}
+              >
+                <colgroup>
+                  {shownPromotionColumns.map((column) => (
+                    <col key={column.id} style={{ width: `${column.width}px` }} />
+                  ))}
+                </colgroup>
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
                   <tr>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("programName")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("scope")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("validity")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("offerLevel")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("claimedCount")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("usedCount")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("usedValue")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("status")}</th>
-                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("actions")}</th>
+                    {shownPromotionColumns.map((column) => (
+                      <th
+                        key={column.id}
+                        scope="col"
+                        className={`whitespace-nowrap px-5 py-3 ${["offer", "claimed", "used", "value", "actions"].includes(column.id) ? "text-right" : ""}`}
+                      >
+                        {label(column.labelKey.replace("promotion.", ""))}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -943,7 +1081,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     const editDisabledReason = expired ? label("editDisabledExpired") : label("editDisabledUsed");
                     return (
                       <tr key={promotion.id} className="text-slate-700 transition hover:bg-slate-50/70">
-                        <td className="max-w-80 px-5 py-3">
+                      {visiblePromotionColumns.program && <td className="max-w-80 px-5 py-3">
                           <p className="truncate font-semibold text-slate-900" title={promotion.name}>{promotion.name}</p>
                           {promotion.description && <p className="mt-1 truncate text-xs text-slate-500" title={promotion.description}>{promotion.description}</p>}
                           {promotion.code ? (
@@ -957,31 +1095,31 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                               {copied === promotion.code ? label("copied") : promotion.code}
                             </button>
                           ) : <span className="mt-1 inline-block text-xs text-slate-400">{label("codeGenerated")}</span>}
-                        </td>
-                        <td className="px-5 py-3">
+                        </td>}
+                        {visiblePromotionColumns.scope && <td className="px-5 py-3">
                           <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${scopeColorClasses[scope]}`}>
                             {label(scopeLabelKeys[scope])}
                           </span>
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-slate-600">
+                        </td>}
+                        {visiblePromotionColumns.validity && <td className="whitespace-nowrap px-5 py-3 text-slate-600">
                           <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} className="text-slate-400" />{formatDate(promotion.startDate)} – {formatDate(promotion.endDate)}</span>
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right font-bold text-slate-900">{formatValue(promotion)}</td>
-                        <td className="px-5 py-3 text-right tabular-nums">{(promotion.claimedCount ?? 0).toLocaleString(locale)}</td>
-                        <td className="px-5 py-3 text-right tabular-nums">{(promotion.usedCount ?? 0).toLocaleString(locale)}</td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
+                        </td>}
+                        {visiblePromotionColumns.offer && <td className="whitespace-nowrap px-5 py-3 text-right font-bold text-slate-900">{formatValue(promotion)}</td>}
+                        {visiblePromotionColumns.claimed && <td className="px-5 py-3 text-right tabular-nums">{(promotion.claimedCount ?? 0).toLocaleString(locale)}</td>}
+                        {visiblePromotionColumns.used && <td className="px-5 py-3 text-right tabular-nums">{(promotion.usedCount ?? 0).toLocaleString(locale)}</td>}
+                        {visiblePromotionColumns.value && <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
                           {isPromotionUsageLoading
                             ? "…"
                             : isPromotionUsageError
                               ? "—"
                               : `${(promotionSavingsById.get(promotion.id) ?? 0).toLocaleString(locale)}${locale === "en-US" ? " VND" : "đ"}`}
-                        </td>
-                        <td className="px-5 py-3">
+                        </td>}
+                        {visiblePromotionColumns.status && <td className="px-5 py-3">
                           <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
                             {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
                           </span>
-                        </td>
-                        <td className="px-5 py-3">
+                        </td>}
+                        {visiblePromotionColumns.actions && <td className="px-5 py-3">
                           <div className="grid grid-cols-[80px_96px] justify-end gap-2">
                             <button
                               type="button"
@@ -1010,7 +1148,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                               </span>
                             ) : <span aria-hidden="true" />}
                           </div>
-                        </td>
+                        </td>}
                       </tr>
                     );
                   })}

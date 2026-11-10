@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, BedDouble, Building2, CalendarDays, Check, ChevronDown, ConciergeBell, PanelLeftClose, PanelLeftOpen, Tag, Wallet, XCircle } from "lucide-react";
+import { BarChart3, BedDouble, Building2, CalendarDays, Check, ChevronDown, ConciergeBell, PanelLeftClose, PanelLeftOpen, RefreshCw, RotateCcw, Tag, Wallet, XCircle } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -43,7 +43,6 @@ import {
   type PromotionScope,
 } from "../lib/promotionReport";
 import usePeriodReportData from "../hooks/usePeriodReportData";
-import { FilterResetButton } from "./SearchableFilter";
 
 type Props = {
   branches: SuperAdminBranch[];
@@ -140,6 +139,8 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const {
     data: availablePromotions = EMPTY_PROMOTIONS,
     isError: isPromotionCatalogError,
+    isFetching: isPromotionCatalogFetching,
+    refetch: refetchPromotionCatalog,
   } = useGetPromotionsQuery(
     selectedBranchId === "all"
       ? { page: 0, size: 100 }
@@ -309,6 +310,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     endDate,
     dailyReportHotelIds,
     promotionScopeById,
+    retryCount,
   );
   const bookingRevenueChartData = reportPeriod === "custom"
     ? [{
@@ -398,6 +400,22 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     setStartDate(range.startDate);
     setEndDate(range.endDate);
   };
+  const hasReportFilters = Boolean(
+    selectedBranchId !== "all"
+    || reportPeriod !== "day-month"
+    || comparisonUnit !== "day"
+    || comparisonScope !== "month"
+    || startDate !== initialRange.startDate
+    || endDate !== initialRange.endDate,
+  );
+  const handleReportRefreshOrReset = () => {
+    if (hasReportFilters) {
+      resetReportFilters();
+      return;
+    }
+    setRetryCount((count) => count + 1);
+    void refetchPromotionCatalog();
+  };
   const reportDateScopeLabel = reportPeriod === "custom"
     ? "trong khoảng tùy chọn"
     : `trong ${comparisonScope === "week" ? "tuần" : comparisonScope === "month" ? "tháng" : "năm"}`;
@@ -439,7 +457,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
   return (
     <section className="mt-2 space-y-5" aria-labelledby="resource-stats-title">
-      <header className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+      <header className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-start gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
             <BarChart3 size={21} />
@@ -453,8 +471,8 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="block text-xs font-semibold text-slate-500">
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(120px,0.8fr)_minmax(120px,0.8fr)_minmax(190px,1.2fr)_minmax(160px,1fr)_minmax(160px,1fr)_40px]">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             Theo
             <select
               value={comparisonUnit}
@@ -466,14 +484,14 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                 if (nextPeriod) selectReportPeriod(nextPeriod.value);
               }}
               aria-label="Chọn đơn vị so sánh"
-              className="ml-2 mt-1 h-10 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             >
               <option value="day">Ngày</option>
               <option value="week">Tuần</option>
               <option value="month">Tháng</option>
             </select>
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             Trong
             <select
               value={comparisonScope}
@@ -484,7 +502,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                 if (nextPeriod) selectReportPeriod(nextPeriod.value);
               }}
               aria-label="Chọn khoảng so sánh"
-              className="ml-2 mt-1 h-10 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             >
               {reportPeriodOptions
                 .filter((option) => option.unit === comparisonUnit)
@@ -495,7 +513,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                 ))}
             </select>
           </label>
-          <div className="text-xs font-semibold text-slate-500">
+          <div className="min-w-0 text-xs font-semibold text-slate-500">
             <span>Chi nhánh</span>
             <Popover open={isBranchPickerOpen} onOpenChange={setIsBranchPickerOpen}>
               <PopoverTrigger asChild>
@@ -503,7 +521,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                   type="button"
                   disabled={isLoading || isError}
                   aria-label="Tìm và chọn chi nhánh"
-                  className="ml-2 mt-1 flex h-10 min-w-52 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                  className="mt-1 flex h-10 w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                 >
                   <span className="truncate">
                     {selectedBranchName ?? "Tất cả chi nhánh"}
@@ -546,17 +564,17 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               </PopoverContent>
             </Popover>
           </div>
-          <label className="block text-xs font-semibold text-slate-500">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             Từ ngày
             <input
               type="date"
               value={startDate}
               max={endDate || undefined}
               onChange={(event) => { setStartDate(event.target.value); setReportPeriod("custom"); }}
-              className="ml-2 mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             />
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
             Đến ngày
             <input
               type="date"
@@ -564,15 +582,22 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               min={startDate || undefined}
               max={today}
               onChange={(event) => { setEndDate(event.target.value); setReportPeriod("custom"); }}
-              className="ml-2 mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             />
           </label>
           <div className="flex items-end">
-            <FilterResetButton
-              onClick={resetReportFilters}
-              label="Xóa bộ lọc"
-              showLabel
-            />
+            <button
+              type="button"
+              onClick={handleReportRefreshOrReset}
+              disabled={!hasReportFilters && (isStatsLoading || isPromotionCatalogFetching)}
+              aria-label={hasReportFilters ? "Xóa bộ lọc" : "Tải lại thống kê"}
+              title={hasReportFilters ? "Xóa bộ lọc" : "Tải lại thống kê"}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {hasReportFilters
+                ? <RotateCcw size={15} />
+                : <RefreshCw size={16} className={isStatsLoading || isPromotionCatalogFetching ? "animate-spin" : ""} />}
+            </button>
           </div>
         </div>
       </header>

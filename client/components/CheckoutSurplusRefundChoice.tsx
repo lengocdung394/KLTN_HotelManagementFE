@@ -1,3 +1,5 @@
+import { localizedText } from "../i18n";
+
 export type CheckoutSurplusRefundMethod = "CASH" | "BANK";
 
 type CheckoutSurplusRefundChoiceProps = {
@@ -14,7 +16,7 @@ export default function CheckoutSurplusRefundChoice({
   return (
     <fieldset className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
       <legend className="px-1 text-sm font-semibold text-slate-800">
-        Nếu có khoản thu dư, chọn cách hoàn
+        {localizedText("Nếu có khoản thu dư, chọn cách hoàn", "Choose a refund method for any surplus payment")}
       </legend>
       <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 text-sm">
         <input
@@ -25,8 +27,8 @@ export default function CheckoutSurplusRefundChoice({
           className="mt-0.5 accent-emerald-600"
         />
         <span>
-          <span className="block font-semibold text-slate-800">Hoàn tiền mặt ngay tại quầy</span>
-          <span className="mt-0.5 block text-xs text-slate-500">Nhân viên giao tiền lại cho khách khi check-out.</span>
+          <span className="block font-semibold text-slate-800">{localizedText("Hoàn tiền mặt ngay tại quầy", "Refund in cash at the front desk")}</span>
+          <span className="mt-0.5 block text-xs text-slate-500">{localizedText("Nhân viên giao tiền lại cho khách khi check-out.", "Staff will return the money to the guest at check-out.")}</span>
         </span>
       </label>
       <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 text-sm">
@@ -38,8 +40,8 @@ export default function CheckoutSurplusRefundChoice({
           className="mt-0.5 accent-blue-600"
         />
         <span>
-          <span className="block font-semibold text-slate-800">Hoàn qua ngân hàng</span>
-          <span className="mt-0.5 block text-xs text-slate-500">Quản lý duyệt và chuyển khoản; tiền thường về trong 1–3 ngày làm việc kể từ khi chuyển.</span>
+          <span className="block font-semibold text-slate-800">{localizedText("Hoàn qua ngân hàng", "Refund by bank transfer")}</span>
+          <span className="mt-0.5 block text-xs text-slate-500">{localizedText("Quản lý duyệt và chuyển khoản; tiền thường về trong 1–3 ngày làm việc kể từ khi chuyển.", "A manager approves and sends the transfer; funds usually arrive within 1–3 business days.")}</span>
         </span>
       </label>
     </fieldset>

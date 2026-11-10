@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, BedDouble, CalendarDays, RefreshCw, Tag, TrendingUp, XCircle } from "lucide-react";
+import { BarChart3, BedDouble, CalendarDays, RefreshCw, RotateCcw, Tag, TrendingUp, XCircle } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -19,6 +19,7 @@ import { useGetPromotionsQuery, type Promotion } from "../services/promotionApi"
 import { useGetSuperAdminBranchesQuery } from "../services/superAdminApi";
 import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import { toast } from "@/components/ui/use-toast";
 import ListPagination from "../components/ListPagination";
 import FilterSelect from "../components/FilterSelect";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -113,6 +114,7 @@ export default function ReportWorkspace() {
   const [refundPageSizes, setRefundPageSizes] = useState<Record<string, number>>({});
   const [cancelledPage, setCancelledPage] = useState(1);
   const [cancelledPageSize, setCancelledPageSize] = useState(10);
+  const [isManuallyRefreshingReport, setIsManuallyRefreshingReport] = useState(false);
   const { data: branches = [], isLoading: isLoadingBranches, isError: isBranchesError } =
     useGetSuperAdminBranchesQuery(undefined, { skip: !isSystemAdmin });
   const reportHotelId = isSystemAdmin ? Number(selectedBranchId) : Number(hotelId);
@@ -126,6 +128,7 @@ export default function ReportWorkspace() {
     isLoading,
     isFetching,
     isError,
+    refetch,
   } = useGetHotelReportQuery(
     {
       startDate,
@@ -239,6 +242,41 @@ export default function ReportWorkspace() {
     setStartDate(range.startDate);
     setEndDate(range.endDate);
     if (isSystemAdmin) setSelectedBranchId("");
+  };
+  const defaultRange = getReportDateRange("day-month", today, today);
+  const hasActiveReportFilters = reportPeriod !== "day-month"
+    || comparisonUnit !== "day"
+    || comparisonScope !== "month"
+    || startDate !== defaultRange.startDate
+    || endDate !== defaultRange.endDate
+    || (isSystemAdmin && Boolean(selectedBranchId));
+  const isReportLoading = isLoading || isFetching || isManuallyRefreshingReport;
+  const refreshOrResetReport = async () => {
+    if (isReportLoading) return;
+    if (hasActiveReportFilters) {
+      resetReportFilters();
+      return;
+    }
+    if (!canLoadReport) return;
+    const refreshStartedAt = Date.now();
+    setIsManuallyRefreshingReport(true);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    try {
+      await refetch().unwrap();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể tải báo cáo. Vui lòng thử lại.", "Could not reload the report."),
+      });
+    } finally {
+      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+      if (remainingLoadingTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+      }
+      setIsManuallyRefreshingReport(false);
+    }
   };
   const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, [string, string]> = {
     "day-week": ["Ngày trong tuần", "Day of week"],
@@ -436,13 +474,22 @@ export default function ReportWorkspace() {
           <div className="flex items-end">
             <button
               type="button"
-              onClick={resetReportFilters}
-              aria-label={localizedText("Khôi phục mặc định", "Reset to default")}
-              title={localizedText("Khôi phục mặc định", "Reset to default")}
-              className="flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              onClick={() => void refreshOrResetReport()}
+              disabled={isReportLoading || (!hasActiveReportFilters && !canLoadReport)}
+              aria-label={hasActiveReportFilters
+                ? localizedText("Khôi phục mặc định", "Reset to default")
+                : localizedText("Tải lại báo cáo", "Reload report")}
+              title={hasActiveReportFilters
+                ? localizedText("Khôi phục mặc định", "Reset to default")
+                : localizedText("Tải lại báo cáo", "Reload report")}
+              aria-busy={isReportLoading}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-wait disabled:opacity-60"
             >
-              <RefreshCw size={15} />
-              <span className="text-xs font-medium">{localizedText("Mặc định", "Default")}</span>
+              {isReportLoading
+                ? <RefreshCw size={15} className="animate-spin" />
+                : hasActiveReportFilters
+                ? <RotateCcw size={15} />
+                : <RefreshCw size={15} />}
             </button>
           </div>
           {startDate > endDate && (
@@ -466,7 +513,7 @@ export default function ReportWorkspace() {
           {localizedText("Chọn chi nhánh để xem báo cáo.", "Select a branch to view the report.")}
         </p>
       )}
-      {isLoading && (
+      {isReportLoading && (
         <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
           {localizedText("Đang tải báo cáo...", "Loading report...")}
         </p>
@@ -476,7 +523,7 @@ export default function ReportWorkspace() {
           {localizedText("Không thể tải báo cáo. Vui lòng thử lại.", "Could not load the report. Please try again.")}
         </p>
       )}
-      {isFetching && !isLoading && (
+      {isFetching && !isLoading && !isManuallyRefreshingReport && (
         <p className="text-right text-xs text-slate-400">{localizedText("Đang cập nhật số liệu...", "Updating report data...")}</p>
       )}
 
