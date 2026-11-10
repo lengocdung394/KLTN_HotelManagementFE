@@ -1,5 +1,5 @@
 /** @import must precede all other statements */
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700;800&display=swap");
 
 @import "tailwindcss";
 
@@ -150,13 +150,6 @@ form.max-w-lg label {
   align-items: center;
 }
 
-form.max-w-lg label::before {
-  color: rgb(239 68 68);
-  content: "*";
-  margin-left: 4px;
-  order: 2;
-}
-
 form.max-w-lg label > input,
 form.max-w-lg label > select,
 form.max-w-lg label > textarea {
@@ -167,6 +160,25 @@ form.max-w-lg label > textarea {
 @layer base {
   * {
     @apply border-border;
+  }
+
+  :where(
+    button:not(:disabled),
+    a[href],
+    [role="button"]:not([aria-disabled="true"]),
+    [role="tab"]:not([aria-disabled="true"]),
+    [role="menuitem"]:not([aria-disabled="true"]),
+    [role="option"]:not([aria-disabled="true"]),
+    summary,
+    select:not(:disabled),
+    input[type="checkbox"]:not(:disabled),
+    input[type="radio"]:not(:disabled)
+  ) {
+    cursor: pointer;
+  }
+
+  :where(button:disabled, [aria-disabled="true"], input:disabled, select:disabled) {
+    cursor: not-allowed;
   }
 
   body {
@@ -187,7 +199,7 @@ form.max-w-lg label > textarea {
   @media (prefers-reduced-motion: reduce) { .login-orb, .login-panel-lines { animation: none; } }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: "DM Sans", sans-serif;
+    font-family: "Playfair Display", serif;
   }
 
   :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
@@ -741,5 +753,11 @@ form.max-w-lg label > textarea {
   code {
     overflow-x: auto;
     white-space: pre;
+  }
+
+  table > thead > tr > th {
+    background-color: rgb(239 246 255) !important;
+    color: rgb(30 58 138) !important;
+    border-bottom: 1px solid rgb(191 219 254) !important;
   }
 }

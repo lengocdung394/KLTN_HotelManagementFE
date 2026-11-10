@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import DatePickerPopover from "./DatePickerPopover";
 import { useGetRoomMatrixQuery, type RoomMatrixResponse, type RoomMatrixSchedule } from "../services/bookingApi";
 import { useAppSelector } from "../store/hooks";
 
@@ -19,13 +20,6 @@ const startOfWeek = (value: string) => {
   date.setDate(date.getDate() - daysSinceMonday);
   return localDateString(date);
 };
-
-const formatDate = (value: string, language: string) =>
-  new Date(`${value}T00:00:00`).toLocaleDateString(language.toLowerCase().startsWith("en") ? "en-US" : "vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
 
 const getEffectiveCheckInDate = (schedule: RoomMatrixSchedule) => {
   const scheduledCheckIn = schedule.checkinTime?.slice(0, 10);
@@ -59,10 +53,9 @@ const scheduleStatusStyle: Record<string, string> = {
 };
 
 export default function OverviewCalendarNew() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const [selectedDate, setSelectedDate] = useState(() => localDateString(new Date()));
-  const dateInput = useRef<HTMLInputElement>(null);
   const weekStart = startOfWeek(selectedDate);
   const weekEnd = shiftDate(weekStart, 6);
   const { currentData: rooms, isFetching, isError } = useGetRoomMatrixQuery(
@@ -102,11 +95,6 @@ export default function OverviewCalendarNew() {
         .map(([bookingId], index) => [bookingId, `#${index + 1}`]),
     );
   }, [rooms, days]);
-  const openDatePicker = () => {
-    dateInput.current?.showPicker?.();
-    dateInput.current?.click();
-  };
-
   return (
     <section className="mt-7 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -126,22 +114,12 @@ export default function OverviewCalendarNew() {
           >
             <ChevronLeft size={16} />
           </button>
-          <button
-            type="button"
-            onClick={openDatePicker}
-            className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm hover:border-blue-300 hover:text-blue-700"
-          >
-            <CalendarDays size={14} className="text-blue-600" />
-            {formatDate(selectedDate, i18n.language)}
-          </button>
-          <input
-            ref={dateInput}
-            type="date"
-            value={selectedDate}
-            onChange={(event) => event.target.value && setSelectedDate(event.target.value)}
-            aria-label={t("calendar.chooseDate", "Chọn ngày")}
-            className="pointer-events-none absolute h-0 w-0 opacity-0"
-            tabIndex={-1}
+          <DatePickerPopover
+            value={new Date(`${selectedDate}T00:00:00`)}
+            onChange={(date) => date && setSelectedDate(localDateString(date))}
+            placeholder={t("calendar.chooseDate", "Chọn ngày")}
+            buttonClassName="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm hover:border-blue-300 hover:text-blue-700"
+            align="center"
           />
           <button
             type="button"

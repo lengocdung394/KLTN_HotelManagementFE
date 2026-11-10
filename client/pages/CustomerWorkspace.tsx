@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BedDouble, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Mail, Pencil, Phone, Plus, Search, UserRound, X } from "lucide-react";
+import { BedDouble, CalendarDays, ChevronDown, CreditCard, Mail, Pencil, Phone, Plus, Search, UserRound, X } from "lucide-react";
+import ListPagination from "../components/ListPagination";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterResultStatus from "../components/FilterResultStatus";
+import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import { useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
@@ -8,12 +12,13 @@ import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useUpda
 import { useGetCustomerPromotionsQuery, useGetPromotionsQuery } from "../services/promotionApi";
 import { useGetOrderByBookingIdQuery } from "../services/orderApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { localizedText } from "../i18n";
 
 type Customer = CustomerResponse;
 type Tier = Customer["tier"];
-type Form = Pick<Customer, "name" | "phone" | "email" | "identityNumber" | "note">;
+type Form = Pick<Customer, "name" | "phone" | "email" | "identityNumber">;
 
-const blankForm: Form = { name: "", phone: "", email: "", identityNumber: "", note: "" };
+const blankForm: Form = { name: "", phone: "", email: "", identityNumber: "" };
 const tierStyle: Record<Tier, string> = { loyal: "bg-amber-50 text-amber-700", potential: "bg-blue-50 text-blue-700", new: "bg-emerald-50 text-emerald-700" };
 
 export default function CustomerWorkspace() {
@@ -32,7 +37,7 @@ export default function CustomerWorkspace() {
     { hotelId: Number(hotelId), page: 0, size: 100 },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
   );
-  const [createWalkInCustomer] = useCreateWalkInCustomerMutation();
+  const [createWalkInCustomer, { isLoading: isCreating }] = useCreateWalkInCustomerMutation();
   const [updateCustomer, { isLoading: isUpdating }] = useUpdateCustomerMutation();
 
   useEffect(() => {
@@ -50,7 +55,7 @@ export default function CustomerWorkspace() {
   const [search, setSearch] = useState("");
   const [tier, setTier] = useState("all");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(12);
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
@@ -63,6 +68,8 @@ export default function CustomerWorkspace() {
   const [identityCheck, setIdentityCheck] = useState("");
   const [identityError, setIdentityError] = useState(false);
   const [form, setForm] = useState<Form>(blankForm);
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof Form, string>>>({});
+  const [formError, setFormError] = useState("");
   const customers = apiCustomers.filter((customer) => customer.visits > 0);
   const customerBookings = useMemo(() => {
     if (!selected) return [];
@@ -85,6 +92,7 @@ export default function CustomerWorkspace() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedCustomers = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const hasActiveFilters = Boolean(search.trim()) || tier !== "all";
 
   useEffect(() => {
     setPage(1);
@@ -126,38 +134,113 @@ export default function CustomerWorkspace() {
     };
     return statusKeys[status] ? t(statusKeys[status]) : status.replace(/_/g, " ");
   };
-  const openCreate = () => { setEditing(null); setForm(blankForm); setModal("create"); };
+  const openCreate = () => { setEditing(null); setForm(blankForm); setFormErrors({}); setFormError(""); setModal("create"); };
   const openEdit = (customer: Customer) => { setSelected(null); setCustomerToVerify(customer); setIdentityCheck(""); setIdentityError(false); };
   const verifyIdentity = () => {
     if (!customerToVerify || identityCheck.trim() !== customerToVerify.identityNumber.trim()) { setIdentityError(true); return; }
     setEditing(customerToVerify);
-    setForm({ name: customerToVerify.name, phone: customerToVerify.phone, email: customerToVerify.email, identityNumber: customerToVerify.identityNumber, note: customerToVerify.note });
+    setForm({ name: customerToVerify.name, phone: customerToVerify.phone, email: customerToVerify.email, identityNumber: customerToVerify.identityNumber });
+    setFormErrors({});
+    setFormError("");
     setCustomerToVerify(null);
     setModal("edit");
   };
-  const closeModal = () => { setModal(null); setEditing(null); setCustomerToVerify(null); setIdentityCheck(""); setIdentityError(false); setForm(blankForm); };
+  const closeModal = () => {
+    if (isCreating || isUpdating) return;
+    setModal(null);
+    setEditing(null);
+    setCustomerToVerify(null);
+    setIdentityCheck("");
+    setIdentityError(false);
+    setForm(blankForm);
+    setFormErrors({});
+    setFormError("");
+  };
   const save = async () => {
-    const values = { name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim(), identityNumber: form.identityNumber.trim(), note: form.note.trim() || t("customer.noNote") };
-    if (!values.name || !values.phone || !values.email || !values.identityNumber) return;
-    if (editing) {
-      await updateCustomer({ id: editing.id, request: values }).unwrap();
-    } else {
-      await createWalkInCustomer({
-        fullName: values.name,
-        phone: values.phone,
-        cccd: values.identityNumber,
-        email: values.email,
-      }).unwrap();
+    const values = {
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      identityNumber: form.identityNumber.trim(),
+    };
+    const errors: Partial<Record<keyof Form, string>> = {};
+    (Object.keys(values) as Array<keyof Form>).forEach((field) => {
+      if (!values[field]) errors[field] = t("customer.fieldRequired");
+    });
+    if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
+      errors.email = t("customer.invalidEmail");
     }
-    closeModal();
+    setFormErrors(errors);
+    setFormError("");
+    if (Object.keys(errors).length > 0) return;
+
+    try {
+      if (editing) {
+        await updateCustomer({
+          id: editing.id,
+          request: { ...values, note: editing.note },
+        }).unwrap();
+      } else {
+        await createWalkInCustomer({
+          fullName: values.name,
+          phone: values.phone,
+          cccd: values.identityNumber,
+          email: values.email,
+        }).unwrap();
+      }
+      closeModal();
+    } catch (error) {
+      const message = error && typeof error === "object" && "data" in error
+        && error.data && typeof error.data === "object" && "message" in error.data
+        && typeof error.data.message === "string"
+        ? error.data.message
+        : t("customer.saveError");
+      setFormError(message);
+    }
   };
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
     <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="font-bold text-slate-900">{t("customer.listTitle")}</h3><p className="mt-1 text-sm text-slate-500">{t("customer.listDescription")}</p></div>{canManageCustomers && <button type="button" onClick={openCreate} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} />{t("customer.add")}</button>}</div>
-    <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row"><div className="relative flex-1"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("customer.searchPlaceholder")} className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm" /></div><select value={tier} onChange={(event) => setTier(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="all">{t("customer.allTiers")}</option>{(["loyal", "potential", "new"] as Tier[]).map((value) => <option key={value} value={value}>{tierLabel(value)}</option>)}</select></div>
+    <div className={`flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row ${hasActiveFilters ? "sm:items-center" : ""}`}>
+      <div className="relative flex-1">
+        <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={t("customer.searchPlaceholder")}
+          className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm"
+        />
+        <ClearSearchButton value={search} onClear={() => setSearch("")} label={t("common.clearSearch")} />
+      </div>
+      <div className="flex items-center gap-2 sm:w-56">
+        <SearchableFilter
+          value={tier}
+          options={[
+            { value: "all", label: t("customer.allTiers") },
+            ...(["loyal", "potential", "new"] as Tier[]).map((value) => ({
+              value,
+              label: tierLabel(value),
+            })),
+          ]}
+          onChange={setTier}
+          ariaLabel={t("customer.allTiers")}
+          searchPlaceholder={localizedText("Tìm nhóm khách hàng...", "Search customer groups...")}
+          emptyMessage={localizedText("Không tìm thấy nhóm khách hàng.", "No customer groups found.")}
+        />
+        {hasActiveFilters && (
+          <FilterResetButton
+            onClick={() => {
+              setSearch("");
+              setTier("all");
+            }}
+            label={localizedText("Xóa bộ lọc", "Clear filters")}
+          />
+        )}
+      </div>
+    </div>
     <div className="grid gap-3 p-4">
       {isLoading ? <p className="p-6 text-sm text-slate-500">{t("common.loading")}</p>
         : isError ? <p className="p-6 text-sm text-rose-600">{t("customer.loadError")}</p>
-          : filtered.length === 0 ? <p className="p-6 text-sm text-slate-500">{t("customer.noResults")}</p>
+          : filtered.length === 0 ? <FilterResultStatus filterKey={JSON.stringify([search, tier])}><p className="p-6 text-sm text-slate-500">{t("customer.noResults")}</p></FilterResultStatus>
             : paginatedCustomers.map((customer) => {
               const isExpanded = expandedCustomerId === customer.id;
               const bookings = bookingsForCustomer(customer.id);
@@ -171,7 +254,6 @@ export default function CustomerWorkspace() {
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${tierStyle[customer.tier]}`}>{tierLabel(customer.tier)}</span>
                       </span>
                       <span className="mt-1 block truncate text-xs text-slate-500"><Phone size={12} className="mr-1 inline" />{customer.phone}</span>
-                      <span className="mt-1 block truncate text-xs text-slate-500"><BedDouble size={12} className="mr-1 inline" />{t("customer.roomAmount")}: {formatMoney(customer.totalRoomAmount)}</span>
                     </span>
                   </button>
                   <div className="grid flex-1 grid-cols-2 gap-3 border-t border-slate-200 pt-3 sm:grid-cols-4 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
@@ -190,7 +272,7 @@ export default function CustomerWorkspace() {
                       {isExpanded ? t("customer.hideBookings") : t("customer.viewBookings")}
                       <ChevronDown size={15} className={`transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                     </button>
-                    {canManageCustomers && <button type="button" onClick={() => openEdit(customer)} aria-label={t("customer.edit")} title={t("customer.edit")} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"><Pencil size={16} /></button>}
+                    {canManageCustomers && <button type="button" onClick={() => openEdit(customer)} aria-label={t("customer.edit")} title={t("customer.edit")} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-amber-200 text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"><Pencil size={16} /></button>}
                   </div>
                 </div>
                 {isExpanded && <div className="border-t border-slate-200 p-4">
@@ -306,7 +388,7 @@ export default function CustomerWorkspace() {
               </div>;
             })}
     </div>
-    {filtered.length > 0 && <div className="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between"><span>{t("customer.paginationSummary", { from: (safePage - 1) * pageSize + 1, to: Math.min(safePage * pageSize, filtered.length), total: filtered.length })}</span><div className="flex items-center gap-2"><label className="flex items-center gap-2">{t("customer.rowsPerPage")}<select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label><button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage === 1} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label={t("common.previousPage")}><ChevronLeft size={16} /></button><span className="min-w-16 text-center font-semibold text-slate-700">{safePage} / {totalPages}</span><button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={safePage === totalPages} className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" aria-label={t("common.nextPage")}><ChevronRight size={16} /></button></div></div>}
+    <ListPagination totalItems={filtered.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={setPage} onPageSizeChange={setPageSize} />
     {selected && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setSelected(null)}><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{t("customer.profile")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">{selected.name}</h3></div><button type="button" onClick={() => setSelected(null)} aria-label={t("common.close")}><X size={18} /></button></div><div className="mt-5 grid gap-3 text-sm text-slate-600"><p><Phone size={14} className="mr-2 inline" />{selected.phone}</p><p><Mail size={14} className="mr-2 inline" />{selected.email}</p></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.bookingCount")}</span><strong className="mt-1 block text-lg text-slate-900">{selected.visits}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.cancelledBookings")}</span><strong className="mt-1 block text-lg text-slate-900">{selected.cancelledBookings}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.bookingValue")}</span><strong className="mt-1 block text-sm text-slate-900">{formatMoney(selected.totalSpend)}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500"><CalendarDays size={12} className="mr-1 inline" />{t("customer.latestBooking")}</span><strong className="mt-1 block text-xs text-slate-900">{formatBookingDate(selected.latestBookingAt)}</strong></div></div><p className="mt-4 text-sm text-slate-600">{t("customer.note")}: {selected.note}</p><section className="mt-6 border-t border-slate-100 pt-5"><div className="mb-3 flex items-center justify-between gap-3"><h4 className="font-semibold text-slate-900">{t("customer.bookingHistory")}</h4><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{customerBookings.length}</span></div>{isBookingsLoading ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{t("customer.bookingsLoading")}</p> : isBookingsError ? <p className="rounded-lg bg-rose-50 p-4 text-sm text-rose-700">{t("customer.bookingsLoadError")}</p> : customerBookings.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{t("customer.noBookings")}</p> : <div className="space-y-3">{customerBookings.map((booking) => { const bookingKey = String(booking.bookingId ?? booking.orderId ?? booking.id ?? ""); const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : []; const roomAmount = Number(booking.roomTotal ?? 0); const serviceAmount = Number(booking.serviceTotal ?? 0); const amount = Number(booking.finalAmount ?? 0); return <article key={bookingKey} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{t("customer.bookingCode")}: {bookingKey || "-"}</p><p className="mt-1 text-xs text-slate-500"><CalendarDays size={12} className="mr-1 inline" />{formatBookingDate(booking.createdAt ?? null)}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${String(booking.bookingStatus ?? "").toUpperCase().includes("CANCEL") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{formatBookingStatus(booking)}</span></div><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.roomCharge")}</span><strong className="mt-1 block text-slate-800">{formatMoney(Number.isFinite(roomAmount) ? roomAmount : 0)}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.serviceCharge")}</span><strong className="mt-1 block text-slate-800">{formatMoney(Number.isFinite(serviceAmount) ? serviceAmount : 0)}</strong></div></div><p className="mt-3 text-sm font-semibold text-slate-800">{t("customer.bookingAmount")}: {formatMoney(Number.isFinite(amount) ? amount : 0)}</p>    {details.length > 0 && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">{details.map((detail, index) => {
       const roomNumber = String(detail.roomNumber ?? detail.roomName ?? detail.roomTypeName ?? "-");
       const detailStatus = String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").toUpperCase();
@@ -345,8 +427,55 @@ export default function CustomerWorkspace() {
         </div>
       );
     })}</div>}</article>; })}</div>}</section>{canManageCustomers && <button type="button" onClick={() => openEdit(selected)} className="mt-6 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"><Pencil size={15} />{t("customer.edit")}</button>}</div></div>}
-    {customerToVerify && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}><form onSubmit={(event) => { event.preventDefault(); verifyIdentity(); }} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{t("customer.edit")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">Xác thực CCCD</h3><p className="mt-2 text-sm text-slate-500">Nhập đúng số CCCD của {customerToVerify.name} để tiếp tục chỉnh sửa.</p></div><button type="button" onClick={closeModal} aria-label={t("common.close")}><X size={18} /></button></div><label className="mt-5 block text-sm font-semibold text-slate-700">{t("customer.identityNumber")}<input autoFocus required value={identityCheck} onChange={(event) => { setIdentityCheck(event.target.value); setIdentityError(false); }} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />{identityError && <span className="mt-2 block text-xs font-normal text-rose-600">CCCD không đúng, vui lòng kiểm tra lại.</span>}</label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">{t("common.cancel")}</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Tiếp tục</button></div></form></div>}
-    {modal && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}><form onSubmit={(event) => { event.preventDefault(); void save(); }} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><h3 className="text-xl font-bold text-slate-900">{modal === "edit" ? t("customer.edit") : t("customer.addTitle")}</h3><button type="button" onClick={closeModal} aria-label={t("common.close")}><X size={18} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2">{([["name", "fullName"], ["phone", "phone"], ["email", "email"], ["identityNumber", "identityNumber"]] as const).map(([field, label]) => <label key={field} className="text-sm font-semibold text-slate-700">{t(`customer.${label}`)}<input required value={form[field]} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" /></label>)}<label className="text-sm font-semibold text-slate-700 sm:col-span-2">{t("customer.note")}<textarea value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} placeholder={t("customer.notePlaceholder")} className="mt-1.5 min-h-20 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal" /></label></div><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">{t("common.cancel")}</button><button type="submit" disabled={isUpdating} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{isUpdating ? t("common.loading") : t("customer.save")}</button></div></form></div>}
+    {customerToVerify && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}><form onSubmit={(event) => { event.preventDefault(); verifyIdentity(); }} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{t("customer.edit")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">Xác thực CCCD</h3><p className="mt-2 text-sm text-slate-500">Nhập đúng số CCCD của {customerToVerify.name} để tiếp tục chỉnh sửa.</p></div><button type="button" onClick={closeModal} aria-label={t("common.close")}><X size={18} /></button></div><label className="mt-5 block text-sm font-semibold text-slate-700">{t("customer.identityNumber")}<input autoFocus required value={identityCheck} onChange={(event) => { setIdentityCheck(event.target.value); setIdentityError(false); }} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />{identityError && <span className="mt-2 block text-xs font-normal text-rose-600">{localizedText("CCCD không đúng, vui lòng kiểm tra lại.", "The ID number is incorrect. Please check it and try again.")}</span>}</label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">{t("common.cancel")}</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Tiếp tục</button></div></form></div>}
+    {modal && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}>
+      <form
+        noValidate
+        onSubmit={(event) => { event.preventDefault(); void save(); }}
+        onMouseDown={(event) => event.stopPropagation()}
+        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold text-slate-900">{modal === "edit" ? t("customer.edit") : t("customer.addTitle")}</h3>
+          <button type="button" onClick={closeModal} disabled={isCreating || isUpdating} aria-label={t("common.close")}><X size={18} /></button>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          {([
+            ["name", "fullName"],
+            ["phone", "phone"],
+            ["email", "email"],
+            ["identityNumber", "identityNumber"],
+          ] as const).map(([field, label]) => (
+            <div key={field}>
+              <label htmlFor={`customer-${field}`} className="text-sm font-semibold text-slate-700">
+                {t(`customer.${label}`)} <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id={`customer-${field}`}
+                type={field === "email" ? "email" : "text"}
+                value={form[field]}
+                aria-invalid={Boolean(formErrors[field])}
+                aria-describedby={formErrors[field] ? `customer-${field}-error` : undefined}
+                onChange={(event) => {
+                  setForm((current) => ({ ...current, [field]: event.target.value }));
+                  setFormErrors((current) => ({ ...current, [field]: undefined }));
+                }}
+                disabled={isCreating || isUpdating}
+                className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${formErrors[field] ? "border-rose-400" : "border-slate-200"}`}
+              />
+              {formErrors[field] && <p id={`customer-${field}-error`} className="mt-1 text-xs font-normal text-rose-600">{formErrors[field]}</p>}
+            </div>
+          ))}
+        </div>
+        {formError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{formError}</p>}
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={closeModal} disabled={isCreating || isUpdating} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50">{t("common.cancel")}</button>
+          <button type="submit" disabled={isCreating || isUpdating} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {isCreating || isUpdating ? t("common.loading") : t("customer.save")}
+          </button>
+        </div>
+      </form>
+    </div>}
   </section>;
 }
 

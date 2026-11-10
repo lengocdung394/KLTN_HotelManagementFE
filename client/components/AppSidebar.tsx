@@ -2,7 +2,6 @@ import { Link, useLocation } from "react-router-dom";
 import {
   CalendarCheck,
   CalendarDays,
-  Construction,
   ClipboardCheck,
   ClipboardList,
   ConciergeBell,
@@ -43,7 +42,6 @@ const items = [
   ["/invoices", "invoices", WalletCards],
   ["/promotions", "promotions", Tag],
   ["/services", "services", ConciergeBell],
-  ["/hotel-closures", "hotelClosures", Construction],
 ] as const;
 const adminItems = [
   ["/staff", "staff", Users],
@@ -62,7 +60,6 @@ const sidebarOrder: Record<string, string> = {
   "/refund-approvals": "order-8",
   "/promotions": "order-9",
   "/hotel-rules": "order-10",
-  "/hotel-closures": "order-11",
 };
 
 export default function AppSidebar({
@@ -267,8 +264,7 @@ export default function AppSidebar({
           </div>
           {items
             .slice(2)
-            .filter(([href]) => href !== "/rooms" && href !== "/services"
-              && (href !== "/hotel-closures" || isEmployee || roles.includes("ROLE_MANAGER")))
+            .filter(([href]) => href !== "/rooms" && href !== "/services")
             .map(([href, label, Icon]) => (
               <Link
                 key={href}

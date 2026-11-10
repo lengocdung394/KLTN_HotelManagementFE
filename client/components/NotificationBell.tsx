@@ -48,7 +48,6 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
     || type === "HOUSEKEEPING_TASK_ASSIGNED"
     || type === "HOUSEKEEPING_TASK_REASSIGNED"
     || type === "HOUSEKEEPING_TASK_COMPLETED";
-  const isHotelClosureNotification = type === "SYSTEM" && referenceType === "HOTEL_CLOSURE";
   if (
     type !== "BOOKING_CREATED"
     && type !== "BOOKING_UPDATED"
@@ -63,7 +62,7 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
     && type !== "HOUSEKEEPING_TASK_ASSIGNED"
     && type !== "HOUSEKEEPING_TASK_REASSIGNED"
     && type !== "HOUSEKEEPING_TASK_COMPLETED"
-    && !(type === "SYSTEM" && (isHousekeepingNotification || isHotelClosureNotification))
+    && !(type === "SYSTEM" && isHousekeepingNotification)
   ) {
     return null;
   }
@@ -180,22 +179,6 @@ export default function NotificationBell() {
             description?: unknown;
             referenceType?: unknown;
           };
-          if (notification.type === "SYSTEM" && notification.referenceType === "HOTEL_CLOSURE") {
-            dispatch(baseApi.util.invalidateTags(["HotelClosure"]));
-            toast({
-              title: typeof notification.title === "string" ? notification.title : "Lịch tạm đóng khách sạn",
-              description: typeof notification.description === "string" ? notification.description : "",
-              action: (
-                <ToastAction
-                  altText="Mở lịch tạm đóng khách sạn"
-                  className="border-blue-700 bg-blue-700 text-white hover:bg-blue-800 focus:ring-blue-500/50"
-                  onClick={() => navigate("/hotel-closures")}
-                >
-                  Xem lịch
-                </ToastAction>
-              ),
-            });
-          }
           if (notification.type === "PROMOTION_CREATED" || notification.type === "PROMOTION_UPDATED") {
             dispatch(baseApi.util.invalidateTags(["Promotion"]));
           }

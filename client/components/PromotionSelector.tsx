@@ -2,9 +2,12 @@ import { ChevronLeft, ChevronRight, Eye, Search, Sparkles, Tag } from "lucide-re
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useGetCustomerPromotionsQuery, useGetPromotionsQuery, type Promotion } from "../services/promotionApi";
-import { calculatePromotionDiscount, promotionEligibilityMessage } from "../lib/promotionPricing";
+import { calculatePromotionDiscount, isPromotionExpired, promotionEligibilityMessage } from "../lib/promotionPricing";
 import { useAppSelector } from "../store/hooks";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
+import { localizedText } from "../i18n";
 
 export type SelectedPromotion = Promotion;
 
@@ -29,7 +32,7 @@ type PromotionRailProps = {
   emptyMessage: string;
   appliedPromotion: SelectedPromotion | null;
   appliedSource: "branch" | "customer" | null;
-  onApply: (promotion: SelectedPromotion, source: "branch" | "customer") => void;
+  onApply: (promotion: SelectedPromotion | null, source: "branch" | "customer") => void;
   onDetails: (promotion: SelectedPromotion, source: "branch" | "customer") => void;
 };
 
@@ -56,25 +59,29 @@ function PromotionRail({ promotions, source, title, loading, error, emptyMessage
       </div>}
     </div>
     {loading ? <p className="mt-3 text-xs text-slate-500">{t("promotion.loading")}</p> : error ? <p className="mt-3 text-xs text-rose-600">{t("promotion.loadError")}</p> : promotions.length === 0 ? <p className="mt-3 text-xs text-slate-500">{emptyMessage}</p> : <div ref={scrollRef} className="mt-3 grid auto-cols-[calc((100%-2rem)/2)] grid-flow-col gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
-      {promotions.map((promotion) => <article key={`${source}-${promotion.id}`} className={`flex min-h-21.25 min-w-0 snap-start flex-col rounded-lg border p-1.5 transition ${appliedPromotion?.id === promotion.id && appliedSource === source ? "border-emerald-400 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
+      {promotions.map((promotion) => {
+        const expired = isPromotionExpired(promotion);
+        const isApplied = appliedPromotion?.id === promotion.id && appliedSource === source;
+        return <article key={`${source}-${promotion.id}`} className={`flex min-h-21.25 min-w-0 snap-start flex-col rounded-lg border p-1.5 transition ${expired ? "border-slate-300 bg-slate-100" : appliedPromotion?.id === promotion.id && appliedSource === source ? "border-emerald-400 bg-emerald-50/50" : "border-slate-200 bg-white"}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1 space-y-1">
             <p className="flex min-w-0 items-baseline gap-1 text-[11px] leading-4">
               <span className="shrink-0 text-slate-500">{t("promotion.nameLabel")}</span>
-              <strong title={promotion.name} className="truncate text-sm font-bold text-slate-900">{promotion.name}</strong>
+              <strong title={promotion.name} className={`truncate text-sm font-bold ${expired ? "text-slate-500" : "text-slate-900"}`}>{promotion.name}</strong>
             </p>
             <p className="flex min-w-0 items-baseline gap-1 text-[11px] leading-4">
               <span className="shrink-0 text-slate-500">{t("promotion.codeLabel")}</span>
-              <span title={promotion.code} className="truncate font-mono font-bold text-slate-800">{promotion.code}</span>
+              <span title={promotion.code} className={`truncate font-mono font-bold ${expired ? "text-slate-500" : "text-slate-800"}`}>{promotion.code}</span>
             </p>
           </div>
-          <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">-{promotionValueLabel(promotion)}</span>
+          <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-bold ${expired ? "bg-slate-200 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}>{expired ? t("promotion.statusExpired") : `-${promotionValueLabel(promotion)}`}</span>
         </div>
         <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-          <button type="button" onClick={() => onDetails(promotion, source)} className="inline-flex min-w-0 items-center gap-1 text-xs font-semibold text-slate-600 hover:text-emerald-700"><Eye size={14} /> <span className="truncate">{t("promotion.details")}</span></button>
-          <button type="button" onClick={() => onApply(promotion, source)} className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">{t("promotion.chooseCode")}</button>
+          <button type="button" onClick={() => onDetails(promotion, source)} className={`inline-flex min-w-0 items-center gap-1 text-xs font-semibold ${expired ? "text-slate-500" : "text-slate-600 hover:text-emerald-700"}`}><Eye size={14} /> <span className="truncate">{t("promotion.details")}</span></button>
+          {!expired && <button type="button" onClick={() => onApply(isApplied ? null : promotion, source)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-semibold ${isApplied ? "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-100" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>{isApplied ? t("promotion.removeSelection") : t("promotion.chooseCode")}</button>}
         </div>
-      </article>)}
+      </article>;
+      })}
     </div>}
   </section>;
 }
@@ -133,7 +140,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
     setAppliedPromotion(null);
     setAppliedSource(null);
     onApply(null);
-    onEligibilityChange?.(true);
+    onEligibilityChange?.(false);
     setPromotionCode("");
     setPromotionWarning(t("promotion.codeRemoved", { code: appliedPromotion.code, reason: warning }));
   }, [orderTotal, roomTotal, serviceTotal, appliedPromotion, initialPromotionId, initialCustomerPromotionId, initialPromotionApplyAt, onApply, onEligibilityChange]);
@@ -197,7 +204,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       setPromotionCode("");
       onApply(null);
       setPromotionWarning(t("promotion.codeIneligible", { code: promotion.code, reason: warning }));
-      onEligibilityChange?.(true);
+      onEligibilityChange?.(false);
       if (import.meta.env.DEV) console.warn("[promotions] minimum order not met:\n" + JSON.stringify({
         code: promotion.code,
         orderTotal,
@@ -210,6 +217,10 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       return;
     }
     if (promotion && !isCurrentBookingPromotion(promotion)) restoredPromotionRef.current = null;
+    if (!promotion) {
+      restoredPromotionRef.current = null;
+      setPromotionCode("");
+    }
     setPromotionWarning("");
     onEligibilityChange?.(false);
     if (import.meta.env.DEV) {
@@ -274,7 +285,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
       setAppliedSource(null);
       onApply(null);
       setPromotionWarning(t("promotion.codeNotFound", { code: code || t("promotion.thisCode") }));
-      onEligibilityChange?.(true);
+      onEligibilityChange?.(false);
       return;
     }
     applyPromotion(promotion, source);
@@ -284,13 +295,19 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
     <div className="flex items-center gap-2"><Tag size={16} className="text-emerald-600" /><h3 className="text-sm font-bold text-slate-900">{t("promotion.bookingTitle")}</h3></div>
     <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input value={promotionCode} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} placeholder={t("promotion.enterCode")} className="h-10 min-w-0 flex-1 rounded-lg border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-400" /><button type="button" onClick={applyPromotionCode} className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700">{t("promotion.apply")}</button></div>
     <button type="button" onClick={applyBestPromotion} disabled={isBranchLoading || Boolean(customerId && isCustomerLoading)} className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"><Sparkles size={15} />{t("promotion.bestDiscount")}</button>
-    {promotionWarning && <div role="alert" className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800"><p>{promotionWarning}</p><button type="button" onClick={() => { setPromotionWarning(""); setPromotionCode(""); onEligibilityChange?.(false); }} className="shrink-0 underline">{t("promotion.close")}</button></div>}
-    <div className="relative mt-2"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={promotionSearch} onChange={(event) => setPromotionSearch(event.target.value)} placeholder={t("promotion.searchBookingPromotions")} className="h-10 w-full rounded-lg border border-blue-100 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400" />{promotionSearch && <div className="absolute left-0 right-0 top-11 z-10 overflow-hidden rounded-lg border border-blue-100 bg-white shadow-lg">{matchingPromotions.map((promotion) => <button type="button" key={`${promotion.id}-${promotion.code}`} onClick={() => { applyPromotion(promotion, customerPromotions.some((item) => item.id === promotion.id) ? "customer" : "branch"); setPromotionSearch(""); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-blue-50"><span><strong className="block text-slate-800">{promotion.name}</strong><small className="text-slate-500">{promotion.code}</small></span><span className="font-bold text-blue-700">-{promotionValueLabel(promotion)}</span></button>)}</div>}</div>
+    {promotionWarning && <p role="alert" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800">{promotionWarning}</p>}
+    <div className="relative mt-2"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={promotionSearch} onChange={(event) => setPromotionSearch(event.target.value)} placeholder={t("promotion.searchBookingPromotions")} className="h-10 w-full rounded-lg border border-blue-100 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400" /><ClearSearchButton value={promotionSearch} onClear={() => setPromotionSearch("")} label={t("common.clearSearch")} />{promotionSearch && <div className="absolute left-0 right-0 top-11 z-10 overflow-hidden rounded-lg border border-blue-100 bg-white shadow-lg">{matchingPromotions.length === 0 ? <FilterResultStatus filterKey={promotionSearch}><p className="px-3 py-3 text-center text-sm text-slate-500">{localizedText("Không tìm thấy khuyến mãi phù hợp.", "No matching promotions found.")}</p></FilterResultStatus> : matchingPromotions.map((promotion) => {
+      const expired = isPromotionExpired(promotion);
+      const content = <><span><strong className={`block ${expired ? "text-slate-500" : "text-slate-800"}`}>{promotion.name}</strong><small className="text-slate-500">{promotion.code}</small></span><span className={`font-bold ${expired ? "text-slate-500" : "text-blue-700"}`}>{expired ? t("promotion.statusExpired") : `-${promotionValueLabel(promotion)}`}</span></>;
+      return expired
+        ? <div key={`${promotion.id}-${promotion.code}`} className="flex w-full items-center justify-between bg-slate-100 px-3 py-2 text-left text-sm">{content}</div>
+        : <button type="button" key={`${promotion.id}-${promotion.code}`} onClick={() => { applyPromotion(promotion, customerPromotions.some((item) => item.id === promotion.id) ? "customer" : "branch"); setPromotionSearch(""); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-blue-50">{content}</button>;
+    })}</div>}</div>
     <div className="mt-4 grid min-w-0 gap-3">
       <PromotionRail promotions={branchPromotions} source="branch" title={t("promotion.branchOffers")} loading={isBranchLoading} error={isBranchError} emptyMessage={t("promotion.availableCodesEmpty")} appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
       <PromotionRail promotions={customerPromotions} source="customer" title={t("promotion.customerOffers")} loading={!customerId || isCustomerLoading} error={isCustomerError} emptyMessage={!customerId ? t("promotion.selectCustomerToViewCodes") : t("promotion.customerHasNoCodes")} appliedPromotion={appliedPromotion} appliedSource={appliedSource} onApply={applyPromotion} onDetails={(promotion, source) => setDetailPromotion({ promotion, source })} />
     </div>
-    {appliedPromotion && <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><p>{t(appliedSource === "customer" ? "promotion.appliedCustomer" : "promotion.appliedBranch")}: {appliedPromotion.code} · {t("promotion.discountAmount", { amount: moneyAmount(calculatePromotionDiscount(appliedPromotion, roomTotal, serviceTotal, orderTotal)) })}</p><button type="button" onClick={() => { restoredPromotionRef.current = null; setAppliedPromotion(null); setAppliedSource(null); setPromotionCode(""); setPromotionWarning(""); onEligibilityChange?.(false); onApply(null); }} className="shrink-0 underline">{t("promotion.removeSelection")}</button></div>}
+    {appliedPromotion && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><p>{t(appliedSource === "customer" ? "promotion.appliedCustomer" : "promotion.appliedBranch")}: {appliedPromotion.code} · {t("promotion.discountAmount", { amount: moneyAmount(calculatePromotionDiscount(appliedPromotion, roomTotal, serviceTotal, orderTotal)) })}</p></div>}
     <Dialog open={Boolean(detailPromotion)} onOpenChange={(open) => { if (!open) setDetailPromotion(null); }}>
       {detailPromotion && <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
@@ -326,7 +343,7 @@ export default function PromotionSelector({ customerId, initialPromotionId, init
               {(detailPromotion.promotion as SelectedPromotion & { used?: boolean }).used != null ? <div><dt className="text-xs text-slate-500">{t("promotion.usageStatus")}</dt><dd className="mt-1 font-semibold text-slate-800">{(detailPromotion.promotion as SelectedPromotion & { used?: boolean }).used ? t("promotion.used") : t("promotion.unused")}</dd></div> : null}
             </dl>
           </section>
-          <button type="button" disabled={Boolean(detailEligibilityWarning)} onClick={() => { applyPromotion(detailPromotion.promotion, detailPromotion.source); setDetailPromotion(null); }} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">{t("promotion.chooseThisPromotion")}</button>
+          {!isPromotionExpired(detailPromotion.promotion) && <button type="button" disabled={Boolean(detailEligibilityWarning)} onClick={() => { applyPromotion(detailPromotion.promotion, detailPromotion.source); setDetailPromotion(null); }} className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">{t("promotion.chooseThisPromotion")}</button>}
         </div>
       </DialogContent>}
     </Dialog>

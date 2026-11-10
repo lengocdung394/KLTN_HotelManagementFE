@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
 import { localizedText } from "../i18n";
-import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
+import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, RotateCcw, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import EventPricingCalendar from "../components/EventPricingCalendar";
@@ -12,6 +12,7 @@ import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailM
 import BulkImportDialog from "../components/BulkImportDialog";
 import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
+import ClearSearchButton from "../components/ClearSearchButton";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation, useUpdateRoomStatusMutation } from "../services/roomApi";
 import { useGetAllAmenitiesQuery } from "../services/amenityApi.ts";
@@ -269,6 +270,17 @@ type CreateRoomFormState = {
   status: string;
 };
 
+type RoomFormErrors = {
+  roomNumber?: string;
+  description?: string;
+  building?: string;
+  floor?: string;
+  beds?: string;
+  bedQuantities?: Record<number, string>;
+  images?: string;
+  form?: string;
+};
+
 const roomTypeDetails: Record<string, { area: string; beds: string; capacity: number; guestPolicy: string; price: number; description: string }> = {
   "Standard Room": { area: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "Người lớn: 1 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 1000000, description: "Phòng tiêu chuẩn có giường ngủ, bàn làm việc, TV, điều hòa và phòng tắm riêng. Có thể trang bị thêm minibar và ấm đun nước." },
   "Deluxe Room": { area: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "Người lớn: 2 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 2000000, description: "Phòng hạng sang rộng rãi với giường King Size, TV màn hình lớn, minibar, khu vực tiếp khách và phòng tắm cao cấp." },
@@ -341,7 +353,6 @@ export default function RoomWorkspace() {
   const amenityCatalog = apiAmenities ?? [];
   const availableRoomTypes = useMemo(() => (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value))), [apiRoomTypes]);
   const availableRoomStatuses = useMemo(() => (apiRoomStatuses ?? []).map((value) => statusLabel(String(value))), [apiRoomStatuses]);
-  const amenityOptions = useMemo(() => amenityCatalog.map((amenity) => amenity.name).filter(Boolean), [amenityCatalog]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const requestedTab = new URLSearchParams(location.search).get("tab");
   const defaultRoomTab: "rooms" | "pricing" = canManageRooms && requestedTab === "pricing" ? "pricing" : "rooms";
@@ -523,12 +534,9 @@ export default function RoomWorkspace() {
   }, [dispatch, roomImportTaskId, t]);
   const [detailRoom, setDetailRoom] = useState<Room | null>(null);
   const [createRoomForm, setCreateRoomForm] = useState<CreateRoomFormState>(emptyCreateRoomForm);
+  const [roomFormErrors, setRoomFormErrors] = useState<RoomFormErrors>({});
   const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
-  const [newAmenityName, setNewAmenityName] = useState("");
-  const [amenityPrice, setAmenityPrice] = useState("");
-  const [customAmenityPrices, setCustomAmenityPrices] = useState<Record<string, number>>({});
-  const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
@@ -995,8 +1003,7 @@ export default function RoomWorkspace() {
   }, [apiAmenities, amenitySearch]);
   const filteredBuildings = useMemo(() => {
     const normalizedQuery = normalizeText(buildingQuery);
-    const matchingBuildings = buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
-    return normalizedQuery ? matchingBuildings : matchingBuildings.slice(0, 4);
+    return buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
   }, [buildings, buildingQuery]);
   const updateRoom = async (id: string, changes: Partial<Room>): Promise<void> => {
     const room = rooms.find((item) => item.id === id);
@@ -1028,11 +1035,14 @@ export default function RoomWorkspace() {
     setEditingRoomId(null);
     setEditingRoomDatabaseId(null);
     setCreateRoomForm(emptyCreateRoomForm);
+    setRoomFormErrors({});
     setAmenitySearch("");
-    setShowAmenityMenu(false);
     setRoomImageFiles([]);
   };
-  const openCreateRoomModal = () => {
+  const resetCreateRoomForm = () => {
+    createRoomForm.images.forEach((image) => {
+      if (image.startsWith("blob:")) URL.revokeObjectURL(image);
+    });
     const building = defaultBuildingOption(buildings);
     const floorsForBuilding = hotelFloorOptions.filter((item) => item.buildingId === building?.id);
     const floor = defaultFloorOption(floorsForBuilding);
@@ -1059,7 +1069,12 @@ export default function RoomWorkspace() {
       building: building?.id ?? "",
       floor: floor?.id ?? "",
     });
+    setRoomFormErrors({});
+    setAmenitySearch("");
     setRoomImageFiles([]);
+  };
+  const openCreateRoomModal = () => {
+    resetCreateRoomForm();
     setShowCreateRoom(true);
   };
   const handlePricingDraftChange = (roomType: string, field: "price" | "extraAdultFee" | "extraChildFee" | "standardCapacity" | "maxExtraGuests", value: string) => {
@@ -1287,31 +1302,15 @@ export default function RoomWorkspace() {
     }
     closeCreateFloorModal();
   };
-  const appendAmenity = (value?: string) => {
-    const nextAmenity = (value ?? newAmenityName).trim();
-    if (!nextAmenity) return;
-    const normalized = normalizeText(nextAmenity);
-    const matchedAmenity = amenityOptions.find((item) => normalizeText(item) === normalized) ?? nextAmenity;
-
-    if (createRoomForm.amenities.some((item) => normalizeText(item) === normalized)) {
-      setAmenitySearch("");
-      setShowAmenityMenu(false);
-      return;
-    }
-
-    if (!apiAmenities?.some((amenity) => amenity.name === matchedAmenity)) {
-      const price = Number(amenityPrice);
-      if (!Number.isFinite(price) || price < 0) return;
-      setCustomAmenityPrices((current) => ({ ...current, [matchedAmenity]: price }));
-    }
-
-    setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, matchedAmenity] }));
-    setNewAmenityName("");
-    setAmenityPrice("");
-    setShowAmenityMenu(false);
-  };
   const removeAmenity = (value: string) => setCreateRoomForm((current) => ({ ...current, amenities: current.amenities.filter((item) => normalizeText(item) !== normalizeText(value)) }));
   const clearAllAmenities = () => setCreateRoomForm((current) => ({ ...current, amenities: [] }));
+  const clearRoomFormErrors = (...fields: Array<keyof RoomFormErrors>) => {
+    setRoomFormErrors((current) => {
+      const next = { ...current };
+      fields.forEach((field) => { delete next[field]; });
+      return next;
+    });
+  };
   const addImages = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const availableSlots = Math.max(0, 8 - createRoomForm.images.length);
@@ -1319,6 +1318,8 @@ export default function RoomWorkspace() {
     if (selectedFiles.length === 0) return;
     const nextImages = selectedFiles.map((file) => URL.createObjectURL(file));
     setRoomImageFiles((current) => [...current, ...selectedFiles]);
+    clearRoomFormErrors("form");
+    if (roomImageFiles.length + selectedFiles.length >= 4) clearRoomFormErrors("images");
     setCreateRoomForm((current) => {
       const mergedImages = [...current.images, ...nextImages];
       const nextDefault = current.defaultImage ?? mergedImages[0] ?? null;
@@ -1331,6 +1332,10 @@ export default function RoomWorkspace() {
       : -1;
     if (removedUploadIndex >= 0) {
       setRoomImageFiles((files) => files.filter((_, index) => index !== removedUploadIndex));
+    }
+    clearRoomFormErrors("form");
+    if (!roomFormErrors.images || roomImageFiles.length - Number(removedUploadIndex >= 0) >= 4) {
+      clearRoomFormErrors("images");
     }
     setCreateRoomForm((current) => {
       const remaining = current.images.filter((item) => item !== image);
@@ -1358,35 +1363,45 @@ export default function RoomWorkspace() {
       const definition = apiBedTypes?.find((item) => item.id === bed.bedTypeId);
       return definition ? `${definition.name ?? definition.bedTypeName} × ${bed.quantity}` : `Loại giường #${bed.bedTypeId} × ${bed.quantity}`;
     }).join(" · ");
-    const showRoomSaveError = (title: string, description: string) => toast({
-      variant: "destructive",
-      title,
-      description,
-    });
-
-    if (!roomCode || !roomType || !area || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
-      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Vui lòng nhập đầy đủ các trường bắt buộc.");
-      return;
-    }
-    if (selectedBeds.length === 0) {
-      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Vui lòng chọn ít nhất một loại giường và nhập số lượng hợp lệ.");
-      return;
-    }
+    setRoomFormErrors({});
+    const errors: RoomFormErrors = {};
+    if (!roomCode) errors.roomNumber = localizedText("Vui lòng nhập số phòng.", "Enter a room number.");
     if (rooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase() && room.id !== editingRoomId)) {
-      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Số phòng đã tồn tại, vui lòng nhập số khác.");
+      errors.roomNumber = localizedText("Số phòng đã tồn tại, vui lòng nhập số khác.", "This room number already exists. Enter a different one.");
+    }
+    if (!roomType || !area || !Number.isFinite(area) || area <= 0 || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
+      errors.form = localizedText("Vui lòng kiểm tra thông tin loại phòng và cấu hình giá trước khi lưu.", "Check the room type and pricing details before saving.");
+    }
+    if (!isEditingRoom) {
+      if (!createRoomForm.building) errors.building = localizedText("Vui lòng chọn tòa nhà.", "Select a building.");
+      const selectedFloor = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor || item.name === createRoomForm.floor);
+      if (!selectedFloor?.id) errors.floor = localizedText("Vui lòng chọn tầng hợp lệ.", "Select a valid floor.");
+      if (roomImageFiles.length < 4) errors.images = localizedText("Vui lòng tải lên ít nhất 4 ảnh phòng.", "Upload at least 4 room photos.");
+      if (!description) errors.description = localizedText("Vui lòng nhập mô tả phòng.", "Enter a room description.");
+    } else if (!createRoomForm.floor) {
+      errors.floor = localizedText("Vui lòng chọn tầng hợp lệ.", "Select a valid floor.");
+    }
+    const invalidBedQuantities = createRoomForm.bedConfigurations.reduce<Record<number, string>>((bedErrors, bed) => {
+      if (!Number.isSafeInteger(Number(bed.quantity)) || Number(bed.quantity) < 1) {
+        bedErrors[Number(bed.bedTypeId)] = localizedText("Nhập số lượng giường là số nguyên lớn hơn 0.", "Enter a whole number of beds greater than 0.");
+      }
+      return bedErrors;
+    }, {});
+    if (createRoomForm.bedConfigurations.length === 0) {
+      errors.beds = localizedText("Vui lòng chọn ít nhất một loại giường.", "Select at least one bed type.");
+    } else if (Object.keys(invalidBedQuantities).length > 0) {
+      errors.bedQuantities = invalidBedQuantities;
+    }
+    if (Object.keys(errors).length > 0) {
+      setRoomFormErrors(isEditingRoom
+        ? { form: errors.form ?? errors.roomNumber ?? errors.floor ?? errors.beds ?? localizedText("Vui lòng kiểm tra lại thông tin phòng.", "Check the room details and try again.") }
+        : errors);
       return;
     }
     if (!editingRoomId) {
-      if (roomImageFiles.length === 0) {
-        showRoomSaveError("Không thể thêm phòng", "Vui lòng tải lên ít nhất một ảnh phòng.");
-        return;
-      }
       const selectedFloor = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor || item.name === createRoomForm.floor);
       const floorId = selectedFloor?.id;
-      if (!floorId) {
-        showRoomSaveError("Không thể thêm phòng", "Vui lòng chọn tầng hợp lệ.");
-        return;
-      }
+      if (!floorId) return;
       const defaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
       const amenityIds = createRoomForm.amenities
         .map((name) => apiAmenities?.find((amenity) => amenity.name === name)?.id)
@@ -1411,17 +1426,13 @@ export default function RoomWorkspace() {
             ? responseData.message
             : typeof errorRecord.message === "string"
               ? errorRecord.message
-              : "Không thể thêm phòng. Vui lòng thử lại.";
-        showRoomSaveError("Không thể thêm phòng", message);
+              : localizedText("Không thể thêm phòng. Vui lòng thử lại.", "Could not add the room. Please try again.");
+        setRoomFormErrors({ form: message });
       }
       return;
     }
-    if (!createRoomForm.floor) {
-      showRoomSaveError("Không thể cập nhật phòng", "Vui lòng chọn tầng hợp lệ.");
-      return;
-    }
     if (!editingRoomDatabaseId) {
-      showRoomSaveError("Không thể cập nhật phòng", "Không tìm thấy ID phòng từ máy chủ. Vui lòng tải lại danh sách phòng.");
+      setRoomFormErrors({ form: localizedText("Không tìm thấy ID phòng từ máy chủ. Vui lòng tải lại danh sách phòng.", "The room ID was not found. Reload the room list and try again.") });
       return;
     }
     const updateDefaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
@@ -1454,8 +1465,8 @@ export default function RoomWorkspace() {
           ? responseData.message
           : typeof errorRecord.message === "string"
             ? errorRecord.message
-            : "Không thể cập nhật phòng. Vui lòng thử lại.";
-      showRoomSaveError("Không thể cập nhật phòng", message);
+            : localizedText("Không thể cập nhật phòng. Vui lòng thử lại.", "Could not update the room. Please try again.");
+      setRoomFormErrors({ form: message });
       return;
     }
     const orderedImages = createRoomForm.defaultImage
@@ -1700,7 +1711,7 @@ export default function RoomWorkspace() {
     {canViewRoomStructure && activeTab === "buildings" && <>
       {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
       {isBuildingsLoading && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tòa nhà...</p>}
-      <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} canManage={canManageRooms} />
+      <BuildingManagementPanel query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} canManage={canManageRooms} />
     </>}
     {canViewRoomStructure && activeTab === "floors" && <>
       {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
@@ -1812,7 +1823,6 @@ export default function RoomWorkspace() {
       onEditRoom={openEditRoomModal}
       onShowGallery={(room) => { setGalleryRoom(room); setGalleryIndex(0); }}
       onShowDetails={setDetailRoom}
-      onAssign={setAssignmentRoom}
     />}
     {activeTab === "pricing" && (
       <div className="p-6 space-y-6">
@@ -1864,11 +1874,6 @@ export default function RoomWorkspace() {
                 standardCapacity: String(entry.standardCapacity),
                 maxExtraGuests: String(entry.maxExtraGuests),
               };
-              const currentPriceNum = Number(draft.price) || 0;
-              const currentAdultFeeNum = Number(draft.extraAdultFee) || 0;
-              const currentChildFeeNum = Number(draft.extraChildFee) || 0;
-              const currentStandardCapacity = Number(draft.standardCapacity) || entry.standardCapacity || 1;
-              const currentMaxExtraGuests = Number(draft.maxExtraGuests) || entry.maxExtraGuests || 0;
               const isModified = String(draft.price) !== String(entry.price) || String(draft.extraAdultFee) !== String(entry.extraAdultFee) || String(draft.extraChildFee) !== String(entry.extraChildFee) || String(draft.standardCapacity) !== String(entry.standardCapacity) || String(draft.maxExtraGuests) !== String(entry.maxExtraGuests);
 
               return (
@@ -1968,16 +1973,15 @@ export default function RoomWorkspace() {
                       </div>
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
-                      <span className="text-[11px] font-semibold text-slate-500">{t("room.pricingConfig.guestSummary", { standard: currentStandardCapacity, extra: currentMaxExtraGuests, price: formatPricingMoney(currentPriceNum), adultFee: formatPricingMoney(currentAdultFeeNum), childFee: formatPricingMoney(currentChildFeeNum) })}</span>
-                      <div className="flex gap-2.5">
-                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-100">{t("room.pricingConfig.cancel")}</button>
+                    <div className="mt-5 flex justify-end gap-3 border-t border-slate-100 pt-4">
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-12 rounded-xl border border-slate-200 bg-slate-50 px-6 text-base font-bold text-slate-600 transition hover:bg-slate-100">{t("room.pricingConfig.cancel")}</button>
                         <button
                           type="button"
                           onClick={async () => {
                             if (await saveRoomTypePricing(entry.roomType)) setEditingPricingType(null);
                           }}
-                          className={`h-10 rounded-xl px-4 text-sm font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
+                          className={`h-12 rounded-xl px-6 text-base font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
                           disabled={!isModified || !entry.policyId || isUpdatingPolicy}
                         >
                           {isUpdatingPolicy ? t("room.pricingConfig.saving") : t("room.pricingConfig.save")}
@@ -2061,7 +2065,7 @@ export default function RoomWorkspace() {
                           <button
                             type="button"
                             onClick={() => setEditingPricingType(entry.roomType)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 transition hover:border-amber-300 hover:bg-amber-100 hover:text-amber-800"
                             title={t("room.pricingConfig.edit")}
                           >
                             <Pencil size={14} />
@@ -2141,6 +2145,10 @@ export default function RoomWorkspace() {
             </div>
 
             <div className="flex items-center gap-2">
+              <button type="button" onClick={resetCreateRoomForm} disabled={isCreatingRoom || isUpdatingRoom} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+                <RotateCcw size={15} />
+                {t("room.createForm.reset")}
+              </button>
               <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">{t("common.cancel")}</button>
               <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom || isUpdatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom || isUpdatingRoom ? t("room.createForm.saving") : editingRoomId ? t("room.saveChanges") : t("room.createRoom")}</button>
             </div>
@@ -2148,6 +2156,7 @@ export default function RoomWorkspace() {
 
           <div className="grid gap-5 overflow-y-auto p-5 lg:grid-cols-[1.4fr_0.8fr]">
             <div className="space-y-5">
+              {roomFormErrors.form && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{roomFormErrors.form}</p>}
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">1</span>
@@ -2168,24 +2177,27 @@ export default function RoomWorkspace() {
 
                   <label className="block text-sm font-semibold text-slate-700">
                     {t("room.buildingLabel")} <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.building} onChange={(event) => { const buildingId = event.target.value; setSelectedBuildingId(buildingId); setCreateRoomForm((current) => ({ ...current, building: buildingId, floor: "" })); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                    <select value={createRoomForm.building} onChange={(event) => { const buildingId = event.target.value; setSelectedBuildingId(buildingId); setCreateRoomForm((current) => ({ ...current, building: buildingId, floor: "" })); clearRoomFormErrors("building", "floor", "form"); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
+                    {roomFormErrors.building && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.building}</p>}
                   </label>
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     {t("room.createForm.roomNumber")} <span className="text-rose-500">*</span>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" required value={createRoomForm.roomNumber} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomNumber: event.target.value.replace(/\D/g, "") }))} placeholder={t("room.createForm.roomNumberPlaceholder")} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" required value={createRoomForm.roomNumber} onChange={(event) => { setCreateRoomForm((current) => ({ ...current, roomNumber: event.target.value.replace(/\D/g, "") })); clearRoomFormErrors("roomNumber", "form"); }} placeholder={t("room.createForm.roomNumberPlaceholder")} aria-invalid={Boolean(roomFormErrors.roomNumber)} aria-describedby={roomFormErrors.roomNumber ? "room-number-error" : undefined} className={`mt-1.5 h-11 w-full rounded-xl border px-3 text-sm font-normal outline-none transition focus:ring-2 ${roomFormErrors.roomNumber ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+                    {roomFormErrors.roomNumber && <p id="room-number-error" role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.roomNumber}</p>}
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     {t("room.createForm.floor")} <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} disabled={isFloorsLoading || isFloorsFetching || selectedBuildingFloorOptions.length === 0} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
+                    <select value={createRoomForm.floor} onChange={(event) => { setCreateRoomForm((current) => ({ ...current, floor: event.target.value })); clearRoomFormErrors("floor", "form"); }} disabled={isFloorsLoading || isFloorsFetching || selectedBuildingFloorOptions.length === 0} aria-invalid={Boolean(roomFormErrors.floor)} className={`mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm outline-none transition focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-50 ${roomFormErrors.floor ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`}>
                       {isFloorsLoading || isFloorsFetching ? <option value="">{t("room.createForm.loadingFloors")}</option> : selectedBuildingFloorOptions.length === 0 ? <option value="">{t("room.createForm.noFloors")}</option> : selectedBuildingFloorOptions.map((item) => (
                         <option key={item.id} value={item.id}>{localizedFloorName(item.name)}</option>
                       ))}
                     </select>
+                    {roomFormErrors.floor && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.floor}</p>}
                   </label>
                 </div>
               </div>
@@ -2198,7 +2210,7 @@ export default function RoomWorkspace() {
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    {t("room.area")} <span className="text-rose-500">*</span>
+                    {t("room.area")}
                     <input type="number" min="1" step="0.1" value={createRoomForm.area} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
 
@@ -2209,14 +2221,14 @@ export default function RoomWorkspace() {
                   </label>
                 </div>
 
-                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    {t("room.createForm.standardCapacity")} <span className="text-rose-500">*</span>
+                    {t("room.createForm.standardCapacity")}
                     <input type="number" min="1" value={createRoomForm.standardCapacity} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
                     <span className="mt-1 block text-xs font-normal text-slate-400">{t("room.createForm.includedGuests")}</span>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    {t("room.createForm.maxExtraGuests")}<span className="text-rose-500">*</span>
+                    {t("room.createForm.maxExtraGuests")}
                     <input type="number" min="0" value={createRoomForm.maxExtraGuests} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
                     <span className="mt-1 block text-xs font-normal text-slate-400">{t("room.createForm.extraGuestsDescription")}</span>
                   </label>
@@ -2250,17 +2262,21 @@ export default function RoomWorkspace() {
                         if (bedType.id == null) return null;
                         const selected = createRoomForm.bedConfigurations.find((bed) => Number(bed.bedTypeId) === Number(bedType.id));
                         return (
-                          <div key={bedType.id} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+                          <div key={bedType.id}>
+                            <div className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
                             <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
                               <input
                                 type="checkbox"
                                 checked={Boolean(selected)}
-                                onChange={(event) => setCreateRoomForm((current) => ({
-                                  ...current,
-                                  bedConfigurations: event.target.checked
-                                    ? [...current.bedConfigurations, { bedTypeId: bedType.id!, quantity: 1 }]
-                                    : current.bedConfigurations.filter((bed) => Number(bed.bedTypeId) !== Number(bedType.id)),
-                                }))}
+                                onChange={(event) => {
+                                  setCreateRoomForm((current) => ({
+                                    ...current,
+                                    bedConfigurations: event.target.checked
+                                      ? [...current.bedConfigurations, { bedTypeId: bedType.id!, quantity: 1 }]
+                                      : current.bedConfigurations.filter((bed) => Number(bed.bedTypeId) !== Number(bedType.id)),
+                                  }));
+                                  clearRoomFormErrors("beds", "bedQuantities", "form");
+                                }}
                                 className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                               />
                               <span className="truncate">{bedType.name ?? bedType.bedTypeName}</span>
@@ -2283,11 +2299,19 @@ export default function RoomWorkspace() {
                                         Number(bed.bedTypeId) === Number(bedType.id) ? { ...bed, quantity } : bed,
                                       ),
                                     }));
+                                    setRoomFormErrors((current) => {
+                                      const bedQuantities = { ...current.bedQuantities };
+                                      delete bedQuantities[Number(bedType.id)];
+                                      return { ...current, bedQuantities, beds: undefined, form: undefined };
+                                    });
                                   }}
-                                  className="h-9 w-20 rounded-lg border border-slate-200 px-2 text-sm text-slate-800 outline-none focus:border-blue-400"
+                                  aria-invalid={Boolean(roomFormErrors.bedQuantities?.[Number(bedType.id)])}
+                                  className={`h-9 w-20 rounded-lg border px-2 text-sm text-slate-800 outline-none focus:ring-2 ${roomFormErrors.bedQuantities?.[Number(bedType.id)] ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`}
                                 />
                               </label>
                             )}
+                            </div>
+                            {roomFormErrors.bedQuantities?.[Number(bedType.id)] && <p role="alert" className="ml-1 text-xs font-medium text-rose-600">{roomFormErrors.bedQuantities[Number(bedType.id)]}</p>}
                           </div>
                         );
                       })}
@@ -2295,6 +2319,7 @@ export default function RoomWorkspace() {
                   ) : (
                     <p className="mt-1 text-xs text-amber-700">{t("room.createForm.noBedTypes")}</p>
                   )}
+                  {roomFormErrors.beds && <p role="alert" className="mt-2 text-xs font-medium text-rose-600">{roomFormErrors.beds}</p>}
                 </div>
 
                 <div className="mt-4">
@@ -2328,81 +2353,26 @@ export default function RoomWorkspace() {
                   </div>
 
                   <div className="flex items-center gap-2">
-
-                    
-                      <button
+                    <button
                         type="button"
                         onClick={clearAllAmenities}
                         className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
-                      >
-                        {t("room.createForm.deselectAll")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowAmenityMenu(false)}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
-                      >
-                        {t("room.createForm.useDefault")}
-                      </button>
-                    
-  
-                    <button
-                      type="button"
-                      onClick={() => setShowAmenityMenu((current) => !current)}
-                      className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
                     >
-                      + {t("room.createForm.add")}
+                      {t("room.createForm.deselectAll")}
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="relative mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                   <Search size={15} className="text-slate-400" />
                   <input
                     value={amenitySearch}
                     onChange={(event) => setAmenitySearch(event.target.value)}
                     placeholder={t("room.searchAmenities")}
-                    className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                    className="w-full border-0 bg-transparent pr-9 text-sm text-slate-700 outline-none placeholder:text-slate-400"
                   />
+                  <ClearSearchButton value={amenitySearch} onClear={() => setAmenitySearch("")} label={t("common.clearSearch")} />
                 </div>
-
-                {showAmenityMenu && (
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
-                      <input
-                        value={newAmenityName}
-                        onChange={(event) => setNewAmenityName(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            appendAmenity();
-                          }
-                        }}
-                        placeholder={t("room.createForm.newAmenityName")}
-                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={amenityPrice}
-                        onChange={(event) => setAmenityPrice(event.target.value)}
-                        placeholder={t("room.createForm.amenityPrice")}
-                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={() => appendAmenity(newAmenityName)}
-                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
-                      >
-                        {t("room.createForm.add")}
-                      </button>
-                    </div>
-
-                  </div>
-                )}
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredAmenityOptions.map((item) => {
@@ -2424,7 +2394,8 @@ export default function RoomWorkspace() {
                   {t("room.createForm.descriptionAndImages")} <span className="text-rose-500">*</span>
                 </div>
 
-                <textarea value={createRoomForm.description} onChange={(event) => setCreateRoomForm((current) => ({ ...current, description: event.target.value }))} rows={4} placeholder={t("room.createForm.detailedDescriptionPlaceholder")} className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                <textarea value={createRoomForm.description} onChange={(event) => { setCreateRoomForm((current) => ({ ...current, description: event.target.value })); clearRoomFormErrors("description", "form"); }} rows={4} placeholder={t("room.createForm.detailedDescriptionPlaceholder")} aria-invalid={Boolean(roomFormErrors.description)} aria-describedby={roomFormErrors.description ? "room-description-error" : undefined} className={`mt-4 w-full rounded-xl border px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:ring-2 ${roomFormErrors.description ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+                {roomFormErrors.description && <p id="room-description-error" role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.description}</p>}
 
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
                   <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
@@ -2432,7 +2403,6 @@ export default function RoomWorkspace() {
                     {t("room.createForm.uploadImage")}
                     <input type="file" multiple accept="image/*" onChange={(event) => addImages(event.target.files)} className="hidden" />
                   </label>
-
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                     {createRoomForm.images.length > 0 ? createRoomForm.images.slice(0, 6).map((image, index) => {
                       const isDefault = createRoomForm.defaultImage ? image === createRoomForm.defaultImage : index === 0;
@@ -2464,6 +2434,7 @@ export default function RoomWorkspace() {
                     )}
                   </div>
                 </div>
+                {roomFormErrors.images && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.images}</p>}
               </div>
             </div>
 
@@ -2522,7 +2493,7 @@ export default function RoomWorkspace() {
                   {createRoomForm.amenities.slice(0, 5).map((item) => (
                     <div key={item} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
                       <span className="min-w-0 truncate">{item}</span>
-                      <span className="ml-3 flex shrink-0 items-center gap-2"><span className="text-xs font-semibold text-blue-600">{money(apiAmenities?.find((amenity) => amenity.name === item)?.price ?? customAmenityPrices[item] ?? 0)}</span><Check size={15} className="text-emerald-600" /></span>
+                      <span className="ml-3 flex shrink-0 items-center gap-2"><span className="text-xs font-semibold text-blue-600">{money(apiAmenities?.find((amenity) => amenity.name === item)?.price ?? 0)}</span><Check size={15} className="text-emerald-600" /></span>
                     </div>
                   ))}
                   {createRoomForm.amenities.length === 0 && (
@@ -2543,6 +2514,7 @@ export default function RoomWorkspace() {
           floorId: createRoomForm.floor,
           roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status,
           area: createRoomForm.area,
+          basePrice: String(rooms.find((room) => room.id === editingRoomId)?.price ?? ""),
           standardCapacity: createRoomForm.standardCapacity,
           maxExtraGuests: createRoomForm.maxExtraGuests,
           extraAdultFee: createRoomForm.extraAdultFee,
@@ -2555,6 +2527,7 @@ export default function RoomWorkspace() {
           beds: createRoomForm.bedConfigurations,
         }}
         onDraftChange={(draft: RoomEditDraft) => {
+          clearRoomFormErrors("form");
           const floorOption = hotelFloorOptions.find((item) => item.id === draft.floorId);
           setSelectedBuildingId(floorOption?.buildingId ?? createRoomForm.building);
           setCreateRoomForm((current) => ({
@@ -2608,9 +2581,9 @@ export default function RoomWorkspace() {
             isExtraBed: item.isExtraBed,
           }))}
         imageFiles={roomImageFiles}
-        onImageFilesChange={setRoomImageFiles}
+        onImageFilesChange={(files) => { setRoomImageFiles(files); clearRoomFormErrors("images", "form"); }}
         isSaving={isUpdatingRoom}
-        error=""
+        error={roomFormErrors.form ?? ""}
         onSave={() => void saveRoom()}
         onCancel={closeCreateRoomModal}
       />

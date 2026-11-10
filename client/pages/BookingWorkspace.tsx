@@ -6,6 +6,9 @@ import { useTranslation } from "react-i18next";
 import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, QrCode, RefreshCw, Search, UserRound, UsersRound, Wallet } from "lucide-react";
 import GuestRoomForms, { bookingCache, clearRoomGuestCache, isBookingGuestValid, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterResultStatus from "../components/FilterResultStatus";
+import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
 import { useGetBranchRoomDailyPricesQuery, useGetRoomSeasonalRatesByMonthQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomSeasonalRate } from "../services/roomApi";
@@ -15,11 +18,12 @@ import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrixQuery, type RoomMatrixResponse } from "../services/bookingApi";
 import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
-import { useGetHotelClosuresQuery } from "../services/hotelClosureApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import ListPagination from "../components/ListPagination";
 import { getServicePriceBreakdown, sumRoomPriceForRange } from "../lib/bookingPricing";
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
 import { calculatePromotionDiscount } from "../lib/promotionPricing";
+import { localizedText } from "../i18n";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
@@ -344,7 +348,7 @@ const mapApiRoom = (item: Record<string, unknown>, index: number): BookingRoom =
   };
 };
 
-function DatePicker({ label, value, min, onChange, hotelId, blockedDateLabels }: { label: string; value: string; min?: string; onChange: (value: string) => void; hotelId?: string | number | null; blockedDateLabels: Record<string, string[]> }) {
+function DatePicker({ label, value, min, onChange, hotelId }: { label: string; value: string; min?: string; onChange: (value: string) => void; hotelId?: string | number | null }) {
   const { t, i18n } = useTranslation();
   const [pickerMonth, setPickerMonth] = useState(() => value ? new Date(`${value}T00:00:00`) : new Date());
   const { data: monthlyRates } = useGetRoomSeasonalRatesByMonthQuery(
@@ -373,11 +377,10 @@ function DatePicker({ label, value, min, onChange, hotelId, blockedDateLabels }:
           value={value ? new Date(`${value}T00:00:00`) : undefined}
           onMonthChange={setPickerMonth}
           highlightDates={eventDates}
-          blockedDateLabels={blockedDateLabels}
           onChange={(nextDate) => {
             if (!nextDate) return;
             const nextValue = formatDateForInput(nextDate);
-            if ((!min || nextValue >= min) && !blockedDateLabels[nextValue]?.length) {
+            if (!min || nextValue >= min) {
               onChange(nextValue);
             }
           }}
@@ -395,6 +398,8 @@ function DesktopCalendar({
   setSelected,
   checkIn,
   checkOut,
+  scrollTargetCheckIn,
+  scrollTargetCheckOut,
   setCheckIn,
   setCheckOut,
   selectedRanges,
@@ -404,7 +409,6 @@ function DesktopCalendar({
   hotelId,
   editingBookingId,
   editingBookingRanges,
-  maintenanceDateLabels,
   isChangingRoom,
   roomChangeTargetRoomId,
   roomChangeTargetRange,
@@ -419,6 +423,8 @@ function DesktopCalendar({
   setSelected: React.Dispatch<React.SetStateAction<string[]>>;
   checkIn: string;
   checkOut: string;
+  scrollTargetCheckIn: string;
+  scrollTargetCheckOut: string;
   setCheckIn: (value: string) => void;
   setCheckOut: (value: string) => void;
   selectedRanges: Record<string, RoomDateRange>;
@@ -428,7 +434,6 @@ function DesktopCalendar({
   hotelId: number;
   editingBookingId?: string;
   editingBookingRanges: Map<string, BookingRoomRange[]>;
-  maintenanceDateLabels: Record<string, string[]>;
   isChangingRoom?: boolean;
   roomChangeTargetRoomId?: string | null;
   roomChangeTargetRange?: RoomDateRange;
@@ -446,8 +451,23 @@ function DesktopCalendar({
   const totalDays = 14;
   const todayValue = todayLocal();
   const [timelineStart, setTimelineStart] = useState(todayValue);
+  const selectedDateRangeRef = useRef({ checkIn: scrollTargetCheckIn, checkOut: scrollTargetCheckOut });
   const [timelinePickerOpen, setTimelinePickerOpen] = useState(false);
   const [timelinePickerMonth, setTimelinePickerMonth] = useState(() => new Date(`${todayValue}T00:00:00`));
+  useEffect(() => {
+    const previousRange = selectedDateRangeRef.current;
+    if (previousRange.checkIn === scrollTargetCheckIn && previousRange.checkOut === scrollTargetCheckOut) return;
+    selectedDateRangeRef.current = { checkIn: scrollTargetCheckIn, checkOut: scrollTargetCheckOut };
+
+    const timelineEnd = shiftDay(timelineStart, totalDays - 1);
+    const checkInOutsideTimeline = scrollTargetCheckIn < timelineStart || scrollTargetCheckIn > timelineEnd;
+    const checkOutOutsideTimeline = scrollTargetCheckOut < timelineStart || scrollTargetCheckOut > timelineEnd;
+    if (checkInOutsideTimeline) {
+      setTimelineStart(scrollTargetCheckIn);
+    } else if (checkOutOutsideTimeline) {
+      setTimelineStart(shiftDay(scrollTargetCheckOut, -(totalDays - 1)));
+    }
+  }, [scrollTargetCheckIn, scrollTargetCheckOut, timelineStart]);
   useEffect(() => {
     setTimelinePickerMonth(new Date(`${timelineStart}T00:00:00`));
   }, [timelineStart]);
@@ -520,7 +540,6 @@ function DesktopCalendar({
   const isAvailableWithMatrix = (room: BookingRoom, start: string, end: string) => {
     if (!isAvailableForRange(room, start, end)) return false;
     for (let day = start; day < end; day = shiftDay(day, 1)) {
-      if (maintenanceDateLabels[day]?.length) return false;
       const dateIsPast = new Date(`${day}T00:00:00`) < today;
       const isOwnBookingDate = isBookingRoomDate(editingBookingRanges, roomKeysOf(room), day);
       if (dateIsPast && !isOwnBookingDate) return false;
@@ -579,7 +598,6 @@ function DesktopCalendar({
     if (e.button !== 0) return;
     const dayValue = stableTimeline[dayIndex].value;
     const room = visibleRooms.find((item) => item.id === roomId);
-    if (maintenanceDateLabels[dayValue]?.length) return;
     if (isChangingRoom && roomId === roomChangeTargetRoomId) return;
     if (room && showRoomChangeAction && selected.includes(roomId) && !canChangeRoom?.(room)) return;
     const isOwnBookingDate = room && isBookingRoomDate(editingBookingRanges, roomKeysOf(room), dayValue);
@@ -687,7 +705,7 @@ function DesktopCalendar({
       const room = visibleRooms.find((item) => item.id === roomId);
       const date = stableTimeline[i].value;
       const isOwnBookingDate = room && isBookingRoomDate(editingBookingRanges, roomKeysOf(room), date);
-      if (maintenanceDateLabels[date]?.length || (isPastDate(date) && !isOwnBookingDate) || (room && isReservedCell(room, date)) || (room && isMatrixReserved(room, date))) {
+      if ((isPastDate(date) && !isOwnBookingDate) || (room && isReservedCell(room, date)) || (room && isMatrixReserved(room, date))) {
          isValid = false;
          break;
        }
@@ -736,10 +754,6 @@ function DesktopCalendar({
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-sky-200 border border-sky-400 shadow-2xs" />
             Phòng trống
-          </span>
-          <span className="flex items-center gap-1.5 text-amber-800">
-            <span className="h-2.5 w-2.5 rounded-full border border-amber-300 bg-amber-100" />
-            {t("booking.busyDateShort", "Lịch bận")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-400">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
@@ -827,7 +841,6 @@ function DesktopCalendar({
                     const isSelected = date.toDateString() === selectedDate.toDateString();
                     const isToday = date.toDateString() === todayDate.toDateString();
                     const dateValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-                    const isMaintenanceDate = Boolean(maintenanceDateLabels[dateValue]?.length);
                     const isDisabled = date < todayDate;
 
                     return (
@@ -835,7 +848,6 @@ function DesktopCalendar({
                         key={day}
                         type="button"
                         disabled={isDisabled}
-                        title={isMaintenanceDate ? `${t("booking.busyDate", "Ngày bận")}: ${maintenanceDateLabels[dateValue].join(", ")}` : undefined}
                         onClick={() => {
                           setTimelineStart(dateValue);
                           setTimelinePickerOpen(false);
@@ -845,8 +857,6 @@ function DesktopCalendar({
                             ? "bg-blue-600 text-white shadow-sm"
                             : isDisabled
                               ? "cursor-not-allowed text-slate-300"
-                              : isMaintenanceDate
-                                ? "border border-amber-300 bg-amber-100 font-bold text-amber-800"
                               : isToday
                                 ? "border border-blue-200 bg-blue-50 font-bold text-blue-700"
                                 : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
@@ -911,11 +921,7 @@ function DesktopCalendar({
                   <p className={`mt-0.5 text-xs font-extrabold ${isPastDate(date.value) ? "text-slate-400" : isToday ? "text-blue-900" : "text-slate-800"}`}>
                     {date.label}
                   </p>
-                  {maintenanceDateLabels[date.value]?.length ? (
-                    <span title={maintenanceDateLabels[date.value].join(", ")} className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">
-                      {t("booking.busyDateShort", "Lịch bận")}
-                    </span>
-                  ) : hasEvent ? <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span> : null}
+                  {hasEvent && <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span>}
                 </div>
               );
             })}
@@ -1035,7 +1041,6 @@ function DesktopCalendar({
                   ? roomKeysOf(room).flatMap((key) => booked[key] ?? []).find((item) => day >= item.start && day < item.end)
                   : undefined;
                 const matrixReserved = isMatrixReserved(room, day);
-                const maintenanceLabels = maintenanceDateLabels[day] ?? [];
                 const bookedGuestName = roomKeysOf(room)
                   .map((roomKey) => matrixGuestNames.get(roomKey)?.get(day))
                   .find((name): name is string => Boolean(name))
@@ -1057,15 +1062,11 @@ function DesktopCalendar({
                     key={`${room.id}-${day}`}
                     onPointerDown={handlePointerDown(room.id, dayIndex)}
                     onPointerEnter={handlePointerEnter(room.id, dayIndex)}
-                    title={maintenanceLabels.length
-                      ? `${t("booking.busyDate", "Ngày bận")}: ${maintenanceLabels.join(", ")}`
-                      : matrixReserved || reservation ? `${bookedGuestName ?? "Khách"} · đã đặt` : undefined}
+                    title={matrixReserved || reservation ? `${bookedGuestName ?? "Khách"} · đã đặt` : undefined}
                     className="p-1"
                   >
                     <div className={`flex h-full min-h-[72px] flex-col justify-center rounded-xl border px-2 py-1.5 shadow-2xs transition-all duration-150 ${
-                      maintenanceLabels.length
-                        ? "cursor-not-allowed border-amber-300 bg-amber-100 text-amber-900 opacity-90"
-                        : pastDay
+                      pastDay
                         ? "border-slate-200 bg-slate-100/70 text-slate-400 opacity-60 cursor-not-allowed"
                         : reservation || matrixReserved
                         ? "border-emerald-300/80 bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-xs shadow-emerald-200/50 font-bold"
@@ -1110,26 +1111,6 @@ export default function BookingWorkspace() {
   const dispatch = useAppDispatch();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const employeeId = useAppSelector((state) => state.auth.employeeId);
-  const {
-    data: hotelClosuresResponse,
-    isLoading: isHotelClosuresLoading,
-    isError: isHotelClosuresError,
-  } = useGetHotelClosuresQuery();
-  const maintenanceDateLabels = useMemo(() => {
-    const currentHotelId = Number(hotelId);
-    if (!Number.isFinite(currentHotelId)) return {};
-
-    return (hotelClosuresResponse?.result ?? []).reduce<Record<string, string[]>>((dateLabels, closure) => {
-      if (closure.active === false || (!closure.allHotels && !closure.hotelIds.includes(currentHotelId))) {
-        return dateLabels;
-      }
-
-      for (let date = closure.startDate; date <= closure.endDate; date = shiftDay(date, 1)) {
-        dateLabels[date] = [...(dateLabels[date] ?? []), closure.title];
-      }
-      return dateLabels;
-    }, {});
-  }, [hotelClosuresResponse?.result, hotelId]);
   const [createCounterBooking, { isLoading: isCreatingBooking }] = useCreateCounterBookingMutation();
   const [modifyBooking, { isLoading: isModifyingBooking }] = useModifyBookingMutation();
   const bookingMutationInFlight = useRef(false);
@@ -1381,7 +1362,6 @@ export default function BookingWorkspace() {
   const isAvailableForRange = (room: BookingRoom, start: string, end: string) => {
     const roomKeys = roomKeysOf(room);
     for (let date = start; date < end; date = shiftDay(date, 1)) {
-      if (maintenanceDateLabels[date]?.length) return false;
       if (isBookingRoomDate(editingBookingRanges, roomKeys, date)) continue;
       if (matrixBusyDays?.size && roomKeys.some((key) => matrixBusyDays.get(key)?.has(date))) return false;
       if (roomKeys.some((key) => (booked[key] || []).some((item) => date >= item.start && date < item.end))) return false;
@@ -2148,13 +2128,9 @@ export default function BookingWorkspace() {
   useEffect(() => () => clearRoomGuestCache(), []);
   const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
   const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
-  const canContinue = !isHotelClosuresLoading && !isHotelClosuresError && selected.length > 0 && selectedRooms.every((room) => {
+  const canContinue = selected.length > 0 && selectedRooms.every((room) => {
     const range = selectedRanges[room.id] ?? (hasDates ? { checkIn, checkOut } : undefined);
-    if (!range?.checkIn || !range?.checkOut || range.checkIn >= range.checkOut) return false;
-    for (let date = range.checkIn; date < range.checkOut; date = shiftDay(date, 1)) {
-      if (maintenanceDateLabels[date]?.length) return false;
-    }
-    return true;
+    return Boolean(range?.checkIn && range?.checkOut && range.checkIn < range.checkOut);
   });
 
   if (step === "success")
@@ -2170,18 +2146,23 @@ export default function BookingWorkspace() {
   return (
     <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "rooms" ? "bg-violet-600 text-white" : "bg-emerald-500 text-white"}`}>{step === "rooms" ? "1" : <Check size={14} />}</span>
-          <span className="text-xs font-semibold text-slate-500">{t("booking.dateAndRooms")}</span>
-          <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "guest" ? "bg-violet-600 text-white" : step === "services" || step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "services" || step === "promotion" ? <Check size={14} /> : "2"}</span>
-          <span className="text-xs font-semibold text-slate-500">{t("booking.guestInformation")}</span>
-          <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "services" ? "bg-violet-600 text-white" : step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "promotion" ? <Check size={14} /> : "3"}</span>
-          <span className="text-xs font-semibold text-slate-500">{t("booking.selectServices")}</span>
-          <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "promotion" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-400"}`}>4</span>
-          <span className="text-xs font-semibold text-slate-500">{t("promotion.bookingTitle")}</span>
+        <div className="grid grid-cols-4">
+          {[
+            { label: t("booking.dateAndRooms"), active: step === "rooms", complete: step !== "rooms" },
+            { label: t("booking.guestInformation"), active: step === "guest", complete: step === "services" || step === "promotion" },
+            { label: t("booking.selectServices"), active: step === "services", complete: step === "promotion" },
+            { label: t("promotion.bookingTitle"), active: step === "promotion", complete: false },
+          ].map((item, index) => (
+            <div key={item.label} className="relative flex min-w-0 justify-center">
+              {index < 3 && <span className="absolute left-1/2 right-[-50%] top-3 h-px bg-slate-200" />}
+              <div className="relative z-10 flex min-w-0 items-center gap-2 bg-white px-1 sm:px-2">
+                <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${item.active ? "bg-violet-600 text-white" : item.complete ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>
+                  {item.complete ? <Check size={14} /> : index + 1}
+                </span>
+                <span className={`truncate text-[10px] font-semibold sm:text-xs ${item.active ? "text-slate-700" : "text-slate-500"}`}>{item.label}</span>
+              </div>
+            </div>
+          ))}
         </div>
         <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full bg-violet-600 transition-all ${step === "promotion" ? "w-full" : step === "services" ? "w-3/4" : step === "guest" ? "w-1/2" : "w-1/4"}`} /></div>
         <div className="mt-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -2206,36 +2187,22 @@ export default function BookingWorkspace() {
             <button type="button" onClick={cancelRoomReplacement} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">{t("booking.cancelRoomChange")}</button>
           </div>}
           <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
-            <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} blockedDateLabels={maintenanceDateLabels} />
-            <DatePicker label={t("booking.checkOutDate")} value={displayedCheckOut} min={displayedCheckIn || undefined} onChange={(value) => updateStayDate("checkOut", value)} hotelId={hotelId} blockedDateLabels={maintenanceDateLabels} />
+            <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} />
+            <DatePicker label={t("booking.checkOutDate")} value={displayedCheckOut} min={displayedCheckIn || undefined} onChange={(value) => updateStayDate("checkOut", value)} hotelId={hotelId} />
             <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{displayedCheckIn && displayedCheckOut ? `${displayedNights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
           </div>
-          {isHotelClosuresError && (
-            <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {t("booking.busyScheduleLoadError", "Không thể tải lịch bận. Vui lòng thử lại trước khi đặt phòng.")}
-            </p>
-          )}
-          {isHotelClosuresLoading && (
-            <p role="status" className="mt-3 text-sm text-slate-500">
-              {t("booking.busyScheduleLoading", "Đang tải lịch bận...")}
-            </p>
-          )}
 
           <div className="mt-5 flex flex-col gap-3">
-            <div className="grid w-full gap-2 sm:grid-cols-[minmax(260px,1.5fr)_repeat(3,minmax(150px,1fr))]">
-              <div className="relative w-full">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))_auto]">
+              <div className="relative w-full min-w-0">
               <Search size={15} className="absolute left-3 top-3 text-slate-400" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("booking.searchRooms")} className="h-9 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-xs outline-none focus:border-violet-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("booking.searchRooms")} aria-label={t("booking.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-9 text-xs outline-none focus:border-violet-400" />
+              <ClearSearchButton value={query} onClear={() => setQuery("")} label={t("common.clearSearch")} className="h-6 w-6" />
               </div>
-              <select value={roomType} onChange={(event) => setRoomType(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-violet-400">
-                {roomTypeOptions.map((item) => <option key={item}>{item}</option>)}
-              </select>
-              <select value={floor} onChange={(event) => setFloor(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-violet-400">
-                {floorOptions.map((item) => <option key={item}>{item}</option>)}
-              </select>
-              <select value={building} onChange={(event) => { setBuilding(event.target.value); setFloor(allFloorsLabel); }} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-violet-400">
-                {buildingOptions.map((item) => <option key={item} value={item}>{item === allBuildingsLabel ? item : item}</option>)}
-              </select>
+              <SearchableFilter value={roomType} options={roomTypeOptions.map((item) => ({ value: item, label: item === allRoomTypesLabel ? localizedText("Tất cả loại phòng", "All room types") : item }))} onChange={setRoomType} searchPlaceholder={localizedText("Tìm loại phòng...", "Search room types...")} emptyMessage={localizedText("Không tìm thấy loại phòng.", "No room types found.")} ariaLabel={localizedText("Lọc theo loại phòng", "Filter by room type")} />
+              <SearchableFilter value={floor} options={floorOptions.map((item) => ({ value: item, label: item === allFloorsLabel ? localizedText("Tất cả các tầng", "All floors") : item }))} onChange={setFloor} searchPlaceholder={localizedText("Tìm tầng...", "Search floors...")} emptyMessage={localizedText("Không tìm thấy tầng.", "No floors found.")} ariaLabel={localizedText("Lọc theo tầng", "Filter by floor")} />
+              <SearchableFilter value={building} options={buildingOptions.map((item) => ({ value: item, label: item === allBuildingsLabel ? localizedText("Tất cả các tòa", "All buildings") : item }))} onChange={(value) => { setBuilding(value); setFloor(allFloorsLabel); }} searchPlaceholder={localizedText("Tìm tòa nhà...", "Search buildings...")} emptyMessage={localizedText("Không tìm thấy tòa nhà.", "No buildings found.")} ariaLabel={localizedText("Lọc theo tòa nhà", "Filter by building")} />
+              {hasRoomFilter && <div className="flex items-center xl:justify-center"><FilterResetButton onClick={() => { setQuery(""); setRoomType(allRoomTypesLabel); setBuilding(allBuildingsLabel); setFloor(allFloorsLabel); }} label={localizedText("Xóa tất cả bộ lọc", "Clear all filters")} /></div>}
             </div>
             <div className="flex w-full flex-wrap items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300 ring-1 ring-slate-200" />{t("booking.unavailable")}</span>
@@ -2247,13 +2214,16 @@ export default function BookingWorkspace() {
             </div>
           </div>
 
-          {isRoomsLoading ? <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách phòng...</p> : isRoomsError ? <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách phòng.</p> : <>
+          {isRoomsLoading ? <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách phòng...</p> : isRoomsError ? <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách phòng.</p> : <FilterResultStatus filterKey={JSON.stringify([query, roomType, building, floor, showFull, showSelectedRoomsOnly])} className="mt-5 rounded-xl border border-slate-200 bg-slate-50">
+            {visibleRooms.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">{t("booking.noRooms")}</p> : <>
             <DesktopCalendar
               visibleRooms={paginatedVisibleRooms}
               selected={selected}
               setSelected={setSelected}
               checkIn={checkIn}
               checkOut={checkOut}
+              scrollTargetCheckIn={displayedCheckIn}
+              scrollTargetCheckOut={displayedCheckOut}
               setCheckIn={setCheckIn}
               setCheckOut={setCheckOut}
               selectedRanges={selectedRanges}
@@ -2263,7 +2233,6 @@ export default function BookingWorkspace() {
               hotelId={Number(hotelId)}
               editingBookingId={editingBookingId}
               editingBookingRanges={editingBookingRanges}
-              maintenanceDateLabels={maintenanceDateLabels}
               isChangingRoom={Boolean(roomChangeTargetRoomId)}
               roomChangeTargetRoomId={roomChangeTargetRoomId}
               roomChangeTargetRange={roomChangeTargetRange}
@@ -2273,53 +2242,16 @@ export default function BookingWorkspace() {
               canChangeRoom={(room) => !initialBooking || canChangeBookingRoom(findBookingDetailForRoom(room))}
               onStartRoomChange={beginRoomReplacement}
             />
-            {visibleRooms.length > 0 && (
-              <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  {t("booking.showingRooms", {
-                    from: (safePage - 1) * pageSize + 1,
-                    to: Math.min(safePage * pageSize, visibleRooms.length),
-                    total: visibleRooms.length,
-                  })}
-                </span>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2">
-                    {t("booking.rowsPerPage")}
-                    <select
-                      value={pageSize}
-                      onChange={(event) => setPageSize(Number(event.target.value))}
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    disabled={safePage === 1}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label={t("common.previousPage")}
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="min-w-12 text-center font-semibold text-slate-700">
-                    {safePage} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                    disabled={safePage === totalPages}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label={t("common.nextPage")}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </>}
+            <ListPagination
+              totalItems={visibleRooms.length}
+              page={safePage}
+              pageSize={pageSize}
+              mode="table"
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+            </>}
+          </FilterResultStatus>}
 
           <div className="mt-5 flex flex-col items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
             <div>

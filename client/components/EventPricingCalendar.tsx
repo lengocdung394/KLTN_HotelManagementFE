@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import DatePickerPopover from "./DatePickerPopover";
+import ListPagination from "./ListPagination";
 import { toast } from "../hooks/use-toast";
 import { bindHotelSocketEvents, SEASONAL_RATE_UPDATE_EVENT } from "../lib/socket";
 import { useSelector } from "react-redux";
-import { useCreateRoomSeasonalRateMutation, useGetRoomSeasonalRatesByMonthQuery, useUpdateRoomSeasonalRateMutation, type RoomSeasonalRate } from "../services/roomApi";
+import { useCreateRoomSeasonalRateMutation, useGetRoomSeasonalRatesByMonthQuery, useUpdateRoomSeasonalRateMutation, type CreateRoomSeasonalRateRequest, type RoomSeasonalRate } from "../services/roomApi";
+import SearchableFilter, { FilterResetButton } from "./SearchableFilter";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 import {
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -16,13 +19,10 @@ import {
   Tag,
   Trash2,
   X,
-  TrendingUp,
-  TrendingDown,
   Layers,
   Info,
   Pencil,
   Search,
-  BedDouble,
   Clock,
   BadgePercent,
 } from "lucide-react";
@@ -36,34 +36,8 @@ const roomTypesList: RoomType[] = [
   "Family Room",
 ];
 const defaultEventName = "__DEFAULT_EVENT_NAME__";
-
-
-const roomTypeThemeStyles: Record<RoomType, { bg: string; border: string; text: string; badge: string }> = {
-  "Standard Room": {
-    bg: "bg-blue-50/50",
-    border: "border-blue-200",
-    text: "text-blue-900",
-    badge: "bg-blue-100 text-blue-800",
-  },
-  "Deluxe Room": {
-    bg: "bg-amber-50/50",
-    border: "border-amber-200",
-    text: "text-amber-900",
-    badge: "bg-amber-100 text-amber-800",
-  },
-  "Suite Room": {
-    bg: "bg-purple-50/50",
-    border: "border-purple-200",
-    text: "text-purple-900",
-    badge: "bg-purple-100 text-purple-800",
-  },
-  "Family Room": {
-    bg: "bg-emerald-50/50",
-    border: "border-emerald-200",
-    text: "text-emerald-900",
-    badge: "bg-emerald-100 text-emerald-800",
-  },
-};
+const getLocalDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 export type PriceEventRule = {
   id: string;
@@ -91,12 +65,6 @@ const colorThemeHeader: Record<string, string> = {
   purple: "from-violet-50/80 via-violet-50/40 to-violet-50/80 border-violet-100 text-violet-900",
   rose: "from-rose-50/80 via-rose-50/40 to-rose-50/80 border-rose-100 text-rose-900",
   blue: "from-blue-50/80 via-sky-50/80 to-blue-50/80 border-blue-100 text-blue-900",
-};
-
-const statusColorHeader: Record<"ACTIVE" | "UPCOMING" | "EXPIRED", string> = {
-  ACTIVE: "from-emerald-50/80 via-emerald-50 to-lime-50/60 border-emerald-100 text-emerald-900",
-  UPCOMING: "from-blue-50/80 via-sky-50/80 to-blue-50/80 border-blue-100 text-blue-900",
-  EXPIRED: "from-orange-50/80 via-orange-50 to-amber-50/60 border-orange-100 text-orange-900",
 };
 
 const normalizeDateKey = (value: string | null | undefined) => {
@@ -250,8 +218,7 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
 
         const percent = Number(item.percentValue ?? 0);
         roomTypeAdjustments[rt] = percent;
-        const sourceId = item.id != null ? String(item.id) : null;
-        recordIds[rt] = sourceId ? sourceId : null;
+        if (item.id != null) recordIds[rt] = item.id;
       });
     });
 
@@ -260,7 +227,7 @@ const groupSeasonalRatesToEvents = (rates: RoomSeasonalRate[]): PriceEventRule[]
     const firstColor = (firstItem.colorTheme as "amber" | "emerald" | "purple" | "rose" | "blue") ?? (avgPercent >= 0 ? "amber" : "emerald");
 
     resultEvents.push({
-      id: String(firstItem.id ?? `evt-${startDate}-${endDate}-${Date.now()}`),
+      id: String(firstItem.id ?? `evt-${name}-${startDate}-${endDate}`),
       name,
       startDate,
       endDate,
@@ -294,7 +261,7 @@ export default function EventPricingCalendar() {
     t(status === "ACTIVE" ? "eventPricing.active" : status === "UPCOMING" ? "eventPricing.upcoming" : "eventPricing.expired");
   const formatMoney = (value: number) =>
     `${Number(value).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -314,14 +281,12 @@ export default function EventPricingCalendar() {
     { skip: !hotelId || Number.isNaN(Number(hotelId)) }
   );
 
-  const { data, isLoading: isLoadingSeasonalRates, refetch } = monthQuery;
+  const { currentData: data, isLoading: isLoadingSeasonalRates, refetch } = monthQuery;
   const [createRoomSeasonalRate, { isLoading: isCreatingSeasonalRate }] = useCreateRoomSeasonalRateMutation();
   const [updateRoomSeasonalRate, { isLoading: isUpdatingSeasonalRate }] = useUpdateRoomSeasonalRateMutation();
 
   const seasonalRates = data?.content ?? [];
   const allSeasonalRates = seasonalRates;
-  const totalPages = Math.max(data?.page?.totalPages ?? 1, 1);
-
   const highlightSeasonalRates = calendarMonthQuery.data?.content ?? [];
 
   const [events, setEvents] = useState<PriceEventRule[]>([]);
@@ -382,6 +347,8 @@ export default function EventPricingCalendar() {
         roomTypes: evt.roomTypes,
         percentValue: evt.percentValue,
         adjustments: evt.roomTypeAdjustments,
+        fixedPrices: evt.fixedPrices,
+        recordIds: evt.recordIds,
       }))
     );
 
@@ -428,7 +395,7 @@ export default function EventPricingCalendar() {
   ]);
 
   // Today reference string
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayStr = useMemo(() => getLocalDateKey(new Date()), []);
 
   // Helper to determine status
   const getEventStatus = (evt: PriceEventRule): "ACTIVE" | "UPCOMING" | "EXPIRED" => {
@@ -531,7 +498,30 @@ export default function EventPricingCalendar() {
   };
 
   const saveEventRule = async () => {
-    if (!eventName.trim() || !startDate || !endDate) return;
+    const currentEditingEvent = editingEventId ? events.find((evt) => evt.id === editingEventId) : undefined;
+    const editingEventStatus = currentEditingEvent ? getEventStatus(currentEditingEvent) : null;
+    if (editingEventStatus && editingEventStatus !== "UPCOMING") {
+      setFormValidationError(t(editingEventStatus === "ACTIVE"
+        ? "eventPricing.activeEventEditError"
+        : "eventPricing.expiredEventEditError"));
+      return;
+    }
+    if (editingEventId && endDate < todayStr) {
+      setFormValidationError(t("eventPricing.pastEndDateEditError"));
+      return;
+    }
+    if (!eventName.trim() || !startDate || !endDate) {
+      setFormValidationError(t("eventPricing.requiredFieldsError"));
+      return;
+    }
+    if (startDate > endDate) {
+      setFormValidationError(t("eventPricing.invalidDateRangeError"));
+      return;
+    }
+    if (pricingGroups.some((group) => !Number.isFinite(Number(group.percentValue)) || Number(group.percentValue) <= 0)) {
+      setFormValidationError(t("eventPricing.invalidPriceError"));
+      return;
+    }
 
     const roomTypeAdjustments: Record<string, number> = {};
     const allSelectedTypesSet = new Set<string>();
@@ -561,16 +551,14 @@ export default function EventPricingCalendar() {
       ? ["ALL"]
       : Array.from(allSelectedTypesSet);
 
-    const seasonalRateRequests = pricingGroups.flatMap((group) => {
-      const priceValue = Number(group.percentValue) || 0;
+    const seasonalRateRequests: CreateRoomSeasonalRateRequest[] = pricingGroups.flatMap((group) => {
+      const priceValue = Number(group.percentValue);
       const roomTypesToSave = group.roomTypes.includes("ALL") ? roomTypesList : group.roomTypes;
 
-      return roomTypesToSave.map((roomType) => {
-        const currentEditingEvent = editingEventId ? events.find((evt) => evt.id === editingEventId) : undefined;
-        const recordIdForRoom = currentEditingEvent?.recordIds?.[roomType] ?? null;
-
+      return roomTypesToSave.map((roomType): CreateRoomSeasonalRateRequest => {
+        const recordIdForRoom = currentEditingEvent?.recordIds?.[roomType];
         return {
-          id: recordIdForRoom ?? null,
+          ...(recordIdForRoom != null ? { id: recordIdForRoom } : {}),
           roomType: mapRoomTypeToEnum(roomType),
           rateName: eventName.trim(),
           startDate,
@@ -579,6 +567,10 @@ export default function EventPricingCalendar() {
         };
       });
     });
+    if (seasonalRateRequests.length === 0) {
+      setFormValidationError(t("eventPricing.noRoomTypesError"));
+      return;
+    }
 
     try {
       if (editingEventId) {
@@ -599,7 +591,14 @@ export default function EventPricingCalendar() {
         });
       }
 
-      await refetch();
+      const eventStartDate = new Date(`${startDate}T00:00:00`);
+      if (!Number.isNaN(eventStartDate.getTime())) {
+        setVisibleMonth(new Date(eventStartDate.getFullYear(), eventStartDate.getMonth(), 1));
+        setCalendarMonth(new Date(eventStartDate.getFullYear(), eventStartDate.getMonth(), 1));
+        setSelectedDate(startDate);
+        setIsDateFilterActive(true);
+      }
+      setCurrentPage(0);
       closeFormModal();
     } catch (error) {
       console.error("Failed to save room event pricing:", error);
@@ -641,6 +640,14 @@ export default function EventPricingCalendar() {
       return matchesSearch && matchesStatus && matchesRoomType && matchesDate;
     });
   }, [events, searchQuery, statusFilter, selectedRoomTypeFilter, selectedDate, isDateFilterActive, todayStr]);
+  const [pageSize, setPageSize] = useState(10);
+  const totalPages = Math.max(Math.ceil(filteredEvents.length / pageSize), 1);
+  const safeCurrentPage = Math.min(currentPage, totalPages - 1);
+  const paginatedEvents = filteredEvents.slice(safeCurrentPage * pageSize, (safeCurrentPage + 1) * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [searchQuery, statusFilter, selectedRoomTypeFilter, selectedDate, isDateFilterActive]);
 
   return (
     <div className="space-y-6">
@@ -672,7 +679,7 @@ export default function EventPricingCalendar() {
 
       {/* 2. Controls & Search Filter Bar */}
       <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto] lg:items-center">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_auto_auto_auto_auto] lg:items-center">
           {/* Search Input */}
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
@@ -681,8 +688,9 @@ export default function EventPricingCalendar() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("eventPricing.searchPlaceholder")}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9.5 pr-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9.5 pr-10 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
             />
+            <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={t("common.clearSearch")} />
           </div>
 
           {/* Date Picker */}
@@ -712,35 +720,50 @@ export default function EventPricingCalendar() {
             />
           </div>
 
-          {/* Status Filter Dropdown */}
-          <div className="flex items-center gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "ALL" | "ACTIVE" | "UPCOMING" | "EXPIRED")}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs outline-none focus:border-blue-500"
-            >
-              <option value="ALL">{t("eventPricing.allStatuses")}</option>
-              <option value="ACTIVE">{t("eventPricing.active")}</option>
-              <option value="UPCOMING">{t("eventPricing.upcoming")}</option>
-              <option value="EXPIRED">{t("eventPricing.expired")}</option>
-            </select>
-          </div>
+          <SearchableFilter
+            ariaLabel={t("eventPricing.allStatuses")}
+            searchPlaceholder={t("eventPricing.searchStatus")}
+            emptyMessage={t("eventPricing.noFilterResults")}
+            value={statusFilter}
+            options={[
+              { value: "ALL", label: t("eventPricing.allStatuses") },
+              { value: "ACTIVE", label: t("eventPricing.active") },
+              { value: "UPCOMING", label: t("eventPricing.upcoming") },
+              { value: "EXPIRED", label: t("eventPricing.expired") },
+            ]}
+            onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+            className="w-full lg:w-44"
+          />
 
-          {/* Room Type Filter Dropdown */}
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedRoomTypeFilter}
-              onChange={(e) => setSelectedRoomTypeFilter(e.target.value as any)}
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs outline-none focus:border-blue-500"
-            >
-              <option value="ALL">{t("eventPricing.allRoomTypes")}</option>
-              {roomTypesList.map((rt) => (
-                <option key={rt} value={rt}>
-                  {getRoomTypeLabel(rt)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SearchableFilter
+            ariaLabel={t("eventPricing.allRoomTypes")}
+            searchPlaceholder={t("eventPricing.searchRoomType")}
+            emptyMessage={t("eventPricing.noFilterResults")}
+            value={selectedRoomTypeFilter}
+            options={[
+              { value: "ALL", label: t("eventPricing.allRoomTypes") },
+              ...roomTypesList.map((roomType) => ({
+                value: roomType,
+                label: getRoomTypeLabel(roomType),
+              })),
+            ]}
+            onChange={(value) => setSelectedRoomTypeFilter(value === "ALL" ? "ALL" : value as RoomType)}
+            className="w-full lg:w-44"
+          />
+          {(searchQuery || statusFilter !== "ALL" || selectedRoomTypeFilter !== "ALL" || isDateFilterActive) && <FilterResetButton
+            label={t("common.resetFilter")}
+            onClick={() => {
+              const todayDate = new Date();
+              setSearchQuery("");
+              setStatusFilter("ALL");
+              setSelectedRoomTypeFilter("ALL");
+              setSelectedDate(today);
+              setVisibleMonth(todayDate);
+              setCalendarMonth(todayDate);
+              setIsDateFilterActive(false);
+              setCurrentPage(0);
+            }}
+          />}
         </div>
 
       </div>
@@ -751,7 +774,7 @@ export default function EventPricingCalendar() {
           {t("eventPricing.loading")}
         </div>
       ) : filteredEvents.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
+        <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter, selectedRoomTypeFilter, selectedDate, isDateFilterActive])}><div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
           <Sparkles size={32} className="mx-auto text-slate-400 opacity-60 mb-2" />
           <h5 className="text-sm font-bold text-slate-700">{t("eventPricing.emptyTitle")}</h5>
           <p className="mt-1 text-xs text-slate-500">{t("eventPricing.emptyDescription")}</p>
@@ -762,183 +785,92 @@ export default function EventPricingCalendar() {
           >
             <Plus size={15} /> {t("eventPricing.createNew")}
           </button>
-        </div>
+        </div></FilterResultStatus>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {filteredEvents.map((evt) => {
-            const status = getEventStatus(evt);
-            const statusPill =
-              status === "ACTIVE" ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  {getEventStatusLabel(status)}
-                </span>
-              ) : status === "UPCOMING" ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800 border border-blue-200">
-                  <span className="h-2 w-2 rounded-full bg-blue-500" />
-                  {getEventStatusLabel(status)}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700 border border-orange-300">
-                  {getEventStatusLabel(status)}
-                </span>
-              );
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[1100px] text-left text-xs">
+            <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">{t("eventPricing.eventColumn")}</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">{t("eventPricing.statusColumn")}</th>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">{t("eventPricing.dateRange")}</th>
+                {roomTypesList.map((roomType) => (
+                  <th scope="col" key={roomType} className="min-w-36 whitespace-nowrap px-4 py-3 text-right">{getRoomTypeLabel(roomType)}</th>
+                ))}
+                <th scope="col" className="whitespace-nowrap px-4 py-3 text-right">{t("room.actionsColumn")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedEvents.map((evt) => {
+                const status = getEventStatus(evt);
+                const statusClass = status === "ACTIVE"
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                  : status === "UPCOMING"
+                    ? "bg-blue-50 text-blue-700 ring-blue-200"
+                    : "bg-orange-50 text-orange-700 ring-orange-200";
 
-            const adjValues = evt.roomTypeAdjustments ? Object.values(evt.roomTypeAdjustments) : [evt.percentValue];
-            const minPct = Math.min(...adjValues);
-            const maxPct = Math.max(...adjValues);
-            const hasMultipleAdjustments = evt.roomTypeAdjustments && Object.keys(evt.roomTypeAdjustments).length > 0 && minPct !== maxPct;
+                return (
+                  <tr key={evt.id} className="transition-colors hover:bg-slate-50/70">
+                    <th scope="row" className="max-w-56 px-4 py-3 font-bold text-slate-800">
+                      {evt.name === defaultEventName ? t("eventPricing.seasonalPricing") : evt.name}
+                    </th>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset ${statusClass}`}>
+                        {getEventStatusLabel(status)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-600">
+                      {evt.startDate.split("-").reverse().join("/")} – {evt.endDate.split("-").reverse().join("/")}
+                    </td>
+                    {roomTypesList.map((roomType) => {
+                      const isApplicable = evt.roomTypes.includes("ALL")
+                        || evt.roomTypes.includes(roomType)
+                        || evt.roomTypeAdjustments?.[roomType] !== undefined
+                        || Boolean(evt.fixedPrices?.[roomType]);
+                      const price = isApplicable ? evt.fixedPrices?.[roomType] : undefined;
 
-            const modifierBadge = hasMultipleAdjustments ? (
-              <span className="inline-flex items-center gap-1 rounded-xl bg-purple-500/15 px-3 py-1 text-xs font-extrabold text-purple-900 border border-purple-300">
-                <TrendingUp size={14} className="text-purple-600" />
-                {t("eventPricing.adjustmentRange", { min: minPct > 0 ? `+${minPct}%` : `${minPct}%`, max: maxPct > 0 ? `+${maxPct}%` : `${maxPct}%` })}
-              </span>
-            ) : evt.percentValue > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-xl bg-orange-50 px-3 py-1 text-xs font-extrabold text-orange-900 border border-orange-100">
-                <TrendingUp size={14} className="text-orange-600" />
-                {t("eventPricing.increase", { percent: evt.percentValue })}
-              </span>
-            ) : evt.percentValue < 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-xl bg-orange-50 px-3 py-1 text-xs font-extrabold text-orange-900 border border-orange-100">
-                <TrendingDown size={14} className="text-orange-600" />
-                {t("eventPricing.discount", { percent: Math.abs(evt.percentValue) })}
-              </span>
-            ) : null;
-
-            return (
-              <div
-                key={evt.id}
-                className={`group relative overflow-hidden rounded-2xl border bg-white shadow-xs transition duration-200 hover:shadow-md ${
-                  status === "ACTIVE"
-                    ? "border-emerald-300 hover:border-emerald-400"
-                    : status === "UPCOMING"
-                      ? "border-blue-300 hover:border-blue-400"
-                      : "border-orange-300 hover:border-orange-400"
-                }`}
-              >
-                {/* Event Card Header */}
-                <div className={`flex flex-col gap-3 bg-linear-to-r ${statusColorHeader[status] || colorThemeHeader[evt.colorTheme] || colorThemeHeader.amber} p-5 border-b sm:flex-row sm:items-center sm:justify-between`}>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {statusPill}
-                      {modifierBadge}
-                    </div>
-                    <h5 className="mt-2.5 text-base font-extrabold text-slate-900 tracking-tight">{evt.name === defaultEventName ? t("eventPricing.seasonalPricing") : evt.name}</h5>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(evt)}
-                      className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3.5 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-white hover:text-blue-700 transition"
-                    >
-                      <Pencil size={14} />
-                      {t("eventPricing.edit")}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => deleteEventRule(evt.id)}
-                      className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white/90 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition"
-                      title={t("eventPricing.delete")}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Event Body */}
-                <div className="p-5 space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2 text-xs">
-                    <div className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                      <CalendarDays size={18} className="text-blue-600 shrink-0" />
-                      <div>
-                        <span className="text-slate-400 block text-[11px] font-semibold">{t("eventPricing.dateRange")}</span>
-                        <strong className="font-extrabold text-slate-800">
-                          {evt.startDate.split("-").reverse().join("/")} ➔ {evt.endDate.split("-").reverse().join("/")}
-                        </strong>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                      <BedDouble size={18} className="text-purple-600 shrink-0" />
-                      <div>
-                        <span className="text-slate-400 block text-[11px] font-semibold">{t("eventPricing.applicableRoomTypes")}</span>
-                        <strong className="font-extrabold text-slate-800">
-                          {evt.roomTypes.includes("ALL") ? t("eventPricing.allFourRoomTypes") : evt.roomTypes.map(getRoomTypeLabel).join(", ")}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Calculated Price Breakdown Table */}
-                  <div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {roomTypesList.map((rt) => {
-                        const isApplicable = evt.roomTypes.includes("ALL") || evt.roomTypes.includes(rt) || Boolean(evt.roomTypeAdjustments?.[rt] !== undefined) || Boolean(evt.fixedPrices?.[rt]);
-                        const exactPriceFromBackend = evt.fixedPrices?.[rt];
-                        const displayPrice = isApplicable && exactPriceFromBackend && exactPriceFromBackend > 0 ? exactPriceFromBackend : 0;
-                        const theme = roomTypeThemeStyles[rt];
-
-                        return (
-                          <div
-                            key={rt}
-                            className={`rounded-xl border p-3 transition ${
-                              isApplicable && displayPrice > 0
-                                ? `${theme.bg} ${theme.border}`
-                                : "border-slate-100 bg-slate-50/20 opacity-60"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between text-xs">
-                              <span className={`font-bold ${isApplicable && displayPrice > 0 ? theme.text : "text-slate-800"}`}>{getRoomTypeLabel(rt)}</span>
-                              {isApplicable && displayPrice > 0 && (
-                                <span className="text-[10px] font-extrabold text-blue-700">
-                                  {t("eventPricing.applies")}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 flex items-baseline justify-between">
-                              <span className={`text-xs font-extrabold ${isApplicable && displayPrice > 0 ? theme.text : "text-slate-900"}`}>
-                                {displayPrice > 0 ? formatMoney(displayPrice) : t("eventPricing.noPrice")}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                      return (
+                        <td key={roomType} className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${
+                          isApplicable && price && price > 0 ? "text-slate-800" : "text-slate-400"
+                        }`}>
+                          {price && price > 0 ? formatMoney(price) : t("eventPricing.noPrice")}
+                        </td>
+                      );
+                    })}
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(evt)}
+                        disabled={status !== "UPCOMING"}
+                        title={status === "ACTIVE"
+                          ? t("eventPricing.activeEventEditError")
+                          : status === "EXPIRED"
+                            ? t("eventPricing.expiredEventEditError")
+                            : undefined}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 transition enabled:hover:border-amber-300 enabled:hover:bg-amber-50 enabled:hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Pencil size={13} />
+                        {t("eventPricing.edit")}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="text-xs font-semibold text-slate-500">
-          {t("eventPricing.page", { current: Math.min(currentPage + 1, totalPages), total: totalPages })}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setCurrentPage((page) => Math.max(0, page - 1))}
-            disabled={currentPage === 0}
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t("eventPricing.previous")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentPage((page) => Math.min(totalPages - 1, page + 1))}
-            disabled={currentPage >= totalPages - 1}
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t("eventPricing.next")}
-          </button>
-        </div>
-      </div>
+      {!isLoadingSeasonalRates && (
+        <ListPagination
+          totalItems={filteredEvents.length}
+          page={safeCurrentPage + 1}
+          pageSize={pageSize}
+          mode="table"
+          onPageChange={(nextPage) => setCurrentPage(nextPage - 1)}
+          onPageSizeChange={setPageSize}
+        />
+      )}
 
       {/* Modal Create / Edit Event */}
       {showEventModal && (
@@ -1002,6 +934,7 @@ export default function EventPricingCalendar() {
                   {t("eventPricing.startDate")} <span className="text-rose-500">*</span>
                   <input
                     type="date"
+                    required
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -1011,7 +944,9 @@ export default function EventPricingCalendar() {
                   {t("eventPricing.endDate")} <span className="text-rose-500">*</span>
                   <input
                     type="date"
+                    required
                     value={endDate}
+                    min={startDate || undefined}
                     onChange={(e) => setEndDate(e.target.value)}
                     className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                   />
@@ -1031,14 +966,13 @@ export default function EventPricingCalendar() {
                   const assignedInOtherGroups = pricingGroups
                     .filter((g) => g.id !== group.id)
                     .flatMap((g) => (g.roomTypes.includes("ALL") ? roomTypesList : g.roomTypes));
-
                   const isAllSelected = group.roomTypes.includes("ALL");
 
                   return (
-                    <div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3 relative">
+                    <div key={group.id} className="relative space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                       <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                        <span className="text-xs font-bold text-violet-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <span className="grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white text-[10px] font-bold">
+                        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-violet-700">
+                          <span className="grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
                             {groupIdx + 1}
                           </span>
                           {t("eventPricing.roomGroup", { number: groupIdx + 1 })}
@@ -1054,16 +988,15 @@ export default function EventPricingCalendar() {
                         )}
                       </div>
 
-                      {/* Room types selection */}
                       <div>
-                        <p className="text-xs font-semibold text-slate-700 mb-1.5">{t("eventPricing.roomTypesInGroup")}</p>
+                        <p className="mb-1.5 text-xs font-semibold text-slate-700">{t("eventPricing.roomTypesInGroup")}</p>
                         <div className="flex flex-wrap gap-1.5">
                           {groupIdx === 0 && pricingGroups.length === 1 && (
                             <button
                               type="button"
                               onClick={() => setPricingGroups((current) => current.map((g) => g.id === group.id ? { ...g, roomTypes: ["ALL"] } : g))}
                               className={`rounded-xl px-3 py-1.5 text-xs font-bold transition shadow-2xs ${
-                                isAllSelected ? "bg-blue-600 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                                isAllSelected ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                               }`}
                             >
                               {t("eventPricing.allRoomTypesButton")}
@@ -1079,14 +1012,11 @@ export default function EventPricingCalendar() {
                                 type="button"
                                 disabled={isAssignedElsewhere}
                                 onClick={() => {
-                                  let nextTypes: string[];
-                                  if (isAllSelected) {
-                                    nextTypes = [rt];
-                                  } else if (isSelected) {
-                                    nextTypes = group.roomTypes.filter((t) => t !== rt);
-                                  } else {
-                                    nextTypes = [...group.roomTypes, rt];
-                                  }
+                                  const nextTypes = isAllSelected
+                                    ? [rt]
+                                    : isSelected
+                                      ? group.roomTypes.filter((type) => type !== rt)
+                                      : [...group.roomTypes, rt];
                                   setPricingGroups((current) =>
                                     current.map((g) => (g.id === group.id ? { ...g, roomTypes: nextTypes } : g))
                                   );
@@ -1095,8 +1025,8 @@ export default function EventPricingCalendar() {
                                   isSelected
                                     ? "bg-blue-600 text-white"
                                     : isAssignedElsewhere
-                                    ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-200 opacity-60"
-                                    : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                                      ? "cursor-not-allowed border border-slate-200 bg-slate-200 text-slate-400 opacity-60"
+                                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                                 }`}
                               >
                                 {getRoomTypeLabel(rt)} {isAssignedElsewhere && t("eventPricing.assignedElsewhere")}
@@ -1106,7 +1036,6 @@ export default function EventPricingCalendar() {
                         </div>
                       </div>
 
-                      {/* Fixed Price input for this group */}
                       <div>
                         <label className="block text-xs font-bold text-slate-700">
                           {t("eventPricing.applicablePrice")} <span className="text-rose-500">*</span>
@@ -1114,9 +1043,12 @@ export default function EventPricingCalendar() {
                         <div className="mt-1 flex items-center gap-2">
                           <input
                             type="number"
+                            min="1"
+                            step="1"
+                            required
                             value={group.percentValue}
-                            onChange={(e) => {
-                              const val = e.target.value;
+                            onChange={(event) => {
+                              const val = event.target.value;
                               setPricingGroups((current) =>
                                 current.map((g) => (g.id === group.id ? { ...g, percentValue: val } : g))
                               );
@@ -1124,7 +1056,7 @@ export default function EventPricingCalendar() {
                             placeholder={t("eventPricing.pricePlaceholder")}
                             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                           />
-                          <span className="text-xs font-bold text-slate-500 shrink-0">{t("room.pricingConfig.currency")}</span>
+                          <span className="shrink-0 text-xs font-bold text-slate-500">{t("room.pricingConfig.currency")}</span>
                         </div>
                         <p className="mt-1 text-[11px] text-slate-400">
                           {Number(group.percentValue) > 0

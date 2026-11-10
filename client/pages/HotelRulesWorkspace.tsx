@@ -5,12 +5,14 @@ import {
   CalendarCheck,
   ClipboardList,
   ConciergeBell,
-  Construction,
   CreditCard,
   DoorOpen,
   Info,
+  Search,
   Tag,
 } from "lucide-react";
+import { useState } from "react";
+import SearchableFilter from "../components/SearchableFilter";
 import { localizedText } from "../i18n";
 
 const getRuleSections = () => [
@@ -89,44 +91,6 @@ const getRuleSections = () => [
     ],
   },
   {
-    title: localizedText(
-      "Khách sạn tạm đóng / sửa chữa",
-      "Hotel closure or repairs",
-    ),
-    description: localizedText(
-      "Áp dụng khi khách sạn chủ động yêu cầu hủy booking hoặc checkout sớm vì lịch tạm đóng, sửa chữa hay lý do vận hành.",
-      "Applies when the hotel initiates a booking cancellation or early checkout due to a closure, repairs, or operational reasons.",
-    ),
-    icon: Construction,
-    tone: "amber",
-    points: [
-      localizedText(
-        "Booking chưa check-in: hủy theo diện khách sạn, không áp dụng phí phạt hủy; hoàn lại toàn bộ số tiền khách đã thanh toán.",
-        "Before check-in: process as a hotel-initiated cancellation with no cancellation penalty and refund the full amount paid.",
-      ),
-      localizedText(
-        "Booking đang lưu trú: checkout sớm các phòng bị ảnh hưởng; tính tiền phòng theo số đêm đã ở và giữ lại các khoản phụ thu hợp lệ.",
-        "During a stay: check out the affected rooms early; charge for nights already used and retain applicable surcharges.",
-      ),
-      localizedText(
-        "Dịch vụ chưa sử dụng được hủy và tính vào khoản hoàn; dịch vụ đã sử dụng vẫn được tính phí.",
-        "Unused services are canceled and included in the refund calculation; consumed services remain chargeable.",
-      ),
-      localizedText(
-        "Đối soát tổng chi phí sau khi tính lại với số tiền khách đã thanh toán: nếu khách còn nợ thì thu phần chênh lệch; nếu đã trả dư thì hoàn phần chênh lệch.",
-        "Compare the recalculated final charges with the amount paid: collect any remaining balance or refund any overpayment.",
-      ),
-      localizedText(
-        "Trao đổi rõ số tiền và phương thức hoàn với khách; có thể hoàn tiền mặt tại quầy hoặc chuyển khoản theo lựa chọn và quy trình của khách sạn.",
-        "Clearly confirm the amount and refund method with the guest; refund by cash at the front desk or bank transfer according to the guest's choice and hotel procedure.",
-      ),
-      localizedText(
-        "Đây là chính sách do khách sạn chủ động xử lý, không áp dụng nhầm mức phạt của trường hợp khách tự yêu cầu hủy booking.",
-        "This is a hotel-initiated resolution; do not apply the cancellation penalties used when a guest requests cancellation.",
-      ),
-    ],
-  },
-  {
     title: localizedText("Hoàn tiền do hủy booking", "Refunds for booking cancellations"),
     description: localizedText(
       "Mức khấu trừ tiền phòng phụ thuộc vào thời điểm yêu cầu hủy so với giờ check-in đầu tiên của booking.",
@@ -198,6 +162,18 @@ const toneClasses: Record<string, { icon: string; bullet: string }> = {
 
 export default function HotelRulesWorkspace() {
   const ruleSections = getRuleSections();
+  const [searchInput, setSearchInput] = useState("");
+  const [selectedSection, setSelectedSection] = useState("ALL");
+  const normalize = (value: string) =>
+    value.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const query = normalize(searchInput);
+  const visibleSections = ruleSections.filter((section, index) => {
+    if (selectedSection !== "ALL" && String(index) !== selectedSection) return false;
+    if (!query) return true;
+    return [section.title, section.description, ...section.points]
+      .some((value) => normalize(value).includes(query));
+  });
+
   return (
     <div className="mt-6 space-y-5">
       <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-5 sm:p-7">
@@ -222,8 +198,41 @@ export default function HotelRulesWorkspace() {
         </div>
       </section>
 
+      <div
+        className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"
+      >
+        <label className="relative min-w-[220px] flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder={localizedText("Tìm nội dung chính sách...", "Search policy content...")}
+            aria-label={localizedText("Tìm nội dung chính sách", "Search policy content")}
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="whitespace-nowrap text-xs font-semibold text-slate-500">
+            {localizedText("Lọc mục", "Category")}
+          </span>
+          <SearchableFilter
+            value={selectedSection}
+            options={[
+              { value: "ALL", label: localizedText("Tất cả mục", "All categories") },
+              ...ruleSections.map((section, index) => ({ value: String(index), label: section.title })),
+            ]}
+            onChange={setSelectedSection}
+            ariaLabel={localizedText("Lọc chính sách theo mục", "Filter policies by category")}
+            searchPlaceholder={localizedText("Tìm mục...", "Search categories...")}
+            emptyMessage={localizedText("Không tìm thấy mục.", "No categories found.")}
+            className="w-56"
+          />
+        </div>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
-        {ruleSections.map(({ title, description, icon: Icon, tone, points }) => {
+        {visibleSections.map(({ title, description, icon: Icon, tone, points }) => {
           const colors = toneClasses[tone];
           return (
             <section key={title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -248,6 +257,11 @@ export default function HotelRulesWorkspace() {
           );
         })}
       </div>
+      {visibleSections.length === 0 && (
+        <p className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          {localizedText("Không tìm thấy mục chính sách phù hợp.", "No matching policy categories found.")}
+        </p>
+      )}
 
       <aside className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-5 text-slate-600">
         <Info size={18} className="mt-0.5 shrink-0 text-blue-600" />

@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Ban, Check, ChevronRight, CreditCard, DoorOpen, ListChecks, ReceiptText, Search } from "lucide-react";
 import type { HotelService } from "../services/serviceApi";
 import { getServicePriceBreakdown } from "../lib/bookingPricing";
+import { localizedText } from "../i18n";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 
 export type ServiceSelection = { serviceId: string; quantity: number; originalQuantity?: number; usedQuantity?: number; price?: number; name?: string; usedAt?: string; detailId?: string; detailIds?: string[]; isExisting?: boolean; isUsed?: boolean; isPaid?: boolean; isLocked?: boolean; applyToRoom?: boolean };
 export type ServiceRoom = { id: string; databaseId?: string; type: string; guests: number; price: number; roomTotal?: number; dailyPrices?: Record<string, number>; nightlySurcharge?: number };
@@ -267,9 +270,11 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
       <button type="button" onClick={() => setServiceMode("per-room")} className={`rounded-lg px-4 py-2 text-sm font-semibold ${serviceMode === "per-room" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-white"}`}>{t("booking.selectPerRoom")}</button>
     </div>
     <nav className="mt-3 grid grid-cols-1 gap-1 rounded-lg border border-slate-200 bg-white p-1" aria-label={t("booking.serviceNavigation")}><div className="grid grid-cols-1 gap-1 sm:grid-cols-3"><button type="button" aria-current={activeSection === "services" ? "page" : undefined} onClick={() => scrollToServiceSection("services", 3)} className={`flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${activeSection === "services" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}><ListChecks size={14} />{t("booking.selectServices")}</button><button type="button" aria-current={activeSection === "rooms" ? "page" : undefined} onClick={() => scrollToServiceSection("rooms", 4)} className={`flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${activeSection === "rooms" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}><DoorOpen size={14} />{t("booking.roomInfo")}</button><button type="button" aria-current={activeSection === "summary" ? "page" : undefined} onClick={() => scrollToServiceSection("summary", 6)} className={`flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${activeSection === "summary" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}><ReceiptText size={14} />{t("booking.costSummary")}</button></div><div className="mt-1 grid grid-cols-1 gap-1 border-t border-slate-200 pt-1 sm:grid-cols-2"><button type="button" onClick={onSkip} disabled={isSubmitting} className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"><Ban size={14} />{skipLabel}</button><button type="button" onClick={onContinue} disabled={isSubmitting} className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-wait disabled:opacity-60"><CreditCard size={14} />{isSubmitting ? submittingLabel : continueLabel}</button></div></nav>
-    <label className="relative mt-4 block"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="search" value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} placeholder={t("booking.searchServices")} aria-label={t("booking.searchServices")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+    <div className="relative mt-4"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input type="text" value={serviceSearch} onChange={(event) => setServiceSearch(event.target.value)} placeholder={t("booking.searchServices")} aria-label={t("booking.searchServices")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /><ClearSearchButton value={serviceSearch} onClear={() => setServiceSearch("")} label={t("common.clearSearch")} /></div>
     {servicesLoading ? <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{t("booking.loadingServices")}</div> : servicesError ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{t("booking.servicesLoadError")}</div> : services.length === 0 ? <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{t("booking.noServicesAvailable")}</div> : serviceMode === "all" ? <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {visibleServices(serviceSearch).map((service, index) => { const selection = allRoomServices.find((item) => item.serviceId === service.id); return <div key={`svc-all-${service.id}-${index}`} className={`rounded-xl border-2 p-4 transition-colors ${selection ? "border-blue-500 bg-blue-50" : "border-blue-200 bg-white hover:border-blue-400"}`}><label className="flex min-w-0 items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => updateAllRoomService(service.id, event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="min-w-0"><strong className="block truncate text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{service.category} · {money(service.price)} / {service.unit}</small><small className="mt-1 block truncate text-[11px] text-slate-400">{service.detail}</small></span></label></div>; })}
+      {visibleServices(serviceSearch).length === 0
+        ? <FilterResultStatus filterKey={serviceSearch}><p className="col-span-full rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{localizedText("Không tìm thấy dịch vụ phù hợp.", "No matching services found.")}</p></FilterResultStatus>
+        : visibleServices(serviceSearch).map((service, index) => { const selection = allRoomServices.find((item) => item.serviceId === service.id); return <div key={`svc-all-${service.id}-${index}`} className={`rounded-xl border-2 p-4 transition-colors ${selection ? "border-blue-500 bg-blue-50" : "border-blue-200 bg-white hover:border-blue-400"}`}><label className="flex min-w-0 items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => updateAllRoomService(service.id, event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="min-w-0"><strong className="block truncate text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{service.category} · {money(service.price)} / {service.unit}</small><small className="mt-1 block truncate text-[11px] text-slate-400">{service.detail}</small></span></label></div>; })}
     </div> : <div className="mt-4">
       <div className="mb-2 flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{t("booking.servicesByRoom")}</p><span className="text-xs font-semibold text-slate-500">{t("booking.roomCount", { count: rooms.length })}</span></div>
       {rooms.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">{t("booking.noRoomsSelected")}</div> : <div className="space-y-2">{rooms.map((room, index) => { const selections = getRoomSelections(room).filter((sel) => sel.quantity > 0); const expanded = expandedRoom === room.id; return <div key={`room-${room.id}-${index}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -279,17 +284,18 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
             <p className="mb-2 text-xs font-semibold text-slate-500">
               {t("booking.guestCountAndSelectServices", { count: room.guests })}
             </p>
-            <label className="relative mb-3 block">
+            <div className="relative mb-3 block">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
-                type="search"
+                type="text"
                 value={roomServiceSearch[room.id] ?? ""}
                 onChange={(event) => setRoomServiceSearch((current) => ({ ...current, [room.id]: event.target.value }))}
                 placeholder={t("booking.searchServicesForRoom", { room: room.id })}
                 aria-label={t("booking.searchServicesForRoom", { room: room.id })}
-                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
-            </label>
+              <ClearSearchButton value={roomServiceSearch[room.id] ?? ""} onClear={() => setRoomServiceSearch((current) => ({ ...current, [room.id]: "" }))} label={t("common.clearSearch")} className="h-6 w-6" />
+            </div>
 
             {getExistingServiceGroups(room).length > 0 && (
               <div className="mb-4">
@@ -340,6 +346,11 @@ export default function BookingServiceSelector({ rooms, services, servicesLoadin
               {language.startsWith("en") ? "Add services at current price" : "Thêm dịch vụ theo giá hiện tại"}
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
+              {visibleServices(roomServiceSearch[room.id] ?? "").length === 0 && (
+                <FilterResultStatus filterKey={roomServiceSearch[room.id] ?? ""}>
+                  <p className="col-span-full rounded-lg bg-white p-4 text-center text-xs text-slate-500">{localizedText("Không tìm thấy dịch vụ phù hợp.", "No matching services found.")}</p>
+                </FilterResultStatus>
+              )}
               {visibleServices(roomServiceSearch[room.id] ?? "").map((service, serviceIndex) => {
                 const selection = getRoomSelections(room).find(
                   (item) => !item.isExisting && item.serviceId === service.id,

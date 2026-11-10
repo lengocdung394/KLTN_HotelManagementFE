@@ -14,6 +14,9 @@ import {
 import { createXlsxWorkbook, downloadFile } from "../lib/bulkImportFiles";
 import { parseSuperAdminPermissionCatalogFile } from "../lib/superAdminPermissionCatalogImport";
 import { parseSuperAdminRolePermissionsFile } from "../lib/superAdminRolePermissionsImport";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
+import { localizedText } from "../i18n";
 import {
   useCreateSuperAdminPermissionMutation,
   useCreateSuperAdminRoleMutation,
@@ -196,15 +199,15 @@ export default function SuperAdminRolePermissionsPanel() {
     setRoleError("");
     const code = normalizeCode(roleCode);
     if (!/^ROLE_[A-Z0-9_]+$/.test(code)) {
-      setRoleError("Mã role cần bắt đầu bằng ROLE_ và chỉ gồm chữ in hoa, số hoặc dấu gạch dưới.");
+      setRoleError(localizedText("Mã role cần bắt đầu bằng ROLE_ và chỉ gồm chữ in hoa, số hoặc dấu gạch dưới.", "Role codes must start with ROLE_ and contain only uppercase letters, numbers, or underscores."));
       return;
     }
     if (roles.some((role) => role.code === code)) {
-      setRoleError(`Role ${code} đã tồn tại.`);
+      setRoleError(localizedText(`Role ${code} đã tồn tại.`, `Role ${code} already exists.`));
       return;
     }
     if (!roleName.trim()) {
-      setRoleError("Vui lòng nhập tên role.");
+      setRoleError(localizedText("Vui lòng nhập tên role.", "Enter a role name."));
       return;
     }
     try {
@@ -219,7 +222,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setIsAddRoleDialogOpen(false);
       setActiveStep("catalog");
     } catch (error) {
-      setRoleError(getErrorMessage(error, "Không thể tạo role. Vui lòng thử lại."));
+      setRoleError(getErrorMessage(error, localizedText("Không thể tạo role. Vui lòng thử lại.", "Could not create the role. Please try again.")));
     }
   };
 
@@ -229,15 +232,15 @@ export default function SuperAdminRolePermissionsPanel() {
     setCatalogMessage("");
     const code = normalizeCode(permissionCode);
     if (!/^[A-Z][A-Z0-9_.:-]*$/.test(code)) {
-      setCatalogError("Mã quyền phải bắt đầu bằng chữ và chỉ gồm chữ in hoa, số, dấu gạch dưới, chấm, hai chấm hoặc gạch ngang.");
+      setCatalogError(localizedText("Mã quyền phải bắt đầu bằng chữ và chỉ gồm chữ in hoa, số, dấu gạch dưới, chấm, hai chấm hoặc gạch ngang.", "Permission codes must start with a letter and contain only uppercase letters, numbers, underscores, periods, colons, or hyphens."));
       return;
     }
     if (!permissionName.trim()) {
-      setCatalogError("Vui lòng nhập tên quyền.");
+      setCatalogError(localizedText("Vui lòng nhập tên quyền.", "Enter a permission name."));
       return;
     }
     if (!permissionCategory.trim()) {
-      setCatalogError("Vui lòng nhập danh mục quyền.");
+      setCatalogError(localizedText("Vui lòng nhập danh mục quyền.", "Enter a permission category."));
       return;
     }
     try {
@@ -254,7 +257,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setCatalogMessage(`Đã tạo quyền ${code}.`);
       setIsAddPermissionDialogOpen(false);
     } catch (error) {
-      setCatalogError(getErrorMessage(error, "Không thể tạo quyền. Vui lòng thử lại."));
+      setCatalogError(getErrorMessage(error, localizedText("Không thể tạo quyền. Vui lòng thử lại.", "Could not create the permission. Please try again.")));
     }
   };
 
@@ -269,7 +272,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setCatalogFileMessage(`Đã nhập ${parsed.permissions.length} quyền từ ${file.name}.`);
       setIsAddPermissionDialogOpen(false);
     } catch (error) {
-      setCatalogFileError(getErrorMessage(error, "Không thể đọc file hoặc nhập danh mục quyền."));
+      setCatalogFileError(getErrorMessage(error, localizedText("Không thể đọc file hoặc nhập danh mục quyền.", "Could not read the file or import the permission catalog.")));
     } finally {
       setIsReadingFile(false);
       if (catalogFileInputRef.current) catalogFileInputRef.current.value = "";
@@ -319,7 +322,7 @@ export default function SuperAdminRolePermissionsPanel() {
       setImportMessage(`Đã nạp ${parsed.importedRowCount} dòng phân quyền từ ${file.name}.`);
       setActiveStep("overview");
     } catch (error) {
-      setImportError(getErrorMessage(error, "Không thể đọc file hoặc nạp quyền. Vui lòng thử lại."));
+      setImportError(getErrorMessage(error, localizedText("Không thể đọc file hoặc nạp quyền. Vui lòng thử lại.", "Could not read the file or load the permissions. Please try again.")));
     } finally {
       setIsReadingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -412,17 +415,18 @@ export default function SuperAdminRolePermissionsPanel() {
                 </p>
               </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                <label className="relative block w-full sm:w-64">
+                <div className="relative block w-full sm:w-64">
                   <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="search"
+                    type="text"
                     value={catalogSearch}
                     onChange={(event) => setCatalogSearch(event.target.value)}
                     placeholder="Tìm mã, tên hoặc danh mục..."
                     aria-label="Tìm quyền trong danh mục"
-                    className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
+                    className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400"
                   />
-                </label>
+                    <ClearSearchButton value={catalogSearch} onClear={() => setCatalogSearch("")} label="Xóa tìm kiếm" />
+                  </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -506,9 +510,9 @@ export default function SuperAdminRolePermissionsPanel() {
                   </details>
                 ))}
                 {filteredCatalogPermissions.length === 0 && (
-                  <p className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                  <FilterResultStatus filterKey={catalogSearch}><p className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
                     Không tìm thấy quyền phù hợp.
-                  </p>
+                  </p></FilterResultStatus>
                 )}
               </div>
             )}
@@ -1093,17 +1097,18 @@ export default function SuperAdminRolePermissionsPanel() {
                 </p>
               )}
               <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <label className="relative block min-w-0 flex-1 sm:max-w-sm">
+                <div className="relative block min-w-0 flex-1 sm:max-w-sm">
                   <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="search"
+                    type="text"
                     value={overviewSearch}
                     onChange={(event) => setOverviewSearch(event.target.value)}
                     placeholder="Tìm role hoặc quyền..."
                     aria-label="Tìm role hoặc quyền"
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400"
                   />
-                </label>
+                  <ClearSearchButton value={overviewSearch} onClear={() => setOverviewSearch("")} label="Xóa tìm kiếm" />
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowOnlyGranted((current) => !current)}
@@ -1228,9 +1233,9 @@ export default function SuperAdminRolePermissionsPanel() {
                       .some((value) => value.toLocaleLowerCase().includes(overviewSearch.trim().toLocaleLowerCase())),
                   );
                 }) && (
-                  <p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                  <FilterResultStatus filterKey={overviewSearch}><p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
                     Không tìm thấy role hoặc quyền phù hợp.
-                  </p>
+                  </p></FilterResultStatus>
                 )}
               </div>
             </div>

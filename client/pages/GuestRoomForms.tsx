@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Search, UserRound } from "lucide-react";
+import { LoaderCircle, RefreshCw, Search, UserRound } from "lucide-react";
 import { emitCustomerCreated } from "../lib/socket";
 import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazyGetCustomerByIdQuery, type CustomerResponse } from "../services/customerApi";
 import { useAppSelector } from "../store/hooks";
@@ -85,6 +85,8 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const [getCustomerById, { isFetching: isFindingCustomer }] = useLazyGetCustomerByIdQuery();
   const [customerQuery, setCustomerQuery] = useState("");
+  const [debouncedCustomerQuery, setDebouncedCustomerQuery] = useState("");
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
   const [customerListOpen, setCustomerListOpen] = useState(false);
   const customerListCloseTimeout = useRef<number | null>(null);
   const customerSearchInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +94,23 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   const [localRoomGuests, setLocalRoomGuests] = useState<Record<string, RoomGuestCounts>>({});
   const [createWalkInCustomer, { isLoading: isCreatingCustomer }] = useCreateWalkInCustomerMutation();
   const guestFieldsLocked = customerLocked || Boolean(guest.customerId);
+
+  useEffect(() => {
+    if (!customerQuery.trim()) {
+      setDebouncedCustomerQuery("");
+      setIsSearchingCustomers(false);
+      return;
+    }
+
+    setIsSearchingCustomers(true);
+    const timeout = window.setTimeout(() => {
+      setDebouncedCustomerQuery(customerQuery);
+      setIsSearchingCustomers(false);
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [customerQuery]);
+
   useEffect(() => {
     if (focusCustomerSearch && !guestFieldsLocked) {
       customerSearchInputRef.current?.focus();
@@ -117,13 +136,13 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     };
   }, []);
 
-  const search = normalizeSearchText(customerQuery);
-  const phoneSearch = customerQuery.replace(/\D/g, "");
+  const search = normalizeSearchText(debouncedCustomerQuery);
+  const phoneSearch = debouncedCustomerQuery.replace(/\D/g, "");
   const matches = search
     ? customers.filter((customer) => (
       normalizeSearchText(customer.name).includes(search)
       || (phoneSearch.length > 0
-        && /^[+\d\s()-]+$/.test(customerQuery)
+        && /^[+\d\s()-]+$/.test(debouncedCustomerQuery)
         && customer.phone.replace(/\D/g, "").includes(phoneSearch))
     ))
     : customers;
@@ -213,8 +232,7 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     }
   };
   const totalCapacityFor = (room: GuestRoom) => Math.max(0, Number(room.guests ?? 0) + Number(room.maxExtraGuests ?? 0));
-  const isEmptyValue = (value: string) => !value.trim();
-  const requiredGuestField = (value: string) => isEmptyValue(value) ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-violet-400 focus:ring-violet-100";
+  const requiredGuestFieldClass = "border-slate-200 focus:border-violet-400 focus:ring-violet-100";
   const getRoomLimits = (room: GuestRoom) => ({
     adults: totalCapacityFor(room),
     children: totalCapacityFor(room),
@@ -299,8 +317,10 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
             placeholder={t("booking.searchCustomerPlaceholder")}
             className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
           />
-          {isFindingCustomer && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{t("booking.guestSearchLoading")}</span>
+          {(isSearchingCustomers || isFindingCustomer) && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-500" role="status" aria-label={t("booking.guestSearchLoading")}>
+              <LoaderCircle size={16} className="animate-spin" />
+            </span>
           )}
         </div>
         {customerListOpen && !customerLocked && (
@@ -309,6 +329,11 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
               <p className="px-3 py-3 text-sm text-slate-500">{t("booking.customerListLoading")}</p>
             ) : isCustomersError ? (
               <p className="px-3 py-3 text-sm text-rose-600">{t("booking.customerListError")}</p>
+            ) : isSearchingCustomers ? (
+              <p className="flex items-center gap-2 px-3 py-3 text-sm text-slate-500" role="status">
+                <LoaderCircle size={15} className="animate-spin text-violet-500" />
+                {t("booking.guestSearchLoading")}
+              </p>
             ) : matches.length === 0 ? (
               <p className="px-3 py-3 text-sm text-slate-500">{t(search ? "booking.customerListNoMatches" : "booking.customerListEmpty")}</p>
             ) : (
@@ -342,15 +367,15 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.fullName")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.name} disabled={guestFieldsLocked} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.name)}`} />
+          <input value={guest.name} disabled={guestFieldsLocked} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestFieldClass}`} />
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.phone")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.phone} disabled={guestFieldsLocked} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.phone)}`} />
+          <input value={guest.phone} disabled={guestFieldsLocked} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestFieldClass}`} />
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.identityNumber")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.identityNumber} disabled={guestFieldsLocked} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestField(guest.identityNumber)}`} />
+          <input value={guest.identityNumber} disabled={guestFieldsLocked} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestFieldClass}`} />
         </label>
       </div>
       {!guest.emailOnFile && (

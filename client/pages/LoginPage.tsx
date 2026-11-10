@@ -6,8 +6,10 @@ import { useAppDispatch } from "../store/hooks";
 import { getRolesFromToken, setCredentials } from "../store/authSlice";
 import { useNavigate } from "react-router-dom";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../components/ui/input-otp";
+import { localizedText } from "../i18n";
 
 type LoginPageProps = { onLogin: () => void };
+type ErrorField = "email" | "password" | "otp" | "newPassword" | "confirmPassword";
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [login, { isLoading }] = useLoginMutation();
@@ -19,15 +21,21 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<{ field: ErrorField; message: string } | null>(null);
   const [view, setView] = useState<"login" | "requestOtp" | "resetPassword">("login");
   const [otp, setOtp] = useState("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [otpSecondsRemaining, setOtpSecondsRemaining] = useState(300);
   const [isOtpLocked, setIsOtpLocked] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [notice, setNotice] = useState("");
+
+  const clearFieldError = (field: ErrorField) => {
+    setFieldError((current) => current?.field === field ? null : current);
+  };
 
   useEffect(() => {
     if (sessionStorage.getItem("credentials-updated") === "true") {
@@ -36,10 +44,34 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
   }, []);
 
+  useEffect(() => {
+    if (view !== "resetPassword" || otpExpiresAt === null) return;
+
+    const updateRemainingTime = () => {
+      setOtpSecondsRemaining(Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000)));
+    };
+    updateRemainingTime();
+    const intervalId = window.setInterval(updateRemainingTime, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [otpExpiresAt, view]);
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
+    setFieldError(null);
     setNotice("");
+    const emailInput = e.currentTarget.elements.namedItem("email");
+    if (!email.trim()) {
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email.", "Enter your email address.") });
+      return;
+    }
+    if (emailInput instanceof HTMLInputElement && emailInput.validity.typeMismatch) {
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email hợp lệ.", "Enter a valid email address.") });
+      return;
+    }
+    if (!password) {
+      setFieldError({ field: "password", message: localizedText("Vui lòng nhập mật khẩu.", "Enter your password.") });
+      return;
+    }
     try {
       const result = await login({ email, password }).unwrap();
       localStorage.setItem("id", String(result.id));
@@ -50,45 +82,73 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     } catch (err: any) {
       // err.data là phần "data" mà axiosBaseQuery trả về khi lỗi
       const message =
-        err?.data?.message ?? "Đăng nhập thất bại, vui lòng thử lại";
-      setError(message);
+        err?.data?.message ?? localizedText("Đăng nhập thất bại, vui lòng thử lại.", "Sign-in failed. Please try again.");
+      setFieldError({ field: "password", message });
     }
   };
 
   const sendPasswordResetOtp = async () => {
-    setError(null);
+    setFieldError(null);
     setNotice("");
     try {
       await requestPasswordReset({ email: email.trim() }).unwrap();
       setView("resetPassword");
       setOtp("");
       setIsOtpLocked(false);
+      setOtpExpiresAt(Date.now() + 5 * 60 * 1000);
+      setOtpSecondsRemaining(300);
       setNotice(`Mã OTP đã được gửi đến ${email.trim()}. Mã có hiệu lực trong 5 phút.`);
     } catch (err: any) {
-      setError(err?.data?.message ?? "Không thể gửi mã OTP. Vui lòng kiểm tra email và thử lại.");
+      setFieldError({
+        field: "email",
+        message: err?.data?.message ?? localizedText("Không thể gửi mã OTP. Vui lòng kiểm tra email và thử lại.", "Could not send the OTP. Check your email address and try again."),
+      });
     }
   };
 
   const handleRequestOtp = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setFieldError(null);
+    setNotice("");
+    const emailInput = e.currentTarget.elements.namedItem("email");
+    if (!email.trim()) {
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email.", "Enter your email address.") });
+      return;
+    }
+    if (emailInput instanceof HTMLInputElement && emailInput.validity.typeMismatch) {
+      setFieldError({ field: "email", message: localizedText("Vui lòng nhập email hợp lệ.", "Enter a valid email address.") });
+      return;
+    }
     await sendPasswordResetOtp();
   };
 
   const handleResetPassword = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isOtpLocked) return;
-    setError(null);
+    setFieldError(null);
     setNotice("");
+    if (otpSecondsRemaining === 0) {
+      setFieldError({ field: "otp", message: localizedText("Mã OTP đã hết hạn. Vui lòng gửi lại mã OTP.", "The OTP has expired. Request a new one.") });
+      return;
+    }
     if (!/^\d{6}$/.test(otp)) {
-      setError("Vui lòng nhập mã OTP gồm 6 chữ số.");
+      setFieldError({ field: "otp", message: localizedText("Vui lòng nhập mã OTP gồm 6 chữ số.", "Enter the 6-digit OTP.") });
+      return;
+    }
+    if (!newPassword) {
+      setFieldError({ field: "newPassword", message: localizedText("Vui lòng nhập mật khẩu mới.", "Enter a new password.") });
       return;
     }
     if (newPassword.length < 6) {
-      setError("Mật khẩu mới cần có ít nhất 6 ký tự.");
+      setFieldError({ field: "newPassword", message: localizedText("Mật khẩu mới cần có ít nhất 6 ký tự.", "The new password must be at least 6 characters.") });
+      return;
+    }
+    if (!confirmPassword) {
+      setFieldError({ field: "confirmPassword", message: localizedText("Vui lòng xác nhận mật khẩu mới.", "Confirm your new password.") });
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
+      setFieldError({ field: "confirmPassword", message: localizedText("Mật khẩu xác nhận không khớp.", "The passwords do not match.") });
       return;
     }
     try {
@@ -107,16 +167,22 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     } catch (err: any) {
       if (err?.data?.code === 2053) {
         setIsOtpLocked(true);
-        setError("Bạn đã nhập sai OTP 3 lần. Mã đã bị khóa, vui lòng gửi lại mã OTP để thử tiếp.");
+        setFieldError({
+          field: "otp",
+          message: localizedText("Bạn đã nhập sai OTP 3 lần. Mã đã bị khóa, vui lòng gửi lại mã OTP để thử tiếp.", "You entered the wrong OTP 3 times. This code is locked; request a new OTP to continue."),
+        });
         return;
       }
-      setError(err?.data?.message ?? "Không thể đặt lại mật khẩu. Vui lòng kiểm tra OTP và thử lại.");
+      setFieldError({
+        field: "otp",
+        message: err?.data?.message ?? localizedText("Không thể đặt lại mật khẩu. Vui lòng kiểm tra OTP và thử lại.", "Could not reset the password. Check the OTP and try again."),
+      });
     }
   };
 
   const goToLogin = () => {
     setView("login");
-    setError(null);
+    setFieldError(null);
     setNotice("");
   };
 
@@ -165,27 +231,28 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-950">Đăng nhập tài khoản</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">Sử dụng email công việc để tiếp tục quản lý khách sạn.</p>
             </div>
-            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+            <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
               <label className="block text-sm font-semibold text-slate-700">
                 Email công việc
                 <div className="relative mt-2">
                   <Mail size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" />
-                  <input type="email" autoComplete="username" required value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} placeholder="nhanvien@senviet.vn" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-4 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+                  <input name="email" type="email" autoComplete="username" required value={email} onChange={(event) => { setEmail(event.target.value); clearFieldError("email"); }} placeholder="nhanvien@senviet.vn" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-4 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
                 </div>
+                {fieldError?.field === "email" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}
               </label>
               <label className="block text-sm font-semibold text-slate-700">
                 Mật khẩu
                 <div className="relative mt-2">
                   <LockKeyhole size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" />
-                  <input type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} placeholder="Nhập mật khẩu" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+                  <input type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(event) => { setPassword(event.target.value); clearFieldError("password"); }} placeholder="Nhập mật khẩu" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />
                   <button type="button" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => setShowPassword((visible) => !visible)} className="absolute right-3 top-3 rounded-md p-1 text-slate-400 hover:text-slate-700">{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
                 </div>
+                {fieldError?.field === "password" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}
               </label>
               <div className="flex items-center justify-between text-xs">
                 <label className="flex items-center gap-2 text-slate-500"><input type="checkbox" defaultChecked className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />Ghi nhớ đăng nhập</label>
-                <button type="button" onClick={() => { setView("requestOtp"); setError(null); setNotice(""); }} className="font-semibold text-blue-700 hover:text-blue-900">Quên mật khẩu?</button>
+                <button type="button" onClick={() => { setView("requestOtp"); setFieldError(null); setNotice(""); }} className="font-semibold text-blue-700 hover:text-blue-900">Quên mật khẩu?</button>
               </div>
-              {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{error}</p>}
               {notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">{notice}</p>}
               <button type="submit" disabled={isLoading} className="group flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 text-sm font-bold text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-800 hover:shadow-blue-700/30 disabled:cursor-wait disabled:opacity-70">
                 {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
@@ -199,27 +266,33 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Quên mật khẩu?</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">Nhập email tài khoản. Chúng tôi sẽ gửi mã OTP để xác thực đặt lại mật khẩu.</p>
               </div>
-              <form onSubmit={handleRequestOtp} className="mt-8 space-y-5">
-                <label className="block text-sm font-semibold text-slate-700">Email tài khoản<div className="relative mt-2"><Mail size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input type="email" autoComplete="email" required value={email} onChange={(event) => { setEmail(event.target.value); setError(null); }} placeholder="nhanvien@senviet.vn" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-4 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /></div></label>
-                {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{error}</p>}
+              <form onSubmit={handleRequestOtp} noValidate className="mt-8 space-y-5">
+                <label className="block text-sm font-semibold text-slate-700">Email tài khoản<div className="relative mt-2"><Mail size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input name="email" type="email" autoComplete="email" required value={email} onChange={(event) => { setEmail(event.target.value); clearFieldError("email"); }} placeholder="nhanvien@senviet.vn" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-4 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /></div>{fieldError?.field === "email" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}</label>
                 <button type="submit" disabled={isRequestingOtp} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 text-sm font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70">{isRequestingOtp ? "Đang gửi mã OTP..." : "Gửi mã OTP"}<ArrowRight size={17} /></button>
               </form>
             </>}
             {view === "resetPassword" && <>
-              <button type="button" onClick={() => { setView("requestOtp"); setError(null); setNotice(""); }} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900"><ArrowLeft size={16} />Đổi email</button>
+              <button type="button" onClick={() => { setView("requestOtp"); setFieldError(null); setNotice(""); }} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900"><ArrowLeft size={16} />Đổi email</button>
               <div>
                 <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Xác thực OTP</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">Nhập mã 6 chữ số đã gửi đến <strong>{email}</strong>, sau đó tạo mật khẩu mới.</p>
               </div>
-              <form onSubmit={handleResetPassword} className="mt-7 space-y-5">
+              <form onSubmit={handleResetPassword} noValidate className="mt-7 space-y-5">
                 {notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">{notice}</p>}
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">Mã OTP</label>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label className="block text-sm font-semibold text-slate-700">Mã OTP</label>
+                    <p role="timer" aria-live="off" className={`text-xs font-semibold ${otpSecondsRemaining === 0 ? "text-rose-600" : "text-slate-500"}`}>
+                      {otpSecondsRemaining === 0
+                        ? "Mã OTP đã hết hạn"
+                        : `Mã có hiệu lực: ${String(Math.floor(otpSecondsRemaining / 60)).padStart(2, "0")}:${String(otpSecondsRemaining % 60).padStart(2, "0")}`}
+                    </p>
+                  </div>
                   <InputOTP
                     maxLength={6}
                     pattern="^[0-9]+$"
                     value={otp}
-                    onChange={(value) => { setOtp(value); setError(null); }}
+                    onChange={(value) => { setOtp(value); clearFieldError("otp"); }}
                     aria-label="Mã OTP gồm 6 chữ số"
                     containerClassName="justify-start"
                     disabled={isOtpLocked || isResettingPassword}
@@ -234,11 +307,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                       ))}
                     </InputOTPGroup>
                   </InputOTP>
+                  {fieldError?.field === "otp" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}
                 </div>
-                <label className="block text-sm font-semibold text-slate-700">Mật khẩu mới<div className="relative mt-2"><LockKeyhole size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input type={showNewPassword ? "text" : "password"} autoComplete="new-password" minLength={6} required value={newPassword} onChange={(event) => { setNewPassword(event.target.value); setError(null); }} placeholder="Ít nhất 6 ký tự" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /><button type="button" aria-label={showNewPassword ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"} onClick={() => setShowNewPassword((visible) => !visible)} className="absolute right-3 top-3 rounded-md p-1 text-slate-400 hover:text-slate-700">{showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>
-                <label className="block text-sm font-semibold text-slate-700">Xác nhận mật khẩu mới<div className="relative mt-2"><LockKeyhole size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={6} required value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); setError(null); }} placeholder="Nhập lại mật khẩu mới" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /><button type="button" aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"} onClick={() => setShowConfirmPassword((visible) => !visible)} className="absolute right-3 top-3 rounded-md p-1 text-slate-400 hover:text-slate-700">{showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>
-                {error && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{error}</p>}
-                <button type="submit" disabled={isResettingPassword || isOtpLocked || otp.length !== 6} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 text-sm font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">{isOtpLocked ? "Mã OTP đã bị khóa" : isResettingPassword ? "Đang xác thực..." : "Xác thực và đổi mật khẩu"}{!isOtpLocked && !isResettingPassword && <ArrowRight size={17} />}</button>
+                <label className="block text-sm font-semibold text-slate-700">Mật khẩu mới<div className="relative mt-2"><LockKeyhole size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input type={showNewPassword ? "text" : "password"} autoComplete="new-password" minLength={6} required value={newPassword} onChange={(event) => { setNewPassword(event.target.value); clearFieldError("newPassword"); }} placeholder="Ít nhất 6 ký tự" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /><button type="button" aria-label={showNewPassword ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"} onClick={() => setShowNewPassword((visible) => !visible)} className="absolute right-3 top-3 rounded-md p-1 text-slate-400 hover:text-slate-700">{showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>{fieldError?.field === "newPassword" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}</label>
+                <label className="block text-sm font-semibold text-slate-700">Xác nhận mật khẩu mới<div className="relative mt-2"><LockKeyhole size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={6} required value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearFieldError("confirmPassword"); }} placeholder="Nhập lại mật khẩu mới" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /><button type="button" aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"} onClick={() => setShowConfirmPassword((visible) => !visible)} className="absolute right-3 top-3 rounded-md p-1 text-slate-400 hover:text-slate-700">{showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>{fieldError?.field === "confirmPassword" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}</label>
+                <button type="submit" disabled={isResettingPassword || isOtpLocked || otpSecondsRemaining === 0 || otp.length !== 6 || !newPassword || !confirmPassword} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 text-sm font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">{isOtpLocked ? "Mã OTP đã bị khóa" : isResettingPassword ? "Đang xác thực..." : "Xác thực và đổi mật khẩu"}{!isOtpLocked && !isResettingPassword && <ArrowRight size={17} />}</button>
                 <button type="button" disabled={isRequestingOtp} onClick={() => void sendPasswordResetOtp()} className="w-full text-center text-xs font-semibold text-blue-700 hover:text-blue-900 disabled:opacity-50">{isRequestingOtp ? "Đang gửi lại mã..." : "Gửi lại mã OTP"}</button>
               </form>
             </>}

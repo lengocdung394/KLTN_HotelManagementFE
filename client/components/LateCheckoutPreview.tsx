@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Clock3, LogOut, Search } from "lucide-react";
 import { localizedText } from "../i18n";
+import ListPagination from "./ListPagination";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 
 export type LateCheckoutLevel = string;
 
@@ -43,12 +46,25 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
   const language = i18n.language;
   const [query, setQuery] = useState("");
   const [activeLevel, setActiveLevel] = useState<LateCheckoutLevel | "all">("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const levels = [...new Set(records.map((record) => record.level).filter(Boolean))];
   const counts = Object.fromEntries(levels.map((level) => [level, records.filter((record) => record.level === level).length])) as Record<LateCheckoutLevel, number>;
   const filteredRecords = records.filter((record) => {
     const searchMatches = `${record.room} ${record.guest} ${record.bookingId} ${record.level}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
     return searchMatches && (activeLevel === "all" || record.level === activeLevel);
   });
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRecords = filteredRecords.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, activeLevel, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <section className="border-b border-slate-100 bg-white px-4 py-4" aria-labelledby="late-checkout-title">
@@ -68,20 +84,22 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
             </button>
           ))}
         </div>
-        <label className="relative block w-full lg:max-w-xs">
+        <div className="relative block w-full lg:max-w-xs">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={localizedText("Tìm phòng, khách, mã booking", "Search room, guest, or booking ID")} aria-label={localizedText("Tìm phòng check-out trễ", "Search late check-out rooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-        </label>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={localizedText("Tìm phòng, khách, mã booking", "Search room, guest, or booking ID")} aria-label={localizedText("Tìm phòng check-out trễ", "Search late check-out rooms")} className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          <ClearSearchButton value={query} onClear={() => setQuery("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
+        </div>
       </div>
       {isLoading ? (
         <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">{localizedText("Đang tải danh sách check-out...", "Loading check-out list...")}</p>
       ) : isError ? (
         <p role="alert" className="rounded-lg bg-rose-50 px-3 py-4 text-center text-sm text-rose-700">{localizedText("Không tải được danh sách check-out. Vui lòng thử lại.", "Could not load check-out list. Please try again.")}</p>
       ) : filteredRecords.length === 0 ? (
-        <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">{localizedText("Không có phòng check-out trễ.", "No late check-out rooms.")}</p>
+        <FilterResultStatus filterKey={JSON.stringify([query, activeLevel])}><p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">{localizedText("Không có phòng check-out trễ.", "No late check-out rooms.")}</p></FilterResultStatus>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full min-w-250 border-collapse text-left text-xs">
+        <>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-250 border-collapse text-left text-xs">
             <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-3 py-2.5">{localizedText("Phòng", "Room")}</th>
@@ -96,7 +114,7 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredRecords.map((record) => (
+              {paginatedRecords.map((record) => (
                 <tr key={record.recordId} className="text-slate-700 hover:bg-slate-50/70">
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">{record.room}</td>
                   <td className="whitespace-nowrap px-3 py-2.5">{record.guest}</td>
@@ -110,8 +128,10 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+          <ListPagination totalItems={filteredRecords.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
+        </>
       )}
     </section>
   );

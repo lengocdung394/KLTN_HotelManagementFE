@@ -3,9 +3,6 @@ import {
   Banknote,
   CalendarDays,
   Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CreditCard,
   Eye,
   Pencil,
@@ -19,8 +16,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/use-toast";
+import ClearSearchButton from "../components/ClearSearchButton";
+import DatePickerPopover from "../components/DatePickerPopover";
+import FilterSelect from "../components/FilterSelect";
+import FilterResultStatus from "../components/FilterResultStatus";
+import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import BankSelectionField from "../components/BankSelectionField";
 import {
   useGetBookingsByHotelQuery,
@@ -32,6 +33,7 @@ import { useCreatePaymentQrMutation, useGetPaymentStatusQuery, usePayWithCashMut
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useCancelBookingByStaffMutation, useGetBookingCancellationPreviewQuery } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import ListPagination from "../components/ListPagination";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import i18n, { localizedText } from "../i18n";
@@ -56,6 +58,16 @@ const valueOf = (item: BookingListItem, keys: string[]) => {
 
 const textOf = (item: BookingListItem, keys: string[], fallback = "-") =>
   String(valueOf(item, keys) ?? fallback);
+
+const parseDateFilterValue = (value: string) => {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateFilterValue = (date: Date | undefined) => date
+  ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  : "";
 
 const bookingAmount = (item: BookingListItem, keys: string[], fallback = 0) => {
   const value = valueOf(item, keys);
@@ -253,8 +265,6 @@ export default function BookingListWorkspace() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [statusSearch, setStatusSearch] = useState("");
-  const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
   const [dateSort, setDateSort] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -496,7 +506,7 @@ export default function BookingListWorkspace() {
   };
 
   const normalizedSearch = search.trim().toLowerCase();
-  const hasActiveFilters = Boolean(dateFrom || dateTo || statusFilter !== "ALL");
+  const hasActiveFilters = Boolean(search.trim() || dateFrom || dateTo || statusFilter !== "ALL");
   const statusOptions = [...new Set([...bookings
     .map((booking) => String(booking.bookingStatus ?? booking.status ?? "").trim().toUpperCase())
     .filter(Boolean),
@@ -504,6 +514,11 @@ export default function BookingListWorkspace() {
     "COMPLETED",
     "CANCELLED_BY_CUSTOMER",
   ])].sort();
+  const statusFilterOptions = [
+    { value: "ALL", label: localizedText("Tất cả trạng thái", "All statuses") },
+    { value: "__CANCELLED__", label: localizedText("Tất cả booking đã hủy", "All cancelled bookings") },
+    ...statusOptions.map((status) => ({ value: status, label: bookingStatusLabel(status) })),
+  ];
   const filteredBookings = bookings.filter((booking) => {
     const matchesSearch = JSON.stringify(booking).toLowerCase().includes(normalizedSearch);
     const bookingStatus = String(booking.bookingStatus ?? booking.status ?? "").trim().toUpperCase();
@@ -794,7 +809,7 @@ export default function BookingListWorkspace() {
     if (!selectedBooking) return;
     const id = bookingId(selectedBooking);
     if (!id || id === "-") {
-      setCancelError("Không tìm thấy mã booking để hủy.");
+      setCancelError(localizedText("Không tìm thấy mã booking để hủy.", "Could not find the booking ID to cancel."));
       return;
     }
     if (!cancellationPreview || cancellationPreview.bookingId !== id) {
@@ -802,7 +817,7 @@ export default function BookingListWorkspace() {
       return;
     }
     if (cancelRefundEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cancelRefundEmail.trim())) {
-      setCancelError("Vui lòng nhập email khách hàng hợp lệ.");
+      setCancelError(localizedText("Vui lòng nhập email khách hàng hợp lệ.", "Enter a valid guest email address."));
       return;
     }
     if (cancelRefundMethod === "CASH"
@@ -816,7 +831,10 @@ export default function BookingListWorkspace() {
       && (!cancelBankDetails.bankName.trim()
         || !cancelBankDetails.bankAccountName.trim()
         || !/^[0-9]{6,50}$/.test(cancelBankDetails.bankAccountNumber.trim()))) {
-      setCancelError("Nếu nhập thông tin hoàn tiền, vui lòng nhập tên ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ (6–50 chữ số).");
+      setCancelError(localizedText(
+        "Nếu nhập thông tin hoàn tiền, vui lòng nhập tên ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ (6–50 chữ số).",
+        "If providing refund details, enter a bank name, account holder name, and a valid account number (6–50 digits).",
+      ));
       return;
     }
     setCancelError("");
@@ -944,103 +962,58 @@ export default function BookingListWorkspace() {
 
       {/* Search Bar */}
       <div className="border-b border-slate-100 p-5">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_150px_150px_180px_170px_100px] xl:items-end">
-          <label className="relative block min-w-0">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_150px_150px_180px_170px_auto] xl:items-end">
+          <div className="relative min-w-0">
           <Search size={15} className="absolute left-3 top-3 text-slate-400" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={localizedText("Tìm mã booking, tên khách hàng...", "Search booking ID or guest name...")}
-            className="h-10 w-full min-w-0 rounded-lg border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400 transition-colors"
+            aria-label={localizedText("Tìm booking", "Search bookings")}
+            className="h-10 w-full min-w-0 rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400 transition-colors"
           />
-          </label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Từ ngày", "From")}<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Đến ngày", "To")}<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400" /></label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">
-            {localizedText("Trạng thái booking", "Booking status")}
-            <Popover
-              open={isStatusFilterOpen}
-              onOpenChange={(open) => {
-                setIsStatusFilterOpen(open);
-                if (!open) setStatusSearch("");
-              }}
-            >
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  role="combobox"
-                  aria-expanded={isStatusFilterOpen}
-                  aria-label={localizedText("Tìm và chọn trạng thái booking", "Search and select a booking status")}
-                  className="mt-1 flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:border-blue-300 focus:border-blue-400"
-                >
-                  <span className="truncate">
-                    {statusFilter === "ALL"
-                      ? localizedText("Tất cả trạng thái", "All statuses")
-                      : statusFilter === "__CANCELLED__"
-                        ? localizedText("Tất cả booking đã hủy", "All cancelled bookings")
-                        : bookingStatusLabel(statusFilter)}
-                  </span>
-                  <ChevronDown size={16} className="shrink-0 text-slate-400" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-0 p-0">
-                <Command shouldFilter>
-                  <CommandInput
-                    value={statusSearch}
-                    onValueChange={setStatusSearch}
-                    placeholder={localizedText("Tìm trạng thái...", "Search statuses...")}
-                    aria-label={localizedText("Tìm trạng thái booking", "Search booking statuses")}
-                  />
-                  <CommandList>
-                    <CommandEmpty>{localizedText("Không tìm thấy trạng thái.", "No statuses found.")}</CommandEmpty>
-                    <CommandItem
-                      value={`ALL ${localizedText("Tất cả trạng thái", "All statuses")}`}
-                      onSelect={() => {
-                        setStatusFilter("ALL");
-                        setIsStatusFilterOpen(false);
-                      }}
-                    >
-                      <Check size={16} className={`mr-2 ${statusFilter === "ALL" ? "opacity-100" : "opacity-0"}`} />
-                      {localizedText("Tất cả trạng thái", "All statuses")}
-                    </CommandItem>
-                    <CommandItem
-                      value={`__CANCELLED__ ${localizedText("Tất cả booking đã hủy", "All cancelled bookings")}`}
-                      onSelect={() => {
-                        setStatusFilter("__CANCELLED__");
-                        setIsStatusFilterOpen(false);
-                      }}
-                    >
-                      <Check size={16} className={`mr-2 ${statusFilter === "__CANCELLED__" ? "opacity-100" : "opacity-0"}`} />
-                      {localizedText("Tất cả booking đã hủy", "All cancelled bookings")}
-                    </CommandItem>
-                    {statusOptions.map((status) => (
-                      <CommandItem
-                        key={status}
-                        value={`${status} ${bookingStatusLabel(status)}`}
-                        onSelect={() => {
-                          setStatusFilter(status);
-                          setIsStatusFilterOpen(false);
-                        }}
-                      >
-                        <Check size={16} className={`mr-2 ${statusFilter === status ? "opacity-100" : "opacity-0"}`} />
-                        {bookingStatusLabel(status)}
-                      </CommandItem>
-                    ))}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </label>
-          <label className="block min-w-0 text-xs font-semibold text-slate-500">{localizedText("Sắp xếp", "Sort")}<select value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">{localizedText("Mới nhất trước", "Newest first")}</option><option value="asc">{localizedText("Cũ nhất trước", "Oldest first")}</option></select></label>
-          <button
-            type="button"
-            disabled={!hasActiveFilters}
-            aria-hidden={!hasActiveFilters}
-            onClick={() => { setDateFrom(""); setDateTo(""); setStatusFilter("ALL"); }}
-            className={`h-10 w-[100px] whitespace-nowrap rounded-lg border px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 ${hasActiveFilters ? "" : "invisible pointer-events-none"}`}
-          >
-            {localizedText("Xóa lọc", "Clear filters")}
-          </button>
+          <ClearSearchButton value={search} onClear={() => setSearch("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
+          </div>
+          <div className="min-w-0">
+            <DatePickerPopover
+              value={parseDateFilterValue(dateFrom)}
+              maxDate={parseDateFilterValue(dateTo)}
+              onChange={(date) => setDateFrom(formatDateFilterValue(date))}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              buttonClassName="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+              align="start"
+            />
+          </div>
+          <div className="min-w-0">
+            <DatePickerPopover
+              value={parseDateFilterValue(dateTo)}
+              minDate={parseDateFilterValue(dateFrom)}
+              onChange={(date) => setDateTo(formatDateFilterValue(date))}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              buttonClassName="flex h-10 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+              align="start"
+            />
+          </div>
+          <div className="min-w-0">
+            <SearchableFilter
+              value={statusFilter}
+              options={statusFilterOptions}
+              onChange={setStatusFilter}
+              searchPlaceholder={localizedText("Tìm trạng thái...", "Search statuses...")}
+              emptyMessage={localizedText("Không tìm thấy trạng thái.", "No statuses found.")}
+              ariaLabel={localizedText("Tìm và chọn trạng thái booking", "Search and select a booking status")}
+              className="w-full"
+            />
+          </div>
+          <div className="min-w-0">
+            <FilterSelect aria-label={localizedText("Sắp xếp", "Sort")} value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">{localizedText("Mới nhất trước", "Newest first")}</option><option value="asc">{localizedText("Cũ nhất trước", "Oldest first")}</option></FilterSelect>
+          </div>
+          <div className="flex items-end">
+            {hasActiveFilters && <FilterResetButton
+              onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setStatusFilter("ALL"); }}
+              label={localizedText("Xóa tất cả bộ lọc", "Clear all filters")}
+            />}
+          </div>
         </div>
       </div>
 
@@ -1049,10 +1022,9 @@ export default function BookingListWorkspace() {
         <p className="p-8 text-center text-sm text-slate-500">{localizedText("Đang tải danh sách booking...", "Loading bookings...")}</p>
       ) : isError ? (
         <p className="p-8 text-center text-sm text-rose-600">{localizedText("Không thể tải danh sách booking của chi nhánh.", "Could not load this branch's bookings.")}</p>
-      ) : filteredBookings.length === 0 ? (
-        <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có booking phù hợp.", "No matching bookings found.")}</p>
       ) : (
-        <>
+        <FilterResultStatus filterKey={JSON.stringify([search, dateFrom, dateTo, statusFilter, dateSort])}>
+        {filteredBookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có booking phù hợp.", "No matching bookings found.")}</p> : <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-max text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
@@ -1150,49 +1122,9 @@ export default function BookingListWorkspace() {
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filteredBookings.length)} trên{" "}
-              {filteredBookings.length} booking
-            </span>
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2">
-                Số dòng
-                <select
-                  value={pageSize}
-                  onChange={(event) => setPageSize(Number(event.target.value))}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                disabled={safePage === 1}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Trang trước"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="min-w-16 text-center font-semibold text-slate-700">
-                {safePage} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                disabled={safePage === totalPages}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Trang sau"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        </>
+          <ListPagination totalItems={filteredBookings.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
+        </>}
+        </FilterResultStatus>
       )}
 
       {/* ========================================== */}

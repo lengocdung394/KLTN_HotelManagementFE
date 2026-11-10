@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, ChevronLeft, ChevronRight, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
+import { CalendarDays, Copy, Eye, Pencil, Plus, Search, Tag, X } from "lucide-react";
+import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { useGetHotelReportQuery } from "../services/reportApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterResultStatus from "../components/FilterResultStatus";
 
 type PromotionFormValues = {
   name: string;
@@ -45,6 +50,7 @@ const initialForm: PromotionFormValues = {
 };
 
 const optionalNumber = (value: string) => value.trim() ? Number(value) : undefined;
+type PromotionFormField = keyof PromotionFormValues;
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const promotionDateKey = (value: string) => {
   const isoDate = value.trim().match(/^\d{4}-\d{2}-\d{2}/)?.[0];
@@ -58,6 +64,8 @@ const isPromotionExpired = (promotion: Promotion) => {
   const endDate = new Date(promotion.endDate).getTime();
   return status === "EXPIRED" || (Number.isFinite(endDate) && endDate < Date.now());
 };
+
+const isPromotionUsed = (promotion: Promotion) => Number(promotion.usedCount ?? 0) > 0;
 
 const promotionStatusOf = (promotion: Promotion): PromotionStatus => {
   if (isPromotionExpired(promotion)) return "EXPIRED";
@@ -127,6 +135,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const [detailPromotion, setDetailPromotion] = useState<Promotion | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
   const [form, setForm] = useState<PromotionFormValues>(initialForm);
+  const [formErrors, setFormErrors] = useState<Partial<Record<PromotionFormField, string>>>({});
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [formError, setFormError] = useState("");
   const pendingLocalPromotionName = useRef("");
@@ -134,6 +143,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const [pageSize, setPageSize] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | PromotionStatus>("ALL");
+  const [scopeFilter, setScopeFilter] = useState<"ALL" | PromotionScope>("ALL");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [isDateFilterActive, setIsDateFilterActive] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -159,6 +169,22 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const locale = i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN";
   const monthStartKey = dateKey(calendarMonth);
   const monthEndKey = dateKey(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0));
+  const {
+    data: promotionUsageReport,
+    isLoading: isPromotionUsageLoading,
+    isError: isPromotionUsageError,
+  } = useGetHotelReportQuery({
+    startDate: monthStartKey,
+    endDate: monthEndKey,
+    ...(isSystemAdmin && selectedBranchId
+      ? { hotelId: Number(selectedBranchId) }
+      : !isSystemAdmin && hasHotelId
+        ? { hotelId: Number(hotelId) }
+        : {}),
+  }, { skip: !hasHotelId && !isSystemAdmin });
+  const promotionSavingsById = new Map(
+    (promotionUsageReport?.promotions ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
+  );
   const promotionDateMarkers = useMemo(() => {
     const markers: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">> = {};
     displayedPromotions.forEach((promotion) => {
@@ -194,10 +220,11 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("vi-VN");
   const visiblePromotions = dateFilteredPromotions.filter((promotion) => {
     const matchesStatus = statusFilter === "ALL" || promotionStatusOf(promotion) === statusFilter;
+    const matchesScope = scopeFilter === "ALL" || promotionScopeOf(promotion) === scopeFilter;
     const matchesSearch = `${promotion.name} ${promotion.code} ${promotion.description} ${promotion.type}`
       .toLocaleLowerCase("vi-VN")
       .includes(normalizedSearchQuery);
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesScope && matchesSearch;
   });
   const totalPages = Math.max(1, Math.ceil(visiblePromotions.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -229,7 +256,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
 
   useEffect(() => {
     setPage(1);
-  }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate, searchQuery, statusFilter]);
+  }, [displayedPromotions.length, pageSize, calendarMonth, isDateFilterActive, selectedDate, searchQuery, statusFilter, scopeFilter]);
 
   useEffect(() => {
     if (!hasHotelId && !isSystemAdmin) return;
@@ -289,15 +316,30 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const formatValue = (promotion: Promotion) => isPercentageDiscount(promotion.valueType) ? `${promotion.value}%` : `${promotion.value.toLocaleString("vi-VN")}đ`;
   const copyCode = (code: string) => { navigator.clipboard?.writeText(code); setCopied(code); window.setTimeout(() => setCopied(null), 1500); };
   const label = (key: string, options?: Record<string, string>) => t(`promotion.${key}`, options);
+  const requiredMinimumField: PromotionFormField = form.type === "ROOM"
+    ? "minRoomValue"
+    : form.type === "SERVICE" ? "minServiceValue" : "minBookingValue";
+  const updateFormField = <K extends PromotionFormField>(field: K, value: PromotionFormValues[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setFormErrors((current) => {
+      const next = { ...current };
+      delete next[field];
+      if (field === "startDate") delete next.endDate;
+      return next;
+    });
+    setFormError("");
+  };
   const openCreatePromotion = () => {
     setEditingPromotion(null);
     setForm(initialForm);
+    setFormErrors({});
     setTargetHotelId("");
     setImageFile(null);
     setFormError("");
     setModalOpen(true);
   };
   const openEditPromotion = (promotion: Promotion) => {
+    if (isPromotionExpired(promotion) || isPromotionUsed(promotion)) return;
     const scope = String(promotion.type ?? "TOTAL").toUpperCase();
     const discountType = String(promotion.valueType ?? "PERCENTAGE").toUpperCase();
     const status = String(promotion.status ?? (promotion.active ? "ACTIVE" : "INACTIVE")).toUpperCase();
@@ -321,19 +363,44 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
     });
     setImageFile(null);
     setFormError("");
+    setFormErrors({});
     setModalOpen(true);
   };
   const addPromotion = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError("");
-
-    if (new Date(form.startDate).getTime() >= new Date(form.endDate).getTime()) {
-      setFormError(label("invalidDateRange"));
-      return;
+    const errors: Partial<Record<PromotionFormField, string>> = {};
+    if (!form.name.trim()) errors.name = label("fieldRequired", { field: label("programName") });
+    if (!form.startDate) errors.startDate = label("fieldRequired", { field: label("fromDate") });
+    if (!form.endDate) errors.endDate = label("fieldRequired", { field: label("toDate") });
+    if (form.startDate && form.endDate && new Date(form.startDate).getTime() >= new Date(form.endDate).getTime()) {
+      errors.endDate = label("invalidDateRange");
     }
     const discountValue = Number(form.discountValue);
     if (!Number.isFinite(discountValue) || discountValue <= 0 || (form.discountType === "PERCENTAGE" && discountValue > 100)) {
-      setFormError(label("invalidDiscountValue"));
+      errors.discountValue = label("invalidDiscountValue");
+    }
+    const minimumFields = ["minBookingValue", "minRoomValue", "minServiceValue"] as const;
+    for (const field of minimumFields) {
+      const value = form[field];
+      if (field === requiredMinimumField && !value.trim()) {
+        errors[field] = label("fieldRequired", { field: label(field) });
+      } else if (value.trim() && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+        errors[field] = label("invalidMinimumAmount");
+      }
+    }
+    if (form.discountType === "PERCENTAGE") {
+      if (!form.maxDiscountAmount.trim()) {
+        errors.maxDiscountAmount = label("fieldRequired", { field: label("maxDiscountAmount") });
+      } else if (!Number.isFinite(Number(form.maxDiscountAmount)) || Number(form.maxDiscountAmount) <= 0) {
+        errors.maxDiscountAmount = label("invalidMaxDiscountAmount");
+      }
+    }
+    if (form.usageLimit.trim() && (!Number.isInteger(Number(form.usageLimit)) || Number(form.usageLimit) < 1)) {
+      errors.usageLimit = label("invalidUsageLimit");
+    }
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
@@ -444,6 +511,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 p-4">
           <form
             onSubmit={addPromotion}
+            noValidate
             className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
           >
             <div className="flex items-start justify-between">
@@ -492,10 +560,11 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   )}
                   <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                     {label("programName")} <span className="text-rose-500">*</span>
-                    <input required value={form.name} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={label("exampleWeekendOffer")} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
+                    <input value={form.name} maxLength={200} onChange={(event) => updateFormField("name", event.target.value)} placeholder={label("exampleWeekendOffer")} aria-invalid={Boolean(formErrors.name)} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal ${formErrors.name ? "border-rose-400" : "border-slate-200"}`} />
+                    {formErrors.name && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.name}</span>}
                   </label>
                   <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                    {label("description")} <span className="text-rose-500">*</span>
+                    {label("description")} <span className="text-xs font-normal text-slate-400">({label("optional")})</span>
                     <textarea value={form.description} maxLength={2000} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder={label("descriptionPlaceholder")} className="mt-1.5 min-h-20 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal" />
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
@@ -508,7 +577,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     </select>
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
-                    {label("image")} <span className="text-rose-500">*</span>
+                    {label("image")} <span className="text-xs font-normal text-slate-400">({label("optional")})</span>
                     <input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-sm font-normal text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
                   </label>
                 </div>
@@ -522,7 +591,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-semibold text-slate-700">
                     {label("scope")} <span className="text-rose-500">*</span>
-                    <select required value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as PromotionScope })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal">
+                    <select value={form.type} onChange={(event) => { setForm({ ...form, type: event.target.value as PromotionScope }); setFormErrors({}); }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal">
                       <option value="ROOM">{label("scopeRoom")}</option>
                       <option value="SERVICE">{label("scopeService")}</option>
                       <option value="TOTAL">{label("scopeTotal")}</option>
@@ -533,6 +602,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     <select value={form.discountType} onChange={(event) => {
                       const discountType = event.target.value as PromotionDiscountType;
                       setForm({ ...form, discountType, ...(discountType === "FIXED_AMOUNT" ? { maxDiscountAmount: "" } : {}) });
+                      setFormErrors((current) => ({ ...current, discountValue: undefined, maxDiscountAmount: undefined }));
                     }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal">
                       <option value="PERCENTAGE">{label("percentage")}</option>
                       <option value="FIXED_AMOUNT">{label("fixedAmount")}</option>
@@ -541,16 +611,18 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   <label className="text-sm font-semibold text-slate-700">
                     {label("discountValue")} <span className="text-rose-500">*</span>
                     <div className="relative mt-1.5">
-                      <input required type="number" min="0.01" max={form.discountType === "PERCENTAGE" ? "100" : undefined} step="0.01" value={form.discountValue} onChange={(event) => setForm({ ...form, discountValue: event.target.value })} className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 text-sm font-normal" />
+                    <input type="number" min="0.01" max={form.discountType === "PERCENTAGE" ? "100" : undefined} step="0.01" value={form.discountValue} onChange={(event) => updateFormField("discountValue", event.target.value)} aria-invalid={Boolean(formErrors.discountValue)} className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm font-normal ${formErrors.discountValue ? "border-rose-400" : "border-slate-200"}`} />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">{form.discountType === "PERCENTAGE" ? "%" : "đ"}</span>
                     </div>
+                  {formErrors.discountValue && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.discountValue}</span>}
                   </label>
                   {form.discountType === "PERCENTAGE" && <label className="text-sm font-semibold text-slate-700">
-                    {label("maxDiscountAmount")}
+                    {label("maxDiscountAmount")} <span className="text-rose-500">*</span>
                     <div className="relative mt-1.5">
-                      <input type="number" min="0" step="0.01" value={form.maxDiscountAmount} onChange={(event) => setForm({ ...form, maxDiscountAmount: event.target.value })} className="h-10 w-full rounded-lg border border-slate-200 px-3 pr-10 text-sm font-normal" />
+                      <input type="number" min="0.01" step="0.01" value={form.maxDiscountAmount} onChange={(event) => updateFormField("maxDiscountAmount", event.target.value)} aria-invalid={Boolean(formErrors.maxDiscountAmount)} className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm font-normal ${formErrors.maxDiscountAmount ? "border-rose-400" : "border-slate-200"}`} />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">đ</span>
                     </div>
+                    {formErrors.maxDiscountAmount && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.maxDiscountAmount}</span>}
                   </label>}
                 </div>
               </section>
@@ -561,33 +633,35 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   <p className="mt-1 text-xs text-slate-500">{label("sectionConditionsDescription")}</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
+                  {([requiredMinimumField, ...(["minBookingValue", "minRoomValue", "minServiceValue"] as const).filter((field) => field !== requiredMinimumField)]).map((field) => {
+                    const isRequired = field === requiredMinimumField;
+                    return <label key={field} className="text-sm font-semibold text-slate-700">
+                      {label(field)} {isRequired
+                        ? <span className="text-rose-500">*</span>
+                        : <span className="text-xs font-normal text-slate-400">({label("optional")})</span>}
+                      <input type="number" min="0" step="0.01" value={form[field]} onChange={(event) => updateFormField(field, event.target.value)} aria-invalid={Boolean(formErrors[field])} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal ${formErrors[field] ? "border-rose-400" : "border-slate-200"}`} />
+                      {formErrors[field] && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors[field]}</span>}
+                    </label>;
+                  })}
                   <label className="text-sm font-semibold text-slate-700">
-                    {label("minBookingValue")} <span className="text-rose-500">*</span>
-                    <input type="number" min="0" step="0.01" value={form.minBookingValue} onChange={(event) => setForm({ ...form, minBookingValue: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">
-                    {label("minRoomValue")} <span className="text-rose-500">*</span>
-                    <input type="number" min="0" step="0.01" value={form.minRoomValue} onChange={(event) => setForm({ ...form, minRoomValue: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">
-                    {label("minServiceValue")} <span className="text-rose-500">*</span>
-                    <input type="number" min="0" step="0.01" value={form.minServiceValue} onChange={(event) => setForm({ ...form, minServiceValue: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-700">
-                    {label("usageLimit")} <span className="text-rose-500">*</span>
-                    <input type="number" min="1" step="1" value={form.usageLimit} onChange={(event) => setForm({ ...form, usageLimit: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />
+                    {label("usageLimit")} <span className="text-xs font-normal text-slate-400">({label("optional")})</span>
+                    <input type="number" min="1" step="1" value={form.usageLimit} onChange={(event) => updateFormField("usageLimit", event.target.value)} aria-invalid={Boolean(formErrors.usageLimit)} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal ${formErrors.usageLimit ? "border-rose-400" : "border-slate-200"}`} />
+                    {formErrors.usageLimit && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.usageLimit}</span>}
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
                     {label("fromDate")} <span className="text-rose-500">*</span>
-                    <input required type="datetime-local" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal" />
+                    <input type="datetime-local" value={form.startDate} onChange={(event) => updateFormField("startDate", event.target.value)} aria-invalid={Boolean(formErrors.startDate)} className={`mt-1.5 h-10 w-full rounded-lg border bg-white px-3 text-sm font-normal ${formErrors.startDate ? "border-rose-400" : "border-slate-200"}`} />
+                    {formErrors.startDate && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.startDate}</span>}
                   </label>
                   <label className="text-sm font-semibold text-slate-700">
                     {label("toDate")} <span className="text-rose-500">*</span>
-                    <input required type="datetime-local" min={form.startDate || undefined} value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal" />
+                    <input type="datetime-local" min={form.startDate || undefined} value={form.endDate} onChange={(event) => updateFormField("endDate", event.target.value)} aria-invalid={Boolean(formErrors.endDate)} className={`mt-1.5 h-10 w-full rounded-lg border bg-white px-3 text-sm font-normal ${formErrors.endDate ? "border-rose-400" : "border-slate-200"}`} />
+                    {formErrors.endDate && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.endDate}</span>}
                   </label>
                 </div>
               </section>
             </div>
+            {Object.keys(formErrors).length > 0 && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{label("formHasErrors")}</p>}
             {formError && <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{formError}</p>}
             <div className="mt-6 flex justify-end gap-2">
               <button
@@ -778,29 +852,51 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
             <span className="sr-only">{label("searchPromotion")}</span>
             <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              type="search"
+              type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={label("searchPromotion")}
               className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             />
-            {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={label("clearSearch")} className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={15} /></button>}
+            <ClearSearchButton value={searchQuery} onClear={() => setSearchQuery("")} label={t("common.clearSearch")} />
           </label>
-          <label>
-            <span className="sr-only">{label("status")}</span>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-              aria-label={label("status")}
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-48"
-            >
-              <option value="ALL">{label("allPromotionStatuses")}</option>
-              <option value="DRAFT">{label("statusDraft")}</option>
-              <option value="ACTIVE">{label("statusActive")}</option>
-              <option value="INACTIVE">{label("statusInactive")}</option>
-              <option value="EXPIRED">{label("statusExpired")}</option>
-            </select>
-          </label>
+          <SearchableFilter
+            ariaLabel={label("scope")}
+            searchPlaceholder={label("searchScopeFilter")}
+            emptyMessage={label("noFilterOptions")}
+            value={scopeFilter}
+            onChange={(value) => setScopeFilter(value as typeof scopeFilter)}
+            className="w-full sm:w-44"
+            options={[
+              { value: "ALL", label: label("allPromotionScopes") },
+              { value: "ROOM", label: label("scopeRoom") },
+              { value: "SERVICE", label: label("scopeService") },
+              { value: "TOTAL", label: label("scopeTotal") },
+            ]}
+          />
+          <SearchableFilter
+            ariaLabel={label("status")}
+            searchPlaceholder={label("searchStatusFilter")}
+            emptyMessage={label("noFilterOptions")}
+            value={statusFilter}
+            onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+            className="w-full sm:w-48"
+            options={[
+              { value: "ALL", label: label("allPromotionStatuses") },
+              { value: "DRAFT", label: label("statusDraft") },
+              { value: "ACTIVE", label: label("statusActive") },
+              { value: "INACTIVE", label: label("statusInactive") },
+              { value: "EXPIRED", label: label("statusExpired") },
+            ]}
+          />
+          {(searchQuery || scopeFilter !== "ALL" || statusFilter !== "ALL") && <FilterResetButton
+            label={t("common.resetFilter")}
+            onClick={() => {
+              setSearchQuery("");
+              setScopeFilter("ALL");
+              setStatusFilter("ALL");
+            }}
+          />}
           </div>
         </div>
         {isLoading ? (
@@ -820,144 +916,113 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
             Chi nhánh chưa có khuyến mãi.
           </p>
         ) : visiblePromotions.length === 0 ? (
-          <p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery || statusFilter !== "ALL" ? label("noPromotionsMatchingFilters") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p>
+          <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter, scopeFilter, selectedDate, isDateFilterActive])}><p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery || statusFilter !== "ALL" || scopeFilter !== "ALL" ? label("noPromotionsMatchingFilters") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p></FilterResultStatus>
         ) : (
           <>
-            <div className="divide-y divide-slate-100">
-              {paginatedPromotions.map((promotion) => {
-                const scope = promotionScopeOf(promotion);
-                const status = promotionStatusOf(promotion);
-                return (
-                <article
-                  key={promotion.id}
-                  className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(410px,auto)] lg:items-center"
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className={`grid h-10 w-10 place-items-center rounded-xl ${scopeColorClasses[scope]}`}>
-                      <Tag size={18} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="font-bold text-slate-900">
-                          {promotion.name}
-                        </h4>
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${scopeColorClasses[scope]}`}>
-                          {label(scopeLabelKeys[scope])}
-                        </span>
-                        {promotion.code ? (
-                          <button
-                            type="button"
-                            onClick={() => copyCode(promotion.code)}
-                            title={label("copyCode")}
-                            className="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600"
-                          >
-                            <Copy size={11} />
-                            {copied === promotion.code ? label("copied") : promotion.code}
-                          </button>
-                        ) : <span className="text-xs text-slate-400">{label("codeGenerated")}</span>}
-                      </div>
-                      <p className="mt-1 truncate text-sm text-slate-500" title={promotion.description}>
-                        {promotion.description}
-                      </p>
-                      <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-                        <CalendarDays size={13} />
-                        {formatDate(promotion.startDate)} –{" "}
-                        {formatDate(promotion.endDate)}
-                      </p>
-                      <p className="mt-2 text-xs font-medium text-slate-500">
-                        {label("claimedCount")}: {(promotion.claimedCount ?? 0).toLocaleString(locale)}
-                        <span className="mx-2 text-slate-300">·</span>
-                        {label("usedCount")}: {(promotion.usedCount ?? 0).toLocaleString(locale)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[minmax(100px,1fr)_120px_120px_90px] lg:justify-items-stretch">
-                    <div className="min-w-0 text-right">
-                      <p className="text-xs text-slate-400">
-                        {label("offerLevel")}
-                      </p>
-                      <p className="mt-1 text-xl font-bold text-slate-900">
-                        {formatValue(promotion)}
-                      </p>
-                    </div>
-                    <div className="flex w-full justify-center">
-                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
-                        {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setDetailPromotion(promotion)}
-                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    >
-                      <Eye size={14} />
-                      {label("viewDetails")}
-                    </button>
-                    {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) ? <button
-                      type="button"
-                      onClick={() => openEditPromotion(promotion)}
-                      className="flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    >
-                      <Pencil size={14} />
-                      {label("edit")}
-                    </button> : <span aria-hidden="true" />}
-                  </div>
-                </article>
-                );
-              })}
-            </div>
-            {visiblePromotions.length > 0 && (
-              <div className="flex flex-col gap-3 border-t border-slate-100 p-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  {label("showingPromotions", {
-                    from: String((safePage - 1) * pageSize + 1),
-                    to: String(Math.min(safePage * pageSize, visiblePromotions.length)),
-                    total: String(visiblePromotions.length),
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
+                  <tr>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("programName")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("scope")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("validity")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("offerLevel")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("claimedCount")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("usedCount")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("usedValue")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{label("status")}</th>
+                    <th scope="col" className="whitespace-nowrap px-5 py-3 text-right">{label("actions")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedPromotions.map((promotion) => {
+                    const scope = promotionScopeOf(promotion);
+                    const status = promotionStatusOf(promotion);
+                    const expired = isPromotionExpired(promotion);
+                    const used = isPromotionUsed(promotion);
+                    const editDisabledReason = expired ? label("editDisabledExpired") : label("editDisabledUsed");
+                    return (
+                      <tr key={promotion.id} className="text-slate-700 transition hover:bg-slate-50/70">
+                        <td className="max-w-80 px-5 py-3">
+                          <p className="truncate font-semibold text-slate-900" title={promotion.name}>{promotion.name}</p>
+                          {promotion.description && <p className="mt-1 truncate text-xs text-slate-500" title={promotion.description}>{promotion.description}</p>}
+                          {promotion.code ? (
+                            <button
+                              type="button"
+                              onClick={() => copyCode(promotion.code)}
+                              title={label("copyCode")}
+                              className="mt-1 inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 transition hover:bg-slate-200"
+                            >
+                              <Copy size={11} />
+                              {copied === promotion.code ? label("copied") : promotion.code}
+                            </button>
+                          ) : <span className="mt-1 inline-block text-xs text-slate-400">{label("codeGenerated")}</span>}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${scopeColorClasses[scope]}`}>
+                            {label(scopeLabelKeys[scope])}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-slate-600">
+                          <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} className="text-slate-400" />{formatDate(promotion.startDate)} – {formatDate(promotion.endDate)}</span>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-right font-bold text-slate-900">{formatValue(promotion)}</td>
+                        <td className="px-5 py-3 text-right tabular-nums">{(promotion.claimedCount ?? 0).toLocaleString(locale)}</td>
+                        <td className="px-5 py-3 text-right tabular-nums">{(promotion.usedCount ?? 0).toLocaleString(locale)}</td>
+                        <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
+                          {isPromotionUsageLoading
+                            ? "…"
+                            : isPromotionUsageError
+                              ? "—"
+                              : `${(promotionSavingsById.get(promotion.id) ?? 0).toLocaleString(locale)}${locale === "en-US" ? " VND" : "đ"}`}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
+                            {label(`status${status.charAt(0)}${status.slice(1).toLowerCase()}`)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <div className="grid grid-cols-[80px_96px] justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setDetailPromotion(promotion)}
+                              className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-blue-200 px-2 py-2 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"
+                            >
+                              <Eye size={14} />
+                              {label("viewDetails")}
+                            </button>
+                            {canManagePromotions && (isSystemAdmin || promotion.hotelId != null) ? (
+                              <span
+                                className="block"
+                                title={expired || used ? editDisabledReason : undefined}
+                                aria-label={expired || used ? editDisabledReason : undefined}
+                                tabIndex={expired || used ? 0 : undefined}
+                              >
+                                <button
+                                  type="button"
+                                  disabled={expired || used}
+                                  onClick={() => openEditPromotion(promotion)}
+                                  className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-200 px-2 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-60 disabled:hover:border-slate-200 disabled:hover:bg-slate-100"
+                                >
+                                  <Pencil size={16} className="shrink-0" aria-hidden="true" />
+                                  {label("edit")}
+                                </button>
+                              </span>
+                            ) : <span aria-hidden="true" />}
+                          </div>
+                        </td>
+                      </tr>
+                    );
                   })}
-                </span>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2">
-                    Số dòng
-                    <select
-                      value={pageSize}
-                      onChange={(event) =>
-                        setPageSize(Number(event.target.value))
-                      }
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700"
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPage((current) => Math.max(1, current - 1))
-                    }
-                    disabled={safePage === 1}
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang trước"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <span className="min-w-16 text-center font-semibold text-slate-700">
-                    {safePage} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPage((current) => Math.min(totalPages, current + 1))
-                    }
-                    disabled={safePage === totalPages}
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang sau"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
+                </tbody>
+              </table>
+            </div>
+            {isPromotionUsageError && (
+              <p role="alert" className="border-t border-rose-100 px-5 py-3 text-xs text-rose-700">
+                {label("usageValueLoadError")}
+              </p>
             )}
+            <ListPagination totalItems={visiblePromotions.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
           </>
         )}
       </section>

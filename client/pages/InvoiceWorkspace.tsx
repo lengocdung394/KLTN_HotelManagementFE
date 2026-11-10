@@ -1,7 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CalendarDays, FileText, LoaderCircle, Search } from "lucide-react";
+import { AlertTriangle, FileText, LoaderCircle, Search } from "lucide-react";
 import CheckoutInvoice from "../components/CheckoutInvoice";
+import ClearSearchButton from "../components/ClearSearchButton";
+import DatePickerPopover from "../components/DatePickerPopover";
+import FilterResultStatus from "../components/FilterResultStatus";
+import { FilterResetButton } from "../components/SearchableFilter";
+import ListPagination from "../components/ListPagination";
 import { localizedText } from "../i18n";
 import { useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
 import { useAppSelector } from "../store/hooks";
@@ -18,6 +23,16 @@ const getTodayDateInputValue = () => {
   const day = String(today.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
+
+const parseDateInputValue = (value: string) => {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateInputValue = (date: Date | undefined) => date
+  ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  : "";
 
 const formatCreatedDate = (createdAt: unknown, language: string) => {
   const date = getCreatedDate(createdAt);
@@ -77,6 +92,8 @@ export default function InvoiceWorkspace() {
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const [query, setQuery] = useState("");
   const [createdDate, setCreatedDate] = useState(getTodayDateInputValue);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
   const {
     data: bookings = [],
@@ -105,6 +122,17 @@ export default function InvoiceWorkspace() {
     })
     .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""))),
   [bookings, createdDate, query]);
+  const totalPages = Math.max(1, Math.ceil(completedBookings.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedBookings = completedBookings.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [createdDate, query, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -121,35 +149,31 @@ export default function InvoiceWorkspace() {
       </header>
 
       <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:flex-row sm:items-center">
-        <label className="relative block w-full sm:max-w-sm sm:flex-1">
+        <div className="relative block w-full sm:max-w-sm sm:flex-1">
           <Search size={15} className="absolute left-3 top-3 text-slate-400" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={localizedText("Tìm mã booking, mã đơn, tên khách hoặc số phòng", "Search booking ID, order ID, guest name, or room")}
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            aria-label={localizedText("Tìm hóa đơn", "Search invoices")}
+            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-10 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
-        </label>
+          <ClearSearchButton value={query} onClear={() => setQuery("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
+        </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <label className="relative flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
-            <CalendarDays size={15} className="text-slate-400" />
-            <span>{localizedText("Ngày tạo", "Created")}</span>
-            <input
-              type="date"
-              value={createdDate}
-              onChange={(event) => setCreatedDate(event.target.value)}
-              aria-label={localizedText("Lọc hóa đơn theo ngày tạo booking", "Filter invoices by booking creation date")}
-              className="min-w-0 bg-transparent text-xs text-slate-700 outline-none"
-            />
-          </label>
+          <span className="text-xs font-semibold text-slate-600">{localizedText("Ngày tạo", "Created")}</span>
+          <DatePickerPopover
+            value={parseDateInputValue(createdDate)}
+            onChange={(date) => setCreatedDate(formatDateInputValue(date))}
+            placeholder={localizedText("Chọn ngày", "Select date")}
+            buttonClassName="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+            align="end"
+          />
           {createdDate && (
-            <button
-              type="button"
+            <FilterResetButton
               onClick={() => setCreatedDate("")}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-            >
-              {localizedText("Xóa lọc ngày", "Clear date filter")}
-            </button>
+              label={localizedText("Xóa lọc ngày", "Clear date filter")}
+            />
           )}
         </div>
       </div>
@@ -172,7 +196,7 @@ export default function InvoiceWorkspace() {
       )}
 
       {!isLoading && !isError && completedBookings.length === 0 && (
-        <div className="p-10 text-center">
+        <FilterResultStatus filterKey={JSON.stringify([query, createdDate])}><div className="p-10 text-center">
           <FileText size={26} className="mx-auto text-slate-300" />
           <p className="mt-3 text-sm font-semibold text-slate-700">
             {bookings.length === 0
@@ -184,7 +208,7 @@ export default function InvoiceWorkspace() {
           <p className="mt-1 text-xs text-slate-400">
             {localizedText("Booking còn phòng đang lưu trú sẽ chưa được hiển thị thành hóa đơn.", "Bookings with rooms still occupied will not appear as invoices yet.")}
           </p>
-        </div>
+        </div></FilterResultStatus>
       )}
 
       {!isLoading && !isError && completedBookings.length > 0 && (
@@ -202,7 +226,7 @@ export default function InvoiceWorkspace() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {completedBookings.map((booking) => {
+              {paginatedBookings.map((booking) => {
                 const bookingId = String(booking.bookingId ?? booking.id ?? "—");
                 const details = getBookingDetails(booking);
                 const total = booking.finalAmount ?? (
@@ -250,6 +274,9 @@ export default function InvoiceWorkspace() {
             </tbody>
           </table>
         </div>
+      )}
+      {!isLoading && !isError && (
+        <ListPagination totalItems={completedBookings.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
       )}
 
       {selectedBooking && (

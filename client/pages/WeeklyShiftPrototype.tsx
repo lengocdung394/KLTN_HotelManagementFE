@@ -1044,8 +1044,45 @@ export default function WeeklyShiftPrototype() {
         </article>
       </div>
 
-      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_176px]">
-        <section className="order-2 min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 xl:order-1">
+      <div className="sticky top-16 z-30 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-md backdrop-blur">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h3 className="font-bold text-slate-900">
+              {localizedText("Chọn màu ca", "Shift colors")}
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {copyCellSource
+                ? localizedText(
+                    "Đã sao chép trạng thái ô. Chọn ô đích; bấm màu để hủy sao chép.",
+                    "Cell state copied. Choose a target; click a color to cancel.",
+                  )
+                : localizedText(
+                    "Bấm ô đã xếp ca để sao chép trạng thái; chọn màu để xếp ca mới.",
+                    "Click an assigned cell to copy its state; choose a color to assign a new shift.",
+                  )}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {toolOptions.map((option) => (
+              <button
+                type="button"
+                key={option.code}
+                onClick={() => {
+                  setSelectedTool(option.code);
+                  setCopyCellSource(null);
+                }}
+                aria-pressed={!copyCellSource && selectedTool === option.code}
+                className={`flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-left transition ${!copyCellSource && selectedTool === option.code ? "border-blue-600 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+              >
+                <span className={`h-5 w-5 shrink-0 rounded-md border ${option.swatch}`} />
+                <span className="text-xs font-semibold text-slate-800">{option.label}</span>
+                <span className="text-[11px] text-slate-500">{option.detail}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <section className="min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           <div className="min-w-[700px] space-y-2 xl:min-w-0">
             <div
               id="weekly-shift-assignment-grid"
@@ -1226,52 +1263,7 @@ export default function WeeklyShiftPrototype() {
               </div>
             ))}
           </div>
-        </section>
-        <aside className="order-1 space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm xl:sticky xl:top-4 xl:order-2">
-          <div>
-            <h3 className="font-bold text-slate-900">
-              {localizedText("Chọn màu ca", "Shift colors")}
-            </h3>
-            <p className="mt-1 text-xs text-slate-500">
-              {copyCellSource
-                ? localizedText(
-                    "Đã sao chép trạng thái ô. Chọn ô đích; bấm màu để hủy sao chép.",
-                    "Cell state copied. Choose a target; click a color to cancel.",
-                  )
-                : localizedText(
-                    "Bấm ô đã xếp ca để sao chép trạng thái; chọn màu để xếp ca mới.",
-                    "Click an assigned cell to copy its state; choose a color to assign a new shift.",
-                  )}
-            </p>
-          </div>
-          <div className="grid gap-2">
-            {toolOptions.map((option) => (
-              <button
-                type="button"
-                key={option.code}
-                onClick={() => {
-                  setSelectedTool(option.code);
-                  setCopyCellSource(null);
-                }}
-                aria-pressed={!copyCellSource && selectedTool === option.code}
-                className={`flex min-h-12 items-center gap-2 rounded-lg border px-3 py-2 text-left transition ${!copyCellSource && selectedTool === option.code ? "border-blue-600 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-              >
-                <span
-                  className={`h-5 w-5 shrink-0 rounded-md border ${option.swatch}`}
-                />
-                <span>
-                  <span className="block text-xs font-semibold text-slate-800">
-                    {option.label}
-                  </span>
-                  <span className="block text-[11px] text-slate-500">
-                    {option.detail}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </aside>
-      </div>
+      </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <span

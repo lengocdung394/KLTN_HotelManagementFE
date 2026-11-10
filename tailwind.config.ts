@@ -68,7 +68,8 @@ export default {
       },
       fontFamily: {
         sans: ["DM Sans", "sans-serif"],
-        display: ["DM Sans", "sans-serif"],
+        serif: ["Playfair Display", "serif"],
+        display: ["Playfair Display", "serif"],
       },
       boxShadow: {
         card: "0 8px 24px rgba(40, 35, 63, 0.05)",

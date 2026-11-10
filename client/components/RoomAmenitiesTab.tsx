@@ -1,6 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Search, Save, X } from "lucide-react";
+import ListPagination from "./ListPagination";
+import ClearSearchButton from "./ClearSearchButton";
+import FilterResultStatus from "./FilterResultStatus";
 import type { AmenityResponse } from "../services/amenityApi";
+import { localizedText } from "../i18n";
 
 type RoomAmenitiesTabProps = {
   amenities: AmenityResponse[];
@@ -23,11 +27,24 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   const [createForm, setCreateForm] = useState({ name: "", price: "" });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const normalizedSearch = normalizeText(search);
   const filteredAmenities = useMemo(
     () => amenities.filter((amenity) => !normalizedSearch || normalizeText(amenity.name).includes(normalizedSearch)),
     [amenities, normalizedSearch],
   );
+  const totalPages = Math.max(1, Math.ceil(filteredAmenities.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedAmenities = filteredAmenities.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [normalizedSearch, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const closeEditor = () => setEditingAmenity(null);
   const closeCreateForm = () => {
@@ -37,14 +54,19 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   const saveNewAmenity = async () => {
     const name = createForm.name.trim();
     const price = Number(createForm.price);
-    if (!name || !createForm.price || !Number.isFinite(price) || price < 0) return;
+    if (!name || !createForm.price || !Number.isFinite(price) || price < 0) {
+      setSaveError(!name
+        ? localizedText("Vui lòng nhập tên tiện ích.", "Enter an amenity name.")
+        : localizedText("Vui lòng nhập mức giá hợp lệ không âm.", "Enter a valid non-negative price."));
+      return;
+    }
     setIsSaving(true);
     setSaveError("");
     try {
       await onAdd({ name, price });
       closeCreateForm();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Không thể thêm tiện ích.");
+      setSaveError(error instanceof Error ? error.message : localizedText("Không thể thêm tiện ích.", "Could not add the amenity."));
     } finally {
       setIsSaving(false);
     }
@@ -54,14 +76,19 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
     if (!editingAmenity) return;
     const name = editForm.name.trim();
     const price = Number(editForm.price);
-    if (!name || !editForm.price || !Number.isFinite(price) || price < 0) return;
+    if (!name || !editForm.price || !Number.isFinite(price) || price < 0) {
+      setSaveError(!name
+        ? localizedText("Vui lòng nhập tên tiện ích.", "Enter an amenity name.")
+        : localizedText("Vui lòng nhập mức giá hợp lệ không âm.", "Enter a valid non-negative price."));
+      return;
+    }
     setIsSaving(true);
     setSaveError("");
     try {
       await onSave(editingAmenity, { name, price });
       closeEditor();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Không thể cập nhật tiện ích.");
+      setSaveError(error instanceof Error ? error.message : localizedText("Không thể cập nhật tiện ích.", "Could not update the amenity."));
     } finally {
       setIsSaving(false);
     }
@@ -80,10 +107,11 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
           </span>
         </div>
         <div className="w-full sm:w-72">
-          <label className="relative block">
+          <div className="relative block">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên tiện ích..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-          </label>
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên tiện ích..." aria-label="Tìm tiện ích" className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
+            <ClearSearchButton value={search} onClear={() => setSearch("")} label="Xóa tìm kiếm" />
+          </div>
         </div>
       </div>
       {canManage && (
@@ -96,7 +124,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
       ) : isError ? (
         <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách tiện nghi.</p>
       ) : filteredAmenities.length === 0 ? (
-        <p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p>
+        <FilterResultStatus filterKey={search}><p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p></FilterResultStatus>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-105 text-left text-sm">
@@ -108,7 +136,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredAmenities.map((amenity) => (
+              {paginatedAmenities.map((amenity) => (
                 <tr key={amenity.id} className="transition-colors hover:bg-blue-50/40">
                   <td className="px-4 py-4 font-medium text-slate-800">{amenity.name}</td>
                   <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-800">{money(amenity.price)}</td>
@@ -122,6 +150,9 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
             </tbody>
           </table>
         </div>
+      )}
+      {!isLoading && !isError && (
+        <ListPagination totalItems={filteredAmenities.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />
       )}
 
       {canManage && editingAmenity && (
