@@ -264,37 +264,43 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const monthLabel = calendarMonth.toLocaleDateString(locale, { month: "long", year: "numeric" });
   const summaryCards = [
     {
-      label: "Đang hoạt động",
+      label: t("promotion.active"),
       value: promotionSummary?.activePromotions,
       format: (value: number) => value.toLocaleString(locale),
       accent: true,
+      description: t("promotion.systemUpdatedData"),
     },
     {
-      label: `Lượt sử dụng tháng ${calendarMonth.getMonth() + 1}`,
+      label: t("promotion.usesInMonth", { month: calendarMonth.getMonth() + 1 }),
       value: promotionSummary?.monthlyUsageCount,
       format: (value: number) => value.toLocaleString(locale),
+      description: monthLabel,
     },
     {
-      label: "Tiết kiệm cho khách",
+      label: t("promotion.guestSavings"),
       value: promotionSummary?.monthlySavingsAmount,
-      format: (value: number) => `${value.toLocaleString(locale)}đ`,
+      format: (value: number) => new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency: "VND",
+        maximumFractionDigits: 0,
+      }).format(value),
+      description: monthLabel,
     },
     {
-      label: "Sắp hết hạn (7 ngày tới)",
+      label: t("promotion.expiringSoon"),
       value: promotionSummary?.expiringSoonPromotions,
       format: (value: number) => value.toLocaleString(locale),
+      description: t("promotion.systemUpdatedData"),
     },
   ];
   const summaryValues = summaryCards.map((card) => ({
     ...card,
     displayValue: isPromotionSummaryLoading
-      ? "Đang tải…"
+      ? t("promotion.loading")
       : isPromotionSummaryError || card.value === undefined
         ? "—"
         : card.format(card.value),
-    description: card.label === "Tiết kiệm cho khách" || card.label.startsWith("Lượt sử dụng")
-      ? monthLabel
-      : "Dữ liệu cập nhật từ hệ thống",
+    description: card.description,
   }));
 
   useEffect(() => {
@@ -343,11 +349,13 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       isLoading,
     });
   }, [hotelId, apiPromotions, promotions, displayedPromotions, isError, isLoading]);
-  const formatDate = (value: string) => value ? new Date(value).toLocaleDateString("vi-VN") : "Chưa cập nhật";
+  const formatDate = (value: string) => value
+    ? new Date(value).toLocaleDateString(locale)
+    : localizedText("Chưa cập nhật", "Not provided");
   const formatDateTime = (value: string) => {
-    if (!value) return "Chưa cập nhật";
+    if (!value) return localizedText("Chưa cập nhật", "Not provided");
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "Chưa cập nhật" : date.toLocaleString("vi-VN", {
+    return Number.isNaN(date.getTime()) ? localizedText("Chưa cập nhật", "Not provided") : date.toLocaleString(locale, {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -356,7 +364,9 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
     });
   };
   const toDateTimeInput = (value: string) => value ? value.replace(" ", "T").slice(0, 16) : "";
-  const formatValue = (promotion: Promotion) => isPercentageDiscount(promotion.valueType) ? `${promotion.value}%` : `${promotion.value.toLocaleString("vi-VN")}đ`;
+  const formatValue = (promotion: Promotion) => isPercentageDiscount(promotion.valueType)
+    ? `${promotion.value}%`
+    : `${promotion.value.toLocaleString(locale)}${locale === "en-US" ? " VND" : "đ"}`;
   const copyCode = (code: string) => { navigator.clipboard?.writeText(code); setCopied(code); window.setTimeout(() => setCopied(null), 1500); };
   const label = (key: string, options?: Record<string, string>) => t(`promotion.${key}`, options);
   const requiredMinimumField: PromotionFormField = form.type === "ROOM"
@@ -528,7 +538,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   return (
     <div className="mt-2 space-y-5">
       {isSystemAdmin ? (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê khuyến mãi">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={label("statistics")}>
           {summaryValues.map((card) => (
             <article key={card.label} className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
               <h3 className="border-b border-blue-100 bg-blue-50 px-5 py-3.5 text-xs font-semibold text-blue-800">{card.label}</h3>
@@ -540,7 +550,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
           ))}
         </section>
       ) : (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Thống kê khuyến mãi">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={label("statistics")}>
           {summaryValues.map((card) => (
             <div key={card.label} className={`rounded-xl border border-slate-200/80 p-4 shadow-sm ${card.accent ? "bg-[#28233f] text-white" : "bg-white"}`}>
               <p className={`text-xs font-medium ${card.accent ? "text-blue-200" : "text-slate-500"}`}>{card.label}</p>
@@ -552,9 +562,9 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       )}
       {isPromotionSummaryError && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          <span>Không tải được thống kê khuyến mãi.</span>
+          <span>{label("summaryLoadError")}</span>
           <button type="button" onClick={() => void refetchPromotionSummary()} className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-rose-100">
-            Thử tải lại
+            {label("retrySummary")}
           </button>
         </div>
       )}
@@ -845,14 +855,14 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             {isSystemAdmin && (
               <label className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                <span>Chi nhánh</span>
+                <span>{localizedText("Chi nhánh", "Branch")}</span>
                 <select
                   value={selectedBranchId}
                   onChange={(event) => setSelectedBranchId(event.target.value)}
-                  aria-label="Lọc khuyến mãi theo chi nhánh"
+                  aria-label={localizedText("Lọc khuyến mãi theo chi nhánh", "Filter promotions by branch")}
                   className="h-10 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 >
-                  <option value="">Tất cả chi nhánh</option>
+                  <option value="">{localizedText("Tất cả chi nhánh", "All branches")}</option>
                   {branches.map((branch) => (
                     <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}

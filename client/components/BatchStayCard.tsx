@@ -45,11 +45,11 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
   const colors = isCheckIn ? { border: "border-blue-200", background: "bg-blue-50/45", icon: "bg-blue-100 text-blue-700", button: "bg-blue-600 hover:bg-blue-700", selected: "border-blue-400 ring-blue-100", hover: "hover:border-blue-300", badge: "bg-blue-50 text-blue-700" } : { border: "border-amber-200", background: "bg-amber-50/45", icon: "bg-amber-100 text-amber-700", button: "bg-amber-600 hover:bg-amber-700", selected: "border-amber-400 ring-amber-100", hover: "hover:border-amber-300", badge: "bg-amber-50 text-amber-700" };
 
   const confirmedIds = new Set(selectedIds ?? []);
+  const pendingItemIds = items
+    .map((item) => item.id)
+    .filter((id) => !confirmedIds.has(id));
   const paymentStates = items.flatMap((item) => item.roomPaid === undefined ? [] : [item.roomPaid]);
   const groupRoomPaid = paymentStates.length > 0 ? paymentStates.every(Boolean) : undefined;
-  const availableIds = items
-    .map((item) => item.id)
-    .filter((id) => !confirmedIds.has(id) && !draftSelected.includes(id));
 
   const toggleDraft = (id: string) => {
     if (confirmedIds.has(id)) return;
@@ -59,24 +59,25 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
   const toggleSelectAll = () => {
     setDraftSelected((current) => {
       const next = new Set(current);
-      const allSelected = availableIds.every((id) => next.has(id));
+      const allSelected = pendingItemIds.every((id) => next.has(id));
 
       if (allSelected) {
-        availableIds.forEach((id) => next.delete(id));
+        pendingItemIds.forEach((id) => next.delete(id));
         return Array.from(next);
       }
 
-      availableIds.forEach((id) => next.add(id));
+      pendingItemIds.forEach((id) => next.add(id));
       return Array.from(next);
     });
   };
 
-  const hasDraftSelection = draftSelected.length > 0;
-  const selectedCount = draftSelected.length;
+  const pendingDraftSelected = draftSelected.filter((id) => !confirmedIds.has(id));
+  const hasDraftSelection = pendingDraftSelected.length > 0;
+  const selectedCount = pendingDraftSelected.length;
 
   const handleConfirm = () => {
     if (!hasDraftSelection) return;
-    onAction([...draftSelected]);
+    onAction(pendingDraftSelected);
     setDraftSelected([]);
   };
 
@@ -140,7 +141,6 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
               disabled={alreadyConfirmed}
               className={`flex min-h-[4.5rem] items-center gap-3 rounded-xl border p-4 text-left transition ${alreadyConfirmed ? "cursor-not-allowed border-emerald-200 bg-emerald-50/70 opacity-80" : selected ? `${colors.selected} bg-white ring-2` : `border-slate-200 bg-white ${colors.hover}`}`}
             >
-              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${alreadyConfirmed ? "bg-emerald-100 text-emerald-700" : colors.badge}`}>{item.badge || item.id.slice(-2)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-slate-800">{item.title}</span>
                 {item.subtitle && <span className="mt-0.5 block truncate text-xs text-slate-500">{item.subtitle}</span>}

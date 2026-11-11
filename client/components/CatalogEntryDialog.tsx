@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { FileSpreadsheet, Plus, X } from "lucide-react";
+import { localizedText } from "../i18n";
 
 export type CatalogEntryMode = "manual" | "file";
 
@@ -22,6 +24,8 @@ export default function CatalogEntryDialog({
   manualContent,
   fileContent,
 }: CatalogEntryDialogProps) {
+  useTranslation();
+
   return (
     <div
       className="fixed inset-0 z-70 grid place-items-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"
@@ -39,7 +43,7 @@ export default function CatalogEntryDialog({
             <h2 id="catalog-entry-title" className="font-serif text-lg font-bold text-slate-900">{title}</h2>
             <p className="mt-1 text-sm leading-5 text-slate-500">{description}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Đóng" className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+          <button type="button" onClick={onClose} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
             <X size={18} />
           </button>
         </header>
@@ -53,7 +57,7 @@ export default function CatalogEntryDialog({
                 mode === "manual" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Plus size={15} /> Tạo thủ công
+              <Plus size={15} /> {localizedText("Tạo thủ công", "Create manually")}
             </button>
             <button
               type="button"
@@ -63,7 +67,7 @@ export default function CatalogEntryDialog({
                 mode === "file" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <FileSpreadsheet size={15} /> Nhập từ Excel
+              <FileSpreadsheet size={15} /> {localizedText("Nhập từ Excel", "Import from Excel")}
             </button>
           </div>
           <div className="mt-4">{mode === "manual" ? manualContent : fileContent}</div>

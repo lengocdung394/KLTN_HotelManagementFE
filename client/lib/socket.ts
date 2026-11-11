@@ -74,6 +74,15 @@ type SuperAdminSocketHandlers = {
 let hotelSocketHandlers: HotelSocketHandlers = {};
 let superAdminSocketHandlers: SuperAdminSocketHandlers = {};
 let superAdminRoomRequested = false;
+type RefundRefreshSocketEvent =
+  | "room_update"
+  | "booking_state_updated"
+  | "new_booking_notification"
+  | "notification_created";
+const hotelSocketEventSubscribers = new Map<
+  RefundRefreshSocketEvent,
+  Set<(data: unknown) => void>
+>();
 const roomPolicyUpdatedSubscribers = new Set<(data: unknown) => void>();
 const dispatchRoomPolicyUpdated = (data: unknown) => {
   roomPolicyUpdatedSubscribers.forEach((handler) => handler(data));
@@ -408,6 +417,24 @@ const attachSuperAdminSocketHandlers = () => {
   });
 };
 
+export const subscribeHotelSocketEvents = (
+  events: readonly RefundRefreshSocketEvent[],
+  handler: (data: unknown) => void,
+) => {
+  events.forEach((event) => {
+    const subscribers = hotelSocketEventSubscribers.get(event) ?? new Set();
+    subscribers.add(handler);
+    hotelSocketEventSubscribers.set(event, subscribers);
+    socket?.on(event, handler);
+  });
+  return () => events.forEach((event) => {
+    socket?.off(event, handler);
+    const subscribers = hotelSocketEventSubscribers.get(event);
+    subscribers?.delete(handler);
+    if (subscribers?.size === 0) hotelSocketEventSubscribers.delete(event);
+  });
+};
+
 export const bindSuperAdminSocketEvents = (handlers: SuperAdminSocketHandlers) => {
   const previousHandlers = superAdminSocketHandlers;
   if (socket) {
@@ -495,6 +522,10 @@ export const initSocket = (token: string | null) => {
     query: { token },
     reconnection: true,
     reconnectionAttempts: 5,
+  });
+
+  hotelSocketEventSubscribers.forEach((handlers, event) => {
+    handlers.forEach((handler) => socket?.on(event, handler));
   });
 
   if (import.meta.env.DEV) {

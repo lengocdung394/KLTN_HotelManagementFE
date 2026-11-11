@@ -530,10 +530,12 @@ export default function RoomWorkspace() {
   const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
+  const [buildingNameError, setBuildingNameError] = useState("");
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [editingFloorId, setEditingFloorId] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
+  const [floorNameError, setFloorNameError] = useState("");
   const floorNumberInput = floorForm.name.trim();
   const floorNumberValue = Number(floorNumberInput);
   const isFloorNumberValid = floorNumberInput !== ""
@@ -1147,21 +1149,28 @@ export default function RoomWorkspace() {
   const openCreateBuildingModal = () => {
     setEditingBuildingId(null);
     setBuildingForm(emptyBuildingForm);
+    setBuildingNameError("");
     setShowCreateBuilding(true);
   };
   const openEditBuildingModal = (building: Building) => {
     setEditingBuildingId(building.id);
     setBuildingForm({ name: building.name, code: building.id });
+    setBuildingNameError("");
     setShowCreateBuilding(true);
   };
   const closeCreateBuildingModal = () => {
     setShowCreateBuilding(false);
     setEditingBuildingId(null);
     setBuildingForm(emptyBuildingForm);
+    setBuildingNameError("");
   };
   const saveBuilding = async () => {
     const name = buildingForm.name.trim();
-    if (!name) return;
+    if (!name) {
+      setBuildingNameError(localizedText("Vui lòng nhập tên tòa nhà.", "Enter a building name."));
+      return;
+    }
+    setBuildingNameError("");
     if (editingBuildingId) {
       try {
         await updateBuildingApi({ buildingId: editingBuildingId, body: { name } }).unwrap();
@@ -1210,6 +1219,7 @@ export default function RoomWorkspace() {
     }
     setEditingFloor(null);
     setFloorForm(emptyFloorForm);
+    setFloorNameError("");
     setShowCreateFloor(true);
   };
   const openEditFloorModal = (floor: string) => {
@@ -1225,6 +1235,7 @@ export default function RoomWorkspace() {
     setEditingFloor(floor);
     setEditingFloorId(floorId);
     setFloorForm({ name: floor });
+    setFloorNameError("");
     setShowCreateFloor(true);
   };
   const closeCreateFloorModal = () => {
@@ -1232,19 +1243,24 @@ export default function RoomWorkspace() {
     setEditingFloor(null);
     setEditingFloorId(null);
     setFloorForm(emptyFloorForm);
+    setFloorNameError("");
   };
   const saveFloor = async () => {
     const name = floorForm.name.trim();
-    if (!name || (!editingFloor && floors.includes(name))) return;
-    const floorNumber = Number(name);
-    if (!Number.isSafeInteger(floorNumber) || floorNumber < 1) {
-      toast({
-        variant: "destructive",
-        title: localizedText("Số tầng không hợp lệ", "Invalid floor number"),
-        description: localizedText("Vui lòng nhập số nguyên từ 1 trở lên.", "Enter a whole number greater than or equal to 1."),
-      });
+    if (!name) {
+      setFloorNameError(localizedText("Vui lòng nhập số tầng.", "Enter a floor number."));
       return;
     }
+    if (!editingFloor && floors.includes(name)) {
+      setFloorNameError(localizedText("Tầng này đã tồn tại trong tòa nhà.", "This floor already exists in the building."));
+      return;
+    }
+    const floorNumber = floorNumberValue;
+    if (!isFloorNumberValid) {
+      setFloorNameError(localizedText("Số tầng phải là số nguyên từ 1 trở lên.", "Floor number must be a whole number greater than or equal to 1."));
+      return;
+    }
+    setFloorNameError("");
     if (editingFloor) {
       if (!editingFloorId) {
         toast({
@@ -2185,10 +2201,17 @@ export default function RoomWorkspace() {
           <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
         <div className="mt-4 space-y-4">
-          <label className="block text-sm font-semibold text-slate-700">{localizedText("Tên tòa nhà", "Building name")} <span className="text-rose-500">*</span><input autoFocus value={buildingForm.name} onChange={(event) => setBuildingForm((current) => ({ ...current, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && buildingForm.name.trim()) void saveBuilding(); }} placeholder={localizedText("Ví dụ: Tòa Sunrise", "e.g. Sunrise Building")} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+          <label className="block text-sm font-semibold text-slate-700">
+            {localizedText("Tên tòa nhà", "Building name")} <span className="text-rose-500">*</span>
+            <input autoFocus value={buildingForm.name} onChange={(event) => {
+              setBuildingForm((current) => ({ ...current, name: event.target.value }));
+              setBuildingNameError("");
+            }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveBuilding(); } }} aria-invalid={Boolean(buildingNameError)} aria-describedby={buildingNameError ? "building-name-error" : undefined} placeholder={localizedText("Ví dụ: Tòa Sunrise", "e.g. Sunrise Building")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:ring-2 ${buildingNameError ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+            {buildingNameError && <span id="building-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{buildingNameError}</span>}
+          </label>
           {editingBuildingId && <label className="block text-sm font-semibold text-slate-700">{localizedText("Mã tòa nhà", "Building code")}<input value={buildingForm.code} readOnly className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>}
         </div>
-        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveBuilding()} disabled={!buildingForm.name.trim() || isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingBuilding || isUpdatingBuilding ? localizedText("Đang lưu...", "Saving...") : editingBuildingId ? localizedText("Lưu thay đổi", "Save changes") : localizedText("Tạo tòa nhà", "Create building")}</button><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button></div>
+        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveBuilding()} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{isCreatingBuilding || isUpdatingBuilding ? localizedText("Đang lưu...", "Saving...") : editingBuildingId ? localizedText("Lưu thay đổi", "Save changes") : localizedText("Tạo tòa nhà", "Create building")}</button><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button></div>
       </div>
     </div>}
     {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => { if (!isCreatingFloor && !isUpdatingFloor) closeCreateFloorModal(); }}>
@@ -2198,8 +2221,15 @@ export default function RoomWorkspace() {
           <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
         <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Tòa nhà", "Building")} <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Số tầng", "Floor number")} <span className="text-rose-500">*</span><input autoFocus type="number" min="1" step="1" value={floorForm.name} aria-invalid={Boolean(floorNumberInput) && !isFloorNumberValid} aria-describedby={floorNumberInput && !isFloorNumberValid ? "floor-number-error" : undefined} onChange={(event) => setFloorForm({ name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter" && isFloorNumberValid) void saveFloor(); }} placeholder={localizedText("Nhập số tầng từ 1 trở lên", "Enter a floor number from 1 or higher")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 ${floorNumberInput && !isFloorNumberValid ? "border-rose-400" : "border-slate-200"}`} />{floorNumberInput && !isFloorNumberValid && <span id="floor-number-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{localizedText("Số tầng phải là số nguyên từ 1 trở lên.", "Floor number must be a whole number greater than or equal to 1.")}</span>}</label>
-        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveFloor()} disabled={!isFloorNumberValid || !selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? localizedText("Đang lưu...", "Saving...") : t("common.save")}</button><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button></div>
+        <label className="mt-4 block text-sm font-semibold text-slate-700">
+          {localizedText("Số tầng", "Floor number")} <span className="text-rose-500">*</span>
+          <input autoFocus type="number" min="1" step="1" value={floorForm.name} aria-invalid={Boolean(floorNameError)} aria-describedby={floorNameError ? "floor-number-error" : undefined} onChange={(event) => {
+            setFloorForm({ name: event.target.value });
+            setFloorNameError("");
+          }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveFloor(); } }} placeholder={localizedText("Nhập số tầng từ 1 trở lên", "Enter a floor number from 1 or higher")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:ring-2 ${floorNameError ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+          {floorNameError && <span id="floor-number-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{floorNameError}</span>}
+        </label>
+        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveFloor()} disabled={!selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? localizedText("Đang lưu...", "Saving...") : t("common.save")}</button><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button></div>
       </div>
     </div>}
     {showCreateRoom && !editingRoomId && (

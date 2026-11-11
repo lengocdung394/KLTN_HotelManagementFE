@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, CircleUserRound, KeyRound, LoaderCircle, Save, ShieldCheck } from "lucide-react";
 import { useUpdateMyProfileMutation } from "../services/employeeApi";
 import {
@@ -14,6 +15,7 @@ type SuperAdminProfileSettingsProps = {
 };
 
 export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfileSettingsProps) {
+  useTranslation();
   const dispatch = useAppDispatch();
   const { fullName, email, position } = useAppSelector((state) => state.auth);
   const [updateMyProfile, { isLoading }] = useUpdateMyProfileMutation();
@@ -146,12 +148,12 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
           <CircleUserRound size={24} />
         </div>
         <div className="min-w-0">
-          <h2 className="text-lg font-bold text-slate-900">Thông tin cá nhân</h2>
-          <p className="mt-1 text-sm text-slate-500">Cập nhật hồ sơ và tài khoản Super Admin.</p>
+          <h2 className="text-lg font-bold text-slate-900">{localizedText("Thông tin cá nhân", "Personal information")}</h2>
+          <p className="mt-1 text-sm text-slate-500">{localizedText("Cập nhật hồ sơ và tài khoản Super Admin.", "Update your Super Admin profile and account.")}</p>
         </div>
         <span className="ml-auto hidden items-center gap-1.5 rounded-full border border-blue-100 bg-white/80 px-3 py-1.5 text-xs font-semibold text-blue-700 sm:inline-flex">
           <ShieldCheck size={14} />
-          Quản trị hệ thống
+          {localizedText("Quản trị hệ thống", "System administrator")}
         </span>
       </div>
 
@@ -162,13 +164,13 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               <CircleUserRound size={18} />
             </span>
             <div>
-              <h3 className="text-sm font-bold text-slate-800">Hồ sơ cá nhân</h3>
-              <p className="mt-0.5 text-xs text-slate-500">Bạn có thể cập nhật hồ sơ mà không cần đổi mật khẩu.</p>
+              <h3 className="text-sm font-bold text-slate-800">{localizedText("Hồ sơ cá nhân", "Personal profile")}</h3>
+              <p className="mt-0.5 text-xs text-slate-500">{localizedText("Bạn có thể cập nhật hồ sơ mà không cần đổi mật khẩu.", "You can update your profile without changing your password.")}</p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
-              Họ và tên
+              {localizedText("Họ và tên", "Full name")}
               <input
                 required
                 maxLength={150}
@@ -178,7 +180,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               />
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
-              Email đăng nhập
+              {localizedText("Email đăng nhập", "Login email")}
               <input
                 required
                 type="email"
@@ -196,15 +198,15 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               <KeyRound size={18} />
             </span>
             <div>
-              <h3 className="text-sm font-bold text-slate-800">Bảo mật tài khoản</h3>
+              <h3 className="text-sm font-bold text-slate-800">{localizedText("Bảo mật tài khoản", "Account security")}</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                Tên cập nhật riêng; đổi email cần mật khẩu mới. Có thể cấp lại mật khẩu và gửi mật khẩu mới qua email.
+                {localizedText("Tên cập nhật riêng; đổi email cần mật khẩu mới. Có thể cấp lại mật khẩu và gửi mật khẩu mới qua email.", "Your name can be updated separately. Changing your email requires a new password. You can also reset your password and receive it by email.")}
               </p>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1.5 text-sm font-semibold text-slate-700 sm:col-span-2">
-              Mật khẩu hiện tại {requiresCurrentPassword && <span className="text-rose-500">*</span>}
+              {localizedText("Mật khẩu hiện tại", "Current password")} {requiresCurrentPassword && <span className="text-rose-500">*</span>}
               <input
                 required={requiresCurrentPassword}
                 type="password"
@@ -215,7 +217,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               />
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
-              <span>Mật khẩu mới <span className="font-normal text-slate-400">(không bắt buộc)</span></span>
+              <span>{localizedText("Mật khẩu mới", "New password")} <span className="font-normal text-slate-400">({localizedText("không bắt buộc", "optional")})</span></span>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -226,7 +228,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               />
             </label>
             <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
-              Xác nhận mật khẩu mới
+              {localizedText("Xác nhận mật khẩu mới", "Confirm new password")}
               <input
                 type="password"
                 autoComplete="new-password"
@@ -239,11 +241,11 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
         </section>
 
         {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>}
-        {saved && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">Đã cập nhật thông tin cá nhân.</p>}
+        {saved && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{localizedText("Đã cập nhật thông tin cá nhân.", "Personal information updated.")}</p>}
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-xl text-xs leading-5 text-slate-500">
-            Đổi email cần đặt mật khẩu mới; đổi email hoặc mật khẩu sẽ đăng xuất bạn sau khi lưu.
+            {localizedText("Đổi email cần đặt mật khẩu mới; đổi email hoặc mật khẩu sẽ đăng xuất bạn sau khi lưu.", "Changing your email requires a new password. Changing your email or password will sign you out after saving.")}
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <button
@@ -253,7 +255,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
             >
               {isRequestingPasswordReset && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              {isRequestingPasswordReset ? "Đang cấp lại mật khẩu..." : "Cấp lại mật khẩu và đăng xuất"}
+              {isRequestingPasswordReset ? localizedText("Đang cấp lại mật khẩu...", "Resetting password...") : localizedText("Cấp lại mật khẩu và đăng xuất", "Reset password and sign out")}
             </button>
             <button
               type="submit"
@@ -261,7 +263,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
             >
               {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : saved ? <Check size={16} /> : <Save size={16} />}
-              {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
+              {isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu thay đổi", "Save changes")}
             </button>
           </div>
         </div>

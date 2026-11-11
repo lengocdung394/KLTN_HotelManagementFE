@@ -603,9 +603,9 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         setServiceImportValidationOnly(true);
         return true;
       }
-      if (!hotelName) throw new Error("Không xác định được tên chi nhánh để nhập dịch vụ hàng loạt.");
+      if (!hotelName) throw new Error(t("serviceWorkspace.importBranchUnknown"));
 
-      setServiceImportUploadProgress("Đang đọc ảnh dịch vụ trong file ZIP...");
+      setServiceImportUploadProgress(t("serviceWorkspace.importReadingImages"));
       const parsed = await parseServiceImportArchive(archiveFile);
       const validRowNumbers = new Set(validation.rows.filter((row) => row.passed).map((row) => row.rowNumber));
       const validServices = parsed.rows.filter((row) => validRowNumbers.has(row.rowNumber));
@@ -613,25 +613,28 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       validServices.forEach((service) => {
         const matches = parsed.images.get(service.imageFileName.toLocaleLowerCase()) ?? [];
         if (matches.length !== 1) {
-          throw new Error(`Không thể xác định duy nhất ảnh "${service.imageFileName}" ở dòng ${service.rowNumber}.`);
+          throw new Error(t("serviceWorkspace.importImageAmbiguous", {
+            image: service.imageFileName,
+            row: service.rowNumber,
+          }));
         }
         filesByName.set(service.imageFileName.toLocaleLowerCase(), matches[0]);
       });
 
       const imageFiles = [...filesByName.values()];
-      setServiceImportUploadProgress(`Đang tải ${imageFiles.length} ảnh dịch vụ lên Cloudinary...`);
+      setServiceImportUploadProgress(t("serviceWorkspace.importUploadingImages", { count: imageFiles.length }));
       const imageUrls = await uploadServiceImagesToCloudinary(imageFiles, hotelName, (uploaded, total) => {
-        setServiceImportUploadProgress(`Đang tải ảnh dịch vụ lên Cloudinary: ${uploaded}/${total}...`);
+        setServiceImportUploadProgress(t("serviceWorkspace.importUploadingImagesProgress", { uploaded, total }));
       });
       const request = {
         services: validServices.map((service) => {
           const imageUrl = imageUrls.get(service.imageFileName.toLocaleLowerCase());
-          if (!imageUrl) throw new Error(`Không tìm thấy URL Cloudinary cho ảnh "${service.imageFileName}".`);
+          if (!imageUrl) throw new Error(t("serviceWorkspace.importImageUrlMissing", { image: service.imageFileName }));
           return { ...service, imageUrl };
         }),
       };
 
-      setServiceImportUploadProgress("Đã tải ảnh xong. Đang gửi dữ liệu dịch vụ lên máy chủ...");
+      setServiceImportUploadProgress(t("serviceWorkspace.importSendingServices"));
       const taskId = await startServiceImport(request);
       setServiceImportTaskId(taskId);
       setServiceImportSocketStatus(undefined);
@@ -668,7 +671,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           ? `Tiến trình máy chủ hoàn tất. Có ${serviceImportRows.filter((row) => row.passed).length} dòng đạt kiểm tra và ${serviceImportRows.filter((row) => !row.passed).length} dòng cần xem lại trong thông báo góc phải dưới.`
           : `Đã thêm tất cả${addedCount === undefined ? "" : ` ${addedCount}`} dịch vụ cho bạn thành công!`,
     });
-  }, [dispatch, serviceImportRows]);
+  }, [dispatch, serviceImportRows, t]);
 
   return (
     <>
@@ -1341,19 +1344,19 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         validateFile={(file) =>
           file.name.toLocaleLowerCase() === "dichvu.zip"
             ? null
-            : "Vui lòng chọn đúng file dichvu.zip."
+              : t("serviceWorkspace.importWrongZip")
         }
         instructions={
           <>
-            <p className="font-bold">Cấu trúc file ZIP</p>
+            <p className="font-bold">{t("serviceWorkspace.importZipStructure")}</p>
             <pre className="my-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dichvu.zip
 └── dich-vu/
     ├── mau-nhap-dich-vu.xlsx
     └── images/
         ├── massage.jpg
         └── buffet.png`}</pre>
-            <p>Hãy đặt file Excel mẫu <strong>mau-nhap-dich-vu.xlsx</strong> và thư mục <strong>images</strong> cùng cấp trong một thư mục, rồi nén thư mục đó thành file <strong>dichvu.zip</strong>. ZIP có thể chứa thêm một thư mục bao bên ngoài.</p>
-            <p className="mt-2">Trong Excel, cột “Tên file ảnh” phải khớp với tên ảnh trong thư mục <strong>images</strong>, gồm cả phần đuôi, ví dụ <strong>massage.jpg</strong>. Không đổi tên các cột: Tên dịch vụ, Mô tả, Giá, Đơn vị, Danh mục, Tên file ảnh.</p>
+            <p>{t("serviceWorkspace.importZipInstruction")}</p>
+            <p className="mt-2">{t("serviceWorkspace.importImageColumnInstruction")}</p>
           </>
         }
         uploadLabel={t("serviceWorkspace.importServices")}

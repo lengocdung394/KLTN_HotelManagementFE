@@ -18,7 +18,7 @@ import { parseSuperAdminRolePermissionsFile } from "../lib/superAdminRolePermiss
 import { parseSuperAdminRolesFile } from "../lib/superAdminRolesImport";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
-import { localizedText } from "../i18n";
+import i18n, { localizedText } from "../i18n";
 import {
   useCreateSuperAdminPermissionMutation,
   useCreateSuperAdminRoleMutation,
@@ -61,17 +61,159 @@ const CATALOG_TABLE_COLUMNS = [
   { id: "actions", label: "Thao tác", width: 160 },
 ] as const;
 type CatalogTableColumnId = (typeof CATALOG_TABLE_COLUMNS)[number]["id"];
+const catalogColumnLabel = (id: CatalogTableColumnId) => ({
+  category: localizedText("Phân loại", "Category"),
+  name: localizedText("Tên quyền", "Permission name"),
+  code: localizedText("Mã quyền", "Permission code"),
+  description: localizedText("Mô tả", "Description"),
+  roles: localizedText("Vai trò được gán", "Assigned roles"),
+  actions: localizedText("Thao tác", "Actions"),
+}[id]);
 const ROLE_TABLE_COLUMNS = [
   { id: "name", label: "Tên vai trò", width: 180 },
   { id: "code", label: "Mã vai trò", width: 200 },
   { id: "description", label: "Mô tả", width: 240 },
-  { id: "count", label: "Quyền đã gán", width: 140 },
+  { id: "count", label: "Quyền đã gán", width: 200 },
   { id: "permissions", label: "Danh sách quyền", width: 740 },
 ] as const;
 type RoleTableColumnId = (typeof ROLE_TABLE_COLUMNS)[number]["id"];
+const roleColumnLabel = (id: RoleTableColumnId) => ({
+  name: localizedText("Tên vai trò", "Role name"),
+  code: localizedText("Mã vai trò", "Role code"),
+  description: localizedText("Mô tả", "Description"),
+  count: localizedText("Quyền đã gán", "Assigned permissions"),
+  permissions: localizedText("Danh sách quyền", "Permission list"),
+}[id]);
 
 const normalizeCode = (value: string) => value.trim().toLocaleUpperCase();
 const categoryOf = (category?: string) => category?.trim() || UNCATEGORIZED;
+const normalizePermissionName = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().replace(/\s+/g, " ").trim();
+const permissionNameTranslations: Record<string, string> = {
+  "xem bao cao doanh thu": "View revenue reports",
+  "quan ly cai dat chi nhanh": "Manage branch settings",
+  "quan ly cai dat he thong": "Manage system settings",
+  "tao cong viec": "Create tasks",
+  "xoa cong viec": "Delete tasks",
+  "cap nhat trang thai cong viec": "Update task status",
+  "xem cong viec": "View tasks",
+  "quan ly tien nghi": "Manage amenities",
+  "quan ly toa nha": "Manage buildings",
+  "quan ly tang": "Manage floors",
+  "xem tien nghi": "View amenities",
+  "xem toa nha": "View buildings",
+  "xem tang": "View floors",
+  "tao dich vu": "Create services",
+  "xoa dich vu": "Delete services",
+  "quan ly trang thai dich vu": "Manage service status",
+  "cap nhat dich vu": "Update services",
+  "xem dich vu": "View services",
+  "tao hoa don": "Create invoices",
+  "in hoa don": "Print invoices",
+  "xem hoa don": "View invoices",
+  "tao khuyen mai": "Create promotions",
+  "xoa khuyen mai": "Delete promotions",
+  "cap nhat khuyen mai": "Update promotions",
+  "xem khuyen mai": "View promotions",
+  "quan ly khach hang": "Manage customers",
+  "xem khach hang": "View customers",
+  "them nhan vien": "Add employees",
+  "xoa nhan vien": "Delete employees",
+  "quan ly ca lam viec": "Manage shifts",
+  "cap nhat nhan vien": "Update employees",
+  "xem nhan vien": "View employees",
+  "xem ca lam viec": "View shifts",
+  "quan ly nhan/tra phong": "Manage check-in/check-out",
+  "xem nhan/tra phong": "View check-in/check-out",
+  "tao phong": "Create rooms",
+  "xoa phong": "Delete rooms",
+  "cap nhat phong": "Update rooms",
+  "cap nhat trang thai phong": "Update room status",
+  "xem phong": "View rooms",
+  "tao chi nhanh": "Create branches",
+  "tao quyen": "Create permissions",
+  "tao vai tro": "Create roles",
+  "xoa quyen": "Delete permissions",
+  "xoa vai tro": "Delete roles",
+  "quan ly phan quyen": "Manage role permissions",
+  "quan ly role": "Manage roles",
+  "cap nhat quyen": "Update permissions",
+  "cap nhat vai tro": "Update roles",
+  "xem quyen": "View permissions",
+  "xem vai tro": "View roles",
+  "quan ly ho so ca nhan": "Manage personal profiles",
+  "xem bang dieu khien": "View dashboard",
+  "tao dat phong": "Create bookings",
+  "xoa dat phong": "Delete bookings",
+  "cap nhat dat phong": "Update bookings",
+  "xem dat phong": "View bookings",
+};
+const permissionNameLabel = (name: string) => {
+  if (!i18n.language.startsWith("en")) return name;
+  return permissionNameTranslations[normalizePermissionName(name)] ?? name;
+};
+const getApiFieldErrors = (
+  error: unknown,
+  fieldAliases: Record<string, string[]>,
+): Record<string, string> => {
+  const fieldErrors: Record<string, string> = {};
+  const matchField = (value: unknown) => {
+    if (typeof value !== "string") return undefined;
+    const normalized = value.toLocaleLowerCase().replace(/[_-]+/g, " ").trim();
+    return Object.entries(fieldAliases).find(([, aliases]) =>
+      aliases.some((alias) => normalized === alias || normalized.includes(alias)),
+    )?.[0];
+  };
+  const getMessage = (value: unknown): string | undefined => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) {
+      const messages = value.map(getMessage).filter((message): message is string => Boolean(message));
+      return messages.length > 0 ? messages.join(" ") : undefined;
+    }
+    if (!value || typeof value !== "object") return undefined;
+    for (const key of ["message", "defaultMessage", "reason"]) {
+      if (key in value && typeof value[key] === "string") return value[key];
+    }
+    return undefined;
+  };
+
+  const data = error && typeof error === "object" && "data" in error ? error.data : error;
+  if (data && typeof data === "object") {
+    for (const errorsKey of ["errors", "fieldErrors", "validationErrors"]) {
+      if (!(errorsKey in data)) continue;
+      const errors = data[errorsKey];
+      if (Array.isArray(errors)) {
+        errors.forEach((item) => {
+          if (!item || typeof item !== "object") return;
+          const field = matchField(item.field ?? item.name ?? item.property ?? item.path);
+          const message = getMessage(item);
+          if (field && message) fieldErrors[field] = message;
+        });
+      } else if (errors && typeof errors === "object") {
+        Object.entries(errors).forEach(([key, value]) => {
+          const field = matchField(key);
+          const message = getMessage(value);
+          if (field && message) fieldErrors[field] = message;
+        });
+      }
+    }
+  }
+
+  const message = getMessage(data && typeof data === "object" && "message" in data ? data.message : error);
+  if (message) {
+    const field = matchField(message);
+    if (field && !fieldErrors[field]) fieldErrors[field] = message;
+    const normalizedMessage = message.toLocaleLowerCase();
+    if (
+      !fieldErrors.code
+      && /(already exists|already used|duplicate|đã tồn tại|đã được sử dụng|trùng)/i.test(normalizedMessage)
+    ) {
+      fieldErrors.code = message;
+    }
+  }
+
+  return fieldErrors;
+};
 
 const downloadRoleTemplate = () => {
   const workbook = createXlsxWorkbook([
@@ -302,7 +444,16 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
       setIsAddRoleDialogOpen(false);
       setActiveStep("catalog");
     } catch (error) {
-      setRoleError(getErrorMessage(error, localizedText("Không thể tạo role. Vui lòng thử lại.", "Could not create the role. Please try again.")));
+      const fieldErrors = getApiFieldErrors(error, {
+        code: ["code", "role code", "rolecode", "mã role"],
+        name: ["name", "role name", "rolename", "tên role"],
+        description: ["description", "mô tả"],
+      });
+      if (Object.keys(fieldErrors).length > 0) {
+        setRoleFieldErrors(fieldErrors);
+      } else {
+        setRoleError(getErrorMessage(error, localizedText("Không thể tạo role. Vui lòng thử lại.", "Could not create the role. Please try again.")));
+      }
     }
   };
 
@@ -370,10 +521,20 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
       setPermissionCategory("");
       setPermissionDescription("");
       setPermissionFieldErrors({});
-      setCatalogMessage(`Đã tạo quyền ${code}.`);
+      setCatalogMessage(localizedText(`Đã tạo quyền ${code}.`, `Permission ${code} created.`));
       setIsAddPermissionDialogOpen(false);
     } catch (error) {
-      setCatalogError(getErrorMessage(error, localizedText("Không thể tạo quyền. Vui lòng thử lại.", "Could not create the permission. Please try again.")));
+      const fieldErrors = getApiFieldErrors(error, {
+        code: ["code", "permission code", "permissioncode", "mã quyền"],
+        name: ["name", "permission name", "permissionname", "tên quyền"],
+        category: ["category", "danh mục"],
+        description: ["description", "mô tả"],
+      });
+      if (Object.keys(fieldErrors).length > 0) {
+        setPermissionFieldErrors(fieldErrors);
+      } else {
+        setCatalogError(getErrorMessage(error, localizedText("Không thể tạo quyền. Vui lòng thử lại.", "Could not create the permission. Please try again.")));
+      }
     }
   };
 
@@ -408,7 +569,13 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
       return true;
     } catch (error) {
       setPermissionActionError(
-        getErrorMessage(error, `Không thể cập nhật quyền ${permission.code} cho role ${roleCode}.`),
+        getErrorMessage(
+          error,
+          localizedText(
+            `Không thể cập nhật quyền ${permission.code} cho role ${roleCode}.`,
+            `Could not update permission ${permission.code} for role ${roleCode}.`,
+          ),
+        ),
       );
       return false;
     } finally {
@@ -447,7 +614,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
     const assignedCount = pendingBulkPermissionAssignment.roleCodes.length - failedRoles.length;
     if (failedRoles.length > 0) {
       setPermissionActionError(
-        `Đã gán quyền cho ${assignedCount}/${pendingBulkPermissionAssignment.roleCodes.length} vai trò. Không thể gán cho: ${failedRoles.join(", ")}.`,
+        localizedText(
+          `Đã gán quyền cho ${assignedCount}/${pendingBulkPermissionAssignment.roleCodes.length} vai trò. Không thể gán cho: ${failedRoles.join(", ")}.`,
+          `Permission assigned to ${assignedCount}/${pendingBulkPermissionAssignment.roleCodes.length} roles. Could not assign to: ${failedRoles.join(", ")}.`,
+        ),
       );
       setPendingBulkPermissionAssignment({
         ...pendingBulkPermissionAssignment,
@@ -455,7 +625,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
       });
     } else {
       setCatalogMessage(
-        `Đã gán quyền ${pendingBulkPermissionAssignment.permission.name} cho ${assignedCount} vai trò.`,
+        localizedText(
+          `Đã gán quyền ${permissionNameLabel(pendingBulkPermissionAssignment.permission.name)} cho ${assignedCount} vai trò.`,
+          `Permission ${permissionNameLabel(pendingBulkPermissionAssignment.permission.name)} assigned to ${assignedCount} roles.`,
+        ),
       );
       setPendingBulkPermissionAssignment(null);
     }
@@ -535,23 +708,23 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
         <div className="flex items-center gap-2">
           <ShieldCheck size={19} className="text-blue-600" />
           <h2 className="text-lg font-bold text-slate-900">
-            {view === "roles" ? "Quản lý vai trò" : "Quản lý quyền"}
+            {view === "roles" ? localizedText("Quản lý vai trò", "Manage roles") : localizedText("Quản lý quyền", "Manage permissions")}
           </h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">
           {view === "roles"
-            ? "Tạo và xem các vai trò được sử dụng trong hệ thống."
-            : "Quản lý danh mục quyền, gán quyền cho vai trò và xem tổng quan phân quyền."}
+            ? localizedText("Tạo và xem các vai trò được sử dụng trong hệ thống.", "Create and view roles used in the system.")
+            : localizedText("Quản lý danh mục quyền, gán quyền cho vai trò và xem tổng quan phân quyền.", "Manage the permission catalog, assign permissions to roles, and review permission assignments.")}
         </p>
       </header>
 
       {(isRolesError || isRolePermissionsError || isPermissionCatalogError) && (
         <div role="alert" className="mx-4 mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 sm:mx-5">
-          <p>Không thể tải role hoặc danh mục quyền từ backend.</p>
+          <p>{localizedText("Không thể tải role hoặc danh mục quyền từ backend.", "Could not load roles or the permission catalog from the backend.")}</p>
           <div className="mt-2 flex gap-3 font-semibold">
-            {isRolesError && <button type="button" onClick={() => void refetchRoles()}>Tải lại role</button>}
-            {isRolePermissionsError && <button type="button" onClick={() => void refetchRolePermissions()}>Tải lại quyền</button>}
-            {isPermissionCatalogError && <button type="button" onClick={() => void refetchPermissionCatalog()}>Tải danh mục quyền</button>}
+            {isRolesError && <button type="button" onClick={() => void refetchRoles()}>{localizedText("Tải lại role", "Reload roles")}</button>}
+            {isRolePermissionsError && <button type="button" onClick={() => void refetchRolePermissions()}>{localizedText("Tải lại quyền", "Reload permissions")}</button>}
+            {isPermissionCatalogError && <button type="button" onClick={() => void refetchPermissionCatalog()}>{localizedText("Tải danh mục quyền", "Reload permission catalog")}</button>}
           </div>
         </div>
       )}
@@ -561,25 +734,25 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
           <div className="rounded-xl border border-slate-200 p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-900">Các vai trò hiện có</h3>
-                <p className="mt-1 text-sm text-slate-500">{roles.length} vai trò trong hệ thống</p>
+                <h3 className="font-bold text-slate-900">{localizedText("Các vai trò hiện có", "Existing roles")}</h3>
+                <p className="mt-1 text-sm text-slate-500">{roles.length} {localizedText("vai trò trong hệ thống", "roles in the system")}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      aria-label="Tùy chỉnh cột bảng vai trò"
+                      aria-label={localizedText("Tùy chỉnh cột bảng vai trò", "Customize role table columns")}
                       className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       <Columns3 size={16} />
-                      Cột
+                      {localizedText("Cột", "Columns")}
                       <ChevronDown size={16} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-56 p-2">
                     <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Hiển thị cột
+                      {localizedText("Hiển thị cột", "Show columns")}
                     </p>
                     {ROLE_TABLE_COLUMNS.map((column) => {
                       const isLastVisibleColumn = shownRoleColumns.length === 1 && visibleRoleColumns[column.id];
@@ -600,7 +773,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                             }}
                             className="h-4 w-4 rounded border-slate-300 accent-blue-600"
                           />
-                          {column.label}
+                          {roleColumnLabel(column.id)}
                         </label>
                       );
                     })}
@@ -615,7 +788,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       })}
                       className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
                     >
-                      Hiện tất cả cột
+                      {localizedText("Hiện tất cả cột", "Show all columns")}
                     </button>
                   </PopoverContent>
                 </Popover>
@@ -632,7 +805,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   <CirclePlus size={17} />
-                  Thêm vai trò
+                  {localizedText("Thêm vai trò", "Add role")}
                 </button>
               </div>
             </div>
@@ -640,11 +813,11 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
             {roleFileError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleFileError}</p>}
             {roleFileMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{roleFileMessage}</p>}
             {isRolesLoading ? (
-              <p className="py-10 text-center text-sm text-slate-500">Đang tải vai trò...</p>
+              <p className="py-10 text-center text-sm text-slate-500">{localizedText("Đang tải vai trò...", "Loading roles...")}</p>
             ) : roles.length === 0 ? (
               <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center">
-                <p className="font-semibold text-slate-700">Chưa có vai trò nào</p>
-                <p className="mt-1 text-sm text-slate-500">Tạo vai trò để bắt đầu phân quyền cho tài khoản.</p>
+                <p className="font-semibold text-slate-700">{localizedText("Chưa có vai trò nào", "No roles yet")}</p>
+                <p className="mt-1 text-sm text-slate-500">{localizedText("Tạo vai trò để bắt đầu phân quyền cho tài khoản.", "Create a role to begin assigning permissions to accounts.")}</p>
               </div>
             ) : (
               <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
@@ -669,7 +842,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                         >
                           {column.id === "permissions" ? (
                         <div className="flex items-center justify-between gap-3">
-                          <span>{column.label}</span>
+                          <span>{roleColumnLabel(column.id)}</span>
                           <div className="inline-flex shrink-0 rounded-lg bg-slate-200/70 p-0.5 normal-case tracking-normal">
                             <button
                               type="button"
@@ -679,7 +852,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                 !showAllRolePermissions ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
                               }`}
                             >
-                              Đã gán
+                              {localizedText("Đã gán", "Assigned")}
                             </button>
                             <button
                               type="button"
@@ -689,11 +862,11 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                 showAllRolePermissions ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
                               }`}
                             >
-                              Tất cả
+                              {localizedText("Tất cả", "All")}
                             </button>
                           </div>
                         </div>
-                          ) : column.label}
+                          ) : roleColumnLabel(column.id)}
                         </th>
                       ))}
                     </tr>
@@ -732,16 +905,16 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                 {visibleRolePermissions.map((permission) => (
                                   <span
                                     key={permission.code}
-                                    title={`${permission.name} (${permission.code})`}
+                                    title={`${permissionNameLabel(permission.name)} (${permission.code})`}
                                     className={`inline-flex items-center gap-1 rounded-md py-1 pl-2 pr-1 text-xs font-medium ${
                                       permission.granted ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-600"
                                     }`}
                                   >
-                                    <span>{permission.name}</span>
+                                    <span>{permissionNameLabel(permission.name)}</span>
                                     <button
                                       type="button"
-                                      aria-label={`${permission.granted ? "Gỡ" : "Gán"} quyền ${permission.name} ${permission.granted ? "khỏi" : "cho"} vai trò ${role.name}`}
-                                      title={`${permission.granted ? "Gỡ" : "Gán"} quyền ${permission.name}`}
+                                      aria-label={`${permission.granted ? "Gỡ" : "Gán"} quyền ${permissionNameLabel(permission.name)} ${permission.granted ? "khỏi" : "cho"} vai trò ${role.name}`}
+                                      title={`${permission.granted ? "Gỡ" : "Gán"} quyền ${permissionNameLabel(permission.name)}`}
                                       disabled={isUpdatingAssignment}
                                       onClick={() => setPendingPermissionChange({ roleCode: role.code, permission })}
                                       className={`rounded p-0.5 focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -779,9 +952,9 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
           <div className="min-w-0 rounded-xl border border-slate-200 p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-900">Danh mục quyền theo nhóm</h3>
+                <h3 className="font-bold text-slate-900">{localizedText("Danh mục quyền theo nhóm", "Permission catalog by category")}</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  {permissions.length} quyền · {catalogPermissionsByCategory.size} danh mục · bao gồm cả quyền chưa gán role
+                  {localizedText(`${permissions.length} quyền · ${catalogPermissionsByCategory.size} danh mục · bao gồm cả quyền chưa gán role`, `${permissions.length} permissions · ${catalogPermissionsByCategory.size} categories · including unassigned permissions`)}
                 </p>
               </div>
               <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -791,27 +964,27 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     type="text"
                     value={catalogSearch}
                     onChange={(event) => setCatalogSearch(event.target.value)}
-                    placeholder="Tìm mã, tên hoặc danh mục..."
-                    aria-label="Tìm quyền trong danh mục"
+                    placeholder={localizedText("Tìm mã, tên hoặc danh mục...", "Search code, name, or category...")}
+                    aria-label={localizedText("Tìm quyền trong danh mục", "Search permissions in catalog")}
                     className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-10 text-sm outline-none focus:border-blue-400"
                   />
-                    <ClearSearchButton value={catalogSearch} onClear={() => setCatalogSearch("")} label="Xóa tìm kiếm" />
+                    <ClearSearchButton value={catalogSearch} onClear={() => setCatalogSearch("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
                   </div>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      aria-label="Tùy chỉnh cột bảng"
+                      aria-label={localizedText("Tùy chỉnh cột bảng", "Customize table columns")}
                       className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       <Columns3 size={16} />
-                      Cột
+                      {localizedText("Cột", "Columns")}
                       <ChevronDown size={16} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-56 p-2">
                     <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Hiển thị cột
+                      {localizedText("Hiển thị cột", "Show columns")}
                     </p>
                     {CATALOG_TABLE_COLUMNS.map((column) => {
                       const isLastVisibleColumn = shownCatalogColumns.length === 1 && visibleCatalogColumns[column.id];
@@ -832,7 +1005,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                             }}
                             className="h-4 w-4 rounded border-slate-300 accent-blue-600"
                           />
-                          {column.label}
+                          {catalogColumnLabel(column.id)}
                         </label>
                       );
                     })}
@@ -848,7 +1021,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       })}
                       className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
                     >
-                      Hiện tất cả cột
+                      {localizedText("Hiện tất cả cột", "Show all columns")}
                     </button>
                   </PopoverContent>
                 </Popover>
@@ -862,7 +1035,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <FileSpreadsheet size={16} />
-                  Nạp quyền
+                  {localizedText("Nạp quyền", "Import permissions")}
                 </button>
                 <button
                   type="button"
@@ -875,18 +1048,18 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   <CirclePlus size={17} />
-                  Thêm quyền
+                  {localizedText("Thêm quyền", "Add permission")}
                 </button>
               </div>
             </div>
             {catalogMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{catalogMessage}</p>}
             {catalogFileMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{catalogFileMessage}</p>}
             {isPermissionCatalogLoading ? (
-              <p className="py-10 text-center text-sm text-slate-500">Đang tải danh mục quyền...</p>
+              <p className="py-10 text-center text-sm text-slate-500">{localizedText("Đang tải danh mục quyền...", "Loading permission catalog...")}</p>
             ) : permissions.length === 0 ? (
               <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center">
-                <p className="font-semibold text-slate-700">Chưa có quyền nào</p>
-                <p className="mt-1 text-sm text-slate-500">Dùng nút “Thêm quyền” để tạo quyền hoặc nhập danh mục từ Excel.</p>
+                <p className="font-semibold text-slate-700">{localizedText("Chưa có quyền nào", "No permissions yet")}</p>
+                <p className="mt-1 text-sm text-slate-500">{localizedText("Dùng nút “Thêm quyền” để tạo quyền hoặc nhập danh mục từ Excel.", "Use “Add permission” to create a permission or import a catalog from Excel.")}</p>
               </div>
             ) : (
               <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
@@ -909,7 +1082,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                           scope="col"
                           className={`px-4 py-3 font-semibold ${column.id === "actions" ? "text-right" : ""}`}
                         >
-                          {column.label}
+                          {catalogColumnLabel(column.id)}
                         </th>
                       ))}
                     </tr>
@@ -940,7 +1113,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                               </td>
                             )}
                             {visibleCatalogColumns.name && (
-                              <td className="px-4 py-3 font-semibold text-slate-900">{permission.name}</td>
+                              <td className="px-4 py-3 font-semibold text-slate-900">{permissionNameLabel(permission.name)}</td>
                             )}
                             {visibleCatalogColumns.code && (
                               <td className="break-all px-4 py-3 font-mono text-xs text-slate-600">{permission.code}</td>
@@ -958,7 +1131,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                   ))}
                                 </div>
                               ) : (
-                                <span className="text-xs text-slate-400">Chưa gán</span>
+                                <span className="text-xs text-slate-400">{localizedText("Chưa gán", "Not assigned")}</span>
                               )}
                             </td>}
                             {visibleCatalogColumns.actions && <td className="whitespace-nowrap px-4 py-3 text-right">
@@ -971,7 +1144,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                 }}
                                 className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                Gán quyền
+                                {localizedText("Gán quyền", "Assign permission")}
                               </button>
                             </td>}
                           </tr>
@@ -982,7 +1155,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 </table>
                 {filteredCatalogPermissions.length === 0 && (
                   <FilterResultStatus filterKey={catalogSearch}><p className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
-                    Không tìm thấy quyền phù hợp.
+                    {localizedText("Không tìm thấy quyền phù hợp.", "No matching permissions found.")}
                   </p></FilterResultStatus>
                 )}
               </div>
@@ -995,9 +1168,9 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
         <Dialog open={isAddPermissionDialogOpen} onOpenChange={setIsAddPermissionDialogOpen}>
           <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Thêm quyền vào danh mục</DialogTitle>
+              <DialogTitle>{localizedText("Thêm quyền vào danh mục", "Add permissions to the catalog")}</DialogTitle>
               <DialogDescription>
-                Tạo một quyền mới hoặc nhập nhiều quyền từ Excel. Quyền được thêm vào danh mục, chưa tự động gán cho role.
+                {localizedText("Tạo một quyền mới hoặc nhập nhiều quyền từ Excel. Quyền được thêm vào danh mục, chưa tự động gán cho role.", "Create a permission or import multiple permissions from Excel. Permissions are added to the catalog but are not automatically assigned to a role.")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
@@ -1010,7 +1183,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 }`}
               >
                 <CirclePlus size={16} />
-                Tạo quyền lẻ
+                {localizedText("Tạo quyền lẻ", "Create a permission")}
               </button>
               <button
                 type="button"
@@ -1021,14 +1194,14 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 }`}
               >
                 <FileSpreadsheet size={16} />
-                Nhập từ Excel
+                {localizedText("Nhập từ Excel", "Import from Excel")}
               </button>
             </div>
             {addPermissionMode === "single" ? (
               <form noValidate onSubmit={(event) => void createPermission(event)}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Mã quyền <span aria-hidden="true" className="text-rose-600">*</span>
+                    {localizedText("Mã quyền", "Permission code")} <span aria-hidden="true" className="text-rose-600">*</span>
                     <input
                       value={permissionCode}
                       aria-invalid={Boolean(permissionFieldErrors.code)}
@@ -1042,10 +1215,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       autoComplete="off"
                       className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
                     />
-                    {permissionFieldErrors.code && <span id="permission-code-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.code}</span>}
+                    {permissionFieldErrors.code && <span id="permission-code-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.code}</span>}
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    Tên quyền <span aria-hidden="true" className="text-rose-600">*</span>
+                    {localizedText("Tên quyền", "Permission name")} <span aria-hidden="true" className="text-rose-600">*</span>
                     <input
                       value={permissionName}
                       aria-invalid={Boolean(permissionFieldErrors.name)}
@@ -1055,14 +1228,14 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                         setPermissionFieldErrors((current) => ({ ...current, name: "" }));
                         setCatalogError("");
                       }}
-                      placeholder="Xem báo cáo đặc biệt"
+                      placeholder={localizedText("Xem báo cáo đặc biệt", "View special report")}
                       className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.name ? "border-rose-400" : "border-slate-200"}`}
                     />
-                    {permissionFieldErrors.name && <span id="permission-name-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.name}</span>}
+                    {permissionFieldErrors.name && <span id="permission-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.name}</span>}
                   </label>
                 </div>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Danh mục <span aria-hidden="true" className="text-rose-600">*</span>
+                  {localizedText("Danh mục", "Category")} <span aria-hidden="true" className="text-rose-600">*</span>
                   <input
                     value={permissionCategory}
                     aria-invalid={Boolean(permissionFieldErrors.category)}
@@ -1072,13 +1245,13 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       setPermissionFieldErrors((current) => ({ ...current, category: "" }));
                       setCatalogError("");
                     }}
-                    placeholder="Ví dụ: Đặt phòng, Khách hàng, Báo cáo"
+                    placeholder={localizedText("Ví dụ: Đặt phòng, Khách hàng, Báo cáo", "e.g. Bookings, Customers, Reports")}
                     className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.category ? "border-rose-400" : "border-slate-200"}`}
                   />
-                  {permissionFieldErrors.category && <span id="permission-category-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.category}</span>}
+                  {permissionFieldErrors.category && <span id="permission-category-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.category}</span>}
                 </label>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Mô tả <span aria-hidden="true" className="text-rose-600">*</span>
+                  {localizedText("Mô tả", "Description")} <span aria-hidden="true" className="text-rose-600">*</span>
                   <textarea
                     value={permissionDescription}
                     aria-invalid={Boolean(permissionFieldErrors.description)}
@@ -1089,10 +1262,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       setCatalogError("");
                     }}
                     rows={3}
-                    placeholder="Mô tả chức năng mà quyền này cho phép"
+                    placeholder={localizedText("Mô tả chức năng mà quyền này cho phép", "Describe the functionality this permission allows")}
                     className={`mt-1.5 w-full rounded-lg border px-3 py-2 text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.description ? "border-rose-400" : "border-slate-200"}`}
                   />
-                  {permissionFieldErrors.description && <span id="permission-description-error" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.description}</span>}
+                  {permissionFieldErrors.description && <span id="permission-description-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.description}</span>}
                 </label>
                 {catalogError && <p role="alert" className="mt-3 text-sm text-rose-600">{catalogError}</p>}
                 <button
@@ -1101,13 +1274,13 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   <Plus size={16} />
-                  {isCreatingPermission ? "Đang tạo..." : "Tạo quyền"}
+                  {isCreatingPermission ? localizedText("Đang tạo...", "Creating...") : localizedText("Tạo quyền", "Create permission")}
                 </button>
               </form>
             ) : (
               <div>
                 <p className="text-sm leading-5 text-slate-600">
-                  File Excel cần có mã quyền, tên quyền, danh mục và mô tả. Nếu mã đã tồn tại, thông tin quyền được cập nhật mà không đổi role đang được gán.
+                {localizedText("File Excel cần có mã quyền, tên quyền, danh mục và mô tả. Nếu mã đã tồn tại, thông tin quyền được cập nhật mà không đổi role đang được gán.", "The Excel file must include permission code, name, category, and description. Existing codes update permission details without changing assigned roles.")}
                 </p>
                 <button
                   type="button"
@@ -1115,10 +1288,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <FileSpreadsheet size={16} />
-                  Tải file Excel mẫu
+                  {localizedText("Tải file Excel mẫu", "Download Excel template")}
                 </button>
                 <label className="mt-4 block text-sm font-semibold text-slate-700">
-                  Chọn file danh mục quyền (.xlsx)
+                  {localizedText("Chọn file danh mục quyền (.xlsx)", "Choose permission catalog file (.xlsx)")}
                   <input
                     ref={catalogFileInputRef}
                     type="file"
@@ -1128,7 +1301,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     className="mt-1.5 block w-full rounded-lg border border-slate-200 p-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:font-semibold file:text-blue-700"
                   />
                 </label>
-                {isReadingFile && <p role="status" className="mt-3 text-sm text-blue-700">Đang đọc file quyền...</p>}
+                {isReadingFile && <p role="status" className="mt-3 text-sm text-blue-700">{localizedText("Đang đọc file quyền...", "Reading permissions file...")}</p>}
                 {catalogFileError && <p role="alert" className="mt-3 text-sm text-rose-600">{catalogFileError}</p>}
               </div>
             )}
@@ -1143,17 +1316,17 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
         >
           <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Nạp quyền</DialogTitle>
+              <DialogTitle>{localizedText("Nạp quyền", "Import permissions")}</DialogTitle>
               <DialogDescription>
-                Thêm quyền mới cho vai trò đã có sẵn. Chọn role hiện có trong file rồi nhập các quyền cần cấp.
+                {localizedText("Thêm quyền mới cho vai trò đã có sẵn. Chọn role hiện có trong file rồi nhập các quyền cần cấp.", "Add permissions to existing roles. Select an existing role in the file and specify the permissions to grant.")}
               </DialogDescription>
             </DialogHeader>
             <div className="rounded-xl border border-slate-200 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-semibold text-slate-900">Định dạng file Excel</h3>
+                  <h3 className="font-semibold text-slate-900">{localizedText("Định dạng file Excel", "Excel file format")}</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Mỗi dòng là một quyền mới cần thêm cho role đã tồn tại.
+                    {localizedText("Mỗi dòng là một quyền mới cần thêm cho role đã tồn tại.", "Each row adds a permission to an existing role.")}
                   </p>
                 </div>
                 <button
@@ -1163,7 +1336,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FileSpreadsheet size={16} />
-                  Tải file Excel mẫu
+                  {localizedText("Tải file Excel mẫu", "Download Excel template")}
                 </button>
               </div>
               <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
@@ -1182,7 +1355,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               </div>
             </div>
             <label className="block text-sm font-semibold text-slate-700">
-              Chọn file phân quyền (.xlsx)
+              {localizedText("Chọn file phân quyền (.xlsx)", "Choose permissions file (.xlsx)")}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1193,9 +1366,9 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               />
             </label>
             {roles.length === 0 && (
-              <p className="text-sm text-amber-700">Hãy tạo role trước để nhập phân quyền.</p>
+              <p className="text-sm text-amber-700">{localizedText("Hãy tạo role trước để nhập phân quyền.", "Create a role before importing permissions.")}</p>
             )}
-            {isImporting && <p role="status" className="text-sm text-blue-700">Đang đọc file phân quyền...</p>}
+            {isImporting && <p role="status" className="text-sm text-blue-700">{localizedText("Đang đọc file phân quyền...", "Reading permissions file...")}</p>}
             {importError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{importError}</p>}
             {importMessage && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{importMessage}</p>}
           </DialogContent>
@@ -1206,9 +1379,9 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
         <Dialog open={isAddRoleDialogOpen} onOpenChange={setIsAddRoleDialogOpen}>
           <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Thêm vai trò</DialogTitle>
+              <DialogTitle>{localizedText("Thêm vai trò", "Add a role")}</DialogTitle>
               <DialogDescription>
-                Tạo vai trò thủ công hoặc nhập danh sách vai trò từ Excel.
+                {localizedText("Tạo vai trò thủ công hoặc nhập danh sách vai trò từ Excel.", "Create a role manually or import a list of roles from Excel.")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
@@ -1221,7 +1394,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 }`}
               >
                 <CirclePlus size={16} />
-                Tạo vai trò lẻ
+                {localizedText("Tạo vai trò lẻ", "Create a role")}
               </button>
               <button
                 type="button"
@@ -1232,13 +1405,13 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 }`}
               >
                 <FileSpreadsheet size={16} />
-                Nhập từ Excel
+                {localizedText("Nhập từ Excel", "Import from Excel")}
               </button>
             </div>
             {addRoleMode === "single" ? (
               <form noValidate onSubmit={(event) => void createRole(event)} className="mt-4">
                 <label className="block text-sm font-semibold text-slate-700">
-                  Mã role <span aria-hidden="true" className="text-rose-600">*</span>
+                  {localizedText("Mã role", "Role code")} <span aria-hidden="true" className="text-rose-600">*</span>
                   <input
                     value={roleCode}
                     aria-invalid={Boolean(roleFieldErrors.code)}
@@ -1252,10 +1425,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     autoComplete="off"
                     className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 ${roleFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
                   />
-                  {roleFieldErrors.code && <span id="role-code-error" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.code}</span>}
+                  {roleFieldErrors.code && <span id="role-code-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.code}</span>}
                 </label>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Tên role <span aria-hidden="true" className="text-rose-600">*</span>
+                  {localizedText("Tên role", "Role name")} <span aria-hidden="true" className="text-rose-600">*</span>
                   <input
                     value={roleName}
                     aria-invalid={Boolean(roleFieldErrors.name)}
@@ -1265,13 +1438,13 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       setRoleFieldErrors((current) => ({ ...current, name: "" }));
                       setRoleError("");
                     }}
-                    placeholder="Lễ tân"
+                    placeholder={localizedText("Lễ tân", "Receptionist")}
                     className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${roleFieldErrors.name ? "border-rose-400" : "border-slate-200"}`}
                   />
-                  {roleFieldErrors.name && <span id="role-name-error" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.name}</span>}
+                  {roleFieldErrors.name && <span id="role-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.name}</span>}
                 </label>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  Mô tả <span aria-hidden="true" className="text-rose-600">*</span>
+                  {localizedText("Mô tả", "Description")} <span aria-hidden="true" className="text-rose-600">*</span>
                   <textarea
                     value={roleDescription}
                     aria-invalid={Boolean(roleFieldErrors.description)}
@@ -1282,10 +1455,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       setRoleError("");
                     }}
                     rows={3}
-                    placeholder="Mô tả trách nhiệm của role"
+                    placeholder={localizedText("Mô tả trách nhiệm của role", "Describe the role's responsibilities")}
                     className={`mt-1.5 w-full rounded-lg border px-3 py-2 text-sm font-normal outline-none focus:border-blue-400 ${roleFieldErrors.description ? "border-rose-400" : "border-slate-200"}`}
                   />
-                  {roleFieldErrors.description && <span id="role-description-error" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.description}</span>}
+                  {roleFieldErrors.description && <span id="role-description-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.description}</span>}
                 </label>
                 {roleError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleError}</p>}
                 <button
@@ -1294,13 +1467,13 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   <Plus size={16} />
-                  {isCreatingRole ? "Đang tạo..." : "Tạo vai trò"}
+                  {isCreatingRole ? localizedText("Đang tạo...", "Creating...") : localizedText("Tạo vai trò", "Create role")}
                 </button>
               </form>
             ) : (
               <div className="mt-4">
                 <p className="text-sm leading-5 text-slate-600">
-                  File Excel gồm ba cột bắt buộc: mã role, tên role và mô tả. Mã role phải duy nhất và bắt đầu bằng ROLE_.
+                  {localizedText("File Excel gồm ba cột bắt buộc: mã role, tên role và mô tả. Mã role phải duy nhất và bắt đầu bằng ROLE_.", "The Excel file requires three columns: role code, role name, and description. Each role code must be unique and start with ROLE_.")}
                 </p>
                 <button
                   type="button"
@@ -1308,10 +1481,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   <FileSpreadsheet size={16} />
-                  Tải file Excel mẫu
+                  {localizedText("Tải file Excel mẫu", "Download Excel template")}
                 </button>
                 <label className="mt-4 block text-sm font-semibold text-slate-700">
-                  Chọn file danh sách vai trò (.xlsx)
+                  {localizedText("Chọn file danh sách vai trò (.xlsx)", "Choose roles file (.xlsx)")}
                   <input
                     ref={roleFileInputRef}
                     type="file"
@@ -1321,7 +1494,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     className="mt-1.5 block w-full rounded-lg border border-slate-200 p-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:font-semibold file:text-blue-700"
                   />
                 </label>
-                {isImportingRoles && <p role="status" className="mt-3 text-sm text-blue-700">Đang kiểm tra và tạo vai trò...</p>}
+                {isImportingRoles && <p role="status" className="mt-3 text-sm text-blue-700">{localizedText("Đang kiểm tra và tạo vai trò...", "Validating and creating roles...")}</p>}
                 {roleFileError && <p role="alert" className="mt-3 text-sm text-rose-600">{roleFileError}</p>}
               </div>
             )}
@@ -1338,19 +1511,21 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Gán quyền cho vai trò</DialogTitle>
+              <DialogTitle>{localizedText("Gán quyền cho vai trò", "Assign permission to a role")}</DialogTitle>
               <DialogDescription>
-                Chọn vai trò để gán quyền {permissionToAssign?.name ? <strong>{permissionToAssign.name}</strong> : "này"}.
+                {localizedText("Chọn vai trò để gán quyền ", "Choose a role to assign ")}
+                {permissionToAssign?.name ? <strong>{permissionNameLabel(permissionToAssign.name)}</strong> : localizedText("này", "this permission")}.
               </DialogDescription>
             </DialogHeader>
             <label className="block text-sm font-semibold text-slate-700">
-              Vai trò
+              {localizedText("Vai trò", "Role")}
               <select
                 value={catalogAssignmentRoleCode}
                 onChange={(event) => setCatalogAssignmentRoleCode(event.target.value)}
                 disabled={roles.length === 0}
                 className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
               >
+                {roles.length === 0 && <option value="">{localizedText("Chưa có role", "No roles available")}</option>}
                 {roles.map((role) => (
                   <option key={role.code} value={role.code}>{role.name} ({role.code})</option>
                 ))}
@@ -1358,12 +1533,12 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
             </label>
             {isPermissionAlreadyAssignedToSelectedRole && (
               <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                Quyền này đã được gán cho vai trò đang chọn.
+                {localizedText("Quyền này đã được gán cho vai trò đang chọn.", "This permission is already assigned to the selected role.")}
               </p>
             )}
             <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
               <p className="text-sm text-slate-700">
-                Chưa có quyền này: <strong>{rolesMissingPermission.length}</strong> / {roles.length} vai trò
+                {localizedText("Chưa có quyền này: ", "Not assigned yet: ")}<strong>{rolesMissingPermission.length}</strong> / {roles.length} {localizedText("vai trò", "roles")}
               </p>
               <button
                 type="button"
@@ -1379,7 +1554,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 }}
                 className="mt-2 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Gán cho tất cả vai trò còn thiếu
+                {localizedText("Gán cho tất cả vai trò còn thiếu", "Assign to all roles missing this permission")}
               </button>
             </div>
             <div className="flex justify-end gap-2">
@@ -1388,7 +1563,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 onClick={() => setPermissionToAssign(null)}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Hủy
+                {localizedText("Hủy", "Cancel")}
               </button>
               <button
                 type="button"
@@ -1403,7 +1578,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 }}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Tiếp tục
+                {localizedText("Tiếp tục", "Continue")}
               </button>
             </div>
           </DialogContent>
@@ -1419,15 +1594,17 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {pendingPermissionChange?.permission.granted ? "Xác nhận gỡ quyền" : "Xác nhận gán quyền"}
+              {pendingPermissionChange?.permission.granted
+                ? localizedText("Xác nhận gỡ quyền", "Confirm permission removal")
+                : localizedText("Xác nhận gán quyền", "Confirm permission assignment")}
             </DialogTitle>
             <DialogDescription>
               {pendingPermissionChange && (() => {
                 const role = roles.find((item) => item.code === pendingPermissionChange.roleCode);
                 const permission = pendingPermissionChange.permission;
                 return pendingPermissionChange.permission.granted
-                  ? <>Bạn có chắc muốn gỡ quyền <strong>{permission.name}</strong> ({permission.code}) khỏi role <strong>{role?.name ?? role?.code ?? pendingPermissionChange.roleCode}</strong>?</>
-                  : <>Bạn có chắc muốn gán quyền <strong>{permission.name}</strong> ({permission.code}) cho role <strong>{role?.name ?? role?.code ?? pendingPermissionChange.roleCode}</strong>?</>;
+                  ? <>{localizedText("Bạn có chắc muốn gỡ quyền ", "Are you sure you want to remove ")}<strong>{permissionNameLabel(permission.name)}</strong> ({permission.code}) {localizedText("khỏi role ", "from role ")}<strong>{role?.name ?? role?.code ?? pendingPermissionChange.roleCode}</strong>?</>
+                  : <>{localizedText("Bạn có chắc muốn gán quyền ", "Are you sure you want to assign ")}<strong>{permissionNameLabel(permission.name)}</strong> ({permission.code}) {localizedText("cho role ", "to role ")}<strong>{role?.name ?? role?.code ?? pendingPermissionChange.roleCode}</strong>?</>;
               })()}
             </DialogDescription>
           </DialogHeader>
@@ -1439,7 +1616,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               disabled={isConfirmingPermissionChange}
               className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              Hủy
+              {localizedText("Hủy", "Cancel")}
             </button>
             <button
               type="button"
@@ -1452,10 +1629,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               }`}
             >
               {isConfirmingPermissionChange
-                ? "Đang lưu..."
+                ? localizedText("Đang lưu...", "Saving...")
                 : pendingPermissionChange?.permission.granted
-                  ? "Gỡ quyền"
-                  : "Gán quyền"}
+                  ? localizedText("Gỡ quyền", "Remove permission")
+                  : localizedText("Gán quyền", "Assign permission")}
             </button>
           </div>
         </DialogContent>
@@ -1472,14 +1649,14 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Xác nhận gán quyền hàng loạt</DialogTitle>
+            <DialogTitle>{localizedText("Xác nhận gán quyền hàng loạt", "Confirm bulk permission assignment")}</DialogTitle>
             <DialogDescription>
               {pendingBulkPermissionAssignment && (
                 <>
-                  Gán quyền <strong>{pendingBulkPermissionAssignment.permission.name}</strong> (
-                  {pendingBulkPermissionAssignment.permission.code}) cho{" "}
-                  <strong>{pendingBulkPermissionAssignment.roleCodes.length} vai trò chưa có quyền này</strong>.
-                  Chỉ cần xác nhận một lần để áp dụng cho toàn bộ danh sách bên dưới.
+                  {localizedText("Gán quyền ", "Assign ")}<strong>{permissionNameLabel(pendingBulkPermissionAssignment.permission.name)}</strong> (
+                  {pendingBulkPermissionAssignment.permission.code}) {localizedText("cho ", "to ")}
+                  <strong>{pendingBulkPermissionAssignment.roleCodes.length} {localizedText("vai trò chưa có quyền này", "roles that do not have this permission")}</strong>.
+                  {" "}{localizedText("Chỉ cần xác nhận một lần để áp dụng cho toàn bộ danh sách bên dưới.", "Confirm once to apply it to the entire list below.")}
                 </>
               )}
             </DialogDescription>
@@ -1507,7 +1684,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               disabled={isConfirmingBulkAssignment}
               className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              Hủy
+              {localizedText("Hủy", "Cancel")}
             </button>
             <button
               type="button"
@@ -1516,8 +1693,11 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isConfirmingBulkAssignment
-                ? "Đang gán..."
-                : `Gán cho tất cả (${pendingBulkPermissionAssignment?.roleCodes.length ?? 0})`}
+                ? localizedText("Đang gán...", "Assigning...")
+                : localizedText(
+                    `Gán cho tất cả (${pendingBulkPermissionAssignment?.roleCodes.length ?? 0})`,
+                    `Assign to all (${pendingBulkPermissionAssignment?.roleCodes.length ?? 0})`,
+                  )}
             </button>
           </div>
         </DialogContent>
@@ -1674,7 +1854,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                               <div className="flex min-w-0 gap-2">
                                 {permission.granted && <Check size={15} className="mt-0.5 shrink-0 text-emerald-600" />}
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-slate-800">{permission.name}</p>
+                                  <p className="text-sm font-semibold text-slate-800">{permissionNameLabel(permission.name)}</p>
                                   <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{permission.code}</p>
                                   {permission.description && (
                                     <p className="mt-1 text-xs leading-5 text-slate-500">{permission.description}</p>
@@ -1699,10 +1879,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                 }`}
                               >
                                 {updatingAssignment === `${selectedAssignmentRoleCode}:${permission.code}`
-                                  ? "Đang lưu..."
+                                  ? localizedText("Đang lưu...", "Saving...")
                                   : permission.granted
-                                    ? "Gỡ"
-                                    : "Gán"}
+                                    ? localizedText("Gỡ", "Remove")
+                                    : localizedText("Gán", "Assign")}
                               </button>
                             </article>
                           ))}
@@ -1935,7 +2115,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                       <div className="flex min-w-0 gap-2">
                                         {permission.granted && <Check size={15} className="mt-0.5 shrink-0 text-emerald-600" />}
                                         <div className="min-w-0">
-                                          <p className="text-sm font-semibold text-slate-800">{permission.name}</p>
+                                          <p className="text-sm font-semibold text-slate-800">{permissionNameLabel(permission.name)}</p>
                                           <p className="mt-0.5 break-all font-mono text-[11px] text-slate-500">{permission.code}</p>
                                           {permission.description && <p className="mt-1 text-xs leading-5 text-slate-500">{permission.description}</p>}
                                         </div>
@@ -1954,10 +2134,10 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                         }`}
                                       >
                                         {updatingAssignment === `${role.code}:${permission.code}`
-                                          ? "Đang lưu..."
+                                          ? localizedText("Đang lưu...", "Saving...")
                                           : permission.granted
-                                            ? "Gỡ"
-                                            : "Gán"}
+                                            ? localizedText("Gỡ", "Remove")
+                                            : localizedText("Gán", "Assign")}
                                       </button>
                                     </div>
                                   ))}

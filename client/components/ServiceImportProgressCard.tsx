@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, LoaderCircle, X } from "lucide-react";
 import type { ServiceImportRowResult } from "../lib/serviceBulkImport";
 import {
@@ -33,25 +34,25 @@ const getProgressValue = (status: ServiceImportTaskStatus) => {
   return null;
 };
 
-const getStatusLabel = (status?: string) => {
+const getStatusLabel = (status: string | undefined, t: (key: string) => string) => {
   switch (status?.trim().toUpperCase()) {
     case "PENDING":
     case "QUEUED":
-      return "Đang chờ xử lý";
+      return t("serviceWorkspace.importStatusWaiting");
     case "PROCESSING":
     case "IN_PROGRESS":
-      return "Đang nhập dịch vụ";
+      return t("serviceWorkspace.importStatusProcessing");
     case "COMPLETED":
     case "COMPLETE":
     case "SUCCESS":
     case "SUCCEEDED":
     case "DONE":
-      return "Đã nhập xong";
+      return t("serviceWorkspace.importStatusCompleted");
     case "FAILED":
     case "ERROR":
-      return "Nhập dịch vụ thất bại";
+      return t("serviceWorkspace.importStatusFailed");
     default:
-      return status || "Đang kiểm tra tiến trình";
+      return status || t("serviceWorkspace.importStatusChecking");
   }
 };
 
@@ -64,6 +65,7 @@ export default function ServiceImportProgressCard({
   validationOnly = false,
   liveStatus,
 }: ServiceImportProgressDialogProps) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<ServiceImportTaskStatus | null>(null);
   const [pollingError, setPollingError] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -147,17 +149,17 @@ export default function ServiceImportProgressCard({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900">
-                    {archiveError ? "Không thể đọc file dịch vụ" : pollingError ? "Không thể kiểm tra tiến trình"                     : validationOnly ? "Đã kiểm tra file dịch vụ" : getStatusLabel(visibleStatus?.status)}
+                    {archiveError ? t("serviceWorkspace.importReadError") : pollingError ? t("serviceWorkspace.importCheckError") : validationOnly ? t("serviceWorkspace.importValidated") : getStatusLabel(visibleStatus?.status, t)}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {archiveError || pollingError || visibleStatus?.message || (validationOnly ? "Không có dòng hợp lệ để gửi nhập." : "File đã được gửi lên và đang được xử lý.")}
+                    {archiveError || pollingError || visibleStatus?.message || (validationOnly ? t("serviceWorkspace.importNoValidRows") : t("serviceWorkspace.importProcessingInfo"))}
                   </p>
                 </div>
                 {(finished || pollingError || archiveError) && (
                   <button
                     type="button"
                     onClick={onDismiss}
-                    aria-label="Đóng thông báo tiến trình"
+                    aria-label={t("serviceWorkspace.dismissImportProgress")}
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                   >
                     <X size={16} />
@@ -167,7 +169,7 @@ export default function ServiceImportProgressCard({
               <div
                 className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100"
                 role="progressbar"
-                aria-label="Tiến trình nhập dịch vụ"
+                aria-label={t("serviceWorkspace.importProgress")}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={progress ?? undefined}
@@ -180,18 +182,18 @@ export default function ServiceImportProgressCard({
                 />
               </div>
               {typeof processed === "number" && typeof total === "number" && (
-                <p className="mt-1 text-right text-[11px] text-slate-500">{processed}/{total} mục đã xử lý</p>
+                <p className="mt-1 text-right text-[11px] text-slate-500">{t("serviceWorkspace.importItemsProcessed", { processed, total })}</p>
               )}
               {validationRows.length > 0 && (
                 <>
                   <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold">
                     <span className="inline-flex items-center gap-1 text-emerald-700">
-                      <CheckCircle2 size={14} />{validRows.length} dòng đạt
+                      <CheckCircle2 size={14} />{t("serviceWorkspace.importValidRows", { count: validRows.length })}
                     </span>
                     <span className={`inline-flex items-center gap-1 ${invalidRows.length ? "text-rose-700" : "text-slate-500"}`}>
-                      <AlertCircle size={14} />{invalidRows.length} dòng lỗi
+                      <AlertCircle size={14} />{t("serviceWorkspace.importInvalidRows", { count: invalidRows.length })}
                     </span>
-                    <span className="text-slate-500">{validationRows.length} dòng tổng cộng</span>
+                    <span className="text-slate-500">{t("serviceWorkspace.importTotalRows", { count: validationRows.length })}</span>
                   </div>
                   <button
                     type="button"
@@ -199,7 +201,11 @@ export default function ServiceImportProgressCard({
                     className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
                   >
                     {detailsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    {detailsOpen ? "Ẩn chi tiết" : `Xem chi tiết${invalidRows.length ? ` (${invalidRows.length} lỗi)` : ""}`}
+                    {detailsOpen
+                      ? t("serviceWorkspace.hideImportDetails")
+                      : invalidRows.length
+                        ? t("serviceWorkspace.showImportDetails", { count: invalidRows.length })
+                        : t("serviceWorkspace.showImportDetailsNoErrors")}
                   </button>
                   {detailsOpen && (
                     <ul className="mt-2 max-h-52 space-y-2 overflow-y-auto border-t border-slate-100 pt-2">
@@ -208,14 +214,14 @@ export default function ServiceImportProgressCard({
                           {row.passed
                             ? <CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" size={14} />
                             : <AlertCircle className="mt-0.5 shrink-0 text-rose-600" size={14} />}
-                          <span><strong>Dòng {row.rowNumber}{row.serviceName ? ` · ${row.serviceName}` : ""}:</strong> {row.passed ? "Đạt kiểm tra dữ liệu." : row.message}</span>
+                          <span><strong>{t("serviceWorkspace.importRowLabel", { row: row.rowNumber })}{row.serviceName ? ` · ${row.serviceName}` : ""}:</strong> {row.passed ? t("serviceWorkspace.importRowPassed") : row.message}</span>
                         </li>
                       ))}
                     </ul>
                   )}
                   {validationFinished && (
                     <p className="mt-2 text-[11px] leading-4 text-slate-500">
-                      Các dấu đạt/lỗi là kết quả kiểm tra file trước khi gửi; tiến trình máy chủ hiển thị riêng ở phía trên.
+                      {t("serviceWorkspace.importValidationNote")}
                     </p>
                   )}
                 </>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { MapPin } from "lucide-react";
 import type { SuperAdminBranch } from "../services/superAdminApi";
+import { localizedText } from "../i18n";
 
 type ProvinceMapEntry = {
   name: string;
@@ -104,16 +105,16 @@ export default function SuperAdminProvinceMapPanel({
     <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
         <div>
-          <h2 className="font-bold text-slate-900">Phân bố chi nhánh theo tỉnh/thành</h2>
+          <h2 className="font-bold text-slate-900">{localizedText("Phân bố chi nhánh theo tỉnh/thành", "Branch distribution by province/city")}</h2>
           <p className="mt-1 text-sm text-slate-500">
             {isLoading
-              ? "Đang cập nhật dữ liệu chi nhánh..."
-              : `${coveredProvinceCount}/34 tỉnh/thành có chi nhánh · ${branches.length} chi nhánh toàn hệ thống`}
+              ? localizedText("Đang cập nhật dữ liệu chi nhánh...", "Updating branch data...")
+              : localizedText(`${coveredProvinceCount}/34 tỉnh/thành có chi nhánh · ${branches.length} chi nhánh toàn hệ thống`, `${coveredProvinceCount}/34 provinces/cities have branches · ${branches.length} branches in total`)}
           </p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
           <MapPin size={14} />
-          Bản đồ toàn quốc
+          {localizedText("Bản đồ toàn quốc", "Nationwide map")}
         </span>
       </header>
 
@@ -122,10 +123,10 @@ export default function SuperAdminProvinceMapPanel({
           <div className="relative overflow-hidden rounded-2xl border border-sky-100 bg-sky-50/70">
             <img
               src="/province-covers/vietnam-34-provinces.svg"
-              alt="Bản đồ 34 tỉnh thành Việt Nam"
+              alt={localizedText("Bản đồ 34 tỉnh thành Việt Nam", "Map of Vietnam's 34 provinces and cities")}
               className="block h-auto w-full"
             />
-            <svg viewBox="0 0 420 850" className="absolute inset-0 h-full w-full" role="img" aria-label="Vị trí chi nhánh theo tỉnh thành">
+            <svg viewBox="0 0 420 850" className="absolute inset-0 h-full w-full" role="img" aria-label={localizedText("Vị trí chi nhánh theo tỉnh thành", "Branch locations by province/city")}>
               {provinces.map((province) => {
                 const count = branchCounts.get(province.name) ?? 0;
                 const isSelected = selectedProvince === province.name;
@@ -135,7 +136,7 @@ export default function SuperAdminProvinceMapPanel({
                     key={province.name}
                     role="button"
                     tabIndex={0}
-                    aria-label={`${province.name}: ${count} chi nhánh`}
+                    aria-label={localizedText(`${province.name}: ${count} chi nhánh`, `${count} branches in ${province.name}`)}
                     aria-pressed={isSelected}
                     onClick={() => setSelectedProvince((current) => current === province.name ? null : province.name)}
                     onKeyDown={(event) => {
@@ -146,7 +147,7 @@ export default function SuperAdminProvinceMapPanel({
                     }}
                     className="cursor-pointer outline-none"
                   >
-                    <title>{`${province.name}: ${count} chi nhánh`}</title>
+                    <title>{localizedText(`${province.name}: ${count} chi nhánh`, `${count} branches in ${province.name}`)}</title>
                     {isSelected && <circle cx={province.x} cy={province.y} r="15" fill="#2563eb" fillOpacity="0.16" />}
                     {(!hasAddressPin || count === 0) && (
                       <circle
@@ -190,28 +191,28 @@ export default function SuperAdminProvinceMapPanel({
               ))}
             </svg>
             <div className="absolute bottom-3 left-3 flex flex-wrap gap-3 rounded-lg bg-white/90 px-3 py-2 text-[11px] font-medium text-slate-600 shadow-sm backdrop-blur">
-              <span className="inline-flex items-center gap-1.5"><MapPin size={13} className="fill-blue-600 text-blue-700" />Chi nhánh có địa chỉ</span>
-              <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-slate-400" />Chưa có</span>
+              <span className="inline-flex items-center gap-1.5"><MapPin size={13} className="fill-blue-600 text-blue-700" />{localizedText("Chi nhánh có địa chỉ", "Branch with address")}</span>
+              <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-slate-400" />{localizedText("Chưa có", "None")}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-[11px] font-medium text-slate-600 sm:grid-cols-4">
-            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-blue-300" />Miền Bắc</span>
-            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-cyan-300" />Bắc Trung Bộ</span>
-            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-amber-300" />Miền Trung &amp; Tây Nguyên</span>
-            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-violet-300" />Miền Nam</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-blue-300" />{localizedText("Miền Bắc", "Northern Vietnam")}</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-cyan-300" />{localizedText("Bắc Trung Bộ", "North Central Coast")}</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-amber-300" />{localizedText("Miền Trung & Tây Nguyên", "Central Highlands and Central Vietnam")}</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-3 w-3 rounded-sm bg-violet-300" />{localizedText("Miền Nam", "Southern Vietnam")}</span>
           </div>
         </div>
 
         <div className="min-w-0">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-bold text-slate-800">34 tỉnh/thành</h3>
+            <h3 className="text-sm font-bold text-slate-800">{localizedText("34 tỉnh/thành", "34 provinces/cities")}</h3>
             {selectedProvince && (
               <button
                 type="button"
                 onClick={() => setSelectedProvince(null)}
                 className="text-xs font-semibold text-blue-700 hover:text-blue-800"
               >
-                Bỏ chọn
+                {localizedText("Bỏ chọn", "Clear selection")}
               </button>
             )}
           </div>
@@ -236,7 +237,7 @@ export default function SuperAdminProvinceMapPanel({
                     <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold tabular-nums ${
                       count > 0 ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-500"
                     }`}>
-                      {count} chi nhánh
+                      {count} {localizedText("chi nhánh", "branches")}
                     </span>
                   </button>
                 </li>
@@ -244,7 +245,7 @@ export default function SuperAdminProvinceMapPanel({
             })}
           </ul>
           <p className="mt-3 text-[11px] leading-5 text-slate-400">
-            Địa chỉ chưa có tọa độ GPS nên ghim được đặt gần trung tâm tỉnh/thành, không phải vị trí chính xác của khách sạn.
+            {localizedText("Địa chỉ chưa có tọa độ GPS nên ghim được đặt gần trung tâm tỉnh/thành, không phải vị trí chính xác của khách sạn.", "Addresses do not include GPS coordinates, so pins are placed near the center of each province/city and do not show the hotel's exact location.")}
           </p>
         </div>
       </div>

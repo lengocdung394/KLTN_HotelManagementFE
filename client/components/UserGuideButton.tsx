@@ -15,7 +15,7 @@ type GuideSection = {
   imageVi?: string;
   imageEn?: string;
   imageAlt?: [string, string];
-  relatedScreenshots?: { src: string; alt: [string, string] }[];
+  relatedScreenshots?: { srcVi: string; srcEn?: string; alt: [string, string] }[];
   route?: string;
   steps: [string, string][];
   tip?: [string, string];
@@ -24,11 +24,11 @@ type GuideSection = {
 const guideSections: GuideSection[] = [
   {
     title: ["1. Tổng quan chi nhánh", "1. Branch overview"],
-    imageVi: "/user-guide/screenshots/overview.jpg",
-    imageEn: "/user-guide/screenshots/overview.jpg",
+    imageVi: "/user-guide/screenshots/vi/overview/01.jpg",
+    imageEn: "/user-guide/screenshots/en/overview/01.jpg",
     imageAlt: ["Ảnh chụp giao diện Tổng quan thực tế; thông tin nhận diện đã được làm mờ", "Actual Overview screen; identifying details have been blurred"],
     relatedScreenshots: [
-      { src: "/user-guide/screenshots/overview-schedule.jpg", alt: ["Ảnh chụp lịch check-in/check-out và dịch vụ cần xác nhận", "Check-in/check-out schedule and services awaiting confirmation"] },
+      { srcVi: "/user-guide/screenshots/vi/overview/02.jpg", srcEn: "/user-guide/screenshots/en/overview/02.jpg", alt: ["Ảnh chụp lịch check-in/check-out và dịch vụ cần xác nhận", "Check-in/check-out schedule and services awaiting confirmation"] },
     ],
     route: "/overview",
     steps: [
@@ -45,16 +45,20 @@ const guideSections: GuideSection[] = [
   },
   {
     title: ["2. Tạo và tra cứu booking", "2. Create and find bookings"],
-    imageVi: "/user-guide/screenshots/bookings.jpg",
-    imageEn: "/user-guide/screenshots/bookings.jpg",
+    imageVi: "/user-guide/screenshots/vi/booking-create/01.jpg",
+    imageEn: "/user-guide/screenshots/en/booking-create/01.jpg",
     imageAlt: ["Ảnh chụp trang Đặt phòng thực tế", "Actual Bookings screen"],
     relatedScreenshots: [
-      { src: "/user-guide/screenshots/booking-list.jpg", alt: ["Ảnh chụp trang Danh sách booking thực tế", "Actual Booking list screen"] },
-      { src: "/user-guide/screenshots/booking-dates-rooms.jpg", alt: ["Ảnh chụp thật bước chọn ngày và phòng; tên khách trong lịch đã được ẩn", "Actual dates-and-rooms step; guest names in the calendar have been hidden"] },
-      { src: "/user-guide/screenshots/booking-guest-info.jpg", alt: ["Ảnh chụp thật bước nhập thông tin khách và số người theo phòng; dữ liệu cá nhân đã được ẩn", "Actual guest-information step with guest counts per room; personal data has been hidden"] },
-      { src: "/user-guide/screenshots/booking-services-all-rooms.jpg", alt: ["Ảnh chụp thật bước chọn dịch vụ cho tất cả phòng và tóm tắt chi phí", "Actual service-selection step for all rooms and its cost summary"] },
-      { src: "/user-guide/screenshots/booking-services-by-room.jpg", alt: ["Ảnh chụp thật bước chọn dịch vụ riêng theo từng phòng", "Actual service-selection step for individual rooms"] },
-      { src: "/user-guide/screenshots/booking-promotion-selection.jpg", alt: ["Ảnh chụp thật bước chọn khuyến mãi; tên và mã ưu đãi đã được làm mờ", "Actual promotion-selection step; promotion names and codes have been blurred"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-list/01.jpg", srcEn: "/user-guide/screenshots/en/booking-list/01.jpg", alt: ["Ảnh chụp trang Danh sách booking thực tế", "Actual Booking list screen"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-create/02.jpg", srcEn: "/user-guide/screenshots/en/booking-create/02.jpg", alt: ["Ảnh chụp bước chọn ngày và phòng", "Dates-and-rooms step"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-create/03.jpg", srcEn: "/user-guide/screenshots/en/booking-create/03.jpg", alt: ["Ảnh chụp bước chọn phòng", "Room-selection step"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-create/04.jpg", srcEn: "/user-guide/screenshots/en/booking-create/04.jpg", alt: ["Ảnh chụp bước nhập thông tin khách", "Guest-information step"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-create/05.jpg", srcEn: "/user-guide/screenshots/en/booking-create/05.jpg", alt: ["Ảnh chụp bước chọn dịch vụ", "Service-selection step"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-create/06.jpg", srcEn: "/user-guide/screenshots/en/booking-create/06.jpg", alt: ["Ảnh chụp bước chọn khuyến mãi và tổng kết", "Promotion selection and booking summary"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-add-services/01.jpg", srcEn: "/user-guide/screenshots/en/booking-add-services/01.jpg", alt: ["Ảnh chụp danh sách booking trước khi thêm dịch vụ", "Booking list before adding a service"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-add-services/02.jpg", srcEn: "/user-guide/screenshots/en/booking-add-services/02.jpg", alt: ["Ảnh chụp bước chọn dịch vụ bổ sung cho booking", "Selecting an additional service for a booking"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/01.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/01.jpg", alt: ["Ảnh chụp bước xem trước khoản hoàn khi hủy booking", "Refund preview during booking cancellation"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/02.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/02.jpg", alt: ["Ảnh chụp bước chọn phương thức hoàn tiền", "Selecting a refund method"] },
     ],
     route: "/bookings",
     steps: [
@@ -92,13 +96,15 @@ const guideSections: GuideSection[] = [
       ["Trước khi gửi, đối chiếu lại khách, số người/phụ thu từng phòng, ngày/phòng, dịch vụ, khuyến mãi và tổng tiền. Không xem booking là đã thanh toán chỉ vì đã xác nhận; ghi nhận thu tiền theo quy trình của chi nhánh.", "Before submitting, recheck the guest, guest counts/surcharges by room, dates/rooms, services, promotion, and total. Do not treat a booking as paid just because it was confirmed; record payment using the branch's process."],
       ["Nhấn Xác nhận đặt phòng một lần và chờ kết quả. Khi thành công, lưu mã booking và kiểm tra trạng thái trong Danh sách booking; không gửi lại chỉ vì trang đang xử lý.", "Select Confirm booking once and wait for the result. On success, note the booking reference and verify its status in Booking list; do not resubmit while it is processing."],
       ["Tra cứu booking cũ: mở Danh sách booking, lọc/tìm đúng mã hoặc khách, mở dòng để xem trạng thái. Khi sửa booking, rà lại ngày/phòng, dịch vụ, khuyến mãi và tổng tiền trước khi cập nhật.", "To find an existing booking, open Booking list, filter/search for the correct reference or guest, and open the row to review its status. Before editing, recheck dates/rooms, services, promotion, and total."],
+      ["Thêm dịch vụ vào booking đã có: mở thao tác chỉnh sửa, tìm mục Thêm dịch vụ phát sinh, chọn đúng phòng còn hoạt động, dịch vụ và số lượng; nhấn Cập nhật rồi mở lại booking để kiểm tra.", "To add a service to an existing booking, open Edit, find Add services, select the active room, service, and quantity, then select Update and reopen the booking to verify."],
+      ["Hủy booking: chỉ hủy booking Đang chờ/Đã xác nhận. Đọc bảng xem trước tiền phòng, tiền phạt, tiền dịch vụ và tổng hoàn; chọn tiền mặt hoặc chuyển khoản, nhập thông tin tài khoản nếu có rồi xác nhận đúng số tiền.", "To cancel, use a Pending/Confirmed booking only. Review room amount, penalty, service amount, and total refund; choose cash or bank transfer, enter account details if available, and confirm the exact amount."],
     ],
     tip: ["Không xác nhận nếu thông tin liên hệ hoặc phòng chưa đúng. Với booking đã nhận phòng/hoàn tất/hủy, một số thay đổi sẽ bị khóa.", "Do not confirm if contact or room details are incorrect. Some edits are locked for checked-in, completed, or cancelled bookings."],
   },
   {
     title: ["3. Check-in / Check-out tại quầy", "3. Front-desk check-in / check-out"],
-    imageVi: "/user-guide/screenshots/check-in-out.jpg",
-    imageEn: "/user-guide/screenshots/check-in-out.jpg",
+    imageVi: "/user-guide/screenshots/vi/checkinout/01.jpg",
+    imageEn: "/user-guide/screenshots/en/checkinout/01.jpg",
     imageAlt: ["Ảnh chụp trang Check-in / Check-out thực tế", "Actual Check-in / Check-out screen"],
     route: "/check-in-out",
     steps: [
@@ -110,20 +116,54 @@ const guideSections: GuideSection[] = [
       ["Khi nhận phòng, xác nhận đúng khách và phòng; kiểm tra trạng thái thanh toán, ghi chú đến sớm và phụ thu (nếu có).", "For check-in, confirm the guest and room, then review payment status, early-arrival notes, and any surcharge."],
       ["Chỉ xác nhận nhận phòng sau khi đã thông báo và thống nhất các khoản phí phát sinh với khách.", "Confirm check-in only after any additional charges have been explained and agreed with the guest."],
       ["Khi trả phòng, kiểm tra từng dịch vụ đã sử dụng và khoản phát sinh; xác nhận số lượng thực tế thay vì mặc định số đã đặt.", "For check-out, review each service used and extra charge; confirm actual usage instead of assuming the booked quantity was used."],
-      ["Đối chiếu tiền đã thu, số còn phải thu hoặc số tiền hoàn. Nếu có hoàn tiền, làm theo phương thức và quy trình phê duyệt của khách sạn.", "Reconcile payments received, any balance due, and any refund. Follow the hotel's refund method and approval process."],
+      ["Nếu có khoản thu dư, chọn hoàn tiền mặt hoặc chuyển khoản. Với chuyển khoản, chọn ngân hàng và nhập tên chủ tài khoản, số tài khoản; xác minh số tiền và thông tin trước khi hoàn tất.", "For a surplus payment, choose cash or bank refund. For bank transfer, select the bank and enter the account holder and account number; verify the amount and details before completing check-out."],
+      ["Đối chiếu tiền đã thu, số còn phải thu hoặc số tiền hoàn. Hoàn chuyển khoản cần quản lý duyệt và tiếp tục xử lý tại Phê duyệt hoàn tiền.", "Reconcile payments received, any balance due, and any refund. Bank refunds require manager approval and follow-up in Refund approvals."],
       ["Với booking nhiều phòng, mở và rà soát từng phòng/khách. Chỉ dùng thao tác nhóm khi mọi dòng được chọn đều đúng.", "For multi-room bookings, open and review each room/guest. Use a group action only when every selected row is correct."],
       ["Sau khi xác nhận, kiểm tra trạng thái mới trên booking và đảm bảo phòng chuyển sang trạng thái phù hợp với nghiệp vụ.", "After confirming, verify the booking's new status and ensure the room reflects the appropriate operational state."],
     ],
     tip: ["Không tự xác nhận tiền mặt đã hoàn nếu chưa giao/hoàn thực tế. Yêu cầu hoàn qua ngân hàng có thể cần xử lý tại Phê duyệt hoàn tiền.", "Do not mark a cash refund complete until it has actually been returned. Bank refunds may need to be handled in Refund approvals."],
   },
   {
-    title: ["4. Quản lý phòng", "4. Room management"],
-    imageVi: "/user-guide/screenshots/rooms.jpg",
-    imageEn: "/user-guide/screenshots/rooms.jpg",
+    title: ["Thay đổi booking: thêm dịch vụ và hủy", "Booking changes: add services and cancel"],
+    imageVi: "/user-guide/screenshots/vi/booking-add-services/02.jpg",
+    imageEn: "/user-guide/screenshots/en/booking-add-services/02.jpg",
+    imageAlt: ["Chọn dịch vụ bổ sung cho booking hiện có", "Selecting an additional service for an existing booking"],
+    relatedScreenshots: [
+      { srcVi: "/user-guide/screenshots/vi/booking-add-services/01.jpg", srcEn: "/user-guide/screenshots/en/booking-add-services/01.jpg", alt: ["Danh sách booking trước khi thêm dịch vụ", "Booking list before adding a service"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-add-services/03.jpg", srcEn: "/user-guide/screenshots/en/booking-add-services/03.jpg", alt: ["Tóm tắt booking sau khi thêm dịch vụ", "Booking summary after adding a service"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-add-services/04.jpg", srcEn: "/user-guide/screenshots/en/booking-add-services/04.jpg", alt: ["Kết quả cập nhật dịch vụ cho booking", "Service update result"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/01.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/01.jpg", alt: ["Xem trước tiền hoàn trước khi hủy booking", "Refund preview before cancelling a booking"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/02.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/02.jpg", alt: ["Xác nhận phương thức hoàn tiền", "Confirming the refund method"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/03.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/03.jpg", alt: ["Thông tin bổ sung về hoàn tiền", "Additional refund information"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/04.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/04.jpg", alt: ["Nhập thông tin nhận tiền hoàn", "Entering refund recipient details"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/05.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/05.jpg", alt: ["Kiểm tra yêu cầu hủy booking", "Reviewing the cancellation request"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-cancel/06.jpg", srcEn: "/user-guide/screenshots/en/booking-cancel/06.jpg", alt: ["Kết quả gửi yêu cầu hủy booking", "Cancellation request result"] },
+    ],
+    route: "/booking-list",
+    steps: [
+      ["Thêm dịch vụ: trong Danh sách booking, mở đúng booking và chọn Chỉnh sửa. Xác nhận mã booking, khách và các phòng còn hoạt động.", "To add a service, open the correct booking in Booking list and select Edit. Verify the booking reference, guest, and active rooms."],
+      ["Ở mục Thêm dịch vụ phát sinh, mở đúng phòng, chọn dịch vụ khách yêu cầu, nhập số lượng và kiểm tra đơn vị/giá hiển thị. Lặp lại riêng cho từng phòng cần thêm.", "In Add services, open the correct room, select the requested service, enter its quantity, and check its unit/price. Repeat only for each requested room."],
+      ["Rà soát lựa chọn rồi nhấn Cập nhật một lần. Chờ kết quả và mở lại booking để kiểm tra dịch vụ cùng số lượng đã được lưu.", "Review the selections and select Update once. Wait for the result, then reopen the booking to verify the service and quantity."],
+      ["Hủy booking: chỉ hủy booking Đang chờ hoặc Đã xác nhận. Chọn Hủy booking và chờ bảng xem trước khoản hoàn tải đầy đủ.", "To cancel, use a booking in Pending or Confirmed status only. Select Cancel booking and wait for the full refund preview."],
+      ["Đối chiếu tiền đã thanh toán, tiền phòng, tiền phạt, tiền dịch vụ được hoàn, tổng hoàn và thời gian đến giờ nhận phòng. Nếu xem trước lỗi/thiếu, thử tải lại; không xác nhận khi chưa có số tiền chính xác.", "Review the amount paid, room amount, penalty, service refund, total refund, and time until check-in. Retry if the preview fails or is incomplete; do not confirm without an exact amount."],
+      ["Chọn tiền mặt nếu nhân viên sẽ giao tiền trực tiếp và chỉ xác nhận sau khi đã giao. Chọn chuyển khoản nếu quản lý sẽ duyệt rồi chuyển tiền.", "Choose cash only when staff will hand the money to the guest, and confirm only after handing it over. Choose bank transfer when a manager will approve the refund before transfer."],
+      ["Khi hoàn ngân hàng, nhập thông tin tài khoản đầy đủ nếu đã có; nếu chưa có, có thể bổ sung tại Phê duyệt hoàn tiền. Kiểm tra email/lý do nếu nhập rồi xác nhận hủy một lần.", "For a bank refund, enter complete account details if available; missing details can be added in Refund approvals. Check the email/reason if provided, then confirm cancellation once."],
+      ["Booking đã hủy chưa có nghĩa là tiền chuyển khoản đã gửi. Theo dõi khoản hoàn tiếp tại Phê duyệt hoàn tiền.", "A cancelled booking does not mean the bank transfer has been sent. Follow up in Refund approvals."],
+    ],
+    tip: ["Không giao tiền khi chưa kiểm tra đúng khách và số tiền. Chuyển khoản phải qua bước quản lý duyệt.", "Do not hand over money before verifying the guest and exact amount. Bank transfers require manager approval."],
+  },
+  {
+    title: ["5. Quản lý phòng", "5. Room management"],
+    imageVi: "/user-guide/screenshots/vi/room-list/01.jpg",
+    imageEn: "/user-guide/screenshots/en/room-list/01.jpg",
     imageAlt: ["Ảnh chụp trang Quản lý phòng thực tế", "Actual Room management screen"],
     relatedScreenshots: [
-      { src: "/user-guide/screenshots/room-pricing.jpg", alt: ["Ảnh chụp phần cấu hình giá phòng", "Room pricing configuration screen"] },
-      { src: "/user-guide/screenshots/hotel-rules.jpg", alt: ["Ảnh chụp trang Nội quy khách sạn", "Hotel rules screen"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/01.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/01.jpg", alt: ["Cấu hình giá cơ bản theo loại phòng", "Base rates by room type"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/03.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/03.jpg", alt: ["Danh sách giá áp dụng theo sự kiện", "Event-based pricing list"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/05.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/05.jpg", alt: ["Biểu mẫu tạo cấu hình giá sự kiện", "Create event pricing form"] },
+      { srcVi: "/user-guide/screenshots/vi/floor-building/01.jpg", srcEn: "/user-guide/screenshots/en/floor-building/01.jpg", alt: ["Danh sách tòa nhà", "Building list"] },
+      { srcVi: "/user-guide/screenshots/vi/floor-building/04.jpg", srcEn: "/user-guide/screenshots/en/floor-building/04.jpg", alt: ["Danh sách tầng của tòa nhà", "Floors for a selected building"] },
+      { srcVi: "/user-guide/screenshots/vi/hotel-rules/01.jpg", alt: ["Ảnh chụp trang Nội quy khách sạn", "Hotel rules screen"] },
     ],
     route: "/rooms",
     steps: [
@@ -134,19 +174,24 @@ const guideSections: GuideSection[] = [
       ["Nếu có quyền chỉnh sửa, cập nhật các trường cần thiết rồi đọc lại toàn bộ thông tin trước khi lưu.", "If you have edit permission, update the required fields and review all details before saving."],
       ["Khi giao dọn phòng, mở mục công việc/phân công, chọn đúng phòng và nhân viên được giao, rồi xác nhận phân công.", "To assign housekeeping, open tasks/assignments, select the correct room and staff member, then confirm the assignment."],
       ["Cập nhật trạng thái phòng theo tiến độ thực tế; không chuyển sang Sẵn sàng trước khi công việc dọn/kiểm tra hoàn tất.", "Update room status to match actual progress; do not mark it Ready until cleaning/inspection is complete."],
+      ["Tòa nhà và tầng: trong Quản lý danh sách phòng, mở tab Tòa nhà để tìm, thêm hoặc chỉnh sửa tòa. Nhập tên; mã tòa được tạo khi lưu.", "Buildings and floors: in Room list management, open Buildings to search, add, or edit a building. Enter its name; the code is generated when saved."],
+      ["Mở tab Tầng nhà, chọn đúng tòa rồi thêm tầng. Nhập số tầng nguyên dương; khi nhập Excel/CSV, dùng mẫu và kiểm tra những tầng trùng sẽ được bỏ qua.", "Open Floors, select the correct building, and add a floor. Enter a positive whole number; for Excel/CSV import, use the template and note that duplicate floors are skipped."],
+      ["Giá cơ bản: mở Quản lý cấu hình giá → Cấu hình giá theo loại phòng. Kiểm tra giá/đêm, sức chứa và phụ thu trước khi cập nhật.", "Base rates: open Pricing configuration → Pricing by room type. Review nightly rate, capacity, and surcharges before updating."],
+      ["Giá sự kiện: chuyển sang Cấu hình giá theo sự kiện, tạo quy tắc với tên và ngày bắt đầu/kết thúc. Trong từng nhóm, chọn loại phòng và nhập giá áp dụng (VND); đảm bảo các loại phòng được gán đúng nhóm theo yêu cầu.", "Event pricing: open Pricing by event and create a rule with a name and start/end dates. For each group, select room types and enter the applicable price (VND); make sure the required room types are assigned to the correct groups."],
+      ["Sau khi lưu, tìm sự kiện trong bảng; dùng lọc ngày, trạng thái hoặc loại phòng để kiểm tra tên, thời hạn và giá ở từng loại phòng.", "After saving, find the event in the table; use date, status, or room-type filters to verify its name, validity period, and price for each room type."],
     ],
   },
   {
-    title: ["5. Khách hàng, dịch vụ, hóa đơn và hoàn tiền", "5. Customers, services, invoices, and refunds"],
-    imageVi: "/user-guide/screenshots/customers.jpg",
-    imageEn: "/user-guide/screenshots/customers.jpg",
-    imageAlt: ["Ảnh chụp trang Quản lý khách hàng; thông tin khách đã được làm mờ", "Customer management screen; guest details have been blurred"],
+    title: ["6. Khách hàng, dịch vụ, hóa đơn và hoàn tiền", "6. Customers, services, invoices, and refunds"],
+    imageVi: "/user-guide/screenshots/vi/customer-management/01.jpg",
+    imageEn: "/user-guide/screenshots/en/customer-management/01.jpg",
+    imageAlt: ["Ảnh chụp trang Quản lý khách hàng", "Customer management screen"],
     relatedScreenshots: [
-      { src: "/user-guide/screenshots/services.jpg", alt: ["Ảnh chụp trang thao tác dịch vụ khách hàng", "Guest service usage screen"] },
-      { src: "/user-guide/screenshots/service-catalog.jpg", alt: ["Ảnh chụp danh mục dịch vụ", "Service catalog screen"] },
-      { src: "/user-guide/screenshots/invoices.jpg", alt: ["Ảnh chụp trang Hóa đơn; dữ liệu booking đã được làm mờ", "Invoice screen; booking details have been blurred"] },
-      { src: "/user-guide/screenshots/refund-approvals.jpg", alt: ["Ảnh chụp trang Phê duyệt hoàn tiền", "Refund approvals screen"] },
-      { src: "/user-guide/screenshots/promotions.jpg", alt: ["Ảnh chụp trang Khuyến mãi", "Promotions screen"] },
+      { srcVi: "/user-guide/screenshots/vi/service-usage/01.jpg", srcEn: "/user-guide/screenshots/en/service-usage/01.jpg", alt: ["Ảnh chụp trang thao tác dịch vụ khách hàng", "Guest service usage screen"] },
+      { srcVi: "/user-guide/screenshots/vi/service-catalog/01.jpg", srcEn: "/user-guide/screenshots/en/service-catalog/01.jpg", alt: ["Ảnh chụp danh mục dịch vụ", "Service catalog screen"] },
+      { srcVi: "/user-guide/screenshots/vi/invoice-management/01.jpg", srcEn: "/user-guide/screenshots/en/order-management/01.jpg", alt: ["Ảnh chụp trang Hóa đơn", "Order management screen"] },
+      { srcVi: "/user-guide/screenshots/vi/refund-approvals/01.jpg", srcEn: "/user-guide/screenshots/en/refund-approvals/01.jpg", alt: ["Ảnh chụp trang Phê duyệt hoàn tiền", "Refund approvals screen"] },
+      { srcVi: "/user-guide/screenshots/vi/promotion-management/01.jpg", srcEn: "/user-guide/screenshots/en/promotion-management/01.jpg", alt: ["Ảnh chụp trang Khuyến mãi", "Promotions screen"] },
     ],
     route: "/customers",
     steps: [
@@ -165,16 +210,16 @@ const guideSections: GuideSection[] = [
     tip: ["Thông tin hồ sơ và tên khách là nội dung dữ liệu, không tự chuyển ngôn ngữ theo nút Tiếng Việt/English.", "Profile information and guest names are data content and do not automatically change when switching Vietnamese/English."],
   },
   {
-    title: ["6. Nhân viên, ca làm và báo cáo", "6. Staff, shifts, and reports"],
-    imageVi: "/user-guide/screenshots/staff.jpg",
-    imageEn: "/user-guide/screenshots/staff.jpg",
+    title: ["7. Nhân viên, ca làm và báo cáo", "7. Staff, shifts, and reports"],
+    imageVi: "/user-guide/screenshots/vi/staff-weekly-shifts/01.jpg",
+    imageEn: "/user-guide/screenshots/en/staff-weekly-shifts/01.jpg",
     imageAlt: ["Ảnh chụp trang Nhân viên & ca làm thực tế; thông tin nhân viên đã được làm mờ", "Actual Staff & shifts screen; staff details have been blurred"],
     relatedScreenshots: [
-      { src: "/user-guide/screenshots/staff-employees.jpg", alt: ["Ảnh chụp danh sách nhân viên; thông tin cá nhân đã được làm mờ", "Employee directory; personal details have been blurred"] },
-      { src: "/user-guide/screenshots/staff-shifts.jpg", alt: ["Ảnh chụp màn hình phân ca làm việc", "Shift scheduling screen"] },
-      { src: "/user-guide/screenshots/staff-tasks.jpg", alt: ["Ảnh chụp màn hình phân công công việc", "Task assignment screen"] },
-      { src: "/user-guide/screenshots/reports.jpg", alt: ["Ảnh chụp báo cáo doanh thu", "Revenue report screen"] },
-      { src: "/user-guide/screenshots/settings.jpg", alt: ["Ảnh chụp trang Cài đặt; thông tin nhận diện đã được làm mờ", "Settings screen; identifying details have been blurred"] },
+      { srcVi: "/user-guide/screenshots/vi/staff-directory/01.jpg", srcEn: "/user-guide/screenshots/en/staff-directory/01.jpg", alt: ["Ảnh chụp danh sách nhân viên", "Employee directory"] },
+      { srcVi: "/user-guide/screenshots/vi/staff-assign-shifts/01.jpg", srcEn: "/user-guide/screenshots/en/staff-assign-shifts/01.jpg", alt: ["Ảnh chụp màn hình phân ca làm việc", "Shift assignment screen"] },
+      { srcVi: "/user-guide/screenshots/vi/staff-tasks/01.jpg", srcEn: "/user-guide/screenshots/en/staff-tasks/01.jpg", alt: ["Ảnh chụp màn hình phân công công việc", "Task assignment screen"] },
+      { srcVi: "/user-guide/screenshots/vi/reports/01.jpg", srcEn: "/user-guide/screenshots/en/reports/01.jpg", alt: ["Ảnh chụp báo cáo doanh thu", "Revenue report screen"] },
+      { srcVi: "/user-guide/screenshots/vi/settings/01.jpg", srcEn: "/user-guide/screenshots/en/settings/01.jpg", alt: ["Ảnh chụp trang Cài đặt", "Settings screen"] },
     ],
     route: "/staff",
     steps: [
@@ -223,14 +268,24 @@ export default function UserGuideButton() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <a
-            href="/user-guide/USER_GUIDE_VI.pdf"
-            download="Sen-Viet-User-Guide-VI.pdf"
-            className="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
-            <Download className="h-4 w-4" />
-            {text("Tải hướng dẫn tiếng Việt (PDF)", "Download Vietnamese guide (PDF)")}
-          </a>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/user-guide/USER_GUIDE_VI.pdf"
+              download="Sen-Viet-User-Guide-VI.pdf"
+              className="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <Download className="h-4 w-4" />
+              {text("Tải hướng dẫn tiếng Việt (PDF)", "Download Vietnamese guide (PDF)")}
+            </a>
+            <a
+              href="/user-guide/USER_GUIDE_EN.pdf"
+              download="Sen-Viet-User-Guide-EN.pdf"
+              className="inline-flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <Download className="h-4 w-4" />
+              {text("Tải hướng dẫn tiếng Anh (PDF)", "Download English guide (PDF)")}
+            </a>
+          </div>
           <div className="space-y-3">
             {guideSections.map((section, index) => (
               <details key={section.title[0]} open={index === 0} className="group rounded-xl border border-slate-200 bg-white">
@@ -247,22 +302,26 @@ export default function UserGuideButton() {
                         className="w-full rounded-lg border border-slate-200 bg-slate-50"
                       />
                       <figcaption className="mt-1 text-center text-xs text-slate-500">
-                        {text("Ảnh chụp giao diện thật (bằng tiếng Việt); thông tin nhận diện đã được che hoặc làm mờ.", "Real application screenshot (Vietnamese UI); identifying details have been hidden or blurred.")}
+                        {text("Ảnh giao diện thực tế bằng ngôn ngữ đang chọn. Hãy che thông tin cá nhân trước khi chia sẻ.", "Actual screenshot in the selected interface language. Redact personal details before sharing.")}
                       </figcaption>
                     </figure>
                   )}
-                  {section.relatedScreenshots?.map((screenshot) => (
-                    <figure key={screenshot.src}>
-                      <img
-                        src={screenshot.src}
-                        alt={text(screenshot.alt[0], screenshot.alt[1])}
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50"
-                      />
-                      <figcaption className="mt-1 text-center text-xs text-slate-500">
-                        {text("Ảnh chụp giao diện thật (bằng tiếng Việt); thông tin nhận diện đã được che hoặc làm mờ.", "Real application screenshot (Vietnamese UI); identifying details have been hidden or blurred.")}
-                      </figcaption>
-                    </figure>
-                  ))}
+                  {section.relatedScreenshots?.map((screenshot) => {
+                    const src = isEn ? screenshot.srcEn : screenshot.srcVi;
+                    if (!src) return null;
+                    return (
+                      <figure key={src}>
+                        <img
+                          src={src}
+                          alt={text(screenshot.alt[0], screenshot.alt[1])}
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50"
+                        />
+                        <figcaption className="mt-1 text-center text-xs text-slate-500">
+                          {text("Ảnh giao diện thực tế bằng ngôn ngữ đang chọn. Hãy che thông tin cá nhân trước khi chia sẻ.", "Actual screenshot in the selected interface language. Redact personal details before sharing.")}
+                        </figcaption>
+                      </figure>
+                    );
+                  })}
                   <ol className="space-y-3">
                     {section.steps.map(([vi, en], stepIndex) => (
                       <li key={vi} className="flex items-start gap-3 text-sm leading-6 text-slate-700">

@@ -2,8 +2,9 @@ import { CreditCard } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
 import CheckoutSummary, { getCheckoutOutstandingAmount, type CheckoutSummaryRoom } from "./CheckoutSummary";
-import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from "./CheckoutSurplusRefundChoice";
+import CheckoutSurplusRefundChoice from "./CheckoutSurplusRefundChoice";
 import CheckoutUnusedServicesWarning, { type CheckoutUnusedService } from "./CheckoutUnusedServicesWarning";
+import type { CheckoutSurplusRefundSelection } from "../services/checkInOutApi";
 
 type BatchActionRoom = {
   id: string;
@@ -23,8 +24,8 @@ type BatchActionDialogProps = {
   onClose: () => void;
   onConfirm: () => void;
   checkoutSummaryRooms?: CheckoutSummaryRoom[];
-  checkoutRefundMethods?: Record<string, CheckoutSurplusRefundMethod>;
-  onCheckoutRefundMethodChange?: (bookingId: string, method: CheckoutSurplusRefundMethod) => void;
+  checkoutRefundMethods?: Record<string, CheckoutSurplusRefundSelection>;
+  onCheckoutRefundMethodChange?: (bookingId: string, selection: CheckoutSurplusRefundSelection) => void;
   checkoutUnusedServices?: CheckoutUnusedService[];
   isCancellingUnusedServices?: boolean;
   onCancelUnusedServices?: () => void;
@@ -68,10 +69,21 @@ export default function BatchActionDialog({
     (room.surplusAmount ?? 0) > 0
       && getCheckoutOutstandingAmount(selectedCheckoutRooms.filter((selectedRoom) => selectedRoom.bookingId === bookingId)) === 0,
   );
-  const allRefundMethodsSelected = bookingsRequiringRefund.every(([bookingId]) => checkoutRefundMethods[bookingId] != null);
+  const isRefundSelectionComplete = (bookingId: string) => {
+    const selection = checkoutRefundMethods[bookingId];
+    if (!selection) return false;
+    if (selection.method === "CASH") return true;
+    const details = selection.bankDetails;
+    return Boolean(
+      details?.bankName.trim()
+      && details.bankAccountName.trim()
+      && /^[0-9]{6,50}$/.test(details.bankAccountNumber.trim()),
+    );
+  };
+  const allRefundMethodsSelected = bookingsRequiringRefund.every(([bookingId]) => isRefundSelectionComplete(bookingId));
 
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={onClose}>
-    <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+  return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4" onMouseDown={onClose}>
+    <div className="mx-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg touch-pan-y overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
       <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
           <p className={`text-xs font-semibold uppercase tracking-wider ${isCheckIn ? "text-blue-600" : "text-amber-600"}`}>{isCheckIn ? localizedText("Check-in từng phòng", "Check in rooms individually") : localizedText("Check-out hàng loạt", "Bulk check-out")}</p>

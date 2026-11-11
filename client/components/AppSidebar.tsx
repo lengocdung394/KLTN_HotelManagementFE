@@ -22,6 +22,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
 import { isEmployeePortalUser } from "../lib/employeeRoles";
+import { localizedText } from "../i18n";
 import { useGetHotelHousekeepingTasksQuery } from "../services/shiftApi";
 import { useGetCheckInOutSummaryQuery } from "../services/checkInOutApi";
 import {
@@ -46,13 +47,13 @@ const items = [
   ["/customers", "customers", UserRound],
   ["/rooms", "rooms", DoorOpen],
   ["/invoices", "invoices", WalletCards],
+  ["/reports", "reports", FileText],
   ["/promotions", "promotions", Tag],
   ["/services", "services", ConciergeBell],
 ] as const;
 const adminItems = [
   ["/staff", "staff", Users],
   ["/permissions", "permissions", ShieldCheck],
-  ["/reports", "reports", FileText],
   ["/settings", "settings", Settings],
 ] as const;
 const sidebarOrder: Record<string, string> = {
@@ -64,8 +65,9 @@ const sidebarOrder: Record<string, string> = {
   "/customers": "order-6",
   "/invoices": "order-7",
   "/refund-approvals": "order-8",
-  "/promotions": "order-9",
-  "/hotel-rules": "order-10",
+  "/reports": "order-9",
+  "/promotions": "order-10",
+  "/hotel-rules": "order-11",
 };
 
 export default function AppSidebar({
@@ -81,6 +83,7 @@ export default function AppSidebar({
   const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
   const isEmployee = isEmployeePortalUser(roles);
   const canManageHousekeepingTasks = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_ADMIN");
+  const canViewHousekeepingTasks = canManageHousekeepingTasks || isEmployee;
   const today = new Date();
   const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const { data: checkInOutSummary } = useGetCheckInOutSummaryQuery(
@@ -90,7 +93,7 @@ export default function AppSidebar({
   const pendingCheckInOutCount =
     (checkInOutSummary?.waitingCheckIn ?? 0) + (checkInOutSummary?.waitingCheckOut ?? 0);
   const { data: housekeepingTasks = [] } = useGetHotelHousekeepingTasksQuery(undefined, {
-    skip: !canManageHousekeepingTasks,
+    skip: !canViewHousekeepingTasks,
     pollingInterval: 30000,
   });
   const pendingHousekeepingTaskCount = housekeepingTasks.filter((task) => task.status === "NEEDS_ASSIGNMENT").length;
@@ -131,6 +134,9 @@ export default function AppSidebar({
   const servicesActive = location.pathname.startsWith("/services");
   const staffActive = location.pathname === "/staff";
   const canManageServices = roles.includes("ROLE_MANAGER");
+  const canViewServiceCatalog = canManageServices
+    || roles.includes("ROLE_ADMIN")
+    || isEmployee;
   const currentRoomTab = new URLSearchParams(location.search).get("tab");
   const currentStaffTab =
     new URLSearchParams(location.search).get("tab") ?? "today";
@@ -312,7 +318,12 @@ export default function AppSidebar({
           </div>
           {items
             .slice(2)
-            .filter(([href]) => href !== "/rooms" && href !== "/services")
+            .filter(
+              ([href]) =>
+                href !== "/rooms"
+                && href !== "/services"
+                && !(isEmployee && href === "/reports"),
+            )
             .map(([href, label, Icon]) => (
               <Link
                 key={href}
@@ -361,13 +372,15 @@ export default function AppSidebar({
                 >
                   {t("navigation.serviceUsage", "Thao tác dịch vụ khách hàng")}
                 </Link>
-                {canManageServices && (
+                {canViewServiceCatalog && (
                   <Link
                     to="/services/catalog"
                     onClick={onCloseMobile}
                     className={`block whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-4 ${location.pathname === "/services/catalog" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                   >
-                    {t("navigation.serviceCatalog", "Quản lý danh mục dịch vụ")}
+                    {isEmployee
+                      ? localizedText("Danh sách dịch vụ", "Service list")
+                      : t("navigation.serviceCatalog", "Quản lý danh mục dịch vụ")}
                   </Link>
                 )}
               </div>
@@ -395,14 +408,14 @@ export default function AppSidebar({
               >
                 <ClipboardList size={17} />
                 {t("staff.housekeepingAssignment")}
-              </Link>
-              <Link
-                to="/reports"
-                onClick={onCloseMobile}
-                className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/reports" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
-              >
-                <FileText size={17} />
-                {t("navigation.reports")}
+                {pendingHousekeepingTaskCount > 0 && (
+                  <span
+                    className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white"
+                    aria-label={`${pendingHousekeepingTaskCount} ${t("staff.housekeepingAssignment")}`}
+                  >
+                    {pendingHousekeepingTaskCount}
+                  </span>
+                )}
               </Link>
               <Link
                 to="/settings"
@@ -489,7 +502,14 @@ export default function AppSidebar({
                     >
                       {t("staff.assignTasks")}
                       {pendingHousekeepingTaskCount > 0 && (
-                        <span className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white" aria-label={`${pendingHousekeepingTaskCount} ${t("staff.assignTasks")}`}>
+                        <span
+                          className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white"
+                          aria-label={`${pendingHousekeepingTaskCount} ${t("staff.assignTasks")}`}
+                          title={localizedText(
+                            `${pendingHousekeepingTaskCount} phòng đang chờ phân công`,
+                            `${pendingHousekeepingTaskCount} rooms awaiting assignment`,
+                          )}
+                        >
                           {pendingHousekeepingTaskCount}
                         </span>
                       )}

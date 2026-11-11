@@ -22,6 +22,7 @@ import SearchableFilter from "../components/SearchableFilter";
 import { localizedText } from "../i18n";
 import { toast } from "@/components/ui/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { useGetSuperAdminBranchDetailsQuery } from "../services/superAdminApi";
 import {
   useApproveBookingRefundMutation,
   useConfirmBookingRefundMutation,
@@ -38,6 +39,11 @@ import {
   type PayOSPayoutState,
 } from "../services/managementBookingApi";
 
+type BranchOption = { id: number; name: string };
+type Props = {
+  branches?: BranchOption[];
+};
+
 type CancellationAction = "approve" | "reject" | "payout" | "manual-confirm" | "bank-details";
 type CancellationFilter = "ALL" | BookingCancellationStatus;
 type BookingChannelFilter = "ALL" | BookingChannel;
@@ -46,13 +52,14 @@ type RefundQueue = "overpayment" | "cancellation";
 const CANCELLATION_TABLE_COLUMNS = [
   { id: "booking", label: ["Mã booking", "Booking ID"], width: 190 },
   { id: "customer", label: ["Khách hàng", "Guest"], width: 175 },
-  { id: "channel", label: ["Kênh đặt", "Channel"], width: 110 },
-  { id: "date", label: ["Ngày yêu cầu", "Request date"], width: 155 },
+  { id: "channel", label: ["Kênh đặt", "Booking channel"], width: 150 },
+  { id: "date", label: ["Ngày yêu cầu", "Request date"], width: 205 },
   { id: "reason", label: ["Lý do", "Reason"], width: 190 },
-  { id: "account", label: ["Tài khoản nhận", "Recipient account"], width: 220 },
+  { id: "account", label: ["Hình thức / tài khoản nhận", "Method / recipient account"], width: 220 },
   { id: "amount", label: ["Chi tiết hoàn", "Refund details"], width: 210 },
-  { id: "status", label: ["Trạng thái", "Status"], width: 190 },
-  { id: "actions", label: ["Thao tác", "Actions"], width: 160 },
+  { id: "refundedBy", label: ["Người hoàn tiền", "Refunded by"], width: 180 },
+  { id: "status", label: ["Trạng thái", "Status"], width: 240 },
+  { id: "actions", label: ["Thao tác", "Actions"], width: 300 },
 ] as const;
 type CancellationTableColumnId = (typeof CANCELLATION_TABLE_COLUMNS)[number]["id"];
 
@@ -96,6 +103,8 @@ const dateTime = (value: string | null | undefined) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString(localStorage.getItem("language") === "en" ? "en-US" : "vi-VN");
 };
 
+const normalizeBookingId = (value: string | null | undefined) => value?.trim().toLocaleUpperCase() ?? "";
+
 const errorMessage = (error: unknown) => {
   if (!error || typeof error !== "object") return localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "Something went wrong. Please try again.");
   const apiError = error as {
@@ -116,7 +125,7 @@ const actionTitle: Record<CancellationAction, [string, string]> = {
   approve: ["Duyệt hoàn tiền", "Approve refund"],
   reject: ["Từ chối hoàn tiền", "Reject refund"],
   payout: ["Gửi payout hoàn tiền", "Send refund payout"],
-  "manual-confirm": ["Hoàn tiền thủ công", "Manual bank refund"],
+  "manual-confirm": ["Xác nhận hoàn tiền thủ công", "Confirm manual refund"],
   "bank-details": ["Nhập tài khoản nhận hoàn", "Enter refund recipient account"],
 };
 
@@ -128,13 +137,39 @@ const actionDescription: Record<CancellationAction, [string, string]> = {
   "bank-details": ["Nhập thông tin khách cung cấp. Khách không cần có tài khoản trên website.", "Enter the details provided by the guest. The guest does not need a website account."],
 };
 
-export default function RefundApprovalWorkspace() {
+export default function RefundApprovalWorkspace({ branches }: Props) {
   useTranslation();
   const roles = useAppSelector((state) => state.auth.roles);
   const canApproveRefund = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
+  const [selectedBranchId, setSelectedBranchId] = useState<number | undefined>();
+  const {
+    currentData: branchDetails,
+    isLoading: isBranchBookingsLoading,
+    isError: isBranchBookingsError,
+  } = useGetSuperAdminBranchDetailsQuery(selectedBranchId ?? 0, {
+    skip: selectedBranchId === undefined,
+  });
   const { data: cancellations = [], isLoading, isFetching, isError, error, refetch } =
-    useGetBookingCancellationsQuery();
-  const { data: surplusRefunds = [] } = useGetCheckoutRefundsQuery();
+    useGetBookingCancellationsQuery(selectedBranchId);
+  const { data: surplusRefunds = [] } = useGetCheckoutRefundsQuery(selectedBranchId);
+  const branchBookingIds = useMemo(
+    () => new Set((branchDetails?.bookings ?? [])
+      .map((booking) => normalizeBookingId(booking.bookingId))
+      .filter(Boolean)),
+    [branchDetails],
+  );
+  const branchCancellations = useMemo(
+    () => selectedBranchId === undefined
+      ? cancellations
+      : cancellations.filter((item) => branchBookingIds.has(normalizeBookingId(item.bookingId))),
+    [branchBookingIds, cancellations, selectedBranchId],
+  );
+  const branchSurplusRefunds = useMemo(
+    () => selectedBranchId === undefined
+      ? surplusRefunds
+      : surplusRefunds.filter((item) => branchBookingIds.has(normalizeBookingId(item.bookingId))),
+    [branchBookingIds, selectedBranchId, surplusRefunds],
+  );
   const [approveRefund, { isLoading: isApproving }] = useApproveBookingRefundMutation();
   const [confirmBookingRefund, { isLoading: isConfirmingManualRefund }] = useConfirmBookingRefundMutation();
   const [rejectRefund, { isLoading: isRejecting }] = useRejectBookingRefundMutation();
@@ -153,6 +188,7 @@ export default function RefundApprovalWorkspace() {
     reason: true,
     account: true,
     amount: true,
+    refundedBy: true,
     status: true,
     actions: true,
   });
@@ -179,18 +215,19 @@ export default function RefundApprovalWorkspace() {
   const [feedback, setFeedback] = useState("");
 
   const counts = useMemo(() => {
-    const reviewPending = cancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length;
-    const needsBankDetails = cancellations.filter((item) => item.status === "REFUND_BANK_DETAILS_REQUIRED").length;
-    const checkoutPending = surplusRefunds.filter((item) => item.status === "PENDING").length;
-    const processing = cancellations.filter((item) => item.status === "REFUND_APPROVED").length
-      + cancellations.filter((item) => item.status === "PAYOUT_PROCESSING").length
-      + surplusRefunds.filter((item) => item.status === "APPROVED").length;
-    const refunded = cancellations.filter((item) => item.status === "REFUNDED").length
-      + surplusRefunds.filter((item) => item.status === "REFUNDED").length;
-    const totalRefunded = cancellations
+    const reviewPending = branchCancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length;
+    const needsBankDetails = branchCancellations.filter((item) => item.status === "REFUND_BANK_DETAILS_REQUIRED").length;
+    const checkoutPending = branchSurplusRefunds.filter((item) => item.status === "PENDING").length;
+    const processing = branchCancellations.filter((item) => item.status === "REFUND_APPROVED").length
+      + branchCancellations.filter((item) => item.status === "PAYOUT_PROCESSING").length
+      + branchSurplusRefunds.filter((item) => item.status === "APPROVED" || item.status === "PAYOUT_PROCESSING").length;
+    const checkoutFailed = branchSurplusRefunds.filter((item) => item.status === "PAYOUT_FAILED").length;
+    const refunded = branchCancellations.filter((item) => item.status === "REFUNDED").length
+      + branchSurplusRefunds.filter((item) => item.status === "REFUNDED").length;
+    const totalRefunded = branchCancellations
       .filter((item) => item.status === "REFUNDED")
       .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0)
-      + surplusRefunds
+      + branchSurplusRefunds
         .filter((item) => item.status === "REFUNDED")
         .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0);
 
@@ -198,15 +235,16 @@ export default function RefundApprovalWorkspace() {
       reviewPending,
       needsBankDetails,
       checkoutPending,
+      checkoutFailed,
       processing,
       refunded,
       totalRefunded,
     };
-  }, [cancellations, surplusRefunds]);
+  }, [branchCancellations, branchSurplusRefunds]);
 
   const refundRequestsByDate = useMemo(() => {
     const requestCounts = new Map<string, number>();
-    cancellations.forEach((item) => {
+    branchCancellations.forEach((item) => {
       if (Number(item.refundAmount) <= 0 || !item.requestedAt) return;
       const date = new Date(item.requestedAt);
       if (Number.isNaN(date.getTime())) return;
@@ -214,14 +252,14 @@ export default function RefundApprovalWorkspace() {
       requestCounts.set(key, (requestCounts.get(key) ?? 0) + 1);
     });
     return requestCounts;
-  }, [cancellations]);
+  }, [branchCancellations]);
   const refundRequestDates = useMemo(() => Array.from(refundRequestsByDate.keys()), [refundRequestsByDate]);
 
   const visibleCancellations = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const byStatus = filter === "ALL"
-      ? cancellations
-      : cancellations.filter((item) => item.status === filter);
+      ? branchCancellations
+      : branchCancellations.filter((item) => item.status === filter);
     const byChannel = channelFilter === "ALL"
       ? byStatus
       : byStatus.filter((item) => item.bookingChannel === channelFilter);
@@ -247,7 +285,7 @@ export default function RefundApprovalWorkspace() {
     return [...filtered].sort((first, second) =>
       new Date(second.requestedAt ?? 0).getTime() - new Date(first.requestedAt ?? 0).getTime(),
     );
-  }, [cancellations, channelFilter, filter, searchQuery, selectedRequestDate]);
+  }, [branchCancellations, channelFilter, filter, searchQuery, selectedRequestDate]);
   const cancellationTotalPages = Math.max(1, Math.ceil(visibleCancellations.length / cancellationPageSize));
   const safeCancellationPage = Math.min(cancellationPage, cancellationTotalPages);
   const paginatedCancellations = visibleCancellations.slice(
@@ -290,14 +328,14 @@ export default function RefundApprovalWorkspace() {
 
   useEffect(() => {
     setCancellationPage(1);
-  }, [filter, channelFilter, searchQuery, selectedRequestDate, cancellationPageSize]);
+  }, [filter, channelFilter, searchQuery, selectedRequestDate, selectedBranchId, cancellationPageSize]);
 
   useEffect(() => {
     if (cancellationPage > cancellationTotalPages) setCancellationPage(cancellationTotalPages);
   }, [cancellationPage, cancellationTotalPages]);
 
   const isSubmitting = isApproving || isConfirmingManualRefund || isRejecting || isRequestingPayout || isSavingBankDetails || isLoadingBankDetails;
-  const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending;
+  const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending + counts.checkoutFailed;
 
   const openAction = (cancellation: BookingCancellation, action: CancellationAction) => {
     resetBankDetailsQuery();
@@ -479,6 +517,38 @@ export default function RefundApprovalWorkspace() {
 
   return (
     <section className="mt-4 space-y-4">
+      {branches && (
+        <label className="flex w-full max-w-sm flex-col gap-1.5 text-sm font-semibold text-slate-700">
+          {localizedText("Lọc theo chi nhánh", "Filter by branch")}
+          <select
+            value={selectedBranchId ?? ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSelectedBranchId(value ? Number(value) : undefined);
+              setSelectedRequestDate(null);
+            }}
+            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          >
+            <option value="">{localizedText("Tất cả chi nhánh", "All branches")}</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>{branch.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {selectedBranchId !== undefined && isBranchBookingsError && (
+        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {localizedText(
+            "Không thể tải dữ liệu booking của chi nhánh để đối chiếu khoản hoàn tiền. Vui lòng thử lại.",
+            "Could not load this branch's booking records to match refund requests. Please try again.",
+          )}
+        </p>
+      )}
+      {selectedBranchId !== undefined && isBranchBookingsLoading && (
+        <p role="status" className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          {localizedText("Đang tải booking của chi nhánh để lọc khoản hoàn tiền...", "Loading this branch's bookings to filter refund requests...")}
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label={localizedText("Chờ xử lý hoàn tiền", "Refunds pending action")}
@@ -498,7 +568,7 @@ export default function RefundApprovalWorkspace() {
             icon: Banknote,
             title: localizedText("Hoàn tiền sau khi checkout dư", "Checkout surplus refund"),
             description: localizedText("Hoàn khoản thanh toán thừa khi checkout booking", "Refund overpayment after booking checkout"),
-            count: counts.checkoutPending,
+            count: counts.checkoutPending + counts.checkoutFailed,
             tone: "amber",
           },
           {
@@ -549,7 +619,11 @@ export default function RefundApprovalWorkspace() {
       </div>
 
       {activeQueue === "overpayment" ? (
-        <CheckoutRefundApprovalsPanel />
+        <CheckoutRefundApprovalsPanel
+          hotelId={selectedBranchId}
+          bookingIds={selectedBranchId === undefined ? undefined : [...branchBookingIds]}
+          isBranchBookingsReady={selectedBranchId === undefined || (!isBranchBookingsLoading && !isBranchBookingsError)}
+        />
       ) : (
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -665,6 +739,7 @@ export default function RefundApprovalWorkspace() {
                     reason: true,
                     account: true,
                     amount: true,
+                    refundedBy: true,
                     status: true,
                     actions: true,
                   })}
@@ -841,14 +916,17 @@ export default function RefundApprovalWorkspace() {
                         </div>
                       )}
                     </td>}
-                    {visibleColumns.status && <td className="px-3 py-4">
-                      <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
+                    {visibleColumns.refundedBy && <td className="px-3 py-4 text-slate-700">
+                      {cancellation.status === "REFUNDED" ? cancellation.refundedBy || "—" : "—"}
+                    </td>}
+                    {visibleColumns.status && <td className="px-4 py-4">
+                      <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-3 py-2 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
                         {cancellation.status === "NO_REFUND_REQUIRED"
                           ? localizedText("Không hoàn", "No refund")
                           : localizedText(...statusLabels[cancellation.status])}
                       </span>
                       {cancellation.payoutState && (
-                        <span className="mt-1 inline-flex whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                        <span className="mt-1 inline-flex max-w-full whitespace-normal break-words rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
                           {localizedText(...payoutStateLabels[cancellation.payoutState])}
                         </span>
                       )}
@@ -870,21 +948,21 @@ export default function RefundApprovalWorkspace() {
                         </p>
                       )}
                     </td>}
-                    {visibleColumns.actions && <td className="px-3 py-4">
-                      <div className="flex flex-col items-start gap-2">
+                    {visibleColumns.actions && <td className="border-l border-slate-200 px-4 py-4">
+                      <div className="flex min-w-0 flex-col items-start gap-2">
                         {canApproveRefund && cancellation.status === "REFUND_REVIEW_PENDING" && (
                           <>
                             <button
                               type="button"
                               onClick={() => openAction(cancellation, "approve")}
-                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                              className="inline-flex max-w-full items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-700"
                             >
                               <Check size={14} /> {localizedText("Duyệt", "Approve")}
                             </button>
                             <button
                               type="button"
                               onClick={() => openAction(cancellation, "reject")}
-                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                              className="inline-flex max-w-full items-center gap-1 rounded-lg border border-rose-200 px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50"
                             >
                               <X size={14} /> {localizedText("Từ chối", "Reject")}
                             </button>
@@ -895,9 +973,9 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "manual-confirm")}
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                            className="inline-flex max-w-full items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-700"
                           >
-                            <Check size={14} /> {localizedText("Xác nhận đã chuyển khoản", "Confirm transfer")}
+                            <Check size={14} /> {localizedText("Xác nhận hoàn tiền thủ công", "Confirm manual refund")}
                           </button>
                         )}
                         {canApproveRefund && cancellation.status === "REFUND_APPROVED"
@@ -905,7 +983,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "manual-confirm")}
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            className="inline-flex max-w-full items-center gap-1 rounded-lg border border-emerald-300 px-3 py-2 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
                           >
                             <Banknote size={14} /> {localizedText("Hoàn thủ công", "Manual refund")}
                           </button>
@@ -916,7 +994,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "payout")}
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                            className="inline-flex max-w-full items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-blue-700"
                           >
                             <Banknote size={14} />
                             {cancellation.status === "PAYOUT_PROCESSING"
@@ -929,7 +1007,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "bank-details")}
-                            className="inline-flex whitespace-nowrap rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                            className="inline-flex max-w-full rounded-lg border border-amber-300 px-3 py-2 text-left text-xs font-semibold text-amber-800 hover:bg-amber-50"
                           >
                             {cancellation.status === "PAYOUT_FAILED"
                               ? localizedText("Cập nhật tài khoản để thử lại", "Update account to retry")
@@ -1057,12 +1135,11 @@ export default function RefundApprovalWorkspace() {
                       <dd className="font-bold text-blue-700">{money(activeCancellation.refundAmount)}</dd>
                     </div>
                   </dl>
-                  <p className="mt-3 text-xs leading-5 text-slate-600">
-                    {localizedText("Chính sách:", "Policy:")} {activeCancellation.refundPolicy || localizedText("Không có thông tin", "Not available")}
-                    {typeof activeCancellation.hoursBeforeCheckIn === "number"
-                      ? localizedText(` · Yêu cầu trước giờ nhận phòng ${activeCancellation.hoursBeforeCheckIn} giờ`, ` · Requested ${activeCancellation.hoursBeforeCheckIn} hours before check-in`)
-                      : ""}
-                  </p>
+                  {typeof activeCancellation.hoursBeforeCheckIn === "number" && (
+                    <p className="mt-3 text-xs leading-5 text-slate-600">
+                      {localizedText(`Yêu cầu trước giờ nhận phòng ${activeCancellation.hoursBeforeCheckIn} giờ`, `Requested ${activeCancellation.hoursBeforeCheckIn} hours before check-in`)}
+                    </p>
+                  )}
                   <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
                     <input
                       type="checkbox"

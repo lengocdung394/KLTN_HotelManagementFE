@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Pencil, Search, Save, X } from "lucide-react";
 import ListPagination from "./ListPagination";
 import ClearSearchButton from "./ClearSearchButton";
@@ -15,9 +16,8 @@ type RoomAmenitiesTabProps = {
 };
 
 const normalizeText = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-const money = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
-
 export default function RoomAmenitiesTab({ amenities, isLoading, isError, canManage, onSave }: RoomAmenitiesTabProps) {
+  const { i18n } = useTranslation();
   const [search, setSearch] = useState("");
   const [editingAmenity, setEditingAmenity] = useState<AmenityResponse | null>(null);
   const [editForm, setEditForm] = useState({ name: "", price: "" });
@@ -33,6 +33,9 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   const totalPages = Math.max(1, Math.ceil(filteredAmenities.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedAmenities = filteredAmenities.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const locale = i18n.language.startsWith("en") ? "en-US" : "vi-VN";
+  const money = (value: number) =>
+    `${value.toLocaleString(locale)} ${i18n.language.startsWith("en") ? "VND" : "đ"}`;
 
   useEffect(() => {
     setPage(1);
@@ -70,36 +73,36 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
       <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div>
-            <h3 className="font-bold text-slate-900">Danh sách tiện ích</h3>
-            <p className="mt-1 text-sm text-slate-500">Tìm kiếm và quản lý giá tiện ích</p>
+            <h3 className="font-bold text-slate-900">{localizedText("Danh sách tiện ích", "Amenity list")}</h3>
+            <p className="mt-1 text-sm text-slate-500">{localizedText("Tìm kiếm và quản lý giá tiện ích", "Search amenities and manage their prices")}</p>
           </div>
           <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-            {filteredAmenities.length} mục
+            {filteredAmenities.length} {localizedText("mục", "items")}
           </span>
         </div>
         <div className="w-full sm:w-72">
           <div className="relative block">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo tên tiện ích..." aria-label="Tìm tiện ích" className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
-            <ClearSearchButton value={search} onClear={() => setSearch("")} label="Xóa tìm kiếm" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={localizedText("Tìm theo tên tiện ích...", "Search by amenity name...")} aria-label={localizedText("Tìm tiện ích", "Search amenities")} className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" />
+            <ClearSearchButton value={search} onClear={() => setSearch("")} label={localizedText("Xóa tìm kiếm", "Clear search")} />
           </div>
         </div>
       </div>
       {isLoading ? (
-        <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách tiện nghi...</p>
+        <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">{localizedText("Đang tải danh sách tiện ích...", "Loading amenities...")}</p>
       ) : isError ? (
-        <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách tiện nghi.</p>
+        <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">{localizedText("Không thể tải danh sách tiện ích.", "Could not load amenities.")}</p>
       ) : filteredAmenities.length === 0 ? (
-        <FilterResultStatus filterKey={search}><p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Không tìm thấy tiện nghi phù hợp.</p></FilterResultStatus>
+        <FilterResultStatus filterKey={search}><p className="mt-5 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{localizedText("Không tìm thấy tiện ích phù hợp.", "No matching amenities found.")}</p></FilterResultStatus>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full min-w-[26rem] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr className="border-b border-slate-200">
-                <th scope="col" className="whitespace-nowrap px-4 py-3.5 font-semibold">STT</th>
-                <th className="px-4 py-3.5 font-semibold">Tên tiện ích</th>
-                <th className="px-4 py-3.5 text-right font-semibold">Giá</th>
-                {canManage && <th className="px-4 py-3.5 text-right font-semibold">Thao tác</th>}
+                <th scope="col" className="whitespace-nowrap px-4 py-3.5 font-semibold">{localizedText("STT", "No.")}</th>
+                <th className="px-4 py-3.5 font-semibold">{localizedText("Tên tiện ích", "Amenity name")}</th>
+                <th className="px-4 py-3.5 text-right font-semibold">{localizedText("Giá", "Price")}</th>
+                {canManage && <th className="px-4 py-3.5 text-right font-semibold">{localizedText("Thao tác", "Actions")}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -110,7 +113,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
                   <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-800">{money(amenity.price)}</td>
                   {canManage && <td className="px-3 py-3 text-right">
                     <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
-                      <Pencil size={13} />Chỉnh sửa
+                      <Pencil size={13} />{localizedText("Chỉnh sửa", "Edit")}
                     </button>
                   </td>}
                 </tr>
@@ -127,13 +130,13 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
         <div className="fixed inset-0 z-70 grid place-items-center bg-slate-950/45 p-4" onMouseDown={closeEditor}>
           <form onSubmit={(event) => { event.preventDefault(); saveEdit(); }} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
-              <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Danh sách tiện nghi</p><h4 className="mt-1 text-xl font-bold text-slate-900">Chỉnh sửa tiện nghi</h4></div>
-              <button type="button" onClick={closeEditor} aria-label="Đóng" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={18} /></button>
+              <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{localizedText("Danh sách tiện ích", "Amenity list")}</p><h4 className="mt-1 text-xl font-bold text-slate-900">{localizedText("Chỉnh sửa tiện ích", "Edit amenity")}</h4></div>
+              <button type="button" onClick={closeEditor} aria-label={localizedText("Đóng", "Close")} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={18} /></button>
             </div>
             {saveError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{saveError}</p>}
-            <label className="mt-4 block text-sm font-semibold text-slate-700">Tên tiện nghi<input required autoFocus value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label>
-            <label className="mt-4 block text-sm font-semibold text-slate-700">Giá<input required type="number" min="0" value={editForm.price} onChange={(event) => setEditForm((current) => ({ ...current, price: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label>
-            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeEditor} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button><button type="submit" disabled={isSaving || !editForm.name.trim() || !editForm.price || !Number.isFinite(Number(editForm.price)) || Number(editForm.price) < 0} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} />{isSaving ? "Đang lưu..." : "Lưu"}</button></div>
+            <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Tên tiện ích", "Amenity name")}<input required autoFocus value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label>
+            <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Giá", "Price")}<input required type="number" min="0" value={editForm.price} onChange={(event) => setEditForm((current) => ({ ...current, price: event.target.value }))} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none focus:border-blue-400" /></label>
+            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeEditor} disabled={isSaving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">{localizedText("Hủy", "Cancel")}</button><button type="submit" disabled={isSaving || !editForm.name.trim() || !editForm.price || !Number.isFinite(Number(editForm.price)) || Number(editForm.price) < 0} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Save size={15} />{isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu", "Save")}</button></div>
           </form>
         </div>
       )}
