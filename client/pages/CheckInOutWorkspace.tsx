@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import BatchActionDialog from "../components/BatchActionDialog";
 import BatchStayCard from "../components/BatchStayCard";
 import CheckoutSummary, { getCheckoutOutstandingAmount, getCheckoutSurplusAmount, type CheckoutSummaryRoom } from "../components/CheckoutSummary";
-import CheckoutSurplusRefundChoice, { type CheckoutSurplusRefundMethod } from "../components/CheckoutSurplusRefundChoice";
+import CheckoutSurplusRefundChoice from "../components/CheckoutSurplusRefundChoice";
 import CheckoutUnusedServicesWarning, { type CheckoutUnusedService } from "../components/CheckoutUnusedServicesWarning";
 import CheckInOutBookingDetailModal, { type BookingServiceQuantityEdit } from "../components/CheckInOutBookingDetailModal";
 import LateCheckoutPreview, { type LateCheckoutRecord } from "../components/LateCheckoutPreview";
@@ -24,7 +24,7 @@ import {
   useGetTodayCheckInsQuery,
   useGetTodayCheckOutsQuery,
   usePrepareBulkCheckOutMutation,
-  type CheckoutSurplusRefundMethod as ApiCheckoutSurplusRefundMethod,
+  type CheckoutSurplusRefundSelection,
   type CheckInOutBookingDetail,
 } from "../services/checkInOutApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
@@ -45,6 +45,17 @@ import {
   LogOut,
   Search,
 } from "lucide-react";
+
+const isCheckoutRefundSelectionComplete = (selection: CheckoutSurplusRefundSelection | null | undefined) => {
+  if (!selection) return false;
+  if (selection.method === "CASH") return true;
+  const details = selection.bankDetails;
+  return Boolean(
+    details?.bankName.trim()
+    && details.bankAccountName.trim()
+    && /^[0-9]{6,50}$/.test(details.bankAccountNumber.trim()),
+  );
+};
 
 const toDateParam = (value?: Date) => value
   ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
@@ -557,11 +568,11 @@ export default function CheckInOutWorkspace() {
     [],
   );
   const [batchCheckoutOpen, setBatchCheckoutOpen] = useState(false);
-  const [batchCheckoutRefundMethods, setBatchCheckoutRefundMethods] = useState<Record<string, CheckoutSurplusRefundMethod>>({});
+  const [batchCheckoutRefundMethods, setBatchCheckoutRefundMethods] = useState<Record<string, CheckoutSurplusRefundSelection>>({});
   const [groupCheckoutOpen, setGroupCheckoutOpen] = useState(false);
   const [groupCheckoutRecords, setGroupCheckoutRecords] = useState<DailyRecord[]>([]);
-  const [groupCheckoutRefundMethod, setGroupCheckoutRefundMethod] = useState<CheckoutSurplusRefundMethod | null>(null);
-  const [singleCheckoutRefundMethod, setSingleCheckoutRefundMethod] = useState<CheckoutSurplusRefundMethod | null>(null);
+  const [groupCheckoutRefundMethod, setGroupCheckoutRefundMethod] = useState<CheckoutSurplusRefundSelection | null>(null);
+  const [singleCheckoutRefundMethod, setSingleCheckoutRefundMethod] = useState<CheckoutSurplusRefundSelection | null>(null);
   const [warningAction, setWarningAction] = useState<{
     id: string;
     flow: "check-in" | "check-out";
@@ -1027,7 +1038,7 @@ export default function CheckInOutWorkspace() {
 
   const handleBulkCheckOut = async (
     records: DailyRecord[],
-    refundMethodsByBooking: Record<string, ApiCheckoutSurplusRefundMethod> = {},
+    refundMethodsByBooking: Record<string, CheckoutSurplusRefundSelection> = {},
   ): Promise<boolean> => {
     if (records.length === 0) return false;
     if (unusedCheckoutServicesForRecords(records).length > 0) {
@@ -1064,18 +1075,36 @@ export default function CheckInOutWorkspace() {
       return result;
     }, {});
 
+    const invalidBankSelection = Object.values(refundMethodsByBooking).some((selection) =>
+      selection.method === "BANK"
+      && (!selection.bankDetails?.bankName.trim()
+        || !selection.bankDetails.bankAccountName.trim()
+        || !/^[0-9]{6,50}$/.test(selection.bankDetails.bankAccountNumber.trim())),
+    );
+    if (invalidBankSelection) {
+      toast({
+        variant: "destructive",
+        title: localizedText("Thiếu thông tin ngân hàng", "Bank details required"),
+        description: localizedText("Vui lòng nhập ngân hàng, tên chủ tài khoản và số tài khoản hợp lệ.", "Enter the bank, account holder, and a valid account number."),
+      });
+      return false;
+    }
+
     try {
       await Promise.all(
         Object.entries(grouped).map(([bookingId, bookingDetailIds]) =>
           bulkCheckOut({
             bookingId,
             bookingDetailIds,
-            surplusRefundMethod: refundMethodsByBooking[bookingId],
+            surplusRefundMethod: refundMethodsByBooking[bookingId]?.method,
+            refundBankDetails: refundMethodsByBooking[bookingId]?.method === "BANK"
+              ? refundMethodsByBooking[bookingId].bankDetails
+              : undefined,
           }).unwrap(),
         ),
       );
       records.forEach((record) => completeRecord(record.id, "check-out"));
-      const selectedRefundMethods = Object.values(refundMethodsByBooking);
+      const selectedRefundMethods = Object.values(refundMethodsByBooking).map((selection) => selection.method);
       const cashRefundSelected = selectedRefundMethods.includes("CASH");
       const bankRefundSelected = selectedRefundMethods.includes("BANK");
       const refundTimingMessage = [
@@ -1156,7 +1185,7 @@ export default function CheckInOutWorkspace() {
     );
     const completed = selectedRecords.length > 0
       && getCheckoutOutstandingAmount(checkoutRoomsFromRecords(selectedRecords)) === 0
-      && refundBookingIds.every((id) => batchCheckoutRefundMethods[id])
+      && refundBookingIds.every((id) => isCheckoutRefundSelectionComplete(batchCheckoutRefundMethods[id]))
       ? await handleBulkCheckOut(selectedRecords, batchCheckoutRefundMethods)
       : false;
     if (completed) {
@@ -1501,7 +1530,7 @@ export default function CheckInOutWorkspace() {
     if (unusedCheckoutServicesForRecords([checkoutRecord]).length > 0) return;
     if (singleCheckoutOutstandingAmount > 0) return;
     const needsRefundChoice = isFinalSingleCheckout(checkoutRecord) && singleCheckoutSurplusAmount > 0;
-    if (needsRefundChoice && !singleCheckoutRefundMethod) return;
+    if (needsRefundChoice && !isCheckoutRefundSelectionComplete(singleCheckoutRefundMethod)) return;
     const completed = await handleBulkCheckOut(
       [checkoutRecord],
       needsRefundChoice && checkoutRecord.bookingId && singleCheckoutRefundMethod
@@ -2368,11 +2397,11 @@ export default function CheckInOutWorkspace() {
             `${amount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
           return (
             <div
-              className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
+              className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4"
               onMouseDown={closeSingleCheckout}
             >
               <div
-                className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"
+                className="mx-auto my-0 max-h-[calc(100dvh-2rem)] w-full max-w-lg touch-pan-y overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl sm:my-4"
                 onMouseDown={(event) => event.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -2522,7 +2551,7 @@ export default function CheckInOutWorkspace() {
                   <button
                     type="button"
                     onClick={confirmCheckout}
-                    disabled={totalDue > 0 || unusedCheckoutServices.length > 0 || isCancellingCheckoutServices || isPreparingCheckout || Boolean(checkoutPreparationError) || (singleCheckoutSurplusAmount > 0 && isFinalSingleCheckout(checkoutRecord) && !singleCheckoutRefundMethod) || isBulkCheckOutLoading}
+                    disabled={totalDue > 0 || unusedCheckoutServices.length > 0 || isCancellingCheckoutServices || isPreparingCheckout || Boolean(checkoutPreparationError) || (singleCheckoutSurplusAmount > 0 && isFinalSingleCheckout(checkoutRecord) && !isCheckoutRefundSelectionComplete(singleCheckoutRefundMethod)) || isBulkCheckOutLoading}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                   >
                     <CreditCard size={16} />
@@ -2534,8 +2563,8 @@ export default function CheckInOutWorkspace() {
           );
         })()}
       {groupCheckoutOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setGroupCheckoutOpen(false)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4" onMouseDown={() => setGroupCheckoutOpen(false)}>
+          <div className="mx-auto my-0 max-h-[calc(100dvh-2rem)] w-full max-w-lg touch-pan-y overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-2xl sm:my-4" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">{localizedText("Đối soát check-out cả đoàn", "Group check-out summary")}</p>
@@ -2591,7 +2620,7 @@ export default function CheckInOutWorkspace() {
                     setGroupCheckoutRefundMethod(null);
                   }
                 }}
-                disabled={isBulkCheckOutLoading || isCancellingCheckoutServices || groupCheckoutUnusedServices.length > 0 || groupCheckoutRecords.length === 0 || groupCheckoutOutstandingAmount > 0 || (needsGroupRefundChoice && !groupCheckoutRefundMethod)}
+                disabled={isBulkCheckOutLoading || isCancellingCheckoutServices || groupCheckoutUnusedServices.length > 0 || groupCheckoutRecords.length === 0 || groupCheckoutOutstandingAmount > 0 || (needsGroupRefundChoice && !isCheckoutRefundSelectionComplete(groupCheckoutRefundMethod))}
                 className="flex w-56 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
               >
                 <CreditCard size={16} />{localizedText("Xác nhận Check-out", "Confirm check-out")}

@@ -22,13 +22,13 @@ import { useGetBranchRoomPoliciesQuery, useUpdateBranchRoomPolicyMutation } from
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import { bindHotelSocketEvents } from "../lib/socket";
-import { downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
+import { downloadBuildingTemplate, downloadFloorTemplate, downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
 import { getRoomAmenityTranslationKey } from "../lib/roomLocalization";
 import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
 import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
 
 type ImportedRoomRow = Record<string, string>;
-type ImportTarget = "rooms" | "buildings" | "floors";
+type ImportTarget = "buildings" | "floors";
 type RoomSocketImportProgress = {
   taskId: string;
   percent: number | null;
@@ -167,13 +167,6 @@ const parseXlsx = async (data: ArrayBuffer): Promise<ImportedRoomRow[]> => {
 const buildingCodes = ["A", "B", "C", "D"] as const;
 type Building = { id: string; name: string };
 const initialBuildings: Building[] = buildingCodes.map((id) => ({ id, name: `Tòa ${id}` }));
-const createBuildingCode = (currentBuildings: Building[]) => {
-  let code = "";
-  do {
-    code = `TN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  } while (currentBuildings.some((building) => building.id === code));
-  return code;
-};
 type Room = RoomDetailsData;
 type RoomBedConfiguration = { bedTypeId: number; name?: string; quantity: number };
 
@@ -460,6 +453,7 @@ export default function RoomWorkspace() {
   const [importingRooms, setImportingRooms] = useState(false);
   const [roomImportUploadProgress, setRoomImportUploadProgress] = useState("");
   const [isRoomImportDialogOpen, setIsRoomImportDialogOpen] = useState(false);
+  const [structureImportTarget, setStructureImportTarget] = useState<ImportTarget | null>(null);
   const [roomImportReport, setRoomImportReport] = useState<{
     processing: boolean;
     rows: RoomImportRowResult[];
@@ -467,8 +461,6 @@ export default function RoomWorkspace() {
   } | null>(null);
   const [roomSocketImportProgress, setRoomSocketImportProgress] = useState<RoomSocketImportProgress | null>(null);
   const [roomImportTaskId, setRoomImportTaskId] = useState("");
-  const importFileInputRef = useRef<HTMLInputElement>(null);
-  const importTargetRef = useRef<ImportTarget>("rooms");
   const activeRoomImportTaskIdRef = useRef("");
   const finishedRoomImportTasksRef = useRef(new Set<string>());
   const refreshedRoomImportTasksRef = useRef(new Set<string>());
@@ -538,10 +530,17 @@ export default function RoomWorkspace() {
   const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
+  const [buildingNameError, setBuildingNameError] = useState("");
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [editingFloorId, setEditingFloorId] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
+  const [floorNameError, setFloorNameError] = useState("");
+  const floorNumberInput = floorForm.name.trim();
+  const floorNumberValue = Number(floorNumberInput);
+  const isFloorNumberValid = floorNumberInput !== ""
+    && Number.isSafeInteger(floorNumberValue)
+    && floorNumberValue >= 1;
   const selectedRoomTypeValue = roomTypeValues[createRoomForm.roomType] ?? createRoomForm.roomType;
   const { currentData: roomTypeDetail, isLoading: isRoomTypeDetailLoading, isError: isRoomTypeDetailError } = useGetRoomTypeDetailQuery(
     { hotelId: Number(hotelId), roomType: selectedRoomTypeValue },
@@ -616,7 +615,7 @@ export default function RoomWorkspace() {
       return id == null ? "" : resolveAmenityName(String(id));
     }).filter(Boolean);
   };
-  const { data: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError } = useGetRoomsByCurrentHotelQuery();
+  const { data: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError, refetch: refetchRooms } = useGetRoomsByCurrentHotelQuery();
   const apiFloorOptions = useMemo(() => (apiFloorsByBuilding ?? []).map((item) => {
     const id = getApiValue(item, ["id", "floorId", "floorID"]);
     const floorNumber = getApiValue(item, ["floorNumber", "floorLevel", "number"]);
@@ -670,7 +669,8 @@ export default function RoomWorkspace() {
     floors: [...new Map(hotelFloorOptions
       .filter((item) => buildings.some((building) => building.id === item.buildingId))
       .map((item) => [`${item.buildingId}:${normalizeText(item.name)}`, item])).values()],
-  }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, apiBedTypes, buildings, hotelFloorOptions]);
+    language: i18n.resolvedLanguage?.startsWith("en") ? "en" : "vi",
+  }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, apiBedTypes, buildings, hotelFloorOptions, i18n.resolvedLanguage]);
   const selectedBuildingName = buildings.find((item) => item.id === createRoomForm.building)?.name ?? t("room.createForm.notSelected");
   const selectedFloorName = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor)?.name;
   const selectedFloorLabel = selectedFloorName
@@ -1149,21 +1149,28 @@ export default function RoomWorkspace() {
   const openCreateBuildingModal = () => {
     setEditingBuildingId(null);
     setBuildingForm(emptyBuildingForm);
+    setBuildingNameError("");
     setShowCreateBuilding(true);
   };
   const openEditBuildingModal = (building: Building) => {
     setEditingBuildingId(building.id);
     setBuildingForm({ name: building.name, code: building.id });
+    setBuildingNameError("");
     setShowCreateBuilding(true);
   };
   const closeCreateBuildingModal = () => {
     setShowCreateBuilding(false);
     setEditingBuildingId(null);
     setBuildingForm(emptyBuildingForm);
+    setBuildingNameError("");
   };
   const saveBuilding = async () => {
     const name = buildingForm.name.trim();
-    if (!name) return;
+    if (!name) {
+      setBuildingNameError(localizedText("Vui lòng nhập tên tòa nhà.", "Enter a building name."));
+      return;
+    }
+    setBuildingNameError("");
     if (editingBuildingId) {
       try {
         await updateBuildingApi({ buildingId: editingBuildingId, body: { name } }).unwrap();
@@ -1212,6 +1219,7 @@ export default function RoomWorkspace() {
     }
     setEditingFloor(null);
     setFloorForm(emptyFloorForm);
+    setFloorNameError("");
     setShowCreateFloor(true);
   };
   const openEditFloorModal = (floor: string) => {
@@ -1227,6 +1235,7 @@ export default function RoomWorkspace() {
     setEditingFloor(floor);
     setEditingFloorId(floorId);
     setFloorForm({ name: floor });
+    setFloorNameError("");
     setShowCreateFloor(true);
   };
   const closeCreateFloorModal = () => {
@@ -1234,17 +1243,30 @@ export default function RoomWorkspace() {
     setEditingFloor(null);
     setEditingFloorId(null);
     setFloorForm(emptyFloorForm);
+    setFloorNameError("");
   };
   const saveFloor = async () => {
     const name = floorForm.name.trim();
-    if (!name || (!editingFloor && floors.includes(name))) return;
+    if (!name) {
+      setFloorNameError(localizedText("Vui lòng nhập số tầng.", "Enter a floor number."));
+      return;
+    }
+    if (!editingFloor && floors.includes(name)) {
+      setFloorNameError(localizedText("Tầng này đã tồn tại trong tòa nhà.", "This floor already exists in the building."));
+      return;
+    }
+    const floorNumber = floorNumberValue;
+    if (!isFloorNumberValid) {
+      setFloorNameError(localizedText("Số tầng phải là số nguyên từ 1 trở lên.", "Floor number must be a whole number greater than or equal to 1."));
+      return;
+    }
+    setFloorNameError("");
     if (editingFloor) {
-      const floorNumber = Number(name);
-      if (!Number.isInteger(floorNumber) || !editingFloorId) {
+      if (!editingFloorId) {
         toast({
           variant: "destructive",
-          title: "Số tầng không hợp lệ",
-          description: "Nhập số nguyên hợp lệ và tải lại danh sách tầng trước khi sửa.",
+          title: localizedText("Không thể sửa tầng", "Could not update floor"),
+          description: localizedText("Không tìm thấy mã tầng. Vui lòng tải lại danh sách.", "Floor ID not found. Reload the floor list and try again."),
         });
         return;
       }
@@ -1267,15 +1289,6 @@ export default function RoomWorkspace() {
       return;
     }
 
-    const floorNumber = Number(name);
-    if (!Number.isInteger(floorNumber)) {
-      toast({
-        variant: "destructive",
-        title: "Số tầng không hợp lệ",
-        description: "Vui lòng nhập số nguyên, ví dụ 1 hoặc -1.",
-      });
-      return;
-    }
     if (!selectedBuildingId) {
       toast({
         variant: "destructive",
@@ -1587,87 +1600,123 @@ export default function RoomWorkspace() {
     }
   };
 
-  const openImportPicker = (target: ImportTarget) => {
-    importTargetRef.current = target;
-    if (importFileInputRef.current) {
-      importFileInputRef.current.value = "";
-      importFileInputRef.current.accept = target === "rooms" ? ".zip,application/zip" : ".csv,.xlsx";
-      importFileInputRef.current.click();
-    }
-  };
-
-  const importLocalDataFromFile = async (file: File, target = importTargetRef.current): Promise<boolean> => {
-    if (target === "rooms") {
-      await importRoomsFromFile(file);
-      return true;
-    }
-
+  const downloadStructureTemplate = (target: ImportTarget) => {
     try {
-      const rows = await readImportRows(file);
-      if (rows.length === 0) throw new Error(t("room.importDialog.emptyFile"));
-
-      if (target === "buildings") {
-        const nextBuildings = [...buildings];
-        let importedCount = 0;
-        rows.forEach((row) => {
-          const name = getImportedValue(row, ["tên tòa", "ten toa", "tên tòa nhà", "ten toa nha", "building name", "name"]);
-          if (!name || nextBuildings.some((item) => normalizeText(item.name) === normalizeText(name))) return;
-          const requestedCode = getImportedValue(row, ["mã tòa", "ma toa", "mã tòa nhà", "ma toa nha", "building code", "code"]);
-          const id = requestedCode || createBuildingCode(nextBuildings);
-          if (nextBuildings.some((item) => item.id.toLocaleLowerCase() === id.toLocaleLowerCase())) return;
-          nextBuildings.push({ id, name });
-          importedCount += 1;
-        });
-        if (importedCount === 0) throw new Error("Không có tòa nhà hợp lệ mới trong file. Cần cột Tên tòa; có thể thêm cột Mã tòa.");
-        setBuildings(nextBuildings);
-        window.localStorage.setItem("staywise-buildings", JSON.stringify(nextBuildings));
-        toast({ variant: "success", title: "Nhập tòa nhà thành công", description: `Đã thêm ${importedCount} tòa nhà vào giao diện.` });
-        return true;
-      }
-
-      if (target === "floors") {
-        if (!selectedBuildingId) throw new Error("Vui lòng chọn tòa nhà trước khi nhập tầng.");
-        const nextFloors = [...floors];
-        let importedCount = 0;
-        rows.forEach((row) => {
-          const name = getImportedValue(row, ["tên tầng", "ten tang", "tầng", "tang", "floor name", "floor"]);
-          const buildingNameOrCode = getImportedValue(row, ["tên tòa", "ten toa", "tòa", "toa", "building", "building code"]);
-          if (!name || nextFloors.some((item) => normalizeText(item) === normalizeText(name))) return;
-          if (buildingNameOrCode) {
-            const selectedBuilding = buildings.find((item) => item.id === selectedBuildingId);
-            if (!selectedBuilding || normalizeText(buildingNameOrCode) !== normalizeText(selectedBuilding.name) &&
-              buildingNameOrCode.toLocaleLowerCase() !== selectedBuilding.id.toLocaleLowerCase()) return;
-          }
-          nextFloors.push(name);
-          importedCount += 1;
-        });
-        if (importedCount === 0) throw new Error("Không có tầng mới hợp lệ. Cần cột Tên tầng cho tòa nhà đang chọn.");
-        setFloors(nextFloors);
-        toast({ variant: "success", title: "Nhập tầng thành công", description: `Đã thêm ${importedCount} tầng vào giao diện.` });
-        return true;
-      }
-
+      const language = i18n.resolvedLanguage?.startsWith("en") ? "en" : "vi";
+      if (target === "buildings") downloadBuildingTemplate(language);
+      else downloadFloorTemplate(language, buildings, selectedBuildingId);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: t("room.importDialog.importDataError"),
-        description: error instanceof Error ? error.message : t("room.importDialog.couldNotReadFile"),
+        title: localizedText("Không thể tạo file mẫu", "Could not create template"),
+        description: error instanceof Error ? error.message : localizedText("Vui lòng thử lại.", "Please try again."),
       });
-      return true;
     }
   };
 
+  const importStructureFile = async (file: File, target: ImportTarget): Promise<boolean> => {
+    try {
+      const rows = await readImportRows(file);
+      if (rows.length === 0) throw new Error(t("room.importDialog.emptyFile"));
+      let importedCount = 0;
+      let skippedCount = 0;
+      const failures: string[] = [];
+
+      if (target === "buildings") {
+        const seenNames = new Set(buildings.map((item) => normalizeText(item.name)));
+        for (const [index, row] of rows.entries()) {
+          const name = getImportedValue(row, ["tên tòa", "ten toa", "tên tòa nhà", "ten toa nha", "building name", "building", "name"]);
+          if (!name) {
+            failures.push(localizedText(`Dòng ${index + 2}: thiếu tên tòa nhà.`, `Row ${index + 2}: building name is required.`));
+            continue;
+          }
+          const normalizedName = normalizeText(name);
+          if (seenNames.has(normalizedName)) {
+            skippedCount += 1;
+            continue;
+          }
+          try {
+            await createBuildingApi({ name }).unwrap();
+            seenNames.add(normalizedName);
+            importedCount += 1;
+          } catch (error) {
+            failures.push(`${name}: ${getApiErrorMessage(error, localizedText("không thể tạo tòa nhà.", "could not create building."))}`);
+          }
+        }
+      } else {
+        const defaultBuilding = buildings.find((item) => item.id === selectedBuildingId);
+        const seenFloors = new Set(hotelFloorOptions.map((item) => `${item.buildingId}:${Number(item.name)}`));
+        if (!defaultBuilding && rows.some((row) => !getImportedValue(row, ["tòa", "tòa nhà", "ten toa", "building", "building name", "building code"]))) {
+          throw new Error(localizedText("Không tìm thấy tòa nhà đang chọn. Vui lòng tải lại danh sách.", "The selected building could not be found. Reload the building list and try again."));
+        }
+        for (const [index, row] of rows.entries()) {
+          const rawFloor = getImportedValue(row, ["số tầng", "tầng", "floor number", "floor", "floorNumber"]);
+          const floorNumber = Number(rawFloor);
+          if (!rawFloor || !Number.isSafeInteger(floorNumber) || floorNumber < 1) {
+            failures.push(localizedText(`Dòng ${index + 2}: số tầng phải là số nguyên từ 1 trở lên.`, `Row ${index + 2}: floor number must be a whole number greater than or equal to 1.`));
+            continue;
+          }
+          const rawBuilding = getImportedValue(row, ["tòa", "tòa nhà", "ten toa", "tên tòa", "building", "building name", "building code"]);
+          const targetBuilding = rawBuilding
+            ? buildings.find((item) =>
+              normalizeText(item.name) === normalizeText(rawBuilding)
+              || item.id.toLocaleLowerCase() === rawBuilding.toLocaleLowerCase()
+              || normalizeText(item.name.replace(/^Tòa\s*/i, "Building ")) === normalizeText(rawBuilding),
+            )
+            : defaultBuilding;
+          if (!targetBuilding) {
+            failures.push(localizedText(`Dòng ${index + 2}: không tìm thấy tòa nhà "${rawBuilding}".`, `Row ${index + 2}: building "${rawBuilding}" was not found.`));
+            continue;
+          }
+          const floorKey = `${targetBuilding.id}:${floorNumber}`;
+          if (seenFloors.has(floorKey)) {
+            skippedCount += 1;
+            continue;
+          }
+          try {
+            await createFloorApi({ buildingId: targetBuilding.id, floorNumber }).unwrap();
+            seenFloors.add(floorKey);
+            importedCount += 1;
+          } catch (error) {
+            failures.push(localizedText(
+              `${targetBuilding.name} · Tầng ${floorNumber}: ${getApiErrorMessage(error, "không thể tạo tầng.")}`,
+              `${targetBuilding.name} · Floor ${floorNumber}: ${getApiErrorMessage(error, "could not create floor.")}`,
+            ));
+          }
+        }
+      }
+
+      if (importedCount === 0) {
+        const details = failures.slice(0, 5).join("\n");
+        throw new Error(details || localizedText("Không có dữ liệu mới hợp lệ để nhập.", "There is no valid new data to import."));
+      }
+      const entity = target === "buildings"
+        ? localizedText("tòa nhà", "buildings")
+        : localizedText("tầng", "floors");
+      const failureSummary = failures.length
+        ? localizedText(` ${failures.length} dòng lỗi: ${failures.slice(0, 3).join(" ")}`, ` ${failures.length} rows failed: ${failures.slice(0, 3).join(" ")}`)
+        : "";
+      toast({
+        variant: failures.length ? "destructive" : "success",
+        title: localizedText("Nhập file hoàn tất", "File import complete"),
+        description: localizedText(
+          `Đã thêm ${importedCount} ${entity}.${skippedCount ? ` Bỏ qua ${skippedCount} dòng trùng.` : ""}${failureSummary}`,
+          `Added ${importedCount} ${entity}.${skippedCount ? ` Skipped ${skippedCount} duplicate rows.` : ""}${failureSummary}`,
+        ),
+      });
+      return true;
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể nhập file", "Could not import file"),
+        description: error instanceof Error ? error.message : t("room.importDialog.couldNotReadFile"),
+      });
+      return false;
+    }
+  };
+  const closeStructureImportDialog = () => setStructureImportTarget(null);
+
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-    <input
-      ref={importFileInputRef}
-      type="file"
-      className="hidden"
-      onChange={(event) => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (file) void importLocalDataFromFile(file);
-      }}
-    />
     {detailRoom && <RoomDetailModal room={detailRoom} onClose={() => setDetailRoom(null)} />}
     {activeTab !== "pricing" && <>
       <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
@@ -1684,7 +1733,7 @@ export default function RoomWorkspace() {
             type="button"
             onClick={() => {
               if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
-              else openImportPicker(activeTab);
+              else if (activeTab === "buildings" || activeTab === "floors") setStructureImportTarget(activeTab);
             }}
             disabled={importingRooms}
             className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:opacity-50"
@@ -1778,6 +1827,31 @@ export default function RoomWorkspace() {
       progress={roomImportUploadProgress || undefined}
       onUpload={importRoomsFromFile}
     />
+    {structureImportTarget && <BulkImportDialog
+      open
+      onOpenChange={(open) => { if (!open) closeStructureImportDialog(); }}
+      eyebrow={localizedText("QUẢN LÝ CƠ SỞ VẬT CHẤT", "FACILITY MANAGEMENT")}
+      title={structureImportTarget === "buildings"
+        ? localizedText("Nhập tòa nhà từ Excel", "Import buildings from Excel")
+        : localizedText("Nhập tầng từ Excel", "Import floors from Excel")}
+      description={structureImportTarget === "buildings"
+        ? localizedText("Tải file mẫu, điền tên các tòa nhà rồi chọn file để thêm vào khách sạn.", "Download the template, enter building names, then upload it to add them to the hotel.")
+        : localizedText("Tải file mẫu, chọn tòa nhà và nhập số tầng nguyên dương cần thêm.", "Download the template, select a building, and enter the positive whole-number floors to add.")}
+      templateLabel={structureImportTarget === "buildings"
+        ? localizedText("Tải file Excel mẫu tòa nhà", "Download building Excel template")
+        : localizedText("Tải file Excel mẫu tầng", "Download floor Excel template")}
+      onDownloadTemplate={() => downloadStructureTemplate(structureImportTarget)}
+      acceptedFileTypes=".xlsx,.csv"
+      fileLabel={localizedText("Chọn file Excel hoặc CSV", "Choose an Excel or CSV file")}
+      validateFile={(file) => /\.(xlsx|csv)$/i.test(file.name)
+        ? null
+        : localizedText("Vui lòng chọn file .xlsx hoặc .csv.", "Choose an .xlsx or .csv file.")}
+      instructions={structureImportTarget === "buildings"
+        ? <p>{localizedText("Cột bắt buộc: Tên tòa nhà. Mã tòa được hệ thống tự tạo; các tòa trùng tên sẽ được bỏ qua.", "Required column: Building name. Building codes are generated automatically; duplicate names are skipped.")}</p>
+        : <p>{localizedText("Các cột: Tòa nhà (có thể để trống để dùng tòa đang chọn) và Số tầng. Chỉ nhận số nguyên từ 1 trở lên; tầng đã có sẽ được bỏ qua.", "Columns: Building (optional; uses the selected building when blank) and Floor number. Only whole numbers of at least 1 are accepted; existing floors are skipped.")}</p>}
+      uploadLabel={localizedText("Nhập dữ liệu", "Import data")}
+      onUpload={(file) => importStructureFile(file, structureImportTarget)}
+    />}
     {(roomImportReport || roomSocketImportProgress) && (
       <RoomImportProgressCard
         processing={roomImportReport?.processing ?? false}
@@ -1823,6 +1897,18 @@ export default function RoomWorkspace() {
       onEditRoom={openEditRoomModal}
       onShowGallery={(room) => { setGalleryRoom(room); setGalleryIndex(0); }}
       onShowDetails={setDetailRoom}
+      isLoading={isRoomsLoading || isRoomsFetching}
+      isError={isRoomsError}
+      onRefresh={async () => {
+        try {
+          await refetchRooms().unwrap();
+        } catch {
+          toast({
+            variant: "destructive",
+            title: localizedText("Không thể tải lại danh sách phòng.", "Could not reload rooms."),
+          });
+        }
+      }}
     />}
     {activeTab === "pricing" && (
       <div className="p-6 space-y-6">
@@ -2108,28 +2194,42 @@ export default function RoomWorkspace() {
         )}
       </div>
     )}
-    {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => { if (!isCreatingBuilding) closeCreateBuildingModal(); }}>
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Quản lý cơ sở vật chất</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingBuildingId ? "Sửa tòa nhà" : "Tạo tòa nhà mới"}</h3><p className="mt-1 text-sm text-slate-500">{editingBuildingId ? "Cập nhật tên tòa nhà. Mã tòa được giữ nguyên." : "Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu."}</p></div>
-          <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="text-slate-400 hover:text-slate-700 disabled:opacity-50"><X size={19} /></button>
+    {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => { if (!isCreatingBuilding) closeCreateBuildingModal(); }}>
+      <div role="dialog" aria-modal="true" className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{localizedText("Quản lý cơ sở vật chất", "FACILITY MANAGEMENT")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingBuildingId ? localizedText("Sửa tòa nhà", "Edit building") : localizedText("Tạo tòa nhà mới", "Create new building")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingBuildingId ? localizedText("Cập nhật tên tòa nhà. Mã tòa được giữ nguyên.", "Update the building name. The building code will remain unchanged.") : localizedText("Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu.", "Enter a building name; its code will be generated when saved.")}</p></div>
+          <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
-        <div className="mt-5 space-y-4">
-          <label className="block text-sm font-semibold text-slate-700">Tên tòa nhà <span className="text-rose-500">*</span><input autoFocus value={buildingForm.name} onChange={(event) => setBuildingForm((current) => ({ ...current, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && buildingForm.name.trim()) void saveBuilding(); }} placeholder="Ví dụ: Tòa Sunrise" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-          {editingBuildingId && <label className="block text-sm font-semibold text-slate-700">Mã tòa nhà<input value={buildingForm.code} readOnly className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>}
+        <div className="mt-4 space-y-4">
+          <label className="block text-sm font-semibold text-slate-700">
+            {localizedText("Tên tòa nhà", "Building name")} <span className="text-rose-500">*</span>
+            <input autoFocus value={buildingForm.name} onChange={(event) => {
+              setBuildingForm((current) => ({ ...current, name: event.target.value }));
+              setBuildingNameError("");
+            }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveBuilding(); } }} aria-invalid={Boolean(buildingNameError)} aria-describedby={buildingNameError ? "building-name-error" : undefined} placeholder={localizedText("Ví dụ: Tòa Sunrise", "e.g. Sunrise Building")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:ring-2 ${buildingNameError ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+            {buildingNameError && <span id="building-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{buildingNameError}</span>}
+          </label>
+          {editingBuildingId && <label className="block text-sm font-semibold text-slate-700">{localizedText("Mã tòa nhà", "Building code")}<input value={buildingForm.code} readOnly className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>}
         </div>
-        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Hủy</button><button type="button" onClick={() => void saveBuilding()} disabled={!buildingForm.name.trim() || isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingBuilding || isUpdatingBuilding ? "Đang lưu..." : editingBuildingId ? "Lưu thay đổi" : "Tạo tòa nhà"}</button></div>
+        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveBuilding()} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{isCreatingBuilding || isUpdatingBuilding ? localizedText("Đang lưu...", "Saving...") : editingBuildingId ? localizedText("Lưu thay đổi", "Save changes") : localizedText("Tạo tòa nhà", "Create building")}</button><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button></div>
       </div>
     </div>}
-    {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => { if (!isCreatingFloor && !isUpdatingFloor) closeCreateFloorModal(); }}>
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
-          <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="text-slate-400 hover:text-slate-700 disabled:opacity-50"><X size={19} /></button>
+    {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => { if (!isCreatingFloor && !isUpdatingFloor) closeCreateFloorModal(); }}>
+      <div role="dialog" aria-modal="true" className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
+          <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
-        <label className="mt-5 block text-sm font-semibold text-slate-700">Tòa nhà <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label className="mt-4 block text-sm font-semibold text-slate-700">Số tầng <span className="text-rose-500">*</span><input autoFocus type="number" step="1" value={floorForm.name} onChange={(event) => setFloorForm({ name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void saveFloor(); }} placeholder="Ví dụ: 1 hoặc -1" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button><button type="button" onClick={() => void saveFloor()} disabled={!floorForm.name.trim() || !selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? "Đang lưu..." : t("common.save")}</button></div>
+        <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Tòa nhà", "Building")} <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="mt-4 block text-sm font-semibold text-slate-700">
+          {localizedText("Số tầng", "Floor number")} <span className="text-rose-500">*</span>
+          <input autoFocus type="number" min="1" step="1" value={floorForm.name} aria-invalid={Boolean(floorNameError)} aria-describedby={floorNameError ? "floor-number-error" : undefined} onChange={(event) => {
+            setFloorForm({ name: event.target.value });
+            setFloorNameError("");
+          }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveFloor(); } }} placeholder={localizedText("Nhập số tầng từ 1 trở lên", "Enter a floor number from 1 or higher")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:ring-2 ${floorNameError ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+          {floorNameError && <span id="floor-number-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{floorNameError}</span>}
+        </label>
+        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveFloor()} disabled={!selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? localizedText("Đang lưu...", "Saving...") : t("common.save")}</button><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button></div>
       </div>
     </div>}
     {showCreateRoom && !editingRoomId && (

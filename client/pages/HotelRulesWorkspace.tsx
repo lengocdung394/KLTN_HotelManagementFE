@@ -8,6 +8,8 @@ import {
   CreditCard,
   DoorOpen,
   Info,
+  RefreshCw,
+  RotateCcw,
   Search,
   Tag,
 } from "lucide-react";
@@ -167,6 +169,11 @@ export default function HotelRulesWorkspace() {
   const normalize = (value: string) =>
     value.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const query = normalize(searchInput);
+  const hasActiveFilters = Boolean(searchInput.trim() || selectedSection !== "ALL");
+  const resetRuleFilters = () => {
+    setSearchInput("");
+    setSelectedSection("ALL");
+  };
   const visibleSections = ruleSections.filter((section, index) => {
     if (selectedSection !== "ALL" && String(index) !== selectedSection) return false;
     if (!query) return true;
@@ -198,9 +205,7 @@ export default function HotelRulesWorkspace() {
         </div>
       </section>
 
-      <div
-        className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"
-      >
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
         <label className="relative min-w-[220px] flex-1">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -229,6 +234,19 @@ export default function HotelRulesWorkspace() {
             className="w-56"
           />
         </div>
+        <button
+          type="button"
+          onClick={resetRuleFilters}
+          aria-label={hasActiveFilters
+            ? localizedText("Xóa bộ lọc", "Reset filters")
+            : localizedText("Làm mới nội dung", "Refresh content")}
+          title={hasActiveFilters
+            ? localizedText("Xóa bộ lọc", "Reset filters")
+            : localizedText("Làm mới nội dung", "Refresh content")}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+        >
+          {hasActiveFilters ? <RotateCcw size={15} /> : <RefreshCw size={16} />}
+        </button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

@@ -4,10 +4,12 @@ import {
   CalendarDays,
   Check,
   CreditCard,
+  Columns3,
   Eye,
   Pencil,
   QrCode,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   X,
@@ -20,7 +22,7 @@ import ClearSearchButton from "../components/ClearSearchButton";
 import DatePickerPopover from "../components/DatePickerPopover";
 import FilterSelect from "../components/FilterSelect";
 import FilterResultStatus from "../components/FilterResultStatus";
-import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
+import SearchableFilter from "../components/SearchableFilter";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import BankSelectionField from "../components/BankSelectionField";
 import {
@@ -37,6 +39,23 @@ import ListPagination from "../components/ListPagination";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import i18n, { localizedText } from "../i18n";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+
+const BOOKING_TABLE_COLUMNS = [
+  { id: "booking", label: ["Booking", "Booking"] },
+  { id: "date", label: ["Ngày booking", "Booking date"] },
+  { id: "customer", label: ["Khách hàng", "Guest"] },
+  { id: "room", label: ["Tiền phòng", "Room"] },
+  { id: "services", label: ["Tiền dịch vụ", "Services"] },
+  { id: "discount", label: ["Giảm giá", "Discount"] },
+  { id: "collected", label: ["Đã thu", "Collected"] },
+  { id: "refunded", label: ["Đã hoàn", "Refunded"] },
+  { id: "balance", label: ["Còn thiếu", "Balance"] },
+  { id: "total", label: ["Tổng bill", "Total"] },
+  { id: "status", label: ["Trạng thái", "Status"] },
+  { id: "actions", label: ["Thao tác", "Actions"] },
+] as const;
+type BookingTableColumnId = (typeof BOOKING_TABLE_COLUMNS)[number]["id"];
 
 const valueOf = (item: BookingListItem, keys: string[]) => {
   if (!item || typeof item !== "object") return undefined;
@@ -266,8 +285,23 @@ export default function BookingListWorkspace() {
   const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [dateSort, setDateSort] = useState<"desc" | "asc">("desc");
+  const [isManuallyRefreshingBookings, setIsManuallyRefreshingBookings] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [visibleColumns, setVisibleColumns] = useState<Record<BookingTableColumnId, boolean>>({
+    booking: true,
+    date: true,
+    customer: true,
+    room: true,
+    services: true,
+    discount: true,
+    collected: true,
+    refunded: true,
+    balance: true,
+    total: true,
+    status: true,
+    actions: true,
+  });
 
   // Modal states
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
@@ -358,6 +392,7 @@ export default function BookingListWorkspace() {
   const {
     data: fetchedBookings = [],
     isLoading,
+    isFetching,
     isError,
     refetch,
   } = useGetBookingsByHotelQuery(Number(hotelId), {
@@ -542,6 +577,38 @@ export default function BookingListWorkspace() {
   const totalPages = Math.max(1, Math.ceil(sortedBookings.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedBookings = sortedBookings.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const shownBookingColumns = BOOKING_TABLE_COLUMNS.filter((column) => visibleColumns[column.id]);
+  const isBookingListLoading = isLoading || isFetching || isManuallyRefreshingBookings;
+
+  const refreshBookingsOrResetFilters = async () => {
+    if (isBookingListLoading) return;
+    const refreshStartedAt = Date.now();
+    setIsManuallyRefreshingBookings(true);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    if (hasActiveFilters) {
+      setSearch("");
+      setDateFrom("");
+      setDateTo("");
+      setStatusFilter("ALL");
+      setPage(1);
+    }
+    try {
+      await refetch().unwrap();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể tải lại danh sách booking", "Could not reload bookings"),
+      });
+    } finally {
+      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+      if (remainingLoadingTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+      }
+      setIsManuallyRefreshingBookings(false);
+    }
+  };
 
   useEffect(() => {
     setPage(1);
@@ -936,14 +1003,6 @@ export default function BookingListWorkspace() {
           <h3 className="mt-2 text-lg font-bold text-slate-900">{localizedText("Danh sách booking", "Booking list")}</h3>
             <p className="mt-1 text-sm text-slate-500">{localizedText("Tra cứu, xem chi tiết, chỉnh sửa và thanh toán các đơn đặt phòng.", "Search, view, edit, and pay for bookings.")}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-        >
-          <RefreshCw size={15} />
-          {localizedText("Làm mới", "Refresh")}
-        </button>
       </div>
 
       {cancelFeedback && (
@@ -1008,20 +1067,97 @@ export default function BookingListWorkspace() {
           <div className="min-w-0">
             <FilterSelect aria-label={localizedText("Sắp xếp", "Sort")} value={dateSort} onChange={(event) => setDateSort(event.target.value as "asc" | "desc")} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"><option value="desc">{localizedText("Mới nhất trước", "Newest first")}</option><option value="asc">{localizedText("Cũ nhất trước", "Oldest first")}</option></FilterSelect>
           </div>
-          <div className="flex items-end">
-            {hasActiveFilters && <FilterResetButton
-              onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setStatusFilter("ALL"); }}
-              label={localizedText("Xóa tất cả bộ lọc", "Clear all filters")}
-            />}
+          <div className="flex items-end gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={localizedText("Tùy chỉnh cột", "Customize columns")}
+                  className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  <Columns3 size={16} />
+                  {localizedText("Cột", "Columns")}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-60 p-2">
+                <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {localizedText("Hiển thị cột", "Show columns")}
+                </p>
+                {BOOKING_TABLE_COLUMNS.map((column) => {
+                  const isLastVisibleColumn = shownBookingColumns.length === 1 && visibleColumns[column.id];
+                  return (
+                    <label key={column.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns[column.id]}
+                        disabled={isLastVisibleColumn}
+                        onChange={(event) => {
+                          setVisibleColumns((current) => ({ ...current, [column.id]: event.target.checked }));
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                      />
+                      {localizedText(column.label[0], column.label[1])}
+                    </label>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setVisibleColumns({
+                    booking: true,
+                    date: true,
+                    customer: true,
+                    room: true,
+                    services: true,
+                    discount: true,
+                    collected: true,
+                    refunded: true,
+                    balance: true,
+                    total: true,
+                    status: true,
+                    actions: true,
+                  })}
+                  className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+                >
+                  {localizedText("Hiện tất cả cột", "Show all columns")}
+                </button>
+              </PopoverContent>
+            </Popover>
+            <button
+              type="button"
+              onClick={() => void refreshBookingsOrResetFilters()}
+              disabled={isBookingListLoading}
+              aria-label={hasActiveFilters
+                ? localizedText("Xóa bộ lọc", "Reset filters")
+                : localizedText("Tải lại danh sách booking", "Reload bookings")}
+              title={hasActiveFilters
+                ? localizedText("Xóa bộ lọc", "Reset filters")
+                : localizedText("Tải lại danh sách booking", "Reload bookings")}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              aria-busy={isBookingListLoading}
+            >
+              {isBookingListLoading
+                ? <RefreshCw size={16} className="animate-spin" />
+                : hasActiveFilters
+                ? <RotateCcw size={15} />
+                : <RefreshCw size={16} />}
+            </button>
           </div>
         </div>
       </div>
 
       {/* Booking Table */}
-      {isLoading ? (
-        <p className="p-8 text-center text-sm text-slate-500">{localizedText("Đang tải danh sách booking...", "Loading bookings...")}</p>
+      {isBookingListLoading ? (
+        <div role="status" aria-live="polite" className="mx-5 my-4 flex min-h-48 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-8 text-sm text-blue-700">
+          <RefreshCw size={17} className="animate-spin" />
+          <span>{localizedText("Đang tải danh sách booking...", "Loading bookings...")}</span>
+        </div>
       ) : isError ? (
-        <p className="p-8 text-center text-sm text-rose-600">{localizedText("Không thể tải danh sách booking của chi nhánh.", "Could not load this branch's bookings.")}</p>
+        <div role="alert" className="mx-5 my-4 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
+          <p className="text-sm text-rose-700">{localizedText("Không thể tải danh sách booking của chi nhánh.", "Could not load this branch's bookings.")}</p>
+          <button type="button" onClick={() => void refetch()} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            {localizedText("Thử lại", "Try again")}
+          </button>
+        </div>
       ) : (
         <FilterResultStatus filterKey={JSON.stringify([search, dateFrom, dateTo, statusFilter, dateSort])}>
         {filteredBookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có booking phù hợp.", "No matching bookings found.")}</p> : <>
@@ -1029,18 +1165,11 @@ export default function BookingListWorkspace() {
             <table className="w-full min-w-max text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-5 py-3">Booking</th>
-                  <th className="px-5 py-3">{localizedText("Ngày booking", "Booking date")}</th>
-                  <th className="px-5 py-3">{localizedText("Khách hàng", "Guest")}</th>
-                  <th className="px-5 py-3 text-right">{localizedText("Tiền phòng", "Room")}</th>
-                  <th className="px-5 py-3 text-right">{localizedText("Tiền dịch vụ", "Services")}</th>
-                  <th className="px-5 py-3 text-right">{localizedText("Giảm giá", "Discount")}</th>
-                  <th className="px-5 py-3 text-right">{localizedText("Đã thu", "Collected")}</th>
-                  <th className="px-5 py-3 text-right">{localizedText("Đã hoàn", "Refunded")}</th>
-                  <th className="px-5 py-3 text-right">{localizedText("Còn thiếu", "Balance")}</th>
-                  <th className="px-5 py-3 text-right">{localizedText("Tổng bill", "Total")}</th>
-                  <th className="px-5 py-3">{localizedText("Trạng thái", "Status")}</th>
-                  <th className="px-5 py-3">{localizedText("Thao tác", "Actions")}</th>
+                  {shownBookingColumns.map((column) => (
+                    <th key={column.id} className={`px-5 py-3 ${["room", "services", "discount", "collected", "refunded", "balance", "total"].includes(column.id) ? "text-right" : ""}`}>
+                      {localizedText(column.label[0], column.label[1])}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1061,19 +1190,19 @@ export default function BookingListWorkspace() {
                   const displayRemaining = Math.abs(guestDue);
                   return (
                     <tr key={`${bookingId(booking)}-${index}`} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-4 font-semibold text-blue-700">{bookingId(booking)}</td>
-                      <td className="px-5 py-4 text-slate-600">{formatDate(booking.createdAt)}</td>
-                      <td className="px-5 py-4 font-medium text-slate-800">{textOf(booking, ["customerName"])}</td>
-                      <td className="px-5 py-4 text-right text-slate-700">{money(booking.roomTotal)}</td>
-                      <td className="px-5 py-4 text-right text-slate-700">{money(booking.serviceTotal)}</td>
-                      <td className="px-5 py-4 text-right text-rose-600">{money(bookingDiscount)}</td>
-                      <td className="px-5 py-4 text-right text-emerald-700">{money(collectedAmount)}</td>
-                      <td className="px-5 py-4 text-right text-purple-700">{money(refundedAmount)}</td>
-                      <td className={`px-5 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
+                      {visibleColumns.booking && <td className="px-5 py-4 font-semibold text-blue-700">{bookingId(booking)}</td>}
+                      {visibleColumns.date && <td className="px-5 py-4 text-slate-600">{formatDate(booking.createdAt)}</td>}
+                      {visibleColumns.customer && <td className="px-5 py-4 font-medium text-slate-800">{textOf(booking, ["customerName"])}</td>}
+                      {visibleColumns.room && <td className="px-5 py-4 text-right text-slate-700">{money(booking.roomTotal)}</td>}
+                      {visibleColumns.services && <td className="px-5 py-4 text-right text-slate-700">{money(booking.serviceTotal)}</td>}
+                      {visibleColumns.discount && <td className="px-5 py-4 text-right text-rose-600">{money(bookingDiscount)}</td>}
+                      {visibleColumns.collected && <td className="px-5 py-4 text-right text-emerald-700">{money(collectedAmount)}</td>}
+                      {visibleColumns.refunded && <td className="px-5 py-4 text-right text-purple-700">{money(refundedAmount)}</td>}
+                      {visibleColumns.balance && <td className={`px-5 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
                         {isFullyPaid ? "0 đ" : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
-                      </td>
-                      <td className="px-5 py-4 text-right font-bold text-blue-700">{money(finalAmountNumber)}</td>
-                      <td className="px-5 py-4">
+                      </td>}
+                      {visibleColumns.total && <td className="px-5 py-4 text-right font-bold text-blue-700">{money(finalAmountNumber)}</td>}
+                      {visibleColumns.status && <td className="px-5 py-4">
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
                             isPaid
@@ -1085,8 +1214,8 @@ export default function BookingListWorkspace() {
                         >
                           {bookingStatusLabel(booking)}
                         </span>
-                      </td>
-                      <td className="px-5 py-4">
+                      </td>}
+                      {visibleColumns.actions && <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -1114,7 +1243,7 @@ export default function BookingListWorkspace() {
                             Chỉnh sửa
                           </button>
                         </div>
-                      </td>
+                      </td>}
                     </tr>
                   );
                 })}
@@ -1585,7 +1714,7 @@ export default function BookingListWorkspace() {
                         setCancelError("");
                         setShowCancelConfirmation(true);
                       }}
-                      className="mr-auto rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50"
+                      className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50"
                     >
                       {localizedText("Hủy booking", "Cancel booking")}
                     </button>

@@ -6,17 +6,22 @@ import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 
 type BankSelectionFieldProps = {
+  id?: string;
   bankName: string;
   bankCode: string;
+  requireBankCode?: boolean;
   onChange: (bankName: string, bankCode: string) => void;
 };
 
 export default function BankSelectionField({
+  id = "refund-bank-search",
   bankName,
   bankCode,
+  requireBankCode = false,
   onChange,
 }: BankSelectionFieldProps) {
   useTranslation();
+  const listboxId = `${id}-options`;
   const [otherSelected, setOtherSelected] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -41,16 +46,16 @@ export default function BankSelectionField({
           }
         }}
       >
-        <label className="block text-sm font-semibold text-slate-700" htmlFor="refund-bank-search">
-          {localizedText("Ngân hàng *", "Bank *")}
+        <label className="block text-sm font-semibold text-slate-700" htmlFor={id}>
+          {localizedText("Ngân hàng", "Bank")} <span className="text-rose-600" aria-hidden="true">*</span>
         </label>
         <div className="relative mt-1">
           <input
-            id="refund-bank-search"
+            id={id}
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={menuOpen}
-            aria-controls="refund-bank-options"
+            aria-controls={listboxId}
             value={menuOpen ? search : selectedBank?.shortName ?? (isOtherSelected ? localizedText("Ngân hàng khác", "Other bank") : "")}
             onFocus={() => {
               setSearch("");
@@ -79,7 +84,7 @@ export default function BankSelectionField({
         </div>
         {menuOpen && (
           <div
-            id="refund-bank-options"
+            id={listboxId}
             role="listbox"
             className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
           >
@@ -125,22 +130,29 @@ export default function BankSelectionField({
       </div>
       {isOtherSelected ? (
         <div className="grid grid-cols-2 gap-2">
-          <input
-            aria-label={localizedText("Tên ngân hàng khác", "Other bank name")}
-            value={bankName}
-            onChange={(event) => onChange(event.target.value, bankCode)}
-            maxLength={120}
-            placeholder={localizedText("Tên ngân hàng", "Bank name")}
-            className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
-          />
-          <input
-            aria-label={localizedText("Mã ngân hàng khác", "Other bank code")}
-            value={bankCode}
-            onChange={(event) => onChange(bankName, event.target.value)}
-            maxLength={30}
-            placeholder={localizedText("Mã ngân hàng (nếu biết)", "Bank code (if known)")}
-            className="h-10 min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
-          />
+          <label className="min-w-0 text-xs font-semibold text-slate-700">
+            {localizedText("Tên ngân hàng", "Bank name")} <span className="text-rose-600" aria-hidden="true">*</span>
+            <input
+              aria-label={localizedText("Tên ngân hàng khác", "Other bank name")}
+              value={bankName}
+              onChange={(event) => onChange(event.target.value, bankCode)}
+              maxLength={120}
+              placeholder={localizedText("Nhập tên ngân hàng", "Enter bank name")}
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+            />
+          </label>
+          <label className="min-w-0 text-xs font-semibold text-slate-700">
+            {localizedText("Mã BIN", "Bank BIN")}
+            {requireBankCode ? <span className="text-rose-600" aria-hidden="true"> *</span> : null}
+            <input
+              aria-label={localizedText("Mã ngân hàng khác", "Other bank code")}
+              value={bankCode}
+              onChange={(event) => onChange(bankName, event.target.value)}
+              maxLength={30}
+              placeholder={localizedText("Nhập mã BIN", "Enter bank BIN")}
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none focus:border-blue-400"
+            />
+          </label>
         </div>
       ) : selectedBank ? (
         <p className="text-xs font-normal text-slate-500">{localizedText("Mã BIN:", "BIN:")} {selectedBank.bin}</p>

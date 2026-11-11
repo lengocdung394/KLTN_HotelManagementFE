@@ -86,6 +86,16 @@ export type CheckInOutQuery = {
 
 export type BulkCheckInOutRequest = string[];
 export type CheckoutSurplusRefundMethod = "CASH" | "BANK";
+export type CheckoutRefundBankDetails = {
+  bankName: string;
+  bankCode?: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+};
+export type CheckoutSurplusRefundSelection = {
+  method: CheckoutSurplusRefundMethod;
+  bankDetails?: CheckoutRefundBankDetails;
+};
 export type BulkCheckInOutResponse = Record<string, unknown>;
 export type CheckInOutSummary = {
   waitingCheckIn: number;
@@ -191,11 +201,12 @@ export const checkInOutApi = baseApi.injectEndpoints({
       bookingId: string;
       bookingDetailIds: BulkCheckInOutRequest;
       surplusRefundMethod?: CheckoutSurplusRefundMethod;
+      refundBankDetails?: CheckoutRefundBankDetails;
     }>({
-      query: ({ bookingId, bookingDetailIds, surplusRefundMethod }) => ({
+      query: ({ bookingId, bookingDetailIds, surplusRefundMethod, refundBankDetails }) => ({
         url: `/checkInOuts/${bookingId}/check-out/bulk`,
         method: "POST",
-        data: { bookingDetailIds, surplusRefundMethod },
+        data: { bookingDetailIds, surplusRefundMethod, refundBankDetails },
       }),
       transformResponse: (response: unknown) => {
         if (!response || typeof response !== "object") return {} as BulkCheckInOutResponse;

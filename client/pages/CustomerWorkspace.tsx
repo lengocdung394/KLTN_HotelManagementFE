@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BedDouble, CalendarDays, ChevronDown, CreditCard, Mail, Pencil, Phone, Plus, Search, UserRound, X } from "lucide-react";
+import { BedDouble, CalendarDays, ChevronDown, CreditCard, Mail, Pencil, Phone, Plus, RefreshCw, RotateCcw, Search, UserRound, X } from "lucide-react";
 import ListPagination from "../components/ListPagination";
 import ClearSearchButton from "../components/ClearSearchButton";
 import FilterResultStatus from "../components/FilterResultStatus";
-import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
+import SearchableFilter from "../components/SearchableFilter";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import { useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
@@ -13,6 +13,7 @@ import { useGetCustomerPromotionsQuery, useGetPromotionsQuery } from "../service
 import { useGetOrderByBookingIdQuery } from "../services/orderApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import { toast } from "@/components/ui/use-toast";
 
 type Customer = CustomerResponse;
 type Tier = Customer["tier"];
@@ -27,7 +28,7 @@ export default function CustomerWorkspace() {
   const roles = useAppSelector((state) => state.auth.roles);
   const canManageCustomers = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
   const hotelId = useAppSelector((state) => state.auth.hotelId);
-  const { data: apiCustomers = [], isLoading, isError } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
+  const { data: apiCustomers = [], isLoading, isFetching, isError, refetch: refetchCustomers } = useGetCustomersByHotelIdQuery(Number(hotelId), { skip: !hotelId || Number.isNaN(Number(hotelId)) });
   const {
     data: hotelBookings = [],
     isLoading: isBookingsLoading,
@@ -54,6 +55,7 @@ export default function CustomerWorkspace() {
   }, [dispatch, hotelId]);
   const [search, setSearch] = useState("");
   const [tier, setTier] = useState("all");
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
@@ -93,6 +95,34 @@ export default function CustomerWorkspace() {
   const safePage = Math.min(page, totalPages);
   const paginatedCustomers = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
   const hasActiveFilters = Boolean(search.trim()) || tier !== "all";
+  const isCustomerListLoading = isLoading || isFetching || isManuallyRefreshing;
+  const refreshOrResetFilters = async () => {
+    if (isCustomerListLoading || !hotelId || Number.isNaN(Number(hotelId))) return;
+    const refreshStartedAt = Date.now();
+    setIsManuallyRefreshing(true);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    if (hasActiveFilters) {
+      setSearch("");
+      setTier("all");
+      setPage(1);
+    }
+    try {
+      await refetchCustomers().unwrap();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: t("customer.loadError"),
+      });
+    } finally {
+      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+      if (remainingLoadingTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+      }
+      setIsManuallyRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     setPage(1);
@@ -137,7 +167,7 @@ export default function CustomerWorkspace() {
   const openCreate = () => { setEditing(null); setForm(blankForm); setFormErrors({}); setFormError(""); setModal("create"); };
   const openEdit = (customer: Customer) => { setSelected(null); setCustomerToVerify(customer); setIdentityCheck(""); setIdentityError(false); };
   const verifyIdentity = () => {
-    if (!customerToVerify || identityCheck.trim() !== customerToVerify.identityNumber.trim()) { setIdentityError(true); return; }
+    if (!customerToVerify || !identityCheck.trim() || identityCheck.trim() !== customerToVerify.identityNumber.trim()) { setIdentityError(true); return; }
     setEditing(customerToVerify);
     setForm({ name: customerToVerify.name, phone: customerToVerify.phone, email: customerToVerify.email, identityNumber: customerToVerify.identityNumber });
     setFormErrors({});
@@ -200,7 +230,7 @@ export default function CustomerWorkspace() {
   };
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
     <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="font-bold text-slate-900">{t("customer.listTitle")}</h3><p className="mt-1 text-sm text-slate-500">{t("customer.listDescription")}</p></div>{canManageCustomers && <button type="button" onClick={openCreate} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} />{t("customer.add")}</button>}</div>
-    <div className={`flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row ${hasActiveFilters ? "sm:items-center" : ""}`}>
+    <div className={`flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:flex-wrap ${hasActiveFilters ? "sm:items-center" : ""}`}>
       <div className="relative flex-1">
         <Search size={16} className="absolute left-3 top-3 text-slate-400" />
         <input
@@ -226,20 +256,14 @@ export default function CustomerWorkspace() {
           searchPlaceholder={localizedText("Tìm nhóm khách hàng...", "Search customer groups...")}
           emptyMessage={localizedText("Không tìm thấy nhóm khách hàng.", "No customer groups found.")}
         />
-        {hasActiveFilters && (
-          <FilterResetButton
-            onClick={() => {
-              setSearch("");
-              setTier("all");
-            }}
-            label={localizedText("Xóa bộ lọc", "Clear filters")}
-          />
-        )}
       </div>
+      <button type="button" onClick={() => void refreshOrResetFilters()} disabled={isCustomerListLoading || !hotelId || Number.isNaN(Number(hotelId))} aria-label={hasActiveFilters ? localizedText("Xóa bộ lọc", "Reset filters") : localizedText("Tải lại danh sách khách hàng", "Reload customers")} title={hasActiveFilters ? localizedText("Xóa bộ lọc", "Reset filters") : localizedText("Tải lại danh sách khách hàng", "Reload customers")} aria-busy={isCustomerListLoading} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60">
+        {isCustomerListLoading ? <RefreshCw size={16} className="animate-spin" /> : hasActiveFilters ? <RotateCcw size={15} /> : <RefreshCw size={16} />}
+      </button>
     </div>
     <div className="grid gap-3 p-4">
-      {isLoading ? <p className="p-6 text-sm text-slate-500">{t("common.loading")}</p>
-        : isError ? <p className="p-6 text-sm text-rose-600">{t("customer.loadError")}</p>
+      {isCustomerListLoading ? <div role="status" aria-live="polite" className="flex min-h-48 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-8 text-sm text-blue-700"><RefreshCw size={17} className="animate-spin" />{t("common.loading")}</div>
+        : isError ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center"><p className="text-sm text-rose-700">{t("customer.loadError")}</p><button type="button" onClick={() => void refreshOrResetFilters()} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">{localizedText("Thử lại", "Try again")}</button></div>
           : filtered.length === 0 ? <FilterResultStatus filterKey={JSON.stringify([search, tier])}><p className="p-6 text-sm text-slate-500">{t("customer.noResults")}</p></FilterResultStatus>
             : paginatedCustomers.map((customer) => {
               const isExpanded = expandedCustomerId === customer.id;
@@ -388,7 +412,7 @@ export default function CustomerWorkspace() {
               </div>;
             })}
     </div>
-    <ListPagination totalItems={filtered.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={setPage} onPageSizeChange={setPageSize} />
+    {!isCustomerListLoading && !isError && <ListPagination totalItems={filtered.length} page={safePage} pageSize={pageSize} mode="cards" onPageChange={setPage} onPageSizeChange={setPageSize} />}
     {selected && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={() => setSelected(null)}><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{t("customer.profile")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">{selected.name}</h3></div><button type="button" onClick={() => setSelected(null)} aria-label={t("common.close")}><X size={18} /></button></div><div className="mt-5 grid gap-3 text-sm text-slate-600"><p><Phone size={14} className="mr-2 inline" />{selected.phone}</p><p><Mail size={14} className="mr-2 inline" />{selected.email}</p></div><div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.bookingCount")}</span><strong className="mt-1 block text-lg text-slate-900">{selected.visits}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.cancelledBookings")}</span><strong className="mt-1 block text-lg text-slate-900">{selected.cancelledBookings}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.bookingValue")}</span><strong className="mt-1 block text-sm text-slate-900">{formatMoney(selected.totalSpend)}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500"><CalendarDays size={12} className="mr-1 inline" />{t("customer.latestBooking")}</span><strong className="mt-1 block text-xs text-slate-900">{formatBookingDate(selected.latestBookingAt)}</strong></div></div><p className="mt-4 text-sm text-slate-600">{t("customer.note")}: {selected.note}</p><section className="mt-6 border-t border-slate-100 pt-5"><div className="mb-3 flex items-center justify-between gap-3"><h4 className="font-semibold text-slate-900">{t("customer.bookingHistory")}</h4><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{customerBookings.length}</span></div>{isBookingsLoading ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{t("customer.bookingsLoading")}</p> : isBookingsError ? <p className="rounded-lg bg-rose-50 p-4 text-sm text-rose-700">{t("customer.bookingsLoadError")}</p> : customerBookings.length === 0 ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">{t("customer.noBookings")}</p> : <div className="space-y-3">{customerBookings.map((booking) => { const bookingKey = String(booking.bookingId ?? booking.orderId ?? booking.id ?? ""); const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : []; const roomAmount = Number(booking.roomTotal ?? 0); const serviceAmount = Number(booking.serviceTotal ?? 0); const amount = Number(booking.finalAmount ?? 0); return <article key={bookingKey} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{t("customer.bookingCode")}: {bookingKey || "-"}</p><p className="mt-1 text-xs text-slate-500"><CalendarDays size={12} className="mr-1 inline" />{formatBookingDate(booking.createdAt ?? null)}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${String(booking.bookingStatus ?? "").toUpperCase().includes("CANCEL") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{formatBookingStatus(booking)}</span></div><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.roomCharge")}</span><strong className="mt-1 block text-slate-800">{formatMoney(Number.isFinite(roomAmount) ? roomAmount : 0)}</strong></div><div className="rounded-lg bg-slate-50 p-3"><span className="block text-xs text-slate-500">{t("customer.serviceCharge")}</span><strong className="mt-1 block text-slate-800">{formatMoney(Number.isFinite(serviceAmount) ? serviceAmount : 0)}</strong></div></div><p className="mt-3 text-sm font-semibold text-slate-800">{t("customer.bookingAmount")}: {formatMoney(Number.isFinite(amount) ? amount : 0)}</p>    {details.length > 0 && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">{details.map((detail, index) => {
       const roomNumber = String(detail.roomNumber ?? detail.roomName ?? detail.roomTypeName ?? "-");
       const detailStatus = String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").toUpperCase();
@@ -427,7 +451,7 @@ export default function CustomerWorkspace() {
         </div>
       );
     })}</div>}</article>; })}</div>}</section>{canManageCustomers && <button type="button" onClick={() => openEdit(selected)} className="mt-6 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"><Pencil size={15} />{t("customer.edit")}</button>}</div></div>}
-    {customerToVerify && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}><form onSubmit={(event) => { event.preventDefault(); verifyIdentity(); }} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{t("customer.edit")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">Xác thực CCCD</h3><p className="mt-2 text-sm text-slate-500">Nhập đúng số CCCD của {customerToVerify.name} để tiếp tục chỉnh sửa.</p></div><button type="button" onClick={closeModal} aria-label={t("common.close")}><X size={18} /></button></div><label className="mt-5 block text-sm font-semibold text-slate-700">{t("customer.identityNumber")}<input autoFocus required value={identityCheck} onChange={(event) => { setIdentityCheck(event.target.value); setIdentityError(false); }} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal" />{identityError && <span className="mt-2 block text-xs font-normal text-rose-600">{localizedText("CCCD không đúng, vui lòng kiểm tra lại.", "The ID number is incorrect. Please check it and try again.")}</span>}</label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">{t("common.cancel")}</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Tiếp tục</button></div></form></div>}
+    {customerToVerify && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}><form noValidate onSubmit={(event) => { event.preventDefault(); verifyIdentity(); }} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{t("customer.edit")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">{localizedText("Xác thực CCCD", "Verify citizen ID")}</h3><p className="mt-2 text-sm text-slate-500">{localizedText(`Nhập đúng số CCCD của ${customerToVerify.name} để tiếp tục chỉnh sửa.`, `Enter ${customerToVerify.name}'s correct citizen ID number to continue editing.`)}</p></div><button type="button" onClick={closeModal} aria-label={t("common.close")}><X size={18} /></button></div><label className="mt-5 block text-sm font-semibold text-slate-700">{t("customer.identityNumber")}<input autoFocus value={identityCheck} onChange={(event) => { setIdentityCheck(event.target.value); setIdentityError(false); }} aria-invalid={identityError} aria-describedby={identityError ? "customer-identity-check-error" : undefined} className={`mt-1.5 h-11 w-full rounded-lg border px-3 text-sm font-normal ${identityError ? "border-rose-400" : "border-slate-200"}`} />{identityError && <span id="customer-identity-check-error" role="alert" className="mt-2 block text-xs font-normal text-rose-600">{identityCheck.trim() ? localizedText("CCCD không đúng, vui lòng kiểm tra lại.", "The ID number is incorrect. Please check it and try again.") : localizedText("Vui lòng nhập số CCCD.", "Enter the citizen ID number.")}</span>}</label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">{t("common.cancel")}</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">{localizedText("Tiếp tục", "Continue")}</button></div></form></div>}
     {modal && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}>
       <form
         noValidate

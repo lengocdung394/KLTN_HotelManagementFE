@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, BedDouble, Building2, CalendarDays, Check, ChevronDown, ConciergeBell, PanelLeftClose, PanelLeftOpen, Tag, Wallet, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { BarChart3, BedDouble, Building2, CalendarDays, Check, ChevronDown, ConciergeBell, PanelLeftClose, PanelLeftOpen, RefreshCw, RotateCcw, Tag, Wallet, XCircle } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -43,7 +44,7 @@ import {
   type PromotionScope,
 } from "../lib/promotionReport";
 import usePeriodReportData from "../hooks/usePeriodReportData";
-import { FilterResetButton } from "./SearchableFilter";
+import { localizedText } from "../i18n";
 
 type Props = {
   branches: SuperAdminBranch[];
@@ -62,13 +63,13 @@ const EMPTY_PROMOTIONS: Promotion[] = [];
 const localDateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
-const roomStatusLabels: Record<string, string> = {
-  READY: "Sẵn sàng",
-  IN_USE: "Đang sử dụng",
-  CLEANING: "Đang dọn",
-  MAINTENANCE: "Bảo trì",
-  UNKNOWN: "Chưa xác định",
-};
+const getRoomStatusLabel = (status: string) => ({
+  READY: localizedText("Sẵn sàng", "Ready"),
+  IN_USE: localizedText("Đang sử dụng", "In use"),
+  CLEANING: localizedText("Đang dọn", "Cleaning"),
+  MAINTENANCE: localizedText("Bảo trì", "Maintenance"),
+  UNKNOWN: localizedText("Chưa xác định", "Unknown"),
+}[status] ?? status);
 
 const roomStatusColors: Record<string, string> = {
   READY: "#22c55e",
@@ -78,18 +79,28 @@ const roomStatusColors: Record<string, string> = {
   UNKNOWN: "#94a3b8",
 };
 
-const roomTypeLabels: Record<string, string> = {
-  STANDARD: "Phòng tiêu chuẩn",
-  DELUXE: "Phòng cao cấp",
-  SUITE: "Phòng thượng hạng",
-  FAMILY: "Phòng gia đình",
-};
+const getRoomTypeLabel = (roomType: string) => ({
+  STANDARD: localizedText("Phòng tiêu chuẩn", "Standard room"),
+  DELUXE: localizedText("Phòng cao cấp", "Deluxe room"),
+  SUITE: localizedText("Phòng thượng hạng", "Suite"),
+  FAMILY: localizedText("Phòng gia đình", "Family room"),
+}[roomType] ?? roomType);
 
-const promotionScopeLabels: Record<PromotionScope, string> = {
-  ROOM: "Tiền phòng",
-  SERVICE: "Tiền dịch vụ",
-  TOTAL: "Tổng booking",
-  UNKNOWN: "Chưa xác định",
+const getPromotionScopeLabel = (scope: PromotionScope) => ({
+  ROOM: localizedText("Tiền phòng", "Room charges"),
+  SERVICE: localizedText("Tiền dịch vụ", "Service charges"),
+  TOTAL: localizedText("Tổng booking", "Booking total"),
+  UNKNOWN: localizedText("Chưa xác định", "Unknown"),
+}[scope]);
+
+const statCardSurfaceColors: Record<string, string> = {
+  blue: "border-blue-200 bg-gradient-to-br from-blue-50 to-white",
+  cyan: "border-cyan-200 bg-gradient-to-br from-cyan-50 to-white",
+  rose: "border-rose-200 bg-gradient-to-br from-rose-50 to-white",
+  violet: "border-violet-200 bg-gradient-to-br from-violet-50 to-white",
+  amber: "border-amber-200 bg-gradient-to-br from-amber-50 to-white",
+  emerald: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white",
+  orange: "border-orange-200 bg-gradient-to-br from-orange-50 to-white",
 };
 
 const StatCard = ({
@@ -104,22 +115,27 @@ const StatCard = ({
   detail: string;
   icon: typeof Building2;
   color: string;
-}) => (
-  <article className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <p className="text-sm font-medium text-slate-500">{label}</p>
-        <p className="mt-3 text-3xl font-bold tracking-tight text-slate-900">{value}</p>
-        <p className="mt-1 text-xs text-slate-400">{detail}</p>
+}) => {
+  const tone = color.match(/text-([a-z]+)-/)?.[1] ?? "blue";
+
+  return (
+    <article className={`flex min-h-[172px] flex-col justify-between rounded-2xl border p-5 shadow-sm ring-1 ring-white/80 transition hover:-translate-y-0.5 hover:shadow-md ${statCardSurfaceColors[tone] ?? statCardSurfaceColors.blue}`}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-h-10 text-sm font-bold leading-5 text-slate-600">{label}</p>
+        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl shadow-sm ${color}`}>
+          <Icon size={21} />
+        </span>
       </div>
-      <span className={`grid h-11 w-11 place-items-center rounded-xl ${color}`}>
-        <Icon size={20} />
-      </span>
-    </div>
-  </article>
-);
+      <div>
+        <p className="mt-3 break-words text-3xl font-extrabold leading-tight tracking-tight text-slate-900">{value}</p>
+        <p className="mt-2 min-h-8 text-xs leading-4 text-slate-500">{detail}</p>
+      </div>
+    </article>
+  );
+};
 
 export default function SuperAdminResourceStatsPanel({ branches, isLoading, isError, onRetry }: Props) {
+  const { i18n } = useTranslation();
   const [selectedBranchId, setSelectedBranchId] = useState("all");
   const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
   const today = localDateString(new Date());
@@ -140,6 +156,8 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const {
     data: availablePromotions = EMPTY_PROMOTIONS,
     isError: isPromotionCatalogError,
+    isFetching: isPromotionCatalogFetching,
+    refetch: refetchPromotionCatalog,
   } = useGetPromotionsQuery(
     selectedBranchId === "all"
       ? { page: 0, size: 100 }
@@ -153,13 +171,13 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   const dispatch = useAppDispatch();
   const hasValidDateRange = Boolean(startDate && endDate && startDate <= endDate);
   const reportSections = [
-    { id: "super-admin-stats-overview", label: "Tổng quan" },
-    { id: "super-admin-stats-booking-revenue", label: "Doanh thu booking" },
-    { id: "super-admin-stats-services", label: "Doanh thu dịch vụ" },
-    { id: "super-admin-stats-promotions", label: "Khuyến mãi" },
-    { id: "super-admin-stats-rooms", label: "Thống kê phòng" },
-    { id: "super-admin-stats-cancellations", label: "Booking đã hủy" },
-    { id: "super-admin-stats-branches", label: "Thống kê theo chi nhánh" },
+    { id: "super-admin-stats-overview", label: localizedText("Tổng quan", "Overview") },
+    { id: "super-admin-stats-booking-revenue", label: localizedText("Doanh thu booking", "Booking revenue") },
+    { id: "super-admin-stats-services", label: localizedText("Doanh thu dịch vụ", "Service revenue") },
+    { id: "super-admin-stats-promotions", label: localizedText("Khuyến mãi", "Promotions") },
+    { id: "super-admin-stats-rooms", label: localizedText("Thống kê phòng", "Room statistics") },
+    { id: "super-admin-stats-cancellations", label: localizedText("Booking đã hủy", "Cancelled bookings") },
+    { id: "super-admin-stats-branches", label: localizedText("Thống kê theo chi nhánh", "Statistics by branch") },
   ];
   const [activeReportSection, setActiveReportSection] = useState(reportSections[0].id);
 
@@ -265,31 +283,6 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       "vi-VN",
     );
   }, [endDate, reportPeriod, reports, startDate]);
-  const promotionBreakdown = useMemo(() => {
-    const values = new Map<string, { id: string; name: string; code: string; scope: PromotionScope; usageCount: number; userCount: number; savings: number }>();
-    reports.forEach((report) => report.promotions.forEach((promotion) => {
-      const key = `${promotion.promotionId}:${promotion.promotionCode}`;
-      const current = values.get(key) ?? {
-        id: promotion.promotionId,
-        name: promotion.promotionName,
-        code: promotion.promotionCode,
-        scope: getPromotionScope(
-          promotionScopeById.get(promotion.promotionId)
-            ?? promotion.type
-            ?? promotion.scope
-            ?? promotion.promotionScope,
-        ),
-        usageCount: 0,
-        userCount: 0,
-        savings: 0,
-      };
-      current.usageCount += promotion.usageCount;
-      current.userCount += promotion.userCount;
-      current.savings += Number(promotion.savings ?? 0);
-      values.set(key, current);
-    }));
-    return [...values.values()].sort((left, right) => right.usageCount - left.usageCount);
-  }, [promotionScopeById, reports]);
   const promotionScopeBreakdown = useMemo(
     () => buildPromotionScopeBreakdown(
       reports.flatMap((report) => report.promotions),
@@ -297,7 +290,6 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     ),
     [promotionScopeById, reports],
   );
-  const promotionScopesTotalSavings = promotionScopeBreakdown.reduce((total, item) => total + item.savings, 0);
   const dailyReportHotelIds = useMemo(
     () => visibleBranches.map((branch) => branch.id),
     [visibleBranches],
@@ -309,6 +301,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     endDate,
     dailyReportHotelIds,
     promotionScopeById,
+    retryCount,
   );
   const bookingRevenueChartData = reportPeriod === "custom"
     ? [{
@@ -332,7 +325,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     return [...values.entries()].map(([status, roomCount]) => ({
       status,
       roomCount,
-      name: roomStatusLabels[status] ?? status,
+      name: getRoomStatusLabel(status),
       color: roomStatusColors[status] ?? "#94a3b8",
     }));
   }, [reports]);
@@ -342,7 +335,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       values.set(item.roomType, (values.get(item.roomType) ?? 0) + item.bookingCount);
     }));
     return [...values.entries()]
-      .map(([roomType, bookingCount]) => ({ roomType, bookingCount, name: roomTypeLabels[roomType] ?? roomType }))
+      .map(([roomType, bookingCount]) => ({ roomType, bookingCount, name: getRoomTypeLabel(roomType) }))
       .sort((left, right) => right.bookingCount - left.bookingCount);
   }, [reports]);
   const cancelledBookingDetails = reports.flatMap((report) => {
@@ -373,12 +366,15 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   useEffect(() => {
     if (branchPage > branchTotalPages) setBranchPage(branchTotalPages);
   }, [branchPage, branchTotalPages]);
-  const formatCount = (value: number) => new Intl.NumberFormat("vi-VN").format(value);
+  const locale = i18n.language.startsWith("en") ? "en-US" : "vi-VN";
+  const formatCount = (value: number) => new Intl.NumberFormat(locale).format(value);
   const formatMoney = (value: number) =>
-    `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)}đ`;
+    `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)} ${i18n.language.startsWith("en") ? "VND" : "đ"}`;
   const displayCount = (value: number) => isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatCount(value);
   const selectedBranchName = visibleBranches.length === 1 ? visibleBranches[0].name : null;
-  const reportScopeLabel = selectedBranchName ? `chi nhánh ${selectedBranchName}` : "toàn bộ chi nhánh";
+  const reportScopeLabel = selectedBranchName
+    ? localizedText(`chi nhánh ${selectedBranchName}`, `branch ${selectedBranchName}`)
+    : localizedText("toàn bộ chi nhánh", "all branches");
   const selectReportPeriod = (period: Exclude<ReportPeriod, "custom">) => {
     const option = reportPeriodOptions.find((item) => item.value === period);
     if (!option) return;
@@ -398,25 +394,41 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
     setStartDate(range.startDate);
     setEndDate(range.endDate);
   };
-  const reportDateScopeLabel = reportPeriod === "custom"
-    ? "trong khoảng tùy chọn"
-    : `trong ${comparisonScope === "week" ? "tuần" : comparisonScope === "month" ? "tháng" : "năm"}`;
-  const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, string> = {
-    "day-week": "Ngày trong tuần",
-    "day-month": "Ngày trong tháng",
-    "day-year": "Ngày trong năm",
-    "week-month": "Tuần trong tháng",
-    "week-year": "Tuần trong năm",
-    "month-year": "Tháng trong năm",
+  const hasReportFilters = Boolean(
+    selectedBranchId !== "all"
+    || reportPeriod !== "day-month"
+    || comparisonUnit !== "day"
+    || comparisonScope !== "month"
+    || startDate !== initialRange.startDate
+    || endDate !== initialRange.endDate,
+  );
+  const handleReportRefreshOrReset = () => {
+    if (hasReportFilters) {
+      resetReportFilters();
+      return;
+    }
+    setRetryCount((count) => count + 1);
+    void refetchPromotionCatalog();
   };
+  const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, string> = {
+    "day-week": localizedText("Ngày trong tuần", "Day of week"),
+    "day-month": localizedText("Ngày trong tháng", "Day of month"),
+    "day-year": localizedText("Ngày trong năm", "Day of year"),
+    "week-month": localizedText("Tuần trong tháng", "Week of month"),
+    "week-year": localizedText("Tuần trong năm", "Week of year"),
+    "month-year": localizedText("Tháng trong năm", "Month of year"),
+  };
+  const reportDateScopeLabel = reportPeriod === "custom"
+    ? localizedText("trong khoảng tùy chọn", "in the custom range")
+    : `${localizedText("trong", "in")} ${comparisonScope === "week" ? localizedText("tuần", "week") : comparisonScope === "month" ? localizedText("tháng", "month") : localizedText("năm", "year")}`;
   const reportPeriodLabel = reportPeriod === "custom"
-    ? "ngày trong khoảng tùy chọn"
+    ? localizedText("ngày trong khoảng tùy chọn", "days in the custom range")
     : reportPeriodOptionLabels[reportPeriod].toLowerCase();
   const promotionSavingsByScope = promotionScopeBreakdown
     .filter((item) => item.savings > 0)
     .map((item) => ({
       scope: item.scope,
-      label: promotionScopeLabels[item.scope],
+      label: getPromotionScopeLabel(item.scope),
       savings: item.savings,
       color: promotionScopeColors[item.scope],
     }));
@@ -430,32 +442,33 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       )
     : [{
         label: reportDateScopeLabel,
-        fullDate: reportDateScopeLabel,
+        fullDate: `${startDate} – ${endDate}`,
         ROOM: promotionSavingsByScope.find((item) => item.scope === "ROOM")?.savings ?? 0,
         SERVICE: promotionSavingsByScope.find((item) => item.scope === "SERVICE")?.savings ?? 0,
         TOTAL: promotionSavingsByScope.find((item) => item.scope === "TOTAL")?.savings ?? 0,
         UNKNOWN: promotionSavingsByScope.find((item) => item.scope === "UNKNOWN")?.savings ?? 0,
       }];
-
   return (
     <section className="mt-2 space-y-5" aria-labelledby="resource-stats-title">
-      <header className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+      <header className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-start gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
             <BarChart3 size={21} />
           </span>
           <div>
             <h2 id="resource-stats-title" className="text-lg font-bold text-slate-900">
-              {selectedBranchName ? `Thống kê ${selectedBranchName}` : "Thống kê toàn hệ thống"}
+              {selectedBranchName
+                ? localizedText(`Thống kê ${selectedBranchName}`, `Statistics for ${selectedBranchName}`)
+                : localizedText("Thống kê toàn hệ thống", "System-wide statistics")}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-              Tổng hợp booking, doanh thu, dịch vụ và khuyến mãi tại {reportScopeLabel} trong khoảng ngày đã chọn.
+              {localizedText(`Tổng hợp booking, doanh thu, dịch vụ và khuyến mãi tại ${reportScopeLabel} trong khoảng ngày đã chọn.`, `Summary of bookings, revenue, services, and promotions for ${reportScopeLabel} over the selected date range.`)}
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="block text-xs font-semibold text-slate-500">
-            Theo
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(120px,0.8fr)_minmax(120px,0.8fr)_minmax(190px,1.2fr)_minmax(160px,1fr)_minmax(160px,1fr)_40px]">
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
+            {localizedText("Theo", "By")}
             <select
               value={comparisonUnit}
               onChange={(event) => {
@@ -465,16 +478,16 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                 ) ?? reportPeriodOptions.find((option) => option.unit === nextUnit);
                 if (nextPeriod) selectReportPeriod(nextPeriod.value);
               }}
-              aria-label="Chọn đơn vị so sánh"
-              className="ml-2 mt-1 h-10 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              aria-label={localizedText("Chọn đơn vị so sánh", "Select comparison unit")}
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             >
-              <option value="day">Ngày</option>
-              <option value="week">Tuần</option>
-              <option value="month">Tháng</option>
+              <option value="day">{localizedText("Ngày", "Day")}</option>
+              <option value="week">{localizedText("Tuần", "Week")}</option>
+              <option value="month">{localizedText("Tháng", "Month")}</option>
             </select>
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
-            Trong
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
+            {localizedText("Trong", "Within")}
             <select
               value={comparisonScope}
               onChange={(event) => {
@@ -483,49 +496,49 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                 );
                 if (nextPeriod) selectReportPeriod(nextPeriod.value);
               }}
-              aria-label="Chọn khoảng so sánh"
-              className="ml-2 mt-1 h-10 min-w-32 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              aria-label={localizedText("Chọn khoảng so sánh", "Select comparison range")}
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             >
               {reportPeriodOptions
                 .filter((option) => option.unit === comparisonUnit)
                 .map(({ scope }) => (
                   <option key={scope} value={scope}>
-                    {scope === "week" ? "Tuần" : scope === "month" ? "Tháng" : "Năm"}
+                    {scope === "week" ? localizedText("Tuần", "Week") : scope === "month" ? localizedText("Tháng", "Month") : localizedText("Năm", "Year")}
                   </option>
                 ))}
             </select>
           </label>
-          <div className="text-xs font-semibold text-slate-500">
-            <span>Chi nhánh</span>
+          <div className="min-w-0 text-xs font-semibold text-slate-500">
+            <span>{localizedText("Chi nhánh", "Branch")}</span>
             <Popover open={isBranchPickerOpen} onOpenChange={setIsBranchPickerOpen}>
               <PopoverTrigger asChild>
                 <button
                   type="button"
                   disabled={isLoading || isError}
-                  aria-label="Tìm và chọn chi nhánh"
-                  className="ml-2 mt-1 flex h-10 min-w-52 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                  aria-label={localizedText("Tìm và chọn chi nhánh", "Search and select a branch")}
+                  className="mt-1 flex h-10 w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 outline-none hover:bg-slate-50 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                 >
                   <span className="truncate">
-                    {selectedBranchName ?? "Tất cả chi nhánh"}
+                    {selectedBranchName ?? localizedText("Tất cả chi nhánh", "All branches")}
                   </span>
                   <ChevronDown size={15} className="shrink-0 text-slate-400" />
                 </button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-64 p-0">
                 <Command>
-                  <CommandInput placeholder="Tìm chi nhánh..." />
+                  <CommandInput placeholder={localizedText("Tìm chi nhánh...", "Search branches...")} />
                   <CommandList>
-                    <CommandEmpty>Không tìm thấy chi nhánh.</CommandEmpty>
+                    <CommandEmpty>{localizedText("Không tìm thấy chi nhánh.", "No branches found.")}</CommandEmpty>
                     <CommandGroup>
                       <CommandItem
-                        value="Tất cả chi nhánh"
+                        value={localizedText("Tất cả chi nhánh", "All branches")}
                         onSelect={() => {
                           setSelectedBranchId("all");
                           setIsBranchPickerOpen(false);
                         }}
                       >
                         <Check className={`mr-2 h-4 w-4 ${selectedBranchId === "all" ? "opacity-100" : "opacity-0"}`} />
-                        Tất cả chi nhánh
+                        {localizedText("Tất cả chi nhánh", "All branches")}
                       </CommandItem>
                       {branches.map((branch) => (
                         <CommandItem
@@ -546,63 +559,70 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
               </PopoverContent>
             </Popover>
           </div>
-          <label className="block text-xs font-semibold text-slate-500">
-            Từ ngày
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
+            {localizedText("Từ ngày", "From")}
             <input
               type="date"
               value={startDate}
               max={endDate || undefined}
               onChange={(event) => { setStartDate(event.target.value); setReportPeriod("custom"); }}
-              className="ml-2 mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             />
           </label>
-          <label className="block text-xs font-semibold text-slate-500">
-            Đến ngày
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
+            {localizedText("Đến ngày", "To")}
             <input
               type="date"
               value={endDate}
               min={startDate || undefined}
               max={today}
               onChange={(event) => { setEndDate(event.target.value); setReportPeriod("custom"); }}
-              className="ml-2 mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+              className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
             />
           </label>
           <div className="flex items-end">
-            <FilterResetButton
-              onClick={resetReportFilters}
-              label="Xóa bộ lọc"
-              showLabel
-            />
+            <button
+              type="button"
+              onClick={handleReportRefreshOrReset}
+              disabled={!hasReportFilters && (isStatsLoading || isPromotionCatalogFetching)}
+              aria-label={hasReportFilters ? localizedText("Xóa bộ lọc", "Clear filters") : localizedText("Tải lại thống kê", "Refresh statistics")}
+              title={hasReportFilters ? localizedText("Xóa bộ lọc", "Clear filters") : localizedText("Tải lại thống kê", "Refresh statistics")}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {hasReportFilters
+                ? <RotateCcw size={15} />
+                : <RefreshCw size={16} className={isStatsLoading || isPromotionCatalogFetching ? "animate-spin" : ""} />}
+            </button>
           </div>
         </div>
       </header>
 
       {!hasValidDateRange && (
         <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.
+          {localizedText("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.", "The start date must be on or before the end date.")}
         </p>
       )}
       {hasReportErrors && (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          <span>Không thể tải báo cáo từ một số chi nhánh. Các số tổng hợp được ẩn để tránh hiển thị thiếu dữ liệu.</span>
+          <span>{localizedText("Không thể tải báo cáo từ một số chi nhánh. Các số tổng hợp được ẩn để tránh hiển thị thiếu dữ liệu.", "Reports could not be loaded for some branches. Aggregate figures are hidden to avoid showing incomplete data.")}</span>
           <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="font-semibold underline underline-offset-2">
-            Thử tải lại
+            {localizedText("Thử tải lại", "Retry")}
           </button>
         </div>
       )}
 
       <div className={`grid grid-cols-1 items-start gap-5 ${isReportTocVisible ? "lg:grid-cols-[220px_minmax(0,1fr)]" : "lg:grid-cols-1"}`}>
-        {isReportTocVisible && <nav className="hidden lg:sticky lg:top-6 lg:block" aria-label="Mục lục thống kê Super Admin">
+        {isReportTocVisible && <nav className="hidden lg:sticky lg:top-6 lg:block" aria-label={localizedText("Mục lục thống kê Super Admin", "Super Admin statistics contents")}>
           <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2 px-2 pb-3">
-              <h3 className="text-sm font-bold text-slate-800">Mục lục</h3>
+              <h3 className="text-sm font-bold text-slate-800">{localizedText("Mục lục", "Contents")}</h3>
               <div className="flex items-center gap-1">
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">{reportSections.length}</span>
                 <button
                   type="button"
                   onClick={() => setIsReportTocVisible(false)}
-                  aria-label="Thu gọn mục lục"
-                  title="Thu gọn mục lục"
+                  aria-label={localizedText("Thu gọn mục lục", "Collapse contents")}
+                  title={localizedText("Thu gọn mục lục", "Collapse contents")}
                   className="grid h-7 w-7 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
                 >
                   <PanelLeftClose size={16} />
@@ -641,16 +661,16 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             <button
               type="button"
               onClick={() => setIsReportTocVisible(true)}
-              aria-label="Mở mục lục"
-              title="Mở mục lục"
+              aria-label={localizedText("Mở mục lục", "Open contents")}
+              title={localizedText("Mở mục lục", "Open contents")}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
             >
               <PanelLeftOpen size={16} />
-              Mở mục lục
+              {localizedText("Mở mục lục", "Open contents")}
             </button>
           </div>
         )}
-        <nav className="overflow-x-auto lg:hidden" aria-label="Mục lục thống kê Super Admin">
+        <nav className="overflow-x-auto lg:hidden" aria-label={localizedText("Mục lục thống kê Super Admin", "Super Admin statistics contents")}>
           <div className="flex min-w-max gap-2 rounded-xl border border-slate-200/80 bg-white p-2 shadow-sm">
             {reportSections.map((item, index) => (
               <button
@@ -671,33 +691,33 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
       <section id="super-admin-stats-overview" data-super-admin-report-section className="scroll-mt-24 space-y-5">
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-700">Hoạt động</h3>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <h3 className="mb-2 text-sm font-bold text-slate-700">{localizedText("Hoạt động", "Activity")}</h3>
+          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
             <StatCard
-              label="Chi nhánh"
+              label={localizedText("Chi nhánh", "Branches")}
               value={isLoading || isError ? "—" : visibleBranches.length}
-              detail={selectedBranchName ? "Đang xem chi nhánh đã chọn" : "Tổng số chi nhánh trong hệ thống"}
+              detail={selectedBranchName ? localizedText("Đang xem chi nhánh đã chọn", "Viewing the selected branch") : localizedText("Tổng số chi nhánh trong hệ thống", "Total branches in the system")}
               icon={Building2}
               color="bg-blue-50 text-blue-700"
             />
             <StatCard
-              label="Tổng lượt đặt phòng"
+              label={localizedText("Tổng lượt đặt phòng", "Total bookings")}
               value={displayCount(totalBookings)}
-              detail={`Booking tạo trong kỳ · ${reportScopeLabel}`}
+              detail={localizedText(`Booking tạo trong kỳ · ${reportScopeLabel}`, `Bookings created during the period · ${reportScopeLabel}`)}
               icon={CalendarDays}
               color="bg-cyan-50 text-cyan-700"
             />
             <StatCard
-              label="Booking đã hủy"
+              label={localizedText("Booking đã hủy", "Cancelled bookings")}
               value={displayCount(totalCancelledBookings)}
-              detail={`Trong khoảng ngày đã chọn · ${reportScopeLabel}`}
+              detail={localizedText(`Trong khoảng ngày đã chọn · ${reportScopeLabel}`, `Within the selected date range · ${reportScopeLabel}`)}
               icon={XCircle}
               color="bg-rose-50 text-rose-700"
             />
             <StatCard
-              label="Tổng số phòng"
+              label={localizedText("Tổng số phòng", "Total rooms")}
               value={displayCount(totalRooms)}
-              detail={`Theo trạng thái hiện tại · ${reportScopeLabel}`}
+              detail={localizedText(`Theo trạng thái hiện tại · ${reportScopeLabel}`, `By current status · ${reportScopeLabel}`)}
               icon={BedDouble}
               color="bg-cyan-50 text-cyan-700"
             />
@@ -705,40 +725,40 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
         </div>
 
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-700">Doanh thu vận hành</h3>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <h3 className="mb-2 text-sm font-bold text-slate-700">{localizedText("Doanh thu vận hành", "Operating revenue")}</h3>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <StatCard
-              label="Tiền phòng"
+              label={localizedText("Tiền phòng", "Room charges")}
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRoomRevenue)}
-              detail={`Theo các đêm lưu trú · ${reportScopeLabel}`}
+              detail={localizedText(`Theo các đêm lưu trú · ${reportScopeLabel}`, `Based on nights stayed · ${reportScopeLabel}`)}
               icon={Wallet}
               color="bg-blue-50 text-blue-700"
             />
             <StatCard
-              label="Doanh thu dịch vụ"
+              label={localizedText("Doanh thu dịch vụ", "Service revenue")}
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalServiceRevenue)}
-              detail={`Từ ${displayCount(totalServiceUsage)} lượt dịch vụ · ${reportScopeLabel}`}
+              detail={localizedText(`Từ ${displayCount(totalServiceUsage)} lượt dịch vụ · ${reportScopeLabel}`, `From ${displayCount(totalServiceUsage)} service uses · ${reportScopeLabel}`)}
               icon={ConciergeBell}
               color="bg-violet-50 text-violet-700"
             />
             <StatCard
-              label="Giá trị khuyến mãi"
+              label={localizedText("Giá trị khuyến mãi", "Promotion savings")}
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalPromotionSavings)}
-              detail={`Tổng tiền giảm trên booking · ${reportScopeLabel}`}
+              detail={localizedText(`Tổng tiền giảm trên booking · ${reportScopeLabel}`, `Total discounts applied to bookings · ${reportScopeLabel}`)}
               icon={Tag}
               color="bg-amber-50 text-amber-700"
             />
             <StatCard
-              label="Lượt sử dụng dịch vụ"
+              label={localizedText("Lượt sử dụng dịch vụ", "Service uses")}
               value={displayCount(totalServiceUsage)}
-              detail={`Tổng lượt dùng · ${reportScopeLabel}`}
+              detail={localizedText(`Tổng lượt dùng · ${reportScopeLabel}`, `Total uses · ${reportScopeLabel}`)}
               icon={ConciergeBell}
               color="bg-violet-50 text-violet-700"
             />
             <StatCard
-              label="Lượt dùng khuyến mãi"
+              label={localizedText("Lượt dùng khuyến mãi", "Promotion uses")}
               value={displayCount(totalPromotionUsage)}
-              detail={`Tổng lượt áp dụng · ${reportScopeLabel}`}
+              detail={localizedText(`Tổng lượt áp dụng · ${reportScopeLabel}`, `Total applications · ${reportScopeLabel}`)}
               icon={Tag}
               color="bg-emerald-50 text-emerald-700"
             />
@@ -746,35 +766,35 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
         </div>
 
         <div>
-          <h3 className="mb-2 text-sm font-bold text-slate-700">Dòng tiền</h3>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <h3 className="mb-2 text-sm font-bold text-slate-700">{localizedText("Dòng tiền", "Cash flow")}</h3>
+          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
             <StatCard
-              label="Tổng tiền đã thu booking"
+              label={localizedText("Tổng tiền đã thu booking", "Total booking payments received")}
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRevenue)}
               detail={isStatsLoading || hasReportErrors || !allReportsLoaded
-                ? `Tiền mặt và chuyển khoản · ${reportScopeLabel}`
-                : `Tiền mặt ${formatMoney(totalCashReceived)} · Chuyển khoản ${formatMoney(totalBankReceived)}`}
+                ? localizedText(`Tiền mặt và chuyển khoản · ${reportScopeLabel}`, `Cash and bank transfers · ${reportScopeLabel}`)
+                : localizedText(`Tiền mặt ${formatMoney(totalCashReceived)} · Chuyển khoản ${formatMoney(totalBankReceived)}`, `Cash ${formatMoney(totalCashReceived)} · Bank transfer ${formatMoney(totalBankReceived)}`)}
               icon={Wallet}
               color="bg-amber-50 text-amber-700"
             />
             <StatCard
-              label="Tổng tiền hoàn lại"
+              label={localizedText("Tổng tiền hoàn lại", "Total refunded")}
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalRefunded)}
-              detail={`Giao dịch hoàn tiền trong kỳ · ${reportScopeLabel}`}
+              detail={localizedText(`Giao dịch hoàn tiền trong kỳ · ${reportScopeLabel}`, `Refund transactions during the period · ${reportScopeLabel}`)}
               icon={Wallet}
               color="bg-rose-50 text-rose-700"
             />
             <StatCard
-              label="Tiền thừa trả khách"
+              label={localizedText("Tiền thừa trả khách", "Change returned to guests")}
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalChangeReturned)}
-              detail={`Tiền thừa từ giao dịch tiền mặt · ${reportScopeLabel}`}
+              detail={localizedText(`Tiền thừa từ giao dịch tiền mặt · ${reportScopeLabel}`, `Change from cash transactions · ${reportScopeLabel}`)}
               icon={Wallet}
               color="bg-orange-50 text-orange-700"
             />
             <StatCard
-              label="Tiền thu ròng"
+              label={localizedText("Tiền thu ròng", "Net amount received")}
               value={isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatMoney(totalNetReceived)}
-              detail="Tổng thu trừ hoàn tiền và tiền thừa"
+              detail={localizedText("Tổng thu trừ hoàn tiền và tiền thừa", "Total received minus refunds and change returned")}
               icon={Wallet}
               color="bg-violet-50 text-violet-700"
             />
@@ -788,17 +808,17 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             <section id="super-admin-stats-booking-revenue" data-super-admin-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-slate-900">Doanh thu booking theo {reportPeriodLabel}</h3>
-                  <p className="mt-1 text-xs text-slate-400">Gồm doanh thu phòng và dịch vụ · Tổng hợp {reportScopeLabel} · đ</p>
+                  <h3 className="font-bold text-slate-900">{localizedText(`Doanh thu booking theo ${reportPeriodLabel}`, `Booking revenue by ${reportPeriodLabel}`)}</h3>
+                  <p className="mt-1 text-xs text-slate-400">{localizedText(`Gồm doanh thu phòng và dịch vụ · Tổng hợp ${reportScopeLabel} · đ`, `Includes room and service revenue · Summary for ${reportScopeLabel} · VND`)}</p>
                 </div>
                 <BedDouble size={18} className="text-blue-600" />
               </div>
               {reportPeriod !== "custom" && periodReportData.isLoading ? (
-                <p className="py-12 text-center text-sm text-slate-400">Đang tải doanh thu booking…</p>
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Đang tải doanh thu booking…", "Loading booking revenue…")}</p>
               ) : reportPeriod !== "custom" && periodReportData.isError ? (
-                <p role="alert" className="py-12 text-center text-sm text-rose-600">Không thể tải doanh thu booking theo kỳ.</p>
+                <p role="alert" className="py-12 text-center text-sm text-rose-600">{localizedText("Không thể tải doanh thu booking theo kỳ.", "Could not load booking revenue for this period.")}</p>
               ) : bookingRevenueChartData.every((item) => item.roomRevenue === 0 && item.serviceRevenue === 0) && reportPeriod === "custom" ? (
-                <p className="py-12 text-center text-sm text-slate-400">Không có doanh thu booking trong kỳ.</p>
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có doanh thu booking trong kỳ.", "No booking revenue for this period.")}</p>
               ) : (
                 <ResponsiveContainer width="100%" height={reportPeriod === "day-month" ? 320 : 290}>
                   <BarChart data={bookingRevenueChartData}>
@@ -813,14 +833,14 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                       tickLine={false}
                       tick={{ fontSize: 10, fill: "#94a3b8" }}
                     />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), "vi")} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language.startsWith("en") ? "en" : "vi")} />
                     <Tooltip
                       labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""}
                       formatter={(value, name) => [formatMoney(Number(value)), name]}
                     />
                     <Legend verticalAlign="bottom" height={30} iconType="circle" wrapperStyle={{ fontSize: 12, color: "#334155" }} />
-                    <Bar dataKey="roomRevenue" name="Doanh thu phòng" fill="#2563eb" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="serviceRevenue" name="Doanh thu dịch vụ" fill="#10b981" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="roomRevenue" name={localizedText("Doanh thu phòng", "Room revenue")} fill="#2563eb" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="serviceRevenue" name={localizedText("Doanh thu dịch vụ", "Service revenue")} fill="#10b981" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -828,13 +848,17 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
             <section id="super-admin-stats-services" data-super-admin-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-slate-900">Doanh thu dịch vụ theo {reportPeriodLabel}</h3>
-                  <p className="mt-1 text-xs text-slate-400">Tổng hợp {reportScopeLabel} · đ</p>
+                  <h3 className="font-bold text-slate-900">{localizedText(`Doanh thu dịch vụ theo ${reportPeriodLabel}`, `Service revenue by ${reportPeriodLabel}`)}</h3>
+                  <p className="mt-1 text-xs text-slate-400">{localizedText(`Tổng hợp ${reportScopeLabel} · đ`, `Summary for ${reportScopeLabel} · VND`)}</p>
                 </div>
                 <ConciergeBell size={18} className="text-violet-600" />
               </div>
               {dailyServiceRevenue.every((item) => item.revenue === 0) && reportPeriod === "custom" ? (
-                <p className="py-12 text-center text-sm text-slate-400">Không có dữ liệu doanh thu dịch vụ trong kỳ.</p>
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có dữ liệu doanh thu dịch vụ trong kỳ.", "No service revenue data for this period.")}</p>
+              ) : reportPeriod !== "custom" && periodReportData.isLoading ? (
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Đang tải doanh thu dịch vụ…", "Loading service revenue…")}</p>
+              ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                <p role="alert" className="py-12 text-center text-sm text-rose-600">{localizedText("Không thể tải doanh thu dịch vụ theo kỳ.", "Could not load service revenue for this period.")}</p>
               ) : (
                 <ResponsiveContainer width="100%" height={reportPeriod === "day-month" ? 320 : 290}>
                   <BarChart data={dailyServiceRevenue}>
@@ -849,10 +873,10 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                       tickLine={false}
                       tick={{ fontSize: 10, fill: "#94a3b8" }}
                     />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), "vi")} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language.startsWith("en") ? "en" : "vi")} />
                     <Tooltip
                       labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""}
-                      formatter={(value) => [formatMoney(Number(value)), "Doanh thu dịch vụ"]}
+                      formatter={(value) => [formatMoney(Number(value)), localizedText("Doanh thu dịch vụ", "Service revenue")]}
                     />
                     <Legend
                       verticalAlign="bottom"
@@ -862,7 +886,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                     />
                     <Bar
                       dataKey="revenue"
-                      name="Doanh thu dịch vụ"
+                      name={localizedText("Doanh thu dịch vụ", "Service revenue")}
                       fill="#6d28d9"
                       radius={[5, 5, 0, 0]}
                     />
@@ -873,67 +897,59 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
             <section id="super-admin-stats-promotions" data-super-admin-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
-                <h3 className="font-bold text-slate-900">Hiệu quả khuyến mãi {reportDateScopeLabel}</h3>
-                <p className="mt-1 text-xs text-slate-400">Phân loại theo tiền phòng, tiền dịch vụ và tổng booking</p>
+                <h3 className="font-bold text-slate-900">{localizedText(`Hiệu quả khuyến mãi ${reportDateScopeLabel}`, `Promotion performance ${reportDateScopeLabel}`)}</h3>
+                <p className="mt-1 text-xs text-slate-400">{localizedText("Phân loại theo tiền phòng, tiền dịch vụ và tổng booking", "Breakdown by room charges, service charges, and booking total")}</p>
               </div>
               {isPromotionCatalogError && (
                 <p role="status" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Không tải được loại khuyến mãi; một số chương trình có thể hiện là chưa xác định.
+                  {localizedText("Không tải được loại khuyến mãi; một số chương trình có thể hiện là chưa xác định.", "Could not load promotion types; some promotions may be shown as unknown.")}
                 </p>
               )}
-              {promotionBreakdown.length === 0
-                && reportPeriod === "custom" ? (
-                <p className="py-12 text-center text-sm text-slate-400">Không có khuyến mãi được áp dụng trong kỳ.</p>
+              {promotionScopeBreakdown.length === 0 && reportPeriod === "custom" ? (
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có khuyến mãi được áp dụng trong kỳ.", "No promotions were applied during this period.")}</p>
+              ) : reportPeriod !== "custom" && periodReportData.isLoading ? (
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Đang tải dữ liệu khuyến mãi…", "Loading promotion data…")}</p>
+              ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                <p role="alert" className="py-12 text-center text-sm text-rose-600">{localizedText("Không thể tải dữ liệu khuyến mãi theo ngày.", "Could not load daily promotion data.")}</p>
               ) : (
                 <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
                   <p className="mb-2 text-center text-xs font-semibold text-slate-600">
-                    {reportPeriod !== "custom" ? "Tiền giảm theo thời gian" : "Số tiền giảm theo loại"}
+                    {reportPeriod !== "custom" ? localizedText("Tiền giảm theo thời gian", "Discounts over time") : localizedText("Số tiền giảm theo loại", "Discounts by type")}
                   </p>
-                  {reportPeriod !== "custom" && periodReportData.isLoading ? (
-                    <p className="py-12 text-center text-xs text-slate-400">Đang tải dữ liệu khuyến mãi…</p>
-                  ) : reportPeriod !== "custom" && periodReportData.isError ? (
-                    <p role="alert" className="py-12 text-center text-xs text-rose-600">Không thể tải dữ liệu khuyến mãi theo ngày.</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={promotionChartData} margin={{ top: 8, right: 12, left: 0, bottom: reportPeriod === "day-month" ? 22 : 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
-                        <XAxis
-                          dataKey="label"
-                          axisLine={false}
-                          tickLine={false}
-                          interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
-                          angle={reportPeriod === "day-month" ? -45 : 0}
-                          textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
-                          height={reportPeriod === "day-month" ? 48 : 30}
-                          tick={{ fontSize: 10, fill: "#64748b" }}
-                        />
-                        <YAxis
-                          type="number"
-                          domain={[0, "dataMax"]}
-                          allowDecimals={false}
-                          axisLine={false}
-                          tickLine={false}
-                          width={52}
-                          tick={{ fontSize: 9, fill: "#94a3b8" }}
-                          tickFormatter={(value) => formatReportCurrencyAxis(Number(value), "vi")}
-                        />
-                        <Tooltip
-                          labelFormatter={(_label, entries) => {
-                            return entries[0]?.payload.fullDate ?? "";
-                          }}
-                          formatter={(value, name) => [formatMoney(Number(value)), name]}
-                        />
-                        <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="ROOM" name={promotionScopeLabels.ROOM} fill={promotionScopeColors.ROOM} stackId="savings" radius={[3, 3, 0, 0]} />
-                        <Bar dataKey="SERVICE" name={promotionScopeLabels.SERVICE} fill={promotionScopeColors.SERVICE} stackId="savings" radius={[3, 3, 0, 0]} />
-                        <Bar dataKey="TOTAL" name={promotionScopeLabels.TOTAL} fill={promotionScopeColors.TOTAL} stackId="savings" radius={[3, 3, 0, 0]} />
-                        <Bar dataKey="UNKNOWN" name={promotionScopeLabels.UNKNOWN} fill={promotionScopeColors.UNKNOWN} stackId="savings" radius={[3, 3, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                  {promotionScopesTotalSavings === 0 && !periodReportData.isLoading && !periodReportData.isError && (
-                    <p className="py-3 text-center text-xs text-slate-400">Chưa có số tiền giảm để so sánh.</p>
-                  )}
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={promotionChartData} margin={{ top: 8, right: 12, left: 0, bottom: reportPeriod === "day-month" ? 22 : 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
+                      <XAxis
+                        dataKey="label"
+                        axisLine={false}
+                        tickLine={false}
+                        interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                        angle={reportPeriod === "day-month" ? -45 : 0}
+                        textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                        height={reportPeriod === "day-month" ? 48 : 30}
+                        tick={{ fontSize: 10, fill: "#64748b" }}
+                      />
+                      <YAxis
+                        type="number"
+                        domain={[0, "dataMax"]}
+                        allowDecimals={false}
+                        axisLine={false}
+                        tickLine={false}
+                        width={52}
+                        tick={{ fontSize: 9, fill: "#94a3b8" }}
+                        tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language.startsWith("en") ? "en" : "vi")}
+                      />
+                      <Tooltip
+                        labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""}
+                        formatter={(value, name) => [formatMoney(Number(value)), name]}
+                      />
+                      <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="ROOM" name={getPromotionScopeLabel("ROOM")} fill={promotionScopeColors.ROOM} stackId="savings" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="SERVICE" name={getPromotionScopeLabel("SERVICE")} fill={promotionScopeColors.SERVICE} stackId="savings" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="TOTAL" name={getPromotionScopeLabel("TOTAL")} fill={promotionScopeColors.TOTAL} stackId="savings" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="UNKNOWN" name={getPromotionScopeLabel("UNKNOWN")} fill={promotionScopeColors.UNKNOWN} stackId="savings" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               )}
             </section>
@@ -942,11 +958,11 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
           <div id="super-admin-stats-rooms" data-super-admin-report-section className="scroll-mt-24 grid gap-5 xl:grid-cols-2">
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
-                <h3 className="font-bold text-slate-900">Tình trạng phòng hiện tại</h3>
-                <p className="mt-1 text-xs text-slate-400">Tổng số phòng theo trạng thái · {reportScopeLabel}</p>
+                <h3 className="font-bold text-slate-900">{localizedText("Tình trạng phòng hiện tại", "Current room status")}</h3>
+                <p className="mt-1 text-xs text-slate-400">{localizedText(`Tổng số phòng theo trạng thái · ${reportScopeLabel}`, `Total rooms by status · ${reportScopeLabel}`)}</p>
               </div>
               {roomStatusBreakdown.length === 0 ? (
-                <p className="py-12 text-center text-sm text-slate-400">Chưa có dữ liệu trạng thái phòng.</p>
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Chưa có dữ liệu trạng thái phòng.", "No room status data available.")}</p>
               ) : (
                 <div className="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
                   <ResponsiveContainer width="100%" height={220}>
@@ -975,11 +991,11 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
             <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
-                <h3 className="font-bold text-slate-900">Booking theo loại phòng</h3>
-                <p className="mt-1 text-xs text-slate-400">Số lượt đặt theo loại phòng · {reportScopeLabel}</p>
+                <h3 className="font-bold text-slate-900">{localizedText("Booking theo loại phòng", "Bookings by room type")}</h3>
+                <p className="mt-1 text-xs text-slate-400">{localizedText(`Số lượt đặt theo loại phòng · ${reportScopeLabel}`, `Booking count by room type · ${reportScopeLabel}`)}</p>
               </div>
               {roomTypeBreakdown.length === 0 ? (
-                <p className="py-12 text-center text-sm text-slate-400">Không có dữ liệu loại phòng trong kỳ.</p>
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có dữ liệu loại phòng trong kỳ.", "No room type data for this period.")}</p>
               ) : (
                 <div className="space-y-3">
                   {roomTypeBreakdown.map((item) => {
@@ -1004,27 +1020,37 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
 
           <section id="super-admin-stats-cancellations" data-super-admin-report-section className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
-              <h3 className="font-bold text-slate-900">Chi tiết booking đã hủy</h3>
-              <p className="mt-1 text-xs text-slate-400">Phân loại theo {reportScopeLabel}, kênh đặt và lý do hủy trong kỳ</p>
+              <h3 className="font-bold text-slate-900">{localizedText("Chi tiết booking đã hủy", "Cancelled booking details")}</h3>
+              <p className="mt-1 text-xs text-slate-400">{localizedText(`Phân loại theo ${reportScopeLabel}, kênh đặt và lý do hủy trong kỳ`, `Breakdown by ${reportScopeLabel}, booking channel, and cancellation reason` )}</p>
             </div>
             {cancelledBookingDetails.length === 0 ? (
-              <p className="py-10 text-center text-sm text-slate-400">Không có booking bị hủy trong khoảng ngày này.</p>
+              <p className="py-10 text-center text-sm text-slate-400">{localizedText("Không có booking bị hủy trong khoảng ngày này.", "No bookings were cancelled during this date range.")}</p>
             ) : (
               <>
                 <div className="max-h-[380px] overflow-auto">
-                  <table className="w-full min-w-[760px] text-left text-sm">
+                  <table className="w-full min-w-[1150px] table-fixed text-left text-sm">
+                  <colgroup>
+                    <col className="w-[72px]" />
+                    <col className="w-[190px]" />
+                    <col className="w-[180px]" />
+                    <col className="w-[130px]" />
+                    <col className="w-[350px]" />
+                    <col className="w-[230px]" />
+                  </colgroup>
                   <thead className="sticky top-0 bg-slate-50 text-xs font-semibold text-slate-500">
                     <tr>
-                      <th className="px-5 py-3">Chi nhánh</th>
-                      <th className="px-5 py-3">Mã booking</th>
-                      <th className="px-5 py-3">Kênh đặt</th>
-                      <th className="px-5 py-3">Lý do hủy</th>
-                      <th className="px-5 py-3">Thời điểm</th>
+                      <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>
+                      <th className="whitespace-nowrap px-5 py-3">{localizedText("Chi nhánh", "Branch")}</th>
+                      <th className="whitespace-nowrap px-5 py-3">{localizedText("Mã booking", "Booking ID")}</th>
+                      <th className="whitespace-nowrap px-5 py-3">{localizedText("Kênh đặt", "Booking channel")}</th>
+                      <th className="whitespace-nowrap px-5 py-3">{localizedText("Lý do hủy", "Cancellation reason")}</th>
+                      <th className="whitespace-nowrap px-5 py-3">{localizedText("Thời điểm", "Time")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {paginatedCancelledBookings.map((booking) => (
+                    {paginatedCancelledBookings.map((booking, index) => (
                       <tr key={booking.rowKey} className="hover:bg-slate-50/70">
+                        <td className="whitespace-nowrap px-5 py-3 tabular-nums text-slate-500">{(safeCancelledPage - 1) * cancelledPageSize + index + 1}</td>
                         <td className="px-5 py-3 font-medium text-slate-700">{booking.branchName}</td>
                         <td className="whitespace-nowrap px-5 py-3 font-semibold text-slate-800">{booking.bookingId}</td>
                         <td className="px-5 py-3">
@@ -1032,12 +1058,12 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                             booking.bookingChannel === "ONLINE" ? "bg-blue-50 text-blue-700" :
                               booking.bookingChannel === "OFFLINE" ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-600"
                           }`}>
-                            {booking.bookingChannel === "ONLINE" ? "Online" : booking.bookingChannel === "OFFLINE" ? "Tại quầy" : "Không rõ"}
+                            {booking.bookingChannel === "ONLINE" ? "Online" : booking.bookingChannel === "OFFLINE" ? localizedText("Tại quầy", "At desk") : localizedText("Không rõ", "Unknown")}
                           </span>
                         </td>
                         <td className="px-5 py-3 text-slate-600">{booking.reason}</td>
                         <td className="whitespace-nowrap px-5 py-3 text-slate-500">
-                          {booking.cancelledAt ? new Date(booking.cancelledAt).toLocaleString("vi-VN") : "—"}
+                          {booking.cancelledAt ? new Date(booking.cancelledAt).toLocaleString(locale) : "—"}
                         </td>
                       </tr>
                     ))}
@@ -1054,44 +1080,57 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
       <section id="super-admin-stats-branches" data-super-admin-report-section className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="font-bold text-slate-900">Thống kê theo chi nhánh</h3>
+            <h3 className="font-bold text-slate-900">{localizedText("Thống kê theo chi nhánh", "Statistics by branch")}</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Dữ liệu báo cáo từ {startDate} đến {endDate}.
+              {localizedText(`Dữ liệu báo cáo từ ${startDate} đến ${endDate}.`, `Report data from ${startDate} to ${endDate}.`)}
             </p>
           </div>
           <p className="text-sm text-slate-500">
-            {selectedBranchName ? `Đang xem: ${selectedBranchName}` : "Tổng hợp tất cả chi nhánh"}
+            {selectedBranchName
+              ? localizedText(`Đang xem: ${selectedBranchName}`, `Viewing: ${selectedBranchName}`)
+              : localizedText("Tổng hợp tất cả chi nhánh", "All branches combined")}
           </p>
         </div>
 
         {isLoading ? (
-          <p className="p-10 text-center text-sm text-slate-500">Đang tải danh sách chi nhánh...</p>
+          <p className="p-10 text-center text-sm text-slate-500">{localizedText("Đang tải danh sách chi nhánh...", "Loading branches...")}</p>
         ) : isError ? (
           <div className="p-10 text-center">
-            <p role="alert" className="text-sm text-rose-600">Không thể tải danh sách chi nhánh.</p>
-            <button type="button" onClick={onRetry} className="mt-3 text-sm font-semibold text-blue-700 hover:underline">Thử tải lại</button>
+            <p role="alert" className="text-sm text-rose-600">{localizedText("Không thể tải danh sách chi nhánh.", "Could not load branches.")}</p>
+            <button type="button" onClick={onRetry} className="mt-3 text-sm font-semibold text-blue-700 hover:underline">{localizedText("Thử tải lại", "Retry")}</button>
           </div>
         ) : branches.length === 0 ? (
-          <p className="p-10 text-center text-sm text-slate-500">Chưa có chi nhánh trong hệ thống.</p>
+          <p className="p-10 text-center text-sm text-slate-500">{localizedText("Chưa có chi nhánh trong hệ thống.", "There are no branches in the system yet.")}</p>
         ) : visibleBranches.length === 0 ? (
-          <p className="p-10 text-center text-sm text-slate-500">Không tìm thấy chi nhánh được chọn.</p>
+          <p className="p-10 text-center text-sm text-slate-500">{localizedText("Không tìm thấy chi nhánh được chọn.", "The selected branch was not found.")}</p>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1120px] text-left">
+              <table className="w-full min-w-[1300px] table-fixed text-left">
+              <colgroup>
+                <col className="w-[72px]" />
+                <col className="w-[240px]" />
+                <col className="w-[170px]" />
+                <col className="w-[170px]" />
+                <col className="w-[170px]" />
+                <col className="w-[230px]" />
+                <col className="w-[130px]" />
+                <col className="w-[130px]" />
+              </colgroup>
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th scope="col" className="px-5 py-3">Chi nhánh</th>
-                  <th scope="col" className="px-5 py-3">Tỉnh / thành</th>
-                  <th scope="col" className="px-5 py-3 text-right">Lượt đặt phòng</th>
-                  <th scope="col" className="px-5 py-3 text-right">Booking đã hủy</th>
-                  <th scope="col" className="px-5 py-3 text-right">Tiền booking đã thu</th>
-                  <th scope="col" className="px-5 py-3 text-center">Dịch vụ</th>
-                  <th scope="col" className="px-5 py-3 text-center">Khuyến mãi</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3">{localizedText("STT", "No.")}</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3">{localizedText("Chi nhánh", "Branch")}</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3">{localizedText("Tỉnh / thành", "Province / city")}</th>
+                  <th scope="col" className="px-5 py-3 text-right">{localizedText("Lượt đặt phòng", "Bookings")}</th>
+                  <th scope="col" className="px-5 py-3 text-right">{localizedText("Booking đã hủy", "Cancelled bookings")}</th>
+                  <th scope="col" className="px-5 py-3 text-right">{localizedText("Tiền booking đã thu", "Booking payments received")}</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3 text-center">{localizedText("Dịch vụ", "Services")}</th>
+                  <th scope="col" className="whitespace-nowrap px-5 py-3 text-center">{localizedText("Khuyến mãi", "Promotions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {paginatedBranches.map((branch) => {
+                {paginatedBranches.map((branch, index) => {
                   const branchReport = branchReports[branch.id];
                   const report = branchReport?.report;
                   const hasBranchReportError = branchReport?.hasError;
@@ -1100,6 +1139,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                     hasBranchReportError || isBranchLoading || !report ? "—" : formatCount(count ?? 0);
                   return (
                     <tr key={branch.id} className="transition hover:bg-slate-50/70">
+                      <td className="whitespace-nowrap px-5 py-4 tabular-nums text-slate-500">{(safeBranchPage - 1) * branchPageSize + index + 1}</td>
                       <th scope="row" className="px-5 py-4 font-semibold text-slate-800">
                         <div className="flex items-center gap-3">
                           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
@@ -1107,7 +1147,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                           </span>
                           <div className="min-w-0">
                             <p className="truncate">{branch.name}</p>
-                            <p className="mt-0.5 max-w-64 truncate text-xs font-normal text-slate-400">{branch.address || "Chưa có địa chỉ"}</p>
+                            <p className="mt-0.5 max-w-64 truncate text-xs font-normal text-slate-400">{branch.address || localizedText("Chưa có địa chỉ", "No address")}</p>
                           </div>
                         </div>
                       </th>
@@ -1121,9 +1161,9 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                           <div>
                             <p className="text-sm font-semibold tabular-nums text-slate-800">{formatMoney(Number(report.cashReceived ?? 0))}</p>
                             <p className="mt-1 text-[11px] tabular-nums text-slate-500">
-                              <span className="text-green-700">TM {formatMoney(Number(report.cashReceivedCash ?? 0))}</span>
+                              <span className="text-green-700">{localizedText("Tiền mặt", "Cash")} {formatMoney(Number(report.cashReceivedCash ?? 0))}</span>
                               <span className="mx-1.5 text-slate-300">·</span>
-                              <span className="text-sky-700">CK {formatMoney(Number(report.cashReceivedBank ?? 0))}</span>
+                              <span className="text-sky-700">{localizedText("Chuyển khoản", "Bank transfer")} {formatMoney(Number(report.cashReceivedBank ?? 0))}</span>
                             </p>
                           </div>
                         )}

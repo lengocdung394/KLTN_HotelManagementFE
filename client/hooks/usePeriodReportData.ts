@@ -53,6 +53,7 @@ export default function usePeriodReportData(
   endDate: string,
   hotelIds: Array<number | undefined>,
   scopeByPromotionId: ReadonlyMap<string, unknown>,
+  refreshKey = 0,
 ) {
   const dispatch = useAppDispatch();
   const [state, setState] = useState<DailyPromotionSavingsState>({
@@ -109,7 +110,7 @@ export default function usePeriodReportData(
               endDate: job.endDate,
               ...(job.hotelId === undefined ? {} : { hotelId: job.hotelId }),
             },
-            { subscribe: false },
+            { subscribe: false, forceRefetch: refreshKey > 0 },
           ));
           requests.push(request);
           const report = await request.unwrap();
@@ -141,7 +142,7 @@ export default function usePeriodReportData(
       active = false;
       requests.forEach((request) => request.abort());
     };
-  }, [dispatch, enabled, endDate, hotelIds, period, scopeByPromotionId, startDate]);
+  }, [dispatch, enabled, endDate, hotelIds, period, refreshKey, scopeByPromotionId, startDate]);
 
   return state;
 }

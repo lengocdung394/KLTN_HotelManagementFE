@@ -1,7 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { ArrowLeft, ArrowRight, Building2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
-import { useLoginMutation, useRequestPasswordResetMutation, useResetPasswordMutation } from "../services/authApi";
+import {
+  useLoginMutation,
+  useRequestPasswordResetMutation,
+  useResetPasswordMutation,
+  useResetPasswordWithLinkMutation,
+} from "../services/authApi";
 import { useAppDispatch } from "../store/hooks";
 import { getRolesFromToken, setCredentials } from "../store/authSlice";
 import { useNavigate } from "react-router-dom";
@@ -9,12 +14,13 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "../components/ui/input-ot
 import { localizedText } from "../i18n";
 
 type LoginPageProps = { onLogin: () => void };
-type ErrorField = "email" | "password" | "otp" | "newPassword" | "confirmPassword";
+type ErrorField = "email" | "password" | "otp" | "newPassword" | "confirmPassword" | "resetToken";
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [login, { isLoading }] = useLoginMutation();
   const [requestPasswordReset, { isLoading: isRequestingOtp }] = useRequestPasswordResetMutation();
   const [resetPassword, { isLoading: isResettingPassword }] = useResetPasswordMutation();
+  const [resetPasswordWithLink, { isLoading: isResettingPasswordWithLink }] = useResetPasswordWithLinkMutation();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
@@ -22,7 +28,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [fieldError, setFieldError] = useState<{ field: ErrorField; message: string } | null>(null);
-  const [view, setView] = useState<"login" | "requestOtp" | "resetPassword">("login");
+  const [view, setView] = useState<"login" | "requestOtp" | "resetPassword" | "resetLink">("login");
+  const [resetToken, setResetToken] = useState("");
   const [otp, setOtp] = useState("");
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
   const [otpSecondsRemaining, setOtpSecondsRemaining] = useState(300);
@@ -38,6 +45,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   useEffect(() => {
+    sessionStorage.removeItem("pending-password-reset-email");
+    const resetTokenFromUrl = new URLSearchParams(window.location.search).get("resetToken");
+    const resetTokenFromSession = sessionStorage.getItem("password-reset-link-token");
+    const token = resetTokenFromUrl ?? resetTokenFromSession;
+    if (token) {
+      setResetToken(token);
+      sessionStorage.setItem("password-reset-link-token", token);
+      setView("resetLink");
+      if (resetTokenFromUrl) {
+        window.history.replaceState(window.history.state, "", "/login");
+      }
+      return;
+    }
     if (sessionStorage.getItem("credentials-updated") === "true") {
       sessionStorage.removeItem("credentials-updated");
       setNotice("Email hoặc mật khẩu đã thay đổi. Vui lòng đăng nhập lại bằng thông tin mới.");
@@ -180,10 +200,46 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
   };
 
-  const goToLogin = () => {
-    setView("login");
+  const handleResetPasswordWithLink = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setFieldError(null);
     setNotice("");
+    if (!resetToken) {
+      setFieldError({ field: "resetToken", message: localizedText("Liên kết đặt lại mật khẩu không hợp lệ.", "This password reset link is invalid.") });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setFieldError({ field: "newPassword", message: localizedText("Mật khẩu mới cần có ít nhất 6 ký tự.", "The new password must be at least 6 characters.") });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setFieldError({ field: "confirmPassword", message: localizedText("Mật khẩu xác nhận không khớp.", "The passwords do not match.") });
+      return;
+    }
+    try {
+      await resetPasswordWithLink({ token: resetToken, newPassword, confirmPassword }).unwrap();
+      setView("login");
+      setResetToken("");
+      sessionStorage.removeItem("password-reset-link-token");
+      setNewPassword("");
+      setConfirmPassword("");
+      setNotice("Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.");
+      navigate("/login", { replace: true });
+    } catch (err: any) {
+      setFieldError({
+        field: "resetToken",
+        message: err?.data?.message ?? localizedText("Không thể đặt lại mật khẩu. Liên kết có thể đã hết hạn hoặc được sử dụng.", "Could not reset the password. The link may have expired or already been used."),
+      });
+    }
+  };
+
+  const goToLogin = () => {
+    setView("login");
+    setResetToken("");
+    sessionStorage.removeItem("password-reset-link-token");
+    setFieldError(null);
+    setNotice("");
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -269,6 +325,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <form onSubmit={handleRequestOtp} noValidate className="mt-8 space-y-5">
                 <label className="block text-sm font-semibold text-slate-700">Email tài khoản<div className="relative mt-2"><Mail size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input name="email" type="email" autoComplete="email" required value={email} onChange={(event) => { setEmail(event.target.value); clearFieldError("email"); }} placeholder="nhanvien@senviet.vn" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-4 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /></div>{fieldError?.field === "email" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}</label>
                 <button type="submit" disabled={isRequestingOtp} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 text-sm font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70">{isRequestingOtp ? "Đang gửi mã OTP..." : "Gửi mã OTP"}<ArrowRight size={17} /></button>
+              </form>
+            </>}
+            {view === "resetLink" && <>
+              <button type="button" onClick={goToLogin} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900"><ArrowLeft size={16} />Quay lại đăng nhập</button>
+              <div>
+                <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Tạo mật khẩu mới</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">Liên kết được gửi đến email tài khoản và chỉ sử dụng một lần.</p>
+              </div>
+              <form onSubmit={(event) => void handleResetPasswordWithLink(event)} noValidate className="mt-7 space-y-5">
+                {fieldError?.field === "resetToken" && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}
+                <label className="block text-sm font-semibold text-slate-700">Mật khẩu mới<div className="relative mt-2"><LockKeyhole size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input type={showNewPassword ? "text" : "password"} autoComplete="new-password" minLength={6} required value={newPassword} onChange={(event) => { setNewPassword(event.target.value); clearFieldError("newPassword"); }} placeholder="Ít nhất 6 ký tự" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /><button type="button" aria-label={showNewPassword ? "Ẩn mật khẩu mới" : "Hiện mật khẩu mới"} onClick={() => setShowNewPassword((visible) => !visible)} className="absolute right-3 top-3 rounded-md p-1 text-slate-400 hover:text-slate-700">{showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>{fieldError?.field === "newPassword" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}</label>
+                <label className="block text-sm font-semibold text-slate-700">Xác nhận mật khẩu mới<div className="relative mt-2"><LockKeyhole size={17} className="pointer-events-none absolute left-3.5 top-3.5 text-slate-400" /><input type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" minLength={6} required value={confirmPassword} onChange={(event) => { setConfirmPassword(event.target.value); clearFieldError("confirmPassword"); }} placeholder="Nhập lại mật khẩu mới" className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-11 pr-11 text-sm font-normal text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" /><button type="button" aria-label={showConfirmPassword ? "Ẩn xác nhận mật khẩu" : "Hiện xác nhận mật khẩu"} onClick={() => setShowConfirmPassword((visible) => !visible)} className="absolute right-3 top-3 rounded-md p-1 text-slate-400 hover:text-slate-700">{showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>{fieldError?.field === "confirmPassword" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}</label>
+                <button type="submit" disabled={isResettingPasswordWithLink || !newPassword || !confirmPassword} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 text-sm font-bold text-white shadow-lg shadow-blue-700/20 hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70">{isResettingPasswordWithLink ? "Đang cập nhật..." : "Đặt lại mật khẩu"}<ArrowRight size={17} /></button>
               </form>
             </>}
             {view === "resetPassword" && <>
