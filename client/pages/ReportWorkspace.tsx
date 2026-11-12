@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, BedDouble, CalendarDays, Tag, TrendingUp, XCircle } from "lucide-react";
+import { BarChart3, BedDouble, CalendarDays, RefreshCw, RotateCcw, Tag, TrendingUp, XCircle } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -15,17 +15,42 @@ import {
   YAxis,
 } from "recharts";
 import { useGetHotelReportQuery } from "../services/reportApi";
+import { useGetPromotionsQuery, type Promotion } from "../services/promotionApi";
 import { useGetSuperAdminBranchesQuery } from "../services/superAdminApi";
 import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import { toast } from "@/components/ui/use-toast";
+import ListPagination from "../components/ListPagination";
+import FilterSelect from "../components/FilterSelect";
+import DatePickerPopover from "../components/DatePickerPopover";
+import {
+  buildBookingRevenueChartData,
+  buildRevenueChartData,
+  getReportDateRange,
+  reportPeriodOptions,
+  type ReportPeriod,
+} from "../lib/reportPeriod";
+import {
+  buildPromotionScopeBreakdown,
+  buildPromotionSavingsChartData,
+  formatReportCurrencyAxis,
+  promotionScopeColors,
+  promotionScopeLabelKey,
+} from "../lib/promotionReport";
+import usePeriodReportData from "../hooks/usePeriodReportData";
+
+const EMPTY_PROMOTIONS: Promotion[] = [];
 
 const localDateString = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
+const dateFromLocalDateString = (value: string) =>
+  value ? new Date(`${value}T00:00:00`) : undefined;
+
 const formatMoney = (amount: number) =>
   localizedText(
-    `${Number(amount ?? 0).toLocaleString("vi-VN")}đ`,
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(Number(amount ?? 0)),
+    `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}đ`,
+    `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))} VND`,
   );
 
 const roomStatusLabel = (status: string) => {
@@ -74,13 +99,22 @@ const paymentMethodLabel = (method: string | null) => {
 };
 
 export default function ReportWorkspace() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { hotelId, roles } = useAppSelector((state) => state.auth);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const today = localDateString(new Date());
-  const [startDate, setStartDate] = useState(() => `${today.slice(0, 7)}-01`);
-  const [endDate, setEndDate] = useState(today);
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>("day-month");
+  const [comparisonUnit, setComparisonUnit] = useState<"day" | "week" | "month">("day");
+  const [comparisonScope, setComparisonScope] = useState<"week" | "month" | "year">("month");
+  const initialRange = getReportDateRange("day-month", today, today);
+  const [startDate, setStartDate] = useState(initialRange.startDate);
+  const [endDate, setEndDate] = useState(initialRange.endDate);
+  const [refundPages, setRefundPages] = useState<Record<string, number>>({});
+  const [refundPageSizes, setRefundPageSizes] = useState<Record<string, number>>({});
+  const [cancelledPage, setCancelledPage] = useState(1);
+  const [cancelledPageSize, setCancelledPageSize] = useState(10);
+  const [isManuallyRefreshingReport, setIsManuallyRefreshingReport] = useState(false);
   const { data: branches = [], isLoading: isLoadingBranches, isError: isBranchesError } =
     useGetSuperAdminBranchesQuery(undefined, { skip: !isSystemAdmin });
   const reportHotelId = isSystemAdmin ? Number(selectedBranchId) : Number(hotelId);
@@ -94,6 +128,7 @@ export default function ReportWorkspace() {
     isLoading,
     isFetching,
     isError,
+    refetch,
   } = useGetHotelReportQuery(
     {
       startDate,
@@ -102,12 +137,59 @@ export default function ReportWorkspace() {
     },
     { skip: !canLoadReport },
   );
-
-  const dailyRevenue = (report?.dailyServiceRevenue ?? []).map((item) => ({
-    day: item.date.slice(8, 10),
-    revenue: item.revenue,
-    fullDate: new Date(`${item.date}T00:00:00`).toLocaleDateString(localizedText("vi-VN", "en-US")),
+  const {
+    data: availablePromotions = EMPTY_PROMOTIONS,
+    isError: isPromotionCatalogError,
+  } = useGetPromotionsQuery(
+    canLoadReport ? { hotelId: reportHotelId, page: 0, size: 100 } : undefined,
+    { skip: !canLoadReport },
+  );
+  const promotionScopeById = useMemo(
+    () => new Map(availablePromotions.map((promotion) => [promotion.id, promotion.type])),
+    [availablePromotions],
+  );
+  const promotionScopeBreakdown = buildPromotionScopeBreakdown(
+    report?.promotions ?? [],
+    promotionScopeById,
+  ).map((item) => ({
+    ...item,
+    scopeLabel: t(`promotion.${promotionScopeLabelKey[item.scope]}`),
   }));
+  const promotionScopesTotalSavings = promotionScopeBreakdown.reduce((total, item) => total + item.savings, 0);
+  const dailyReportHotelIds = useMemo(
+    () => isSystemAdmin ? [reportHotelId] : [undefined],
+    [isSystemAdmin, reportHotelId],
+  );
+  const periodReportData = usePeriodReportData(
+    reportPeriod !== "custom" && canLoadReport && Boolean(report),
+    reportPeriod,
+    startDate,
+    endDate,
+    dailyReportHotelIds,
+    promotionScopeById,
+  );
+
+  const dailyRevenue = buildRevenueChartData(
+    report?.dailyServiceRevenue ?? [],
+    reportPeriod,
+    startDate,
+    endDate,
+    localizedText("vi-VN", "en-US"),
+  );
+  const bookingRevenueChartData = reportPeriod === "custom"
+    ? [{
+        label: `${startDate} – ${endDate}`,
+        fullDate: `${startDate} – ${endDate}`,
+        roomRevenue: Number(report?.roomRevenue ?? 0),
+        serviceRevenue: Number(report?.serviceRevenue ?? 0),
+      }]
+    : buildBookingRevenueChartData(
+        periodReportData.data,
+        reportPeriod,
+        startDate,
+        endDate,
+        i18n.language,
+      );
   const roomStatuses = (report?.roomStatuses ?? []).map((item) => ({
     ...item,
     name: roomStatusLabel(item.status),
@@ -128,6 +210,12 @@ export default function ReportWorkspace() {
     ?? cancelledBookings.filter((booking) => booking.bookingChannel === "OFFLINE").length;
   const checkoutSurplusRefunds = report?.checkoutSurplusRefunds ?? [];
   const bookingCancellationRefunds = report?.bookingCancellationRefunds ?? [];
+  const cancelledTotalPages = Math.max(1, Math.ceil(cancelledBookings.length / cancelledPageSize));
+  const safeCancelledPage = Math.min(cancelledPage, cancelledTotalPages);
+  const paginatedCancelledBookings = cancelledBookings.slice(
+    (safeCancelledPage - 1) * cancelledPageSize,
+    safeCancelledPage * cancelledPageSize,
+  );
   const totalBookingCount = report?.totalBookingCount ?? 0;
   const cashReceived = report?.cashReceived ?? 0;
   const cashReceivedCash = report?.cashReceivedCash ?? 0;
@@ -136,8 +224,112 @@ export default function ReportWorkspace() {
   const cashChangeReturned = report?.cashChangeReturned ?? 0;
   const netCashReceived = report?.netCashReceived
     ?? cashReceived - cashRefunded - cashChangeReturned;
+  const selectReportPeriod = (period: Exclude<ReportPeriod, "custom">) => {
+    const option = reportPeriodOptions.find((item) => item.value === period);
+    if (!option) return;
+    const range = getReportDateRange(period, today, today);
+    setReportPeriod(period);
+    setComparisonUnit(option.unit);
+    setComparisonScope(option.scope);
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
+  };
+  const resetReportFilters = () => {
+    const range = getReportDateRange("day-month", today, today);
+    setReportPeriod("day-month");
+    setComparisonUnit("day");
+    setComparisonScope("month");
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
+    if (isSystemAdmin) setSelectedBranchId("");
+  };
+  const defaultRange = getReportDateRange("day-month", today, today);
+  const hasActiveReportFilters = reportPeriod !== "day-month"
+    || comparisonUnit !== "day"
+    || comparisonScope !== "month"
+    || startDate !== defaultRange.startDate
+    || endDate !== defaultRange.endDate
+    || (isSystemAdmin && Boolean(selectedBranchId));
+  const isReportLoading = isLoading || isFetching || isManuallyRefreshingReport;
+  const refreshOrResetReport = async () => {
+    if (isReportLoading) return;
+    if (hasActiveReportFilters) {
+      resetReportFilters();
+      return;
+    }
+    if (!canLoadReport) return;
+    const refreshStartedAt = Date.now();
+    setIsManuallyRefreshingReport(true);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    try {
+      await refetch().unwrap();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể tải báo cáo. Vui lòng thử lại.", "Could not reload the report."),
+      });
+    } finally {
+      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+      if (remainingLoadingTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+      }
+      setIsManuallyRefreshingReport(false);
+    }
+  };
+  const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, [string, string]> = {
+    "day-week": ["Ngày trong tuần", "Day of week"],
+    "day-month": ["Ngày trong tháng", "Day of month"],
+    "day-year": ["Ngày trong năm", "Day of year"],
+    "week-month": ["Tuần trong tháng", "Week of month"],
+    "week-year": ["Tuần trong năm", "Week of year"],
+    "month-year": ["Tháng trong năm", "Month of year"],
+  };
+  const reportPeriodLabel = reportPeriod === "custom"
+    ? localizedText("theo ngày trong khoảng tùy chọn", "by day in the selected range")
+    : localizedText(`theo ${reportPeriodOptionLabels[reportPeriod][0].toLowerCase()}`, `by ${reportPeriodOptionLabels[reportPeriod][1].toLowerCase()}`);
+  const reportScopeLabel = reportPeriod === "custom"
+    ? localizedText("trong khoảng tùy chọn", "in the selected range")
+    : localizedText(
+        `trong ${comparisonScope === "week" ? "tuần" : comparisonScope === "month" ? "tháng" : "năm"}`,
+        `in the ${comparisonScope}`,
+      );
+  const promotionSavingsByScope = promotionScopeBreakdown
+    .filter((item) => item.savings > 0)
+    .map((item) => ({
+      scope: item.scope,
+      label: t(`promotion.${promotionScopeLabelKey[item.scope]}`),
+      savings: item.savings,
+      color: promotionScopeColors[item.scope],
+    }));
+  const promotionChartData = reportPeriod !== "custom"
+    ? buildPromotionSavingsChartData(
+        periodReportData.data,
+        reportPeriod,
+        startDate,
+        endDate,
+        i18n.language,
+      )
+    : [{
+        date: reportScopeLabel,
+        fullDate: reportScopeLabel,
+        label: reportScopeLabel,
+        ROOM: promotionSavingsByScope.find((item) => item.scope === "ROOM")?.savings ?? 0,
+        SERVICE: promotionSavingsByScope.find((item) => item.scope === "SERVICE")?.savings ?? 0,
+        TOTAL: promotionSavingsByScope.find((item) => item.scope === "TOTAL")?.savings ?? 0,
+        UNKNOWN: promotionSavingsByScope.find((item) => item.scope === "UNKNOWN")?.savings ?? 0,
+      }];
+  useEffect(() => {
+    setRefundPages({});
+    setCancelledPage(1);
+  }, [selectedBranchId, startDate, endDate]);
+  useEffect(() => {
+    if (cancelledPage > cancelledTotalPages) setCancelledPage(cancelledTotalPages);
+  }, [cancelledPage, cancelledTotalPages]);
   const reportSections = [
     { id: "report-overview", label: localizedText("Tổng quan", "Overview") },
+    { id: "report-booking-revenue", label: localizedText("Doanh thu booking", "Booking revenue") },
     { id: "report-service-revenue", label: localizedText("Doanh thu dịch vụ", "Service revenue") },
     { id: "report-promotions", label: localizedText("Khuyến mãi", "Promotions") },
     { id: "report-room-types", label: localizedText("Lượt đặt theo loại phòng", "Bookings by room type") },
@@ -172,8 +364,8 @@ export default function ReportWorkspace() {
 
   return (
     <div className="mt-6 space-y-5">
-      <section className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-3">
+      <section className="grid gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm xl:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)] xl:items-center">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
             <CalendarDays size={18} />
           </div>
@@ -186,44 +378,120 @@ export default function ReportWorkspace() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className={`grid min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-4 ${isSystemAdmin ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}>
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
+            {localizedText("Theo", "By")}
+            <FilterSelect
+              value={comparisonUnit}
+              onChange={(event) => {
+                const nextUnit = event.target.value as "day" | "week" | "month";
+                const nextPeriod = reportPeriodOptions.find(
+                  (option) => option.unit === nextUnit && option.scope === comparisonScope,
+                ) ?? reportPeriodOptions.find((option) => option.unit === nextUnit);
+                if (nextPeriod) selectReportPeriod(nextPeriod.value);
+              }}
+              aria-label={localizedText("Chọn đơn vị so sánh", "Choose comparison unit")}
+              className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+            >
+              <option value="day">{localizedText("Ngày", "Day")}</option>
+              <option value="week">{localizedText("Tuần", "Week")}</option>
+              <option value="month">{localizedText("Tháng", "Month")}</option>
+            </FilterSelect>
+          </label>
+          <label className="block min-w-0 text-xs font-semibold text-slate-500">
+            {localizedText("Trong", "Within")}
+            <FilterSelect
+              value={comparisonScope}
+              onChange={(event) => {
+                const nextPeriod = reportPeriodOptions.find(
+                  (option) => option.unit === comparisonUnit && option.scope === event.target.value,
+                );
+                if (nextPeriod) selectReportPeriod(nextPeriod.value);
+              }}
+              aria-label={localizedText("Chọn khoảng so sánh", "Choose comparison range")}
+              className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+            >
+              {reportPeriodOptions
+                .filter((option) => option.unit === comparisonUnit)
+                .map(({ scope }) => (
+                  <option key={scope} value={scope}>
+                    {scope === "week"
+                      ? localizedText("Tuần", "Week")
+                      : scope === "month"
+                        ? localizedText("Tháng", "Month")
+                        : localizedText("Năm", "Year")}
+                  </option>
+                ))}
+            </FilterSelect>
+          </label>
           {isSystemAdmin && (
-            <label className="block text-xs font-semibold text-slate-500">
+            <label className="block min-w-0 text-xs font-semibold text-slate-500">
               {localizedText("Chi nhánh", "Branch")}
-              <select
+              <FilterSelect
                 value={selectedBranchId}
                 onChange={(event) => setSelectedBranchId(event.target.value)}
                 aria-label={localizedText("Chọn chi nhánh xem báo cáo", "Select a branch for the report")}
-                className="mt-1 h-9 min-w-48 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+                className="mt-1 h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
               >
                 <option value="">{isLoadingBranches ? localizedText("Đang tải chi nhánh...", "Loading branches...") : localizedText("Chọn chi nhánh", "Select a branch")}</option>
                 {branches.map((branch) => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
-              </select>
+              </FilterSelect>
             </label>
           )}
-          <label className="block text-xs font-semibold text-slate-500">
-            {localizedText("Từ ngày", "From")}
-            <input
-              type="date"
-              value={startDate}
-              max={endDate || undefined}
-              onChange={(event) => setStartDate(event.target.value)}
-              className="mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+          <div className="min-w-0 text-xs font-semibold text-slate-500">
+            <p className="mb-1">{localizedText("Từ ngày", "From")}</p>
+            <DatePickerPopover
+              value={dateFromLocalDateString(startDate)}
+              onChange={(date) => {
+                if (!date) return;
+                setStartDate(localDateString(date));
+                setReportPeriod("custom");
+              }}
+              maxDate={dateFromLocalDateString(endDate)}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              align="start"
+              buttonClassName="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 transition hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
-          </label>
-          <label className="block text-xs font-semibold text-slate-500">
-            {localizedText("Đến ngày", "To")}
-            <input
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              max={today}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="mt-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 outline-none focus:border-blue-400"
+          </div>
+          <div className="min-w-0 text-xs font-semibold text-slate-500">
+            <p className="mb-1">{localizedText("Đến ngày", "To")}</p>
+            <DatePickerPopover
+              value={dateFromLocalDateString(endDate)}
+              onChange={(date) => {
+                if (!date) return;
+                setEndDate(localDateString(date));
+                setReportPeriod("custom");
+              }}
+              minDate={dateFromLocalDateString(startDate)}
+              maxDate={dateFromLocalDateString(today)}
+              placeholder={localizedText("Chọn ngày", "Select date")}
+              align="start"
+              buttonClassName="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 transition hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
-          </label>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => void refreshOrResetReport()}
+              disabled={isReportLoading || (!hasActiveReportFilters && !canLoadReport)}
+              aria-label={hasActiveReportFilters
+                ? localizedText("Khôi phục mặc định", "Reset to default")
+                : localizedText("Tải lại báo cáo", "Reload report")}
+              title={hasActiveReportFilters
+                ? localizedText("Khôi phục mặc định", "Reset to default")
+                : localizedText("Tải lại báo cáo", "Reload report")}
+              aria-busy={isReportLoading}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              {isReportLoading
+                ? <RefreshCw size={15} className="animate-spin" />
+                : hasActiveReportFilters
+                ? <RotateCcw size={15} />
+                : <RefreshCw size={15} />}
+            </button>
+          </div>
           {startDate > endDate && (
             <p role="alert" className="w-full text-xs text-rose-600">{localizedText("Ngày bắt đầu không được sau ngày kết thúc.", "The start date must be on or before the end date.")}</p>
           )}
@@ -245,7 +513,7 @@ export default function ReportWorkspace() {
           {localizedText("Chọn chi nhánh để xem báo cáo.", "Select a branch to view the report.")}
         </p>
       )}
-      {isLoading && (
+      {isReportLoading && (
         <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
           {localizedText("Đang tải báo cáo...", "Loading report...")}
         </p>
@@ -255,7 +523,7 @@ export default function ReportWorkspace() {
           {localizedText("Không thể tải báo cáo. Vui lòng thử lại.", "Could not load the report. Please try again.")}
         </p>
       )}
-      {isFetching && !isLoading && (
+      {isFetching && !isLoading && !isManuallyRefreshingReport && (
         <p className="text-right text-xs text-slate-400">{localizedText("Đang cập nhật số liệu...", "Updating report data...")}</p>
       )}
 
@@ -425,25 +693,85 @@ export default function ReportWorkspace() {
           </div>
           </section>
 
-          <div className="grid gap-5 xl:grid-cols-2">
+          <div className="space-y-5">
+            <section id="report-booking-revenue" data-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+              <div className="mb-5 flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-900">{localizedText(`Doanh thu booking ${reportPeriodLabel}`, `Booking revenue ${reportPeriodLabel}`)}</h3>
+                  <p className="mt-1 text-xs text-slate-400">{localizedText("Gồm doanh thu phòng và dịch vụ · đ", "Room and service revenue · VND")}</p>
+                </div>
+                <BedDouble size={18} className="text-blue-600" />
+              </div>
+              {reportPeriod !== "custom" && periodReportData.isLoading ? (
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Đang tải doanh thu booking…", "Loading booking revenue…")}</p>
+              ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                <p role="alert" className="py-12 text-center text-sm text-rose-600">{localizedText("Không thể tải doanh thu booking theo kỳ.", "Could not load booking revenue for this period.")}</p>
+              ) : bookingRevenueChartData.every((item) => item.roomRevenue === 0 && item.serviceRevenue === 0) && reportPeriod === "custom" ? (
+                <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có doanh thu booking trong khoảng ngày này.", "No booking revenue for this date range.")}</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={reportPeriod === "day-month" ? 320 : 290}>
+                  <BarChart data={bookingRevenueChartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
+                    <XAxis
+                      dataKey="label"
+                      interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                      angle={reportPeriod === "day-month" ? -45 : 0}
+                      textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                      height={reportPeriod === "day-month" ? 48 : 30}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language)} />
+                    <Tooltip
+                      labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""}
+                      formatter={(value, name) => [formatMoney(Number(value)), name]}
+                    />
+                    <Legend verticalAlign="bottom" height={30} iconType="circle" wrapperStyle={{ fontSize: 12, color: "#334155" }} />
+                    <Bar dataKey="roomRevenue" name={localizedText("Doanh thu phòng", "Room revenue")} fill="#2563eb" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="serviceRevenue" name={localizedText("Doanh thu dịch vụ", "Service revenue")} fill="#10b981" stackId="booking-revenue" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </section>
             <section id="report-service-revenue" data-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-5 flex items-start justify-between">
                 <div>
-                  <h3 className="font-bold text-slate-900">{localizedText("Doanh thu dịch vụ theo ngày", "Daily service revenue")}</h3>
-                  <p className="mt-1 text-xs text-slate-400">{localizedText("Tính theo ngày xác nhận sử dụng hoặc checkout · VNĐ", "Based on service confirmation or checkout date · VND")}</p>
+                  <h3 className="font-bold text-slate-900">{localizedText(`Doanh thu dịch vụ ${reportPeriodLabel}`, `Service revenue ${reportPeriodLabel}`)}</h3>
+                  <p className="mt-1 text-xs text-slate-400">{localizedText("Tính theo ngày xác nhận sử dụng hoặc checkout · đ", "Based on service confirmation or checkout date · VND")}</p>
                 </div>
                 <TrendingUp size={18} className="text-emerald-500" />
               </div>
-              {dailyRevenue.length === 0 ? (
+              {dailyRevenue.every((item) => item.revenue === 0) && reportPeriod === "custom" ? (
                 <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có dữ liệu doanh thu trong khoảng ngày này.", "No revenue data for this date range.")}</p>
               ) : (
-                <ResponsiveContainer width="100%" height={250}>
+                <ResponsiveContainer width="100%" height={reportPeriod === "day-month" ? 320 : 280}>
                   <BarChart data={dailyRevenue}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
-                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => localizedText(`${Math.round(Number(value) / 1000000)}tr`, `${Math.round(Number(value) / 1000000)}M`)} />
+                    <XAxis
+                      dataKey="label"
+                      interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                      angle={reportPeriod === "day-month" ? -45 : 0}
+                      textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                      height={reportPeriod === "day-month" ? 48 : 30}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language)} />
                     <Tooltip labelFormatter={(_label, entries) => entries[0]?.payload.fullDate ?? ""} formatter={(value) => [formatMoney(Number(value)), localizedText("Doanh thu dịch vụ", "Service revenue")]} />
-                    <Bar dataKey="revenue" fill="#2563eb" radius={[5, 5, 0, 0]} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={30}
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: 12, color: "#334155" }}
+                    />
+                    <Bar
+                      dataKey="revenue"
+                      name={localizedText("Doanh thu dịch vụ", "Service revenue")}
+                      fill="#1d4ed8"
+                      radius={[5, 5, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -451,25 +779,72 @@ export default function ReportWorkspace() {
 
             <section id="report-promotions" data-report-section className="scroll-mt-24 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
               <div className="mb-4">
-                <h3 className="font-bold text-slate-900">{localizedText("Hiệu quả khuyến mãi", "Promotion performance")}</h3>
-                <p className="mt-1 text-xs text-slate-400">{localizedText("Số khách hàng, lượt áp dụng và số tiền giảm theo chương trình", "Customers, uses, and discount amounts by promotion")}</p>
+                <h3 className="font-bold text-slate-900">{localizedText(`Hiệu quả khuyến mãi ${reportScopeLabel}`, `Promotion performance ${reportScopeLabel}`)}</h3>
+                <p className="mt-1 text-xs text-slate-400">{localizedText("Phân loại theo tiền phòng, tiền dịch vụ và tổng booking", "Breakdown by room charges, service charges, and total booking")}</p>
               </div>
-              {report.promotions.length === 0 ? (
+              {isPromotionCatalogError && (
+                <p role="status" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {localizedText("Không tải được loại khuyến mãi; một số chương trình có thể hiện là chưa xác định.", "Promotion types could not be loaded; some entries may be marked unknown.")}
+                </p>
+              )}
+              {report.promotions.length === 0
+                && reportPeriod === "custom" ? (
                 <p className="py-12 text-center text-sm text-slate-400">{localizedText("Không có khuyến mãi được áp dụng trong khoảng ngày này.", "No promotions were used during this date range.")}</p>
               ) : (
-                <div className="max-h-[290px] space-y-2 overflow-y-auto">
-                  {report.promotions.map((promotion) => (
-                    <article key={promotion.promotionId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-800">{promotion.promotionName}</p>
-                        <p className="mt-1 text-xs text-slate-500">{promotion.promotionCode}</p>
-                        <p className="mt-1 text-xs font-medium text-slate-600">
-                          {localizedText(`${promotion.userCount} khách · ${promotion.usageCount} lượt dùng`, `${promotion.userCount} guests · ${promotion.usageCount} uses`)}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-sm font-bold text-emerald-700">{formatMoney(promotion.savings)}</p>
-                    </article>
-                  ))}
+                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                  <p className="mb-2 text-center text-xs font-semibold text-slate-600">
+                    {reportPeriod !== "custom"
+                      ? localizedText(
+                          `Tiền giảm theo ${reportPeriodOptionLabels[reportPeriod][0].toLowerCase()}`,
+                          `Discount savings ${reportPeriodOptionLabels[reportPeriod][1].toLowerCase()}`,
+                        )
+                      : localizedText("Số tiền giảm theo loại", "Discount savings by type")}
+                  </p>
+                  {reportPeriod !== "custom" && periodReportData.isLoading ? (
+                    <p className="py-12 text-center text-xs text-slate-400">{localizedText("Đang tải dữ liệu khuyến mãi…", "Loading promotion data…")}</p>
+                  ) : reportPeriod !== "custom" && periodReportData.isError ? (
+                    <p role="alert" className="py-12 text-center text-xs text-rose-600">{localizedText("Không thể tải dữ liệu khuyến mãi theo ngày.", "Could not load daily promotion data.")}</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={promotionChartData} margin={{ top: 8, right: 12, left: 0, bottom: reportPeriod === "day-month" ? 22 : 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#edf0f5" />
+                        <XAxis
+                          dataKey="label"
+                          axisLine={false}
+                          tickLine={false}
+                          interval={reportPeriod === "day-month" || reportPeriod === "day-week" || reportPeriod === "week-month" ? 0 : "preserveStartEnd"}
+                          angle={reportPeriod === "day-month" ? -45 : 0}
+                          textAnchor={reportPeriod === "day-month" ? "end" : "middle"}
+                          height={reportPeriod === "day-month" ? 48 : 30}
+                          tick={{ fontSize: 10, fill: "#64748b" }}
+                        />
+                        <YAxis
+                          type="number"
+                          domain={[0, "dataMax"]}
+                          allowDecimals={false}
+                          axisLine={false}
+                          tickLine={false}
+                          width={52}
+                          tick={{ fontSize: 9, fill: "#94a3b8" }}
+                          tickFormatter={(value) => formatReportCurrencyAxis(Number(value), i18n.language)}
+                        />
+                        <Tooltip
+                          labelFormatter={(_label, entries) => {
+                            return entries[0]?.payload.fullDate ?? "";
+                          }}
+                          formatter={(value, name) => [formatMoney(Number(value)), name]}
+                        />
+                        <Legend verticalAlign="bottom" height={28} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="ROOM" name={t("promotion.scopeRoom")} fill={promotionScopeColors.ROOM} stackId="savings" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="SERVICE" name={t("promotion.scopeService")} fill={promotionScopeColors.SERVICE} stackId="savings" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="TOTAL" name={t("promotion.scopeTotal")} fill={promotionScopeColors.TOTAL} stackId="savings" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="UNKNOWN" name={t("promotion.scopeUnknown")} fill={promotionScopeColors.UNKNOWN} stackId="savings" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                  {promotionScopesTotalSavings === 0 && !periodReportData.isLoading && !periodReportData.isError && (
+                    <p className="py-3 text-center text-xs text-slate-400">{localizedText("Chưa có số tiền giảm để so sánh.", "No discount savings to compare.")}</p>
+                  )}
                 </div>
               )}
             </section>
@@ -572,20 +947,26 @@ export default function ReportWorkspace() {
                 <div className="grid grid-cols-1 gap-4">
                   {[
                     {
+                      key: "checkout-surplus",
                       title: localizedText("Hoàn dư khi checkout", "Checkout surplus refunds"),
                       refunds: checkoutSurplusRefunds,
                     },
                     {
+                      key: "booking-cancellation",
                       title: localizedText("Hoàn tiền booking bị hủy", "Cancelled booking refunds"),
                       refunds: bookingCancellationRefunds,
                     },
-                  ].map(({ title, refunds }) => {
+                  ].map(({ key, title, refunds }) => {
                     const refunded = refunds.filter((refund) => refund.status === "REFUNDED");
                     const notCompletedCount = refunds.length - refunded.length;
                     const refundedAmount = refunded.reduce((sum, refund) => sum + Number(refund.amount ?? 0), 0);
+                    const pageSize = refundPageSizes[key] ?? 10;
+                    const totalPages = Math.max(1, Math.ceil(refunds.length / pageSize));
+                    const page = Math.min(refundPages[key] ?? 1, totalPages);
+                    const paginatedRefunds = refunds.slice((page - 1) * pageSize, page * pageSize);
 
                     return (
-                      <div key={title} className="min-w-0 rounded-xl border border-slate-200/80 p-4">
+                      <div key={key} className="min-w-0 rounded-xl border border-slate-200/80 p-4">
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
                           <h5 className="text-sm font-semibold text-slate-800">{title}</h5>
                           <div className="flex flex-wrap gap-2 text-xs">
@@ -602,8 +983,9 @@ export default function ReportWorkspace() {
                             {localizedText("Không có khoản hoàn tiền trong khoảng ngày này.", "No refunds during this date range.")}
                           </p>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full min-w-[660px] text-left text-xs">
+                          <>
+                            <div className="overflow-x-auto">
+                              <table className="w-full min-w-[660px] text-left text-xs">
                               <thead>
                                 <tr className="border-b border-slate-100 text-slate-500">
                                   <th className="px-2 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
@@ -615,7 +997,7 @@ export default function ReportWorkspace() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {refunds.map((refund) => (
+                                {paginatedRefunds.map((refund) => (
                                   <tr key={refund.bookingId} className="border-b border-slate-50 last:border-0">
                                     <td className="whitespace-nowrap px-2 py-2.5 font-semibold text-slate-800">{refund.bookingId}</td>
                                     <td className="whitespace-nowrap px-2 py-2.5 text-slate-700">{formatMoney(refund.amount)}</td>
@@ -634,8 +1016,20 @@ export default function ReportWorkspace() {
                                   </tr>
                                 ))}
                               </tbody>
-                            </table>
-                          </div>
+                              </table>
+                            </div>
+                            <ListPagination
+                              totalItems={refunds.length}
+                              page={page}
+                              pageSize={pageSize}
+                              mode="table"
+                              onPageChange={(nextPage) => setRefundPages((current) => ({ ...current, [key]: nextPage }))}
+                              onPageSizeChange={(nextPageSize) => {
+                                setRefundPageSizes((current) => ({ ...current, [key]: nextPageSize }));
+                                setRefundPages((current) => ({ ...current, [key]: 1 }));
+                              }}
+                            />
+                          </>
                         )}
                       </div>
                     );
@@ -646,8 +1040,9 @@ export default function ReportWorkspace() {
             {cancelledBookings.length === 0 ? (
               <p className="py-10 text-center text-sm text-slate-400">{localizedText("Không có booking bị hủy trong khoảng ngày này.", "No bookings were cancelled during this date range.")}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-left text-sm">
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs text-slate-500">
                       <th className="px-3 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
@@ -657,7 +1052,7 @@ export default function ReportWorkspace() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cancelledBookings.map((booking) => (
+                    {paginatedCancelledBookings.map((booking) => (
                       <tr key={booking.bookingId} className="border-b border-slate-50 last:border-0">
                         <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-800">{booking.bookingId}</td>
                         <td className="whitespace-nowrap px-3 py-3">
@@ -684,8 +1079,10 @@ export default function ReportWorkspace() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                  </table>
+                </div>
+                <ListPagination totalItems={cancelledBookings.length} page={safeCancelledPage} pageSize={cancelledPageSize} mode="table" onPageChange={setCancelledPage} onPageSizeChange={setCancelledPageSize} />
+              </>
             )}
           </section>
           </div>

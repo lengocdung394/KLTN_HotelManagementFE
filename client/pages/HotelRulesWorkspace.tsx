@@ -8,8 +8,13 @@ import {
   CreditCard,
   DoorOpen,
   Info,
+  RefreshCw,
+  RotateCcw,
+  Search,
   Tag,
 } from "lucide-react";
+import { useState } from "react";
+import SearchableFilter from "../components/SearchableFilter";
 import { localizedText } from "../i18n";
 
 const getRuleSections = () => [
@@ -159,6 +164,23 @@ const toneClasses: Record<string, { icon: string; bullet: string }> = {
 
 export default function HotelRulesWorkspace() {
   const ruleSections = getRuleSections();
+  const [searchInput, setSearchInput] = useState("");
+  const [selectedSection, setSelectedSection] = useState("ALL");
+  const normalize = (value: string) =>
+    value.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const query = normalize(searchInput);
+  const hasActiveFilters = Boolean(searchInput.trim() || selectedSection !== "ALL");
+  const resetRuleFilters = () => {
+    setSearchInput("");
+    setSelectedSection("ALL");
+  };
+  const visibleSections = ruleSections.filter((section, index) => {
+    if (selectedSection !== "ALL" && String(index) !== selectedSection) return false;
+    if (!query) return true;
+    return [section.title, section.description, ...section.points]
+      .some((value) => normalize(value).includes(query));
+  });
+
   return (
     <div className="mt-6 space-y-5">
       <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-5 sm:p-7">
@@ -183,8 +205,52 @@ export default function HotelRulesWorkspace() {
         </div>
       </section>
 
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
+        <label className="relative min-w-[220px] flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder={localizedText("Tìm nội dung chính sách...", "Search policy content...")}
+            aria-label={localizedText("Tìm nội dung chính sách", "Search policy content")}
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="whitespace-nowrap text-xs font-semibold text-slate-500">
+            {localizedText("Lọc mục", "Category")}
+          </span>
+          <SearchableFilter
+            value={selectedSection}
+            options={[
+              { value: "ALL", label: localizedText("Tất cả mục", "All categories") },
+              ...ruleSections.map((section, index) => ({ value: String(index), label: section.title })),
+            ]}
+            onChange={setSelectedSection}
+            ariaLabel={localizedText("Lọc chính sách theo mục", "Filter policies by category")}
+            searchPlaceholder={localizedText("Tìm mục...", "Search categories...")}
+            emptyMessage={localizedText("Không tìm thấy mục.", "No categories found.")}
+            className="w-56"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={resetRuleFilters}
+          aria-label={hasActiveFilters
+            ? localizedText("Xóa bộ lọc", "Reset filters")
+            : localizedText("Làm mới nội dung", "Refresh content")}
+          title={hasActiveFilters
+            ? localizedText("Xóa bộ lọc", "Reset filters")
+            : localizedText("Làm mới nội dung", "Refresh content")}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+        >
+          {hasActiveFilters ? <RotateCcw size={15} /> : <RefreshCw size={16} />}
+        </button>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
-        {ruleSections.map(({ title, description, icon: Icon, tone, points }) => {
+        {visibleSections.map(({ title, description, icon: Icon, tone, points }) => {
           const colors = toneClasses[tone];
           return (
             <section key={title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -209,6 +275,11 @@ export default function HotelRulesWorkspace() {
           );
         })}
       </div>
+      {visibleSections.length === 0 && (
+        <p className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          {localizedText("Không tìm thấy mục chính sách phù hợp.", "No matching policy categories found.")}
+        </p>
+      )}
 
       <aside className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-5 text-slate-600">
         <Info size={18} className="mt-0.5 shrink-0 text-blue-600" />

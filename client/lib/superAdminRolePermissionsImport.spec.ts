@@ -7,15 +7,15 @@ const roles: SuperAdminRole[] = [
   { code: "ROLE_RECEPTION", name: "Lễ tân", description: "", system: false },
 ];
 
-const headers = ["Role", "Mã quyền", "Tên quyền", "Mô tả quyền", "Cấp quyền (Có/Không)"];
+const headers = ["Role", "Mã quyền", "Tên quyền", "Mô tả quyền", "Danh mục"];
 
 describe("parseSuperAdminRolePermissionsRows", () => {
-  it("groups manually entered permissions by selected role and retains granted flags", () => {
+  it("groups new permissions by existing role and marks each permission as granted", () => {
     const parsed = parseSuperAdminRolePermissionsRows([
       headers,
-      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "Xem booking", "Có"],
-      ["ROLE_MANAGER", "BOOKING_EDIT", "Sửa đặt phòng", "", "Không"],
-      ["ROLE_RECEPTION", "BOOKING_VIEW", "Xem đặt phòng", "Xem booking", "Yes"],
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "Xem booking", "Đặt phòng"],
+      ["ROLE_MANAGER", "BOOKING_EDIT", "Sửa đặt phòng", "", "Đặt phòng"],
+      ["ROLE_RECEPTION", "BOOKING_VIEW", "Xem đặt phòng", "Xem booking", "Đặt phòng"],
     ], roles);
 
     expect(parsed.importedRowCount).toBe(3);
@@ -23,14 +23,14 @@ describe("parseSuperAdminRolePermissionsRows", () => {
       {
         roleCode: "ROLE_MANAGER",
         permissions: [
-          { code: "BOOKING_VIEW", name: "Xem đặt phòng", category: "Chưa phân loại", description: "Xem booking", granted: true },
-          { code: "BOOKING_EDIT", name: "Sửa đặt phòng", category: "Chưa phân loại", description: "", granted: false },
+          { code: "BOOKING_VIEW", name: "Xem đặt phòng", category: "Đặt phòng", description: "Xem booking", granted: true },
+          { code: "BOOKING_EDIT", name: "Sửa đặt phòng", category: "Đặt phòng", description: "", granted: true },
         ],
       },
       {
         roleCode: "ROLE_RECEPTION",
         permissions: [
-          { code: "BOOKING_VIEW", name: "Xem đặt phòng", category: "Chưa phân loại", description: "Xem booking", granted: true },
+          { code: "BOOKING_VIEW", name: "Xem đặt phòng", category: "Đặt phòng", description: "Xem booking", granted: true },
         ],
       },
     ]);
@@ -39,23 +39,23 @@ describe("parseSuperAdminRolePermissionsRows", () => {
   it("rejects rows with roles that were not created", () => {
     expect(() => parseSuperAdminRolePermissionsRows([
       headers,
-      ["ROLE_UNKNOWN", "BOOKING_VIEW", "Xem đặt phòng", "", "Có"],
+      ["ROLE_UNKNOWN", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng"],
     ], roles)).toThrow(/chưa tồn tại/);
   });
 
   it("rejects duplicate permissions for the same role", () => {
     expect(() => parseSuperAdminRolePermissionsRows([
       headers,
-      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Có"],
-      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Không"],
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng"],
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng"],
     ], roles)).toThrow(/bị lặp/);
   });
 
   it("allows the same permission code to be assigned to different roles", () => {
     const parsed = parseSuperAdminRolePermissionsRows([
       headers,
-      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Có"],
-      ["ROLE_RECEPTION", "BOOKING_VIEW", "Xem đặt phòng", "", "Không"],
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng"],
+      ["ROLE_RECEPTION", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng"],
     ], roles);
 
     expect(parsed.rolePermissions).toHaveLength(2);
@@ -63,12 +63,12 @@ describe("parseSuperAdminRolePermissionsRows", () => {
 
   it("imports category when provided and defaults old templates to uncategorized", () => {
     const categorized = parseSuperAdminRolePermissionsRows([
-      [...headers.slice(0, 4), "Danh mục", headers[4]],
-      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng", "Có"],
+      headers,
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Đặt phòng"],
     ], roles);
     const legacy = parseSuperAdminRolePermissionsRows([
-      headers,
-      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", "", "Có"],
+      headers.slice(0, 4),
+      ["ROLE_MANAGER", "BOOKING_VIEW", "Xem đặt phòng", ""],
     ], roles);
 
     expect(categorized.rolePermissions[0].permissions[0].category).toBe("Đặt phòng");

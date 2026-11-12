@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
 import { AlertTriangle, Clock3, Eye, LogIn, LogOut } from "lucide-react";
 import BatchStayCard from "./BatchStayCard";
+import ListPagination from "./ListPagination";
 
 export type ServiceCharge = {
   serviceId?: string;
@@ -18,6 +20,7 @@ export type ServiceCharge = {
 export type DailyRecord = {
   id: string;
   bookingId?: string;
+  customerId?: string;
   guest: string;
   phone?: string;
   room: string;
@@ -74,6 +77,10 @@ export default function CheckInOutRecordList({
   onViewBooking,
 }: CheckInOutRecordListProps) {
   const { t, i18n } = useTranslation();
+  const [pendingPage, setPendingPage] = useState(1);
+  const [pendingPageSize, setPendingPageSize] = useState(12);
+  const [completedPage, setCompletedPage] = useState(1);
+  const [completedPageSize, setCompletedPageSize] = useState(12);
   const visibleRecords = records.filter((record) => !groupedRecordIds.has(record.id));
   const pendingRecords = visibleRecords.filter((record) => record.status === "Chờ check-in" || record.status === "Đang ở");
   const completedRecords = visibleRecords.filter((record) => record.status === "Đã check-in" || record.status === "Đã trả phòng");
@@ -81,7 +88,7 @@ export default function CheckInOutRecordList({
   const renderRecord = (record: DailyRecord) => {
     const isCheckIn = record.flow === "check-in";
     const canComplete = (isCheckIn && record.status === "Chờ check-in") || (!isCheckIn && record.status === "Đang ở");
-    const canUndo = !record.historical && ((isCheckIn && record.status === "Đã check-in") || (!isCheckIn && record.status === "Đã trả phòng"));
+    const canUndo = !record.historical && isCheckIn && record.status === "Đã check-in";
     const services = recordServices[record.id] ?? record.services ?? [];
     const serviceTotal = services.reduce((total, service) => total + service.amount, 0) + (record.lateFee || 0);
     const totalAmount = Number(record.roomAmount ?? 0) + serviceTotal + Number(record.earlyCheckInFee ?? 0);
@@ -158,15 +165,34 @@ export default function CheckInOutRecordList({
             </button>
           )}
           {(record.status === "Chờ check-in" || record.status === "Đang ở" || record.status === "Đã check-in") && <button type="button" onClick={() => onAddService(record)} className="inline-flex h-10 w-36 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-blue-200 px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-50">{localizedText("Thêm dịch vụ", "Add service")}</button>}
-          {canUndo && <button type="button" onClick={() => onUndo(record)} className={`inline-flex h-10 w-36 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border px-3 text-xs font-bold transition ${isCheckIn ? "border-blue-200 text-blue-700 hover:bg-blue-50" : "border-amber-200 text-amber-700 hover:bg-amber-50"}`}>{isCheckIn ? localizedText("Bỏ check-in", "Undo check-in") : localizedText("Bỏ check-out", "Undo check-out")}</button>}
+          {canUndo && <button type="button" onClick={() => onUndo(record)} className="inline-flex h-10 w-36 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-blue-200 px-3 text-xs font-bold text-blue-700 transition hover:bg-blue-50">{localizedText("Bỏ check-in", "Undo check-in")}</button>}
           </div>
         </div>
       </article>
     );
   };
 
-  const renderStatusGroup = (title: string, groupedRecords: DailyRecord[], isCompleted: boolean, groupedBookings: DailyRecord[][] = []) => {
-    const totalCount = groupedRecords.length + groupedBookings.reduce((count, group) => count + group.length, 0);
+  const pendingEntries = [
+    ...pendingRecords.map((record) => ({ group: null as DailyRecord[] | null, record })),
+    ...pendingGroupedRecords.map((group) => ({ group, record: null as DailyRecord | null })),
+  ];
+  const pendingTotalPages = Math.max(1, Math.ceil(pendingEntries.length / pendingPageSize));
+  const safePendingPage = Math.min(pendingPage, pendingTotalPages);
+  const paginatedPendingEntries = pendingEntries.slice(
+    (safePendingPage - 1) * pendingPageSize,
+    safePendingPage * pendingPageSize,
+  );
+  const paginatedPendingRecords = paginatedPendingEntries.flatMap((entry) => entry.record ? [entry.record] : []);
+  const paginatedPendingGroups = paginatedPendingEntries.flatMap((entry) => entry.group ? [entry.group] : []);
+
+  const renderStatusGroup = (
+    title: string,
+    groupedRecords: DailyRecord[],
+    isCompleted: boolean,
+    groupedBookings: DailyRecord[][] = [],
+    totalCountOverride?: number,
+  ) => {
+    const totalCount = totalCountOverride ?? groupedRecords.length + groupedBookings.reduce((count, group) => count + group.length, 0);
     if (totalCount === 0) return null;
     return (
       <div className="border-b border-slate-100 last:border-0">
@@ -210,6 +236,16 @@ export default function CheckInOutRecordList({
             />
           );
         })}
+        {!isCompleted && (
+          <ListPagination
+            totalItems={pendingEntries.length}
+            page={safePendingPage}
+            pageSize={pendingPageSize}
+            mode="cards"
+            onPageChange={setPendingPage}
+            onPageSizeChange={setPendingPageSize}
+          />
+        )}
       </div>
     );
   };
@@ -233,16 +269,28 @@ export default function CheckInOutRecordList({
     };
     return getProcessedAt(right) - getProcessedAt(left);
   });
+  const completedTotalPages = Math.max(1, Math.ceil(completedEntries.length / completedPageSize));
+  const safeCompletedPage = Math.min(completedPage, completedTotalPages);
+  const paginatedCompletedEntries = completedEntries.slice(
+    (safeCompletedPage - 1) * completedPageSize,
+    safeCompletedPage * completedPageSize,
+  );
 
   return <>
-    {renderStatusGroup(localizedText("Chờ xử lý", "Pending"), pendingRecords, false, pendingGroupedRecords)}
+    {renderStatusGroup(
+      localizedText("Chờ xử lý", "Pending"),
+      paginatedPendingRecords,
+      false,
+      paginatedPendingGroups,
+      pendingRecords.length + pendingGroupedRecords.reduce((count, group) => count + group.length, 0),
+    )}
     {(completedCount > 0) && (
       <div className="border-b border-slate-100 last:border-0">
         <div className="flex items-center justify-between bg-slate-50 px-5 py-3">
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{completedTitle} ({completedCount})</p>
           <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">{localizedText("Đã xử lý", "Completed")}</span>
         </div>
-        {completedEntries.map(({ group, record }) => {
+        {paginatedCompletedEntries.map(({ group, record }) => {
           if (!group) return record ? renderRecord(record) : null;
           const firstRecord = group[0];
           return (
@@ -274,6 +322,14 @@ export default function CheckInOutRecordList({
             />
           );
         })}
+        <ListPagination
+          totalItems={completedEntries.length}
+          page={safeCompletedPage}
+          pageSize={completedPageSize}
+          mode="cards"
+          onPageChange={setCompletedPage}
+          onPageSizeChange={setCompletedPageSize}
+        />
       </div>
     )}
   </>;

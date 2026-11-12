@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
 import { localizedText } from "../i18n";
-import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
+import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, RotateCcw, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import EventPricingCalendar from "../components/EventPricingCalendar";
@@ -12,6 +12,7 @@ import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailM
 import BulkImportDialog from "../components/BulkImportDialog";
 import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
+import ClearSearchButton from "../components/ClearSearchButton";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation, useUpdateRoomStatusMutation } from "../services/roomApi";
 import { useGetAllAmenitiesQuery } from "../services/amenityApi.ts";
@@ -21,13 +22,13 @@ import { useGetBranchRoomPoliciesQuery, useUpdateBranchRoomPolicyMutation } from
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import { bindHotelSocketEvents } from "../lib/socket";
-import { downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
+import { downloadBuildingTemplate, downloadFloorTemplate, downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
 import { getRoomAmenityTranslationKey } from "../lib/roomLocalization";
 import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
 import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
 
 type ImportedRoomRow = Record<string, string>;
-type ImportTarget = "rooms" | "buildings" | "floors";
+type ImportTarget = "buildings" | "floors";
 type RoomSocketImportProgress = {
   taskId: string;
   percent: number | null;
@@ -166,13 +167,6 @@ const parseXlsx = async (data: ArrayBuffer): Promise<ImportedRoomRow[]> => {
 const buildingCodes = ["A", "B", "C", "D"] as const;
 type Building = { id: string; name: string };
 const initialBuildings: Building[] = buildingCodes.map((id) => ({ id, name: `Tòa ${id}` }));
-const createBuildingCode = (currentBuildings: Building[]) => {
-  let code = "";
-  do {
-    code = `TN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  } while (currentBuildings.some((building) => building.id === code));
-  return code;
-};
 type Room = RoomDetailsData;
 type RoomBedConfiguration = { bedTypeId: number; name?: string; quantity: number };
 
@@ -269,6 +263,17 @@ type CreateRoomFormState = {
   status: string;
 };
 
+type RoomFormErrors = {
+  roomNumber?: string;
+  description?: string;
+  building?: string;
+  floor?: string;
+  beds?: string;
+  bedQuantities?: Record<number, string>;
+  images?: string;
+  form?: string;
+};
+
 const roomTypeDetails: Record<string, { area: string; beds: string; capacity: number; guestPolicy: string; price: number; description: string }> = {
   "Standard Room": { area: "25 m²", beds: "1 giường đơn (1m x 1,2m)", capacity: 1, guestPolicy: "Người lớn: 1 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 1000000, description: "Phòng tiêu chuẩn có giường ngủ, bàn làm việc, TV, điều hòa và phòng tắm riêng. Có thể trang bị thêm minibar và ấm đun nước." },
   "Deluxe Room": { area: "45 m²", beds: "1 giường King Size (1,8m x 2m)", capacity: 2, guestPolicy: "Người lớn: 2 · Trẻ nhỏ dưới 11 tuổi: 1 · Em bé dưới 12 tháng: 1", price: 2000000, description: "Phòng hạng sang rộng rãi với giường King Size, TV màn hình lớn, minibar, khu vực tiếp khách và phòng tắm cao cấp." },
@@ -341,7 +346,6 @@ export default function RoomWorkspace() {
   const amenityCatalog = apiAmenities ?? [];
   const availableRoomTypes = useMemo(() => (apiRoomTypes ?? []).map((value) => roomTypeLabel(String(value))), [apiRoomTypes]);
   const availableRoomStatuses = useMemo(() => (apiRoomStatuses ?? []).map((value) => statusLabel(String(value))), [apiRoomStatuses]);
-  const amenityOptions = useMemo(() => amenityCatalog.map((amenity) => amenity.name).filter(Boolean), [amenityCatalog]);
   const translateBed = (bed: string) => bed.startsWith("2 giường đơn") ? `${t("room.doubleSingleBeds")} (1m x 1.2m)` : bed.startsWith("1 giường đơn") ? `${t("room.singleBed")} (1m x 1.2m)` : bed.startsWith("1 giường King Size") ? `${t("room.kingBed")} (1.8m x 2m)` : bed;
   const requestedTab = new URLSearchParams(location.search).get("tab");
   const defaultRoomTab: "rooms" | "pricing" = canManageRooms && requestedTab === "pricing" ? "pricing" : "rooms";
@@ -449,6 +453,7 @@ export default function RoomWorkspace() {
   const [importingRooms, setImportingRooms] = useState(false);
   const [roomImportUploadProgress, setRoomImportUploadProgress] = useState("");
   const [isRoomImportDialogOpen, setIsRoomImportDialogOpen] = useState(false);
+  const [structureImportTarget, setStructureImportTarget] = useState<ImportTarget | null>(null);
   const [roomImportReport, setRoomImportReport] = useState<{
     processing: boolean;
     rows: RoomImportRowResult[];
@@ -456,8 +461,6 @@ export default function RoomWorkspace() {
   } | null>(null);
   const [roomSocketImportProgress, setRoomSocketImportProgress] = useState<RoomSocketImportProgress | null>(null);
   const [roomImportTaskId, setRoomImportTaskId] = useState("");
-  const importFileInputRef = useRef<HTMLInputElement>(null);
-  const importTargetRef = useRef<ImportTarget>("rooms");
   const activeRoomImportTaskIdRef = useRef("");
   const finishedRoomImportTasksRef = useRef(new Set<string>());
   const refreshedRoomImportTasksRef = useRef(new Set<string>());
@@ -523,17 +526,21 @@ export default function RoomWorkspace() {
   }, [dispatch, roomImportTaskId, t]);
   const [detailRoom, setDetailRoom] = useState<Room | null>(null);
   const [createRoomForm, setCreateRoomForm] = useState<CreateRoomFormState>(emptyCreateRoomForm);
+  const [roomFormErrors, setRoomFormErrors] = useState<RoomFormErrors>({});
   const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
   const [amenitySearch, setAmenitySearch] = useState("");
-  const [newAmenityName, setNewAmenityName] = useState("");
-  const [amenityPrice, setAmenityPrice] = useState("");
-  const [customAmenityPrices, setCustomAmenityPrices] = useState<Record<string, number>>({});
-  const [showAmenityMenu, setShowAmenityMenu] = useState(false);
   const [buildingForm, setBuildingForm] = useState(emptyBuildingForm);
+  const [buildingNameError, setBuildingNameError] = useState("");
   const [showCreateFloor, setShowCreateFloor] = useState(false);
   const [editingFloor, setEditingFloor] = useState<string | null>(null);
   const [editingFloorId, setEditingFloorId] = useState<string | null>(null);
   const [floorForm, setFloorForm] = useState(emptyFloorForm);
+  const [floorNameError, setFloorNameError] = useState("");
+  const floorNumberInput = floorForm.name.trim();
+  const floorNumberValue = Number(floorNumberInput);
+  const isFloorNumberValid = floorNumberInput !== ""
+    && Number.isSafeInteger(floorNumberValue)
+    && floorNumberValue >= 1;
   const selectedRoomTypeValue = roomTypeValues[createRoomForm.roomType] ?? createRoomForm.roomType;
   const { currentData: roomTypeDetail, isLoading: isRoomTypeDetailLoading, isError: isRoomTypeDetailError } = useGetRoomTypeDetailQuery(
     { hotelId: Number(hotelId), roomType: selectedRoomTypeValue },
@@ -608,7 +615,7 @@ export default function RoomWorkspace() {
       return id == null ? "" : resolveAmenityName(String(id));
     }).filter(Boolean);
   };
-  const { data: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError } = useGetRoomsByCurrentHotelQuery();
+  const { data: apiRooms, error: roomsError, isLoading: isRoomsLoading, isFetching: isRoomsFetching, isError: isRoomsError, refetch: refetchRooms } = useGetRoomsByCurrentHotelQuery();
   const apiFloorOptions = useMemo(() => (apiFloorsByBuilding ?? []).map((item) => {
     const id = getApiValue(item, ["id", "floorId", "floorID"]);
     const floorNumber = getApiValue(item, ["floorNumber", "floorLevel", "number"]);
@@ -662,7 +669,8 @@ export default function RoomWorkspace() {
     floors: [...new Map(hotelFloorOptions
       .filter((item) => buildings.some((building) => building.id === item.buildingId))
       .map((item) => [`${item.buildingId}:${normalizeText(item.name)}`, item])).values()],
-  }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, apiBedTypes, buildings, hotelFloorOptions]);
+    language: i18n.resolvedLanguage?.startsWith("en") ? "en" : "vi",
+  }), [availableRoomTypes, availableRoomStatuses, amenityCatalog, apiBedTypes, buildings, hotelFloorOptions, i18n.resolvedLanguage]);
   const selectedBuildingName = buildings.find((item) => item.id === createRoomForm.building)?.name ?? t("room.createForm.notSelected");
   const selectedFloorName = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor)?.name;
   const selectedFloorLabel = selectedFloorName
@@ -995,8 +1003,7 @@ export default function RoomWorkspace() {
   }, [apiAmenities, amenitySearch]);
   const filteredBuildings = useMemo(() => {
     const normalizedQuery = normalizeText(buildingQuery);
-    const matchingBuildings = buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
-    return normalizedQuery ? matchingBuildings : matchingBuildings.slice(0, 4);
+    return buildings.filter((item) => normalizeText(`${item.name} ${item.id}`).includes(normalizedQuery));
   }, [buildings, buildingQuery]);
   const updateRoom = async (id: string, changes: Partial<Room>): Promise<void> => {
     const room = rooms.find((item) => item.id === id);
@@ -1028,11 +1035,14 @@ export default function RoomWorkspace() {
     setEditingRoomId(null);
     setEditingRoomDatabaseId(null);
     setCreateRoomForm(emptyCreateRoomForm);
+    setRoomFormErrors({});
     setAmenitySearch("");
-    setShowAmenityMenu(false);
     setRoomImageFiles([]);
   };
-  const openCreateRoomModal = () => {
+  const resetCreateRoomForm = () => {
+    createRoomForm.images.forEach((image) => {
+      if (image.startsWith("blob:")) URL.revokeObjectURL(image);
+    });
     const building = defaultBuildingOption(buildings);
     const floorsForBuilding = hotelFloorOptions.filter((item) => item.buildingId === building?.id);
     const floor = defaultFloorOption(floorsForBuilding);
@@ -1059,7 +1069,12 @@ export default function RoomWorkspace() {
       building: building?.id ?? "",
       floor: floor?.id ?? "",
     });
+    setRoomFormErrors({});
+    setAmenitySearch("");
     setRoomImageFiles([]);
+  };
+  const openCreateRoomModal = () => {
+    resetCreateRoomForm();
     setShowCreateRoom(true);
   };
   const handlePricingDraftChange = (roomType: string, field: "price" | "extraAdultFee" | "extraChildFee" | "standardCapacity" | "maxExtraGuests", value: string) => {
@@ -1134,21 +1149,28 @@ export default function RoomWorkspace() {
   const openCreateBuildingModal = () => {
     setEditingBuildingId(null);
     setBuildingForm(emptyBuildingForm);
+    setBuildingNameError("");
     setShowCreateBuilding(true);
   };
   const openEditBuildingModal = (building: Building) => {
     setEditingBuildingId(building.id);
     setBuildingForm({ name: building.name, code: building.id });
+    setBuildingNameError("");
     setShowCreateBuilding(true);
   };
   const closeCreateBuildingModal = () => {
     setShowCreateBuilding(false);
     setEditingBuildingId(null);
     setBuildingForm(emptyBuildingForm);
+    setBuildingNameError("");
   };
   const saveBuilding = async () => {
     const name = buildingForm.name.trim();
-    if (!name) return;
+    if (!name) {
+      setBuildingNameError(localizedText("Vui lòng nhập tên tòa nhà.", "Enter a building name."));
+      return;
+    }
+    setBuildingNameError("");
     if (editingBuildingId) {
       try {
         await updateBuildingApi({ buildingId: editingBuildingId, body: { name } }).unwrap();
@@ -1197,6 +1219,7 @@ export default function RoomWorkspace() {
     }
     setEditingFloor(null);
     setFloorForm(emptyFloorForm);
+    setFloorNameError("");
     setShowCreateFloor(true);
   };
   const openEditFloorModal = (floor: string) => {
@@ -1212,6 +1235,7 @@ export default function RoomWorkspace() {
     setEditingFloor(floor);
     setEditingFloorId(floorId);
     setFloorForm({ name: floor });
+    setFloorNameError("");
     setShowCreateFloor(true);
   };
   const closeCreateFloorModal = () => {
@@ -1219,17 +1243,30 @@ export default function RoomWorkspace() {
     setEditingFloor(null);
     setEditingFloorId(null);
     setFloorForm(emptyFloorForm);
+    setFloorNameError("");
   };
   const saveFloor = async () => {
     const name = floorForm.name.trim();
-    if (!name || (!editingFloor && floors.includes(name))) return;
+    if (!name) {
+      setFloorNameError(localizedText("Vui lòng nhập số tầng.", "Enter a floor number."));
+      return;
+    }
+    if (!editingFloor && floors.includes(name)) {
+      setFloorNameError(localizedText("Tầng này đã tồn tại trong tòa nhà.", "This floor already exists in the building."));
+      return;
+    }
+    const floorNumber = floorNumberValue;
+    if (!isFloorNumberValid) {
+      setFloorNameError(localizedText("Số tầng phải là số nguyên từ 1 trở lên.", "Floor number must be a whole number greater than or equal to 1."));
+      return;
+    }
+    setFloorNameError("");
     if (editingFloor) {
-      const floorNumber = Number(name);
-      if (!Number.isInteger(floorNumber) || !editingFloorId) {
+      if (!editingFloorId) {
         toast({
           variant: "destructive",
-          title: "Số tầng không hợp lệ",
-          description: "Nhập số nguyên hợp lệ và tải lại danh sách tầng trước khi sửa.",
+          title: localizedText("Không thể sửa tầng", "Could not update floor"),
+          description: localizedText("Không tìm thấy mã tầng. Vui lòng tải lại danh sách.", "Floor ID not found. Reload the floor list and try again."),
         });
         return;
       }
@@ -1252,15 +1289,6 @@ export default function RoomWorkspace() {
       return;
     }
 
-    const floorNumber = Number(name);
-    if (!Number.isInteger(floorNumber)) {
-      toast({
-        variant: "destructive",
-        title: "Số tầng không hợp lệ",
-        description: "Vui lòng nhập số nguyên, ví dụ 1 hoặc -1.",
-      });
-      return;
-    }
     if (!selectedBuildingId) {
       toast({
         variant: "destructive",
@@ -1287,31 +1315,15 @@ export default function RoomWorkspace() {
     }
     closeCreateFloorModal();
   };
-  const appendAmenity = (value?: string) => {
-    const nextAmenity = (value ?? newAmenityName).trim();
-    if (!nextAmenity) return;
-    const normalized = normalizeText(nextAmenity);
-    const matchedAmenity = amenityOptions.find((item) => normalizeText(item) === normalized) ?? nextAmenity;
-
-    if (createRoomForm.amenities.some((item) => normalizeText(item) === normalized)) {
-      setAmenitySearch("");
-      setShowAmenityMenu(false);
-      return;
-    }
-
-    if (!apiAmenities?.some((amenity) => amenity.name === matchedAmenity)) {
-      const price = Number(amenityPrice);
-      if (!Number.isFinite(price) || price < 0) return;
-      setCustomAmenityPrices((current) => ({ ...current, [matchedAmenity]: price }));
-    }
-
-    setCreateRoomForm((current) => ({ ...current, amenities: [...current.amenities, matchedAmenity] }));
-    setNewAmenityName("");
-    setAmenityPrice("");
-    setShowAmenityMenu(false);
-  };
   const removeAmenity = (value: string) => setCreateRoomForm((current) => ({ ...current, amenities: current.amenities.filter((item) => normalizeText(item) !== normalizeText(value)) }));
   const clearAllAmenities = () => setCreateRoomForm((current) => ({ ...current, amenities: [] }));
+  const clearRoomFormErrors = (...fields: Array<keyof RoomFormErrors>) => {
+    setRoomFormErrors((current) => {
+      const next = { ...current };
+      fields.forEach((field) => { delete next[field]; });
+      return next;
+    });
+  };
   const addImages = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const availableSlots = Math.max(0, 8 - createRoomForm.images.length);
@@ -1319,6 +1331,8 @@ export default function RoomWorkspace() {
     if (selectedFiles.length === 0) return;
     const nextImages = selectedFiles.map((file) => URL.createObjectURL(file));
     setRoomImageFiles((current) => [...current, ...selectedFiles]);
+    clearRoomFormErrors("form");
+    if (roomImageFiles.length + selectedFiles.length >= 4) clearRoomFormErrors("images");
     setCreateRoomForm((current) => {
       const mergedImages = [...current.images, ...nextImages];
       const nextDefault = current.defaultImage ?? mergedImages[0] ?? null;
@@ -1331,6 +1345,10 @@ export default function RoomWorkspace() {
       : -1;
     if (removedUploadIndex >= 0) {
       setRoomImageFiles((files) => files.filter((_, index) => index !== removedUploadIndex));
+    }
+    clearRoomFormErrors("form");
+    if (!roomFormErrors.images || roomImageFiles.length - Number(removedUploadIndex >= 0) >= 4) {
+      clearRoomFormErrors("images");
     }
     setCreateRoomForm((current) => {
       const remaining = current.images.filter((item) => item !== image);
@@ -1358,35 +1376,45 @@ export default function RoomWorkspace() {
       const definition = apiBedTypes?.find((item) => item.id === bed.bedTypeId);
       return definition ? `${definition.name ?? definition.bedTypeName} × ${bed.quantity}` : `Loại giường #${bed.bedTypeId} × ${bed.quantity}`;
     }).join(" · ");
-    const showRoomSaveError = (title: string, description: string) => toast({
-      variant: "destructive",
-      title,
-      description,
-    });
-
-    if (!roomCode || !roomType || !area || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
-      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Vui lòng nhập đầy đủ các trường bắt buộc.");
-      return;
-    }
-    if (selectedBeds.length === 0) {
-      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Vui lòng chọn ít nhất một loại giường và nhập số lượng hợp lệ.");
-      return;
-    }
+    setRoomFormErrors({});
+    const errors: RoomFormErrors = {};
+    if (!roomCode) errors.roomNumber = localizedText("Vui lòng nhập số phòng.", "Enter a room number.");
     if (rooms.some((room) => room.id.toLowerCase() === roomCode.toLowerCase() && room.id !== editingRoomId)) {
-      showRoomSaveError(isEditingRoom ? "Không thể cập nhật phòng" : "Không thể thêm phòng", "Số phòng đã tồn tại, vui lòng nhập số khác.");
+      errors.roomNumber = localizedText("Số phòng đã tồn tại, vui lòng nhập số khác.", "This room number already exists. Enter a different one.");
+    }
+    if (!roomType || !area || !Number.isFinite(area) || area <= 0 || !price || !standardCapacity || maxExtraGuests < 0 || extraAdultFee < 0 || extraChildFee < 0) {
+      errors.form = localizedText("Vui lòng kiểm tra thông tin loại phòng và cấu hình giá trước khi lưu.", "Check the room type and pricing details before saving.");
+    }
+    if (!isEditingRoom) {
+      if (!createRoomForm.building) errors.building = localizedText("Vui lòng chọn tòa nhà.", "Select a building.");
+      const selectedFloor = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor || item.name === createRoomForm.floor);
+      if (!selectedFloor?.id) errors.floor = localizedText("Vui lòng chọn tầng hợp lệ.", "Select a valid floor.");
+      if (roomImageFiles.length < 4) errors.images = localizedText("Vui lòng tải lên ít nhất 4 ảnh phòng.", "Upload at least 4 room photos.");
+      if (!description) errors.description = localizedText("Vui lòng nhập mô tả phòng.", "Enter a room description.");
+    } else if (!createRoomForm.floor) {
+      errors.floor = localizedText("Vui lòng chọn tầng hợp lệ.", "Select a valid floor.");
+    }
+    const invalidBedQuantities = createRoomForm.bedConfigurations.reduce<Record<number, string>>((bedErrors, bed) => {
+      if (!Number.isSafeInteger(Number(bed.quantity)) || Number(bed.quantity) < 1) {
+        bedErrors[Number(bed.bedTypeId)] = localizedText("Nhập số lượng giường là số nguyên lớn hơn 0.", "Enter a whole number of beds greater than 0.");
+      }
+      return bedErrors;
+    }, {});
+    if (createRoomForm.bedConfigurations.length === 0) {
+      errors.beds = localizedText("Vui lòng chọn ít nhất một loại giường.", "Select at least one bed type.");
+    } else if (Object.keys(invalidBedQuantities).length > 0) {
+      errors.bedQuantities = invalidBedQuantities;
+    }
+    if (Object.keys(errors).length > 0) {
+      setRoomFormErrors(isEditingRoom
+        ? { form: errors.form ?? errors.roomNumber ?? errors.floor ?? errors.beds ?? localizedText("Vui lòng kiểm tra lại thông tin phòng.", "Check the room details and try again.") }
+        : errors);
       return;
     }
     if (!editingRoomId) {
-      if (roomImageFiles.length === 0) {
-        showRoomSaveError("Không thể thêm phòng", "Vui lòng tải lên ít nhất một ảnh phòng.");
-        return;
-      }
       const selectedFloor = selectedBuildingFloorOptions.find((item) => item.id === createRoomForm.floor || item.name === createRoomForm.floor);
       const floorId = selectedFloor?.id;
-      if (!floorId) {
-        showRoomSaveError("Không thể thêm phòng", "Vui lòng chọn tầng hợp lệ.");
-        return;
-      }
+      if (!floorId) return;
       const defaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
       const amenityIds = createRoomForm.amenities
         .map((name) => apiAmenities?.find((amenity) => amenity.name === name)?.id)
@@ -1411,17 +1439,13 @@ export default function RoomWorkspace() {
             ? responseData.message
             : typeof errorRecord.message === "string"
               ? errorRecord.message
-              : "Không thể thêm phòng. Vui lòng thử lại.";
-        showRoomSaveError("Không thể thêm phòng", message);
+              : localizedText("Không thể thêm phòng. Vui lòng thử lại.", "Could not add the room. Please try again.");
+        setRoomFormErrors({ form: message });
       }
       return;
     }
-    if (!createRoomForm.floor) {
-      showRoomSaveError("Không thể cập nhật phòng", "Vui lòng chọn tầng hợp lệ.");
-      return;
-    }
     if (!editingRoomDatabaseId) {
-      showRoomSaveError("Không thể cập nhật phòng", "Không tìm thấy ID phòng từ máy chủ. Vui lòng tải lại danh sách phòng.");
+      setRoomFormErrors({ form: localizedText("Không tìm thấy ID phòng từ máy chủ. Vui lòng tải lại danh sách phòng.", "The room ID was not found. Reload the room list and try again.") });
       return;
     }
     const updateDefaultImageIndex = createRoomForm.defaultImage ? createRoomForm.images.indexOf(createRoomForm.defaultImage) : 0;
@@ -1454,8 +1478,8 @@ export default function RoomWorkspace() {
           ? responseData.message
           : typeof errorRecord.message === "string"
             ? errorRecord.message
-            : "Không thể cập nhật phòng. Vui lòng thử lại.";
-      showRoomSaveError("Không thể cập nhật phòng", message);
+            : localizedText("Không thể cập nhật phòng. Vui lòng thử lại.", "Could not update the room. Please try again.");
+      setRoomFormErrors({ form: message });
       return;
     }
     const orderedImages = createRoomForm.defaultImage
@@ -1576,87 +1600,123 @@ export default function RoomWorkspace() {
     }
   };
 
-  const openImportPicker = (target: ImportTarget) => {
-    importTargetRef.current = target;
-    if (importFileInputRef.current) {
-      importFileInputRef.current.value = "";
-      importFileInputRef.current.accept = target === "rooms" ? ".zip,application/zip" : ".csv,.xlsx";
-      importFileInputRef.current.click();
-    }
-  };
-
-  const importLocalDataFromFile = async (file: File, target = importTargetRef.current): Promise<boolean> => {
-    if (target === "rooms") {
-      await importRoomsFromFile(file);
-      return true;
-    }
-
+  const downloadStructureTemplate = (target: ImportTarget) => {
     try {
-      const rows = await readImportRows(file);
-      if (rows.length === 0) throw new Error(t("room.importDialog.emptyFile"));
-
-      if (target === "buildings") {
-        const nextBuildings = [...buildings];
-        let importedCount = 0;
-        rows.forEach((row) => {
-          const name = getImportedValue(row, ["tên tòa", "ten toa", "tên tòa nhà", "ten toa nha", "building name", "name"]);
-          if (!name || nextBuildings.some((item) => normalizeText(item.name) === normalizeText(name))) return;
-          const requestedCode = getImportedValue(row, ["mã tòa", "ma toa", "mã tòa nhà", "ma toa nha", "building code", "code"]);
-          const id = requestedCode || createBuildingCode(nextBuildings);
-          if (nextBuildings.some((item) => item.id.toLocaleLowerCase() === id.toLocaleLowerCase())) return;
-          nextBuildings.push({ id, name });
-          importedCount += 1;
-        });
-        if (importedCount === 0) throw new Error("Không có tòa nhà hợp lệ mới trong file. Cần cột Tên tòa; có thể thêm cột Mã tòa.");
-        setBuildings(nextBuildings);
-        window.localStorage.setItem("staywise-buildings", JSON.stringify(nextBuildings));
-        toast({ variant: "success", title: "Nhập tòa nhà thành công", description: `Đã thêm ${importedCount} tòa nhà vào giao diện.` });
-        return true;
-      }
-
-      if (target === "floors") {
-        if (!selectedBuildingId) throw new Error("Vui lòng chọn tòa nhà trước khi nhập tầng.");
-        const nextFloors = [...floors];
-        let importedCount = 0;
-        rows.forEach((row) => {
-          const name = getImportedValue(row, ["tên tầng", "ten tang", "tầng", "tang", "floor name", "floor"]);
-          const buildingNameOrCode = getImportedValue(row, ["tên tòa", "ten toa", "tòa", "toa", "building", "building code"]);
-          if (!name || nextFloors.some((item) => normalizeText(item) === normalizeText(name))) return;
-          if (buildingNameOrCode) {
-            const selectedBuilding = buildings.find((item) => item.id === selectedBuildingId);
-            if (!selectedBuilding || normalizeText(buildingNameOrCode) !== normalizeText(selectedBuilding.name) &&
-              buildingNameOrCode.toLocaleLowerCase() !== selectedBuilding.id.toLocaleLowerCase()) return;
-          }
-          nextFloors.push(name);
-          importedCount += 1;
-        });
-        if (importedCount === 0) throw new Error("Không có tầng mới hợp lệ. Cần cột Tên tầng cho tòa nhà đang chọn.");
-        setFloors(nextFloors);
-        toast({ variant: "success", title: "Nhập tầng thành công", description: `Đã thêm ${importedCount} tầng vào giao diện.` });
-        return true;
-      }
-
+      const language = i18n.resolvedLanguage?.startsWith("en") ? "en" : "vi";
+      if (target === "buildings") downloadBuildingTemplate(language);
+      else downloadFloorTemplate(language, buildings, selectedBuildingId);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: t("room.importDialog.importDataError"),
-        description: error instanceof Error ? error.message : t("room.importDialog.couldNotReadFile"),
+        title: localizedText("Không thể tạo file mẫu", "Could not create template"),
+        description: error instanceof Error ? error.message : localizedText("Vui lòng thử lại.", "Please try again."),
       });
-      return true;
     }
   };
 
+  const importStructureFile = async (file: File, target: ImportTarget): Promise<boolean> => {
+    try {
+      const rows = await readImportRows(file);
+      if (rows.length === 0) throw new Error(t("room.importDialog.emptyFile"));
+      let importedCount = 0;
+      let skippedCount = 0;
+      const failures: string[] = [];
+
+      if (target === "buildings") {
+        const seenNames = new Set(buildings.map((item) => normalizeText(item.name)));
+        for (const [index, row] of rows.entries()) {
+          const name = getImportedValue(row, ["tên tòa", "ten toa", "tên tòa nhà", "ten toa nha", "building name", "building", "name"]);
+          if (!name) {
+            failures.push(localizedText(`Dòng ${index + 2}: thiếu tên tòa nhà.`, `Row ${index + 2}: building name is required.`));
+            continue;
+          }
+          const normalizedName = normalizeText(name);
+          if (seenNames.has(normalizedName)) {
+            skippedCount += 1;
+            continue;
+          }
+          try {
+            await createBuildingApi({ name }).unwrap();
+            seenNames.add(normalizedName);
+            importedCount += 1;
+          } catch (error) {
+            failures.push(`${name}: ${getApiErrorMessage(error, localizedText("không thể tạo tòa nhà.", "could not create building."))}`);
+          }
+        }
+      } else {
+        const defaultBuilding = buildings.find((item) => item.id === selectedBuildingId);
+        const seenFloors = new Set(hotelFloorOptions.map((item) => `${item.buildingId}:${Number(item.name)}`));
+        if (!defaultBuilding && rows.some((row) => !getImportedValue(row, ["tòa", "tòa nhà", "ten toa", "building", "building name", "building code"]))) {
+          throw new Error(localizedText("Không tìm thấy tòa nhà đang chọn. Vui lòng tải lại danh sách.", "The selected building could not be found. Reload the building list and try again."));
+        }
+        for (const [index, row] of rows.entries()) {
+          const rawFloor = getImportedValue(row, ["số tầng", "tầng", "floor number", "floor", "floorNumber"]);
+          const floorNumber = Number(rawFloor);
+          if (!rawFloor || !Number.isSafeInteger(floorNumber) || floorNumber < 1) {
+            failures.push(localizedText(`Dòng ${index + 2}: số tầng phải là số nguyên từ 1 trở lên.`, `Row ${index + 2}: floor number must be a whole number greater than or equal to 1.`));
+            continue;
+          }
+          const rawBuilding = getImportedValue(row, ["tòa", "tòa nhà", "ten toa", "tên tòa", "building", "building name", "building code"]);
+          const targetBuilding = rawBuilding
+            ? buildings.find((item) =>
+              normalizeText(item.name) === normalizeText(rawBuilding)
+              || item.id.toLocaleLowerCase() === rawBuilding.toLocaleLowerCase()
+              || normalizeText(item.name.replace(/^Tòa\s*/i, "Building ")) === normalizeText(rawBuilding),
+            )
+            : defaultBuilding;
+          if (!targetBuilding) {
+            failures.push(localizedText(`Dòng ${index + 2}: không tìm thấy tòa nhà "${rawBuilding}".`, `Row ${index + 2}: building "${rawBuilding}" was not found.`));
+            continue;
+          }
+          const floorKey = `${targetBuilding.id}:${floorNumber}`;
+          if (seenFloors.has(floorKey)) {
+            skippedCount += 1;
+            continue;
+          }
+          try {
+            await createFloorApi({ buildingId: targetBuilding.id, floorNumber }).unwrap();
+            seenFloors.add(floorKey);
+            importedCount += 1;
+          } catch (error) {
+            failures.push(localizedText(
+              `${targetBuilding.name} · Tầng ${floorNumber}: ${getApiErrorMessage(error, "không thể tạo tầng.")}`,
+              `${targetBuilding.name} · Floor ${floorNumber}: ${getApiErrorMessage(error, "could not create floor.")}`,
+            ));
+          }
+        }
+      }
+
+      if (importedCount === 0) {
+        const details = failures.slice(0, 5).join("\n");
+        throw new Error(details || localizedText("Không có dữ liệu mới hợp lệ để nhập.", "There is no valid new data to import."));
+      }
+      const entity = target === "buildings"
+        ? localizedText("tòa nhà", "buildings")
+        : localizedText("tầng", "floors");
+      const failureSummary = failures.length
+        ? localizedText(` ${failures.length} dòng lỗi: ${failures.slice(0, 3).join(" ")}`, ` ${failures.length} rows failed: ${failures.slice(0, 3).join(" ")}`)
+        : "";
+      toast({
+        variant: failures.length ? "destructive" : "success",
+        title: localizedText("Nhập file hoàn tất", "File import complete"),
+        description: localizedText(
+          `Đã thêm ${importedCount} ${entity}.${skippedCount ? ` Bỏ qua ${skippedCount} dòng trùng.` : ""}${failureSummary}`,
+          `Added ${importedCount} ${entity}.${skippedCount ? ` Skipped ${skippedCount} duplicate rows.` : ""}${failureSummary}`,
+        ),
+      });
+      return true;
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể nhập file", "Could not import file"),
+        description: error instanceof Error ? error.message : t("room.importDialog.couldNotReadFile"),
+      });
+      return false;
+    }
+  };
+  const closeStructureImportDialog = () => setStructureImportTarget(null);
+
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-    <input
-      ref={importFileInputRef}
-      type="file"
-      className="hidden"
-      onChange={(event) => {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (file) void importLocalDataFromFile(file);
-      }}
-    />
     {detailRoom && <RoomDetailModal room={detailRoom} onClose={() => setDetailRoom(null)} />}
     {activeTab !== "pricing" && <>
       <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
@@ -1673,7 +1733,7 @@ export default function RoomWorkspace() {
             type="button"
             onClick={() => {
               if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
-              else openImportPicker(activeTab);
+              else if (activeTab === "buildings" || activeTab === "floors") setStructureImportTarget(activeTab);
             }}
             disabled={importingRooms}
             className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:opacity-50"
@@ -1700,7 +1760,7 @@ export default function RoomWorkspace() {
     {canViewRoomStructure && activeTab === "buildings" && <>
       {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
       {isBuildingsLoading && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tòa nhà...</p>}
-      <BuildingManagementPanel buildings={buildings} query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} canManage={canManageRooms} />
+      <BuildingManagementPanel query={buildingQuery} filteredBuildings={filteredBuildings} onQueryChange={setBuildingQuery} onEdit={openEditBuildingModal} canManage={canManageRooms} />
     </>}
     {canViewRoomStructure && activeTab === "floors" && <>
       {isBuildingsError && <p className="border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">Không thể tải danh sách tòa nhà.</p>}
@@ -1767,6 +1827,31 @@ export default function RoomWorkspace() {
       progress={roomImportUploadProgress || undefined}
       onUpload={importRoomsFromFile}
     />
+    {structureImportTarget && <BulkImportDialog
+      open
+      onOpenChange={(open) => { if (!open) closeStructureImportDialog(); }}
+      eyebrow={localizedText("QUẢN LÝ CƠ SỞ VẬT CHẤT", "FACILITY MANAGEMENT")}
+      title={structureImportTarget === "buildings"
+        ? localizedText("Nhập tòa nhà từ Excel", "Import buildings from Excel")
+        : localizedText("Nhập tầng từ Excel", "Import floors from Excel")}
+      description={structureImportTarget === "buildings"
+        ? localizedText("Tải file mẫu, điền tên các tòa nhà rồi chọn file để thêm vào khách sạn.", "Download the template, enter building names, then upload it to add them to the hotel.")
+        : localizedText("Tải file mẫu, chọn tòa nhà và nhập số tầng nguyên dương cần thêm.", "Download the template, select a building, and enter the positive whole-number floors to add.")}
+      templateLabel={structureImportTarget === "buildings"
+        ? localizedText("Tải file Excel mẫu tòa nhà", "Download building Excel template")
+        : localizedText("Tải file Excel mẫu tầng", "Download floor Excel template")}
+      onDownloadTemplate={() => downloadStructureTemplate(structureImportTarget)}
+      acceptedFileTypes=".xlsx,.csv"
+      fileLabel={localizedText("Chọn file Excel hoặc CSV", "Choose an Excel or CSV file")}
+      validateFile={(file) => /\.(xlsx|csv)$/i.test(file.name)
+        ? null
+        : localizedText("Vui lòng chọn file .xlsx hoặc .csv.", "Choose an .xlsx or .csv file.")}
+      instructions={structureImportTarget === "buildings"
+        ? <p>{localizedText("Cột bắt buộc: Tên tòa nhà. Mã tòa được hệ thống tự tạo; các tòa trùng tên sẽ được bỏ qua.", "Required column: Building name. Building codes are generated automatically; duplicate names are skipped.")}</p>
+        : <p>{localizedText("Các cột: Tòa nhà (có thể để trống để dùng tòa đang chọn) và Số tầng. Chỉ nhận số nguyên từ 1 trở lên; tầng đã có sẽ được bỏ qua.", "Columns: Building (optional; uses the selected building when blank) and Floor number. Only whole numbers of at least 1 are accepted; existing floors are skipped.")}</p>}
+      uploadLabel={localizedText("Nhập dữ liệu", "Import data")}
+      onUpload={(file) => importStructureFile(file, structureImportTarget)}
+    />}
     {(roomImportReport || roomSocketImportProgress) && (
       <RoomImportProgressCard
         processing={roomImportReport?.processing ?? false}
@@ -1812,7 +1897,18 @@ export default function RoomWorkspace() {
       onEditRoom={openEditRoomModal}
       onShowGallery={(room) => { setGalleryRoom(room); setGalleryIndex(0); }}
       onShowDetails={setDetailRoom}
-      onAssign={setAssignmentRoom}
+      isLoading={isRoomsLoading || isRoomsFetching}
+      isError={isRoomsError}
+      onRefresh={async () => {
+        try {
+          await refetchRooms().unwrap();
+        } catch {
+          toast({
+            variant: "destructive",
+            title: localizedText("Không thể tải lại danh sách phòng.", "Could not reload rooms."),
+          });
+        }
+      }}
     />}
     {activeTab === "pricing" && (
       <div className="p-6 space-y-6">
@@ -1864,11 +1960,6 @@ export default function RoomWorkspace() {
                 standardCapacity: String(entry.standardCapacity),
                 maxExtraGuests: String(entry.maxExtraGuests),
               };
-              const currentPriceNum = Number(draft.price) || 0;
-              const currentAdultFeeNum = Number(draft.extraAdultFee) || 0;
-              const currentChildFeeNum = Number(draft.extraChildFee) || 0;
-              const currentStandardCapacity = Number(draft.standardCapacity) || entry.standardCapacity || 1;
-              const currentMaxExtraGuests = Number(draft.maxExtraGuests) || entry.maxExtraGuests || 0;
               const isModified = String(draft.price) !== String(entry.price) || String(draft.extraAdultFee) !== String(entry.extraAdultFee) || String(draft.extraChildFee) !== String(entry.extraChildFee) || String(draft.standardCapacity) !== String(entry.standardCapacity) || String(draft.maxExtraGuests) !== String(entry.maxExtraGuests);
 
               return (
@@ -1968,16 +2059,15 @@ export default function RoomWorkspace() {
                       </div>
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
-                      <span className="text-[11px] font-semibold text-slate-500">{t("room.pricingConfig.guestSummary", { standard: currentStandardCapacity, extra: currentMaxExtraGuests, price: formatPricingMoney(currentPriceNum), adultFee: formatPricingMoney(currentAdultFeeNum), childFee: formatPricingMoney(currentChildFeeNum) })}</span>
-                      <div className="flex gap-2.5">
-                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-100">{t("room.pricingConfig.cancel")}</button>
+                    <div className="mt-5 flex justify-end gap-3 border-t border-slate-100 pt-4">
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => setEditingPricingType(null)} className="h-12 rounded-xl border border-slate-200 bg-slate-50 px-6 text-base font-bold text-slate-600 transition hover:bg-slate-100">{t("room.pricingConfig.cancel")}</button>
                         <button
                           type="button"
                           onClick={async () => {
                             if (await saveRoomTypePricing(entry.roomType)) setEditingPricingType(null);
                           }}
-                          className={`h-10 rounded-xl px-4 text-sm font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
+                          className={`h-12 rounded-xl px-6 text-base font-bold text-white transition ${isModified ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-300"}`}
                           disabled={!isModified || !entry.policyId || isUpdatingPolicy}
                         >
                           {isUpdatingPolicy ? t("room.pricingConfig.saving") : t("room.pricingConfig.save")}
@@ -2061,7 +2151,7 @@ export default function RoomWorkspace() {
                           <button
                             type="button"
                             onClick={() => setEditingPricingType(entry.roomType)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 transition hover:border-amber-300 hover:bg-amber-100 hover:text-amber-800"
                             title={t("room.pricingConfig.edit")}
                           >
                             <Pencil size={14} />
@@ -2104,28 +2194,42 @@ export default function RoomWorkspace() {
         )}
       </div>
     )}
-    {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => { if (!isCreatingBuilding) closeCreateBuildingModal(); }}>
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Quản lý cơ sở vật chất</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingBuildingId ? "Sửa tòa nhà" : "Tạo tòa nhà mới"}</h3><p className="mt-1 text-sm text-slate-500">{editingBuildingId ? "Cập nhật tên tòa nhà. Mã tòa được giữ nguyên." : "Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu."}</p></div>
-          <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="text-slate-400 hover:text-slate-700 disabled:opacity-50"><X size={19} /></button>
+    {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => { if (!isCreatingBuilding) closeCreateBuildingModal(); }}>
+      <div role="dialog" aria-modal="true" className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{localizedText("Quản lý cơ sở vật chất", "FACILITY MANAGEMENT")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingBuildingId ? localizedText("Sửa tòa nhà", "Edit building") : localizedText("Tạo tòa nhà mới", "Create new building")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingBuildingId ? localizedText("Cập nhật tên tòa nhà. Mã tòa được giữ nguyên.", "Update the building name. The building code will remain unchanged.") : localizedText("Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu.", "Enter a building name; its code will be generated when saved.")}</p></div>
+          <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
-        <div className="mt-5 space-y-4">
-          <label className="block text-sm font-semibold text-slate-700">Tên tòa nhà <span className="text-rose-500">*</span><input autoFocus value={buildingForm.name} onChange={(event) => setBuildingForm((current) => ({ ...current, name: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && buildingForm.name.trim()) void saveBuilding(); }} placeholder="Ví dụ: Tòa Sunrise" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-          {editingBuildingId && <label className="block text-sm font-semibold text-slate-700">Mã tòa nhà<input value={buildingForm.code} readOnly className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>}
+        <div className="mt-4 space-y-4">
+          <label className="block text-sm font-semibold text-slate-700">
+            {localizedText("Tên tòa nhà", "Building name")} <span className="text-rose-500">*</span>
+            <input autoFocus value={buildingForm.name} onChange={(event) => {
+              setBuildingForm((current) => ({ ...current, name: event.target.value }));
+              setBuildingNameError("");
+            }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveBuilding(); } }} aria-invalid={Boolean(buildingNameError)} aria-describedby={buildingNameError ? "building-name-error" : undefined} placeholder={localizedText("Ví dụ: Tòa Sunrise", "e.g. Sunrise Building")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:ring-2 ${buildingNameError ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+            {buildingNameError && <span id="building-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{buildingNameError}</span>}
+          </label>
+          {editingBuildingId && <label className="block text-sm font-semibold text-slate-700">{localizedText("Mã tòa nhà", "Building code")}<input value={buildingForm.code} readOnly className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>}
         </div>
-        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Hủy</button><button type="button" onClick={() => void saveBuilding()} disabled={!buildingForm.name.trim() || isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingBuilding || isUpdatingBuilding ? "Đang lưu..." : editingBuildingId ? "Lưu thay đổi" : "Tạo tòa nhà"}</button></div>
+        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveBuilding()} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{isCreatingBuilding || isUpdatingBuilding ? localizedText("Đang lưu...", "Saving...") : editingBuildingId ? localizedText("Lưu thay đổi", "Save changes") : localizedText("Tạo tòa nhà", "Create building")}</button><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button></div>
       </div>
     </div>}
-    {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" onMouseDown={() => { if (!isCreatingFloor && !isUpdatingFloor) closeCreateFloorModal(); }}>
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-2 text-xl font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
-          <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="text-slate-400 hover:text-slate-700 disabled:opacity-50"><X size={19} /></button>
+    {showCreateFloor && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => { if (!isCreatingFloor && !isUpdatingFloor) closeCreateFloorModal(); }}>
+      <div role="dialog" aria-modal="true" className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
+          <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
-        <label className="mt-5 block text-sm font-semibold text-slate-700">Tòa nhà <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label className="mt-4 block text-sm font-semibold text-slate-700">Số tầng <span className="text-rose-500">*</span><input autoFocus type="number" step="1" value={floorForm.name} onChange={(event) => setFloorForm({ name: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void saveFloor(); }} placeholder="Ví dụ: 1 hoặc -1" className="mt-1.5 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button><button type="button" onClick={() => void saveFloor()} disabled={!floorForm.name.trim() || !selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? "Đang lưu..." : t("common.save")}</button></div>
+        <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Tòa nhà", "Building")} <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="mt-4 block text-sm font-semibold text-slate-700">
+          {localizedText("Số tầng", "Floor number")} <span className="text-rose-500">*</span>
+          <input autoFocus type="number" min="1" step="1" value={floorForm.name} aria-invalid={Boolean(floorNameError)} aria-describedby={floorNameError ? "floor-number-error" : undefined} onChange={(event) => {
+            setFloorForm({ name: event.target.value });
+            setFloorNameError("");
+          }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveFloor(); } }} placeholder={localizedText("Nhập số tầng từ 1 trở lên", "Enter a floor number from 1 or higher")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:ring-2 ${floorNameError ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+          {floorNameError && <span id="floor-number-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{floorNameError}</span>}
+        </label>
+        <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveFloor()} disabled={!selectedBuildingId || isCreatingFloor || isUpdatingFloor} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200">{isCreatingFloor || isUpdatingFloor ? localizedText("Đang lưu...", "Saving...") : t("common.save")}</button><button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{t("common.cancel")}</button></div>
       </div>
     </div>}
     {showCreateRoom && !editingRoomId && (
@@ -2141,6 +2245,10 @@ export default function RoomWorkspace() {
             </div>
 
             <div className="flex items-center gap-2">
+              <button type="button" onClick={resetCreateRoomForm} disabled={isCreatingRoom || isUpdatingRoom} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+                <RotateCcw size={15} />
+                {t("room.createForm.reset")}
+              </button>
               <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">{t("common.cancel")}</button>
               <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom || isUpdatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom || isUpdatingRoom ? t("room.createForm.saving") : editingRoomId ? t("room.saveChanges") : t("room.createRoom")}</button>
             </div>
@@ -2148,6 +2256,7 @@ export default function RoomWorkspace() {
 
           <div className="grid gap-5 overflow-y-auto p-5 lg:grid-cols-[1.4fr_0.8fr]">
             <div className="space-y-5">
+              {roomFormErrors.form && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{roomFormErrors.form}</p>}
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600">1</span>
@@ -2168,24 +2277,27 @@ export default function RoomWorkspace() {
 
                   <label className="block text-sm font-semibold text-slate-700">
                     {t("room.buildingLabel")} <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.building} onChange={(event) => { const buildingId = event.target.value; setSelectedBuildingId(buildingId); setCreateRoomForm((current) => ({ ...current, building: buildingId, floor: "" })); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                    <select value={createRoomForm.building} onChange={(event) => { const buildingId = event.target.value; setSelectedBuildingId(buildingId); setCreateRoomForm((current) => ({ ...current, building: buildingId, floor: "" })); clearRoomFormErrors("building", "floor", "form"); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                       {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
+                    {roomFormErrors.building && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.building}</p>}
                   </label>
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
                     {t("room.createForm.roomNumber")} <span className="text-rose-500">*</span>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" required value={createRoomForm.roomNumber} onChange={(event) => setCreateRoomForm((current) => ({ ...current, roomNumber: event.target.value.replace(/\D/g, "") }))} placeholder={t("room.createForm.roomNumberPlaceholder")} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" required value={createRoomForm.roomNumber} onChange={(event) => { setCreateRoomForm((current) => ({ ...current, roomNumber: event.target.value.replace(/\D/g, "") })); clearRoomFormErrors("roomNumber", "form"); }} placeholder={t("room.createForm.roomNumberPlaceholder")} aria-invalid={Boolean(roomFormErrors.roomNumber)} aria-describedby={roomFormErrors.roomNumber ? "room-number-error" : undefined} className={`mt-1.5 h-11 w-full rounded-xl border px-3 text-sm font-normal outline-none transition focus:ring-2 ${roomFormErrors.roomNumber ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+                    {roomFormErrors.roomNumber && <p id="room-number-error" role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.roomNumber}</p>}
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
                     {t("room.createForm.floor")} <span className="text-rose-500">*</span>
-                    <select value={createRoomForm.floor} onChange={(event) => setCreateRoomForm((current) => ({ ...current, floor: event.target.value }))} disabled={isFloorsLoading || isFloorsFetching || selectedBuildingFloorOptions.length === 0} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50">
+                    <select value={createRoomForm.floor} onChange={(event) => { setCreateRoomForm((current) => ({ ...current, floor: event.target.value })); clearRoomFormErrors("floor", "form"); }} disabled={isFloorsLoading || isFloorsFetching || selectedBuildingFloorOptions.length === 0} aria-invalid={Boolean(roomFormErrors.floor)} className={`mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm outline-none transition focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-50 ${roomFormErrors.floor ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`}>
                       {isFloorsLoading || isFloorsFetching ? <option value="">{t("room.createForm.loadingFloors")}</option> : selectedBuildingFloorOptions.length === 0 ? <option value="">{t("room.createForm.noFloors")}</option> : selectedBuildingFloorOptions.map((item) => (
                         <option key={item.id} value={item.id}>{localizedFloorName(item.name)}</option>
                       ))}
                     </select>
+                    {roomFormErrors.floor && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.floor}</p>}
                   </label>
                 </div>
               </div>
@@ -2198,7 +2310,7 @@ export default function RoomWorkspace() {
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    {t("room.area")} <span className="text-rose-500">*</span>
+                    {t("room.area")}
                     <input type="number" min="1" step="0.1" value={createRoomForm.area} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-normal text-slate-500 outline-none" />
                   </label>
 
@@ -2209,14 +2321,14 @@ export default function RoomWorkspace() {
                   </label>
                 </div>
 
-                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    {t("room.createForm.standardCapacity")} <span className="text-rose-500">*</span>
+                    {t("room.createForm.standardCapacity")}
                     <input type="number" min="1" value={createRoomForm.standardCapacity} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
                     <span className="mt-1 block text-xs font-normal text-slate-400">{t("room.createForm.includedGuests")}</span>
                   </label>
                   <label className="block text-sm font-semibold text-slate-700">
-                    {t("room.createForm.maxExtraGuests")}<span className="text-rose-500">*</span>
+                    {t("room.createForm.maxExtraGuests")}
                     <input type="number" min="0" value={createRoomForm.maxExtraGuests} disabled className="mt-1.5 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none" />
                     <span className="mt-1 block text-xs font-normal text-slate-400">{t("room.createForm.extraGuestsDescription")}</span>
                   </label>
@@ -2250,17 +2362,21 @@ export default function RoomWorkspace() {
                         if (bedType.id == null) return null;
                         const selected = createRoomForm.bedConfigurations.find((bed) => Number(bed.bedTypeId) === Number(bedType.id));
                         return (
-                          <div key={bedType.id} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+                          <div key={bedType.id}>
+                            <div className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
                             <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
                               <input
                                 type="checkbox"
                                 checked={Boolean(selected)}
-                                onChange={(event) => setCreateRoomForm((current) => ({
-                                  ...current,
-                                  bedConfigurations: event.target.checked
-                                    ? [...current.bedConfigurations, { bedTypeId: bedType.id!, quantity: 1 }]
-                                    : current.bedConfigurations.filter((bed) => Number(bed.bedTypeId) !== Number(bedType.id)),
-                                }))}
+                                onChange={(event) => {
+                                  setCreateRoomForm((current) => ({
+                                    ...current,
+                                    bedConfigurations: event.target.checked
+                                      ? [...current.bedConfigurations, { bedTypeId: bedType.id!, quantity: 1 }]
+                                      : current.bedConfigurations.filter((bed) => Number(bed.bedTypeId) !== Number(bedType.id)),
+                                  }));
+                                  clearRoomFormErrors("beds", "bedQuantities", "form");
+                                }}
                                 className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                               />
                               <span className="truncate">{bedType.name ?? bedType.bedTypeName}</span>
@@ -2283,11 +2399,19 @@ export default function RoomWorkspace() {
                                         Number(bed.bedTypeId) === Number(bedType.id) ? { ...bed, quantity } : bed,
                                       ),
                                     }));
+                                    setRoomFormErrors((current) => {
+                                      const bedQuantities = { ...current.bedQuantities };
+                                      delete bedQuantities[Number(bedType.id)];
+                                      return { ...current, bedQuantities, beds: undefined, form: undefined };
+                                    });
                                   }}
-                                  className="h-9 w-20 rounded-lg border border-slate-200 px-2 text-sm text-slate-800 outline-none focus:border-blue-400"
+                                  aria-invalid={Boolean(roomFormErrors.bedQuantities?.[Number(bedType.id)])}
+                                  className={`h-9 w-20 rounded-lg border px-2 text-sm text-slate-800 outline-none focus:ring-2 ${roomFormErrors.bedQuantities?.[Number(bedType.id)] ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`}
                                 />
                               </label>
                             )}
+                            </div>
+                            {roomFormErrors.bedQuantities?.[Number(bedType.id)] && <p role="alert" className="ml-1 text-xs font-medium text-rose-600">{roomFormErrors.bedQuantities[Number(bedType.id)]}</p>}
                           </div>
                         );
                       })}
@@ -2295,6 +2419,7 @@ export default function RoomWorkspace() {
                   ) : (
                     <p className="mt-1 text-xs text-amber-700">{t("room.createForm.noBedTypes")}</p>
                   )}
+                  {roomFormErrors.beds && <p role="alert" className="mt-2 text-xs font-medium text-rose-600">{roomFormErrors.beds}</p>}
                 </div>
 
                 <div className="mt-4">
@@ -2328,81 +2453,26 @@ export default function RoomWorkspace() {
                   </div>
 
                   <div className="flex items-center gap-2">
-
-                    
-                      <button
+                    <button
                         type="button"
                         onClick={clearAllAmenities}
                         className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
-                      >
-                        {t("room.createForm.deselectAll")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowAmenityMenu(false)}
-                        className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
-                      >
-                        {t("room.createForm.useDefault")}
-                      </button>
-                    
-  
-                    <button
-                      type="button"
-                      onClick={() => setShowAmenityMenu((current) => !current)}
-                      className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
                     >
-                      + {t("room.createForm.add")}
+                      {t("room.createForm.deselectAll")}
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="relative mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                   <Search size={15} className="text-slate-400" />
                   <input
                     value={amenitySearch}
                     onChange={(event) => setAmenitySearch(event.target.value)}
                     placeholder={t("room.searchAmenities")}
-                    className="w-full border-0 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                    className="w-full border-0 bg-transparent pr-9 text-sm text-slate-700 outline-none placeholder:text-slate-400"
                   />
+                  <ClearSearchButton value={amenitySearch} onClear={() => setAmenitySearch("")} label={t("common.clearSearch")} />
                 </div>
-
-                {showAmenityMenu && (
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
-                      <input
-                        value={newAmenityName}
-                        onChange={(event) => setNewAmenityName(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            appendAmenity();
-                          }
-                        }}
-                        placeholder={t("room.createForm.newAmenityName")}
-                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={amenityPrice}
-                        onChange={(event) => setAmenityPrice(event.target.value)}
-                        placeholder={t("room.createForm.amenityPrice")}
-                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={() => appendAmenity(newAmenityName)}
-                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
-                      >
-                        {t("room.createForm.add")}
-                      </button>
-                    </div>
-
-                  </div>
-                )}
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredAmenityOptions.map((item) => {
@@ -2424,7 +2494,8 @@ export default function RoomWorkspace() {
                   {t("room.createForm.descriptionAndImages")} <span className="text-rose-500">*</span>
                 </div>
 
-                <textarea value={createRoomForm.description} onChange={(event) => setCreateRoomForm((current) => ({ ...current, description: event.target.value }))} rows={4} placeholder={t("room.createForm.detailedDescriptionPlaceholder")} className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                <textarea value={createRoomForm.description} onChange={(event) => { setCreateRoomForm((current) => ({ ...current, description: event.target.value })); clearRoomFormErrors("description", "form"); }} rows={4} placeholder={t("room.createForm.detailedDescriptionPlaceholder")} aria-invalid={Boolean(roomFormErrors.description)} aria-describedby={roomFormErrors.description ? "room-description-error" : undefined} className={`mt-4 w-full rounded-xl border px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:ring-2 ${roomFormErrors.description ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
+                {roomFormErrors.description && <p id="room-description-error" role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.description}</p>}
 
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
                   <label className="flex cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
@@ -2432,7 +2503,6 @@ export default function RoomWorkspace() {
                     {t("room.createForm.uploadImage")}
                     <input type="file" multiple accept="image/*" onChange={(event) => addImages(event.target.files)} className="hidden" />
                   </label>
-
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                     {createRoomForm.images.length > 0 ? createRoomForm.images.slice(0, 6).map((image, index) => {
                       const isDefault = createRoomForm.defaultImage ? image === createRoomForm.defaultImage : index === 0;
@@ -2464,6 +2534,7 @@ export default function RoomWorkspace() {
                     )}
                   </div>
                 </div>
+                {roomFormErrors.images && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.images}</p>}
               </div>
             </div>
 
@@ -2522,7 +2593,7 @@ export default function RoomWorkspace() {
                   {createRoomForm.amenities.slice(0, 5).map((item) => (
                     <div key={item} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
                       <span className="min-w-0 truncate">{item}</span>
-                      <span className="ml-3 flex shrink-0 items-center gap-2"><span className="text-xs font-semibold text-blue-600">{money(apiAmenities?.find((amenity) => amenity.name === item)?.price ?? customAmenityPrices[item] ?? 0)}</span><Check size={15} className="text-emerald-600" /></span>
+                      <span className="ml-3 flex shrink-0 items-center gap-2"><span className="text-xs font-semibold text-blue-600">{money(apiAmenities?.find((amenity) => amenity.name === item)?.price ?? 0)}</span><Check size={15} className="text-emerald-600" /></span>
                     </div>
                   ))}
                   {createRoomForm.amenities.length === 0 && (
@@ -2543,6 +2614,7 @@ export default function RoomWorkspace() {
           floorId: createRoomForm.floor,
           roomStatus: statusValues[createRoomForm.status] ?? createRoomForm.status,
           area: createRoomForm.area,
+          basePrice: String(rooms.find((room) => room.id === editingRoomId)?.price ?? ""),
           standardCapacity: createRoomForm.standardCapacity,
           maxExtraGuests: createRoomForm.maxExtraGuests,
           extraAdultFee: createRoomForm.extraAdultFee,
@@ -2555,6 +2627,7 @@ export default function RoomWorkspace() {
           beds: createRoomForm.bedConfigurations,
         }}
         onDraftChange={(draft: RoomEditDraft) => {
+          clearRoomFormErrors("form");
           const floorOption = hotelFloorOptions.find((item) => item.id === draft.floorId);
           setSelectedBuildingId(floorOption?.buildingId ?? createRoomForm.building);
           setCreateRoomForm((current) => ({
@@ -2608,9 +2681,9 @@ export default function RoomWorkspace() {
             isExtraBed: item.isExtraBed,
           }))}
         imageFiles={roomImageFiles}
-        onImageFilesChange={setRoomImageFiles}
+        onImageFilesChange={(files) => { setRoomImageFiles(files); clearRoomFormErrors("images", "form"); }}
         isSaving={isUpdatingRoom}
-        error=""
+        error={roomFormErrors.form ?? ""}
         onSave={() => void saveRoom()}
         onCancel={closeCreateRoomModal}
       />

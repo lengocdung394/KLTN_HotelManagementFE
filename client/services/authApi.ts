@@ -36,6 +36,12 @@ interface ResetPasswordRequest {
   confirmPassword: string;
 }
 
+interface ResetPasswordLinkRequest {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
 export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     login: builder.mutation<AuthenticationResult, LoginRequest>({
@@ -48,11 +54,35 @@ export const authApi = baseApi.injectEndpoints({
       query: (body) => ({ url: "/auth/register", method: "POST", data: body }),
     }),
     requestPasswordReset: builder.mutation<void, ForgotPasswordRequest>({
-      query: (data) => ({ url: "/auth/forgot-password/request", method: "POST", data }),
+      query: (data) => ({
+        url: "/auth/forgot-password/request",
+        method: "POST",
+        data,
+      }),
+      transformResponse: (response: ApiResponse<void>) => response.result,
+    }),
+    requestPasswordResetLink: builder.mutation<void, ForgotPasswordRequest>({
+      query: (data) => ({
+        url: "/auth/forgot-password/link/request",
+        method: "POST",
+        data,
+      }),
+      transformResponse: (response: ApiResponse<void>) => response.result,
+    }),
+    resetPasswordWithLink: builder.mutation<void, ResetPasswordLinkRequest>({
+      query: (data) => ({
+        url: "/auth/forgot-password/link/reset",
+        method: "POST",
+        data,
+      }),
       transformResponse: (response: ApiResponse<void>) => response.result,
     }),
     resetPassword: builder.mutation<void, ResetPasswordRequest>({
-      query: (data) => ({ url: "/auth/forgot-password/reset", method: "POST", data }),
+      query: (data) => ({
+        url: "/auth/forgot-password/reset",
+        method: "POST",
+        data,
+      }),
       transformResponse: (response: ApiResponse<void>) => response.result,
     }),
   }),
@@ -62,5 +92,7 @@ export const {
   useLoginMutation,
   useRegisterMutation,
   useRequestPasswordResetMutation,
+  useRequestPasswordResetLinkMutation,
+  useResetPasswordWithLinkMutation,
   useResetPasswordMutation,
 } = authApi;

@@ -109,6 +109,21 @@ const valueOf = (source: Record<string, unknown>, keys: string[]) =>
     .map((key) => source[key])
     .find((value) => value !== undefined && value !== null && value !== "");
 
+const getRoomSeasonalRateId = (item: RoomSeasonalRate) => {
+  const rawId = valueOf(item, [
+    "id",
+    "roomSeasonalRateId",
+    "roomSeasonalRateID",
+    "room_seasonal_rate_id",
+    "seasonalRateId",
+    "seasonalRateID",
+    "seasonal_rate_id",
+    "rateId",
+    "rateID",
+  ]);
+  return typeof rawId === "string" || typeof rawId === "number" ? rawId : undefined;
+};
+
 const parseNumber = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -319,8 +334,7 @@ export const roomApi = baseApi.injectEndpoints({
 
           return {
             content: pageData.content.map((item) => {
-              const rawId = valueOf(item as Record<string, unknown>, ["id", "roomSeasonalRateId", "seasonalRateId"]);
-              const normalizedId = rawId == null ? String(Date.now() + Math.random()) : String(rawId);
+              const normalizedId = getRoomSeasonalRateId(item);
 
               return {
                 ...item,
@@ -360,8 +374,7 @@ export const roomApi = baseApi.injectEndpoints({
 
           return {
             content: pageData.content.map((item) => {
-              const rawId = valueOf(item as Record<string, unknown>, ["id", "roomSeasonalRateId", "seasonalRateId"]);
-              const normalizedId = rawId == null ? String(Date.now() + Math.random()) : String(rawId);
+              const normalizedId = getRoomSeasonalRateId(item);
 
               return {
                 ...item,
@@ -383,6 +396,7 @@ export const roomApi = baseApi.injectEndpoints({
             page: pageData.page,
           };
         },
+        providesTags: ["SeasonalRate"],
       },
     ),
 
@@ -392,7 +406,7 @@ export const roomApi = baseApi.injectEndpoints({
         method: "POST",
         data: payload,
       }),
-      invalidatesTags: ["Room"],
+      invalidatesTags: ["Room", "SeasonalRate"],
     }),
 
     updateRoomSeasonalRate: builder.mutation<RoomSeasonalRate[] | unknown, CreateRoomSeasonalRateRequest[]>({
@@ -401,7 +415,7 @@ export const roomApi = baseApi.injectEndpoints({
         method: "POST",
         data: payload,
       }),
-      invalidatesTags: ["Room"],
+      invalidatesTags: ["Room", "SeasonalRate"],
     }),
   }),
 });

@@ -6,6 +6,9 @@ import { useTranslation } from "react-i18next";
 import { Banknote, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, CreditCard, Eye, QrCode, RefreshCw, Search, UserRound, UsersRound, Wallet } from "lucide-react";
 import GuestRoomForms, { bookingCache, clearRoomGuestCache, isBookingGuestValid, setBookingRoomTotalCache, setRoomGuestCache, type BookingGuest, type RoomGuestCounts } from "./GuestRoomForms.tsx";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
+import ClearSearchButton from "../components/ClearSearchButton";
+import FilterResultStatus from "../components/FilterResultStatus";
+import SearchableFilter, { FilterResetButton } from "../components/SearchableFilter";
 import PromotionSelector, { type SelectedPromotion } from "../components/PromotionSelector";
 import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailModal";
 import { useGetBranchRoomDailyPricesQuery, useGetRoomSeasonalRatesByMonthQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, type RoomSeasonalRate } from "../services/roomApi";
@@ -16,9 +19,11 @@ import { useCreateCounterBookingMutation, type BookingListItem, useGetRoomMatrix
 import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import ListPagination from "../components/ListPagination";
 import { getServicePriceBreakdown, sumRoomPriceForRange } from "../lib/bookingPricing";
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
 import { calculatePromotionDiscount } from "../lib/promotionPricing";
+import { localizedText } from "../i18n";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
@@ -393,6 +398,8 @@ function DesktopCalendar({
   setSelected,
   checkIn,
   checkOut,
+  scrollTargetCheckIn,
+  scrollTargetCheckOut,
   setCheckIn,
   setCheckOut,
   selectedRanges,
@@ -416,6 +423,8 @@ function DesktopCalendar({
   setSelected: React.Dispatch<React.SetStateAction<string[]>>;
   checkIn: string;
   checkOut: string;
+  scrollTargetCheckIn: string;
+  scrollTargetCheckOut: string;
   setCheckIn: (value: string) => void;
   setCheckOut: (value: string) => void;
   selectedRanges: Record<string, RoomDateRange>;
@@ -442,8 +451,23 @@ function DesktopCalendar({
   const totalDays = 14;
   const todayValue = todayLocal();
   const [timelineStart, setTimelineStart] = useState(todayValue);
+  const selectedDateRangeRef = useRef({ checkIn: scrollTargetCheckIn, checkOut: scrollTargetCheckOut });
   const [timelinePickerOpen, setTimelinePickerOpen] = useState(false);
   const [timelinePickerMonth, setTimelinePickerMonth] = useState(() => new Date(`${todayValue}T00:00:00`));
+  useEffect(() => {
+    const previousRange = selectedDateRangeRef.current;
+    if (previousRange.checkIn === scrollTargetCheckIn && previousRange.checkOut === scrollTargetCheckOut) return;
+    selectedDateRangeRef.current = { checkIn: scrollTargetCheckIn, checkOut: scrollTargetCheckOut };
+
+    const timelineEnd = shiftDay(timelineStart, totalDays - 1);
+    const checkInOutsideTimeline = scrollTargetCheckIn < timelineStart || scrollTargetCheckIn > timelineEnd;
+    const checkOutOutsideTimeline = scrollTargetCheckOut < timelineStart || scrollTargetCheckOut > timelineEnd;
+    if (checkInOutsideTimeline) {
+      setTimelineStart(scrollTargetCheckIn);
+    } else if (checkOutOutsideTimeline) {
+      setTimelineStart(shiftDay(scrollTargetCheckOut, -(totalDays - 1)));
+    }
+  }, [scrollTargetCheckIn, scrollTargetCheckOut, timelineStart]);
   useEffect(() => {
     setTimelinePickerMonth(new Date(`${timelineStart}T00:00:00`));
   }, [timelineStart]);
@@ -816,6 +840,7 @@ function DesktopCalendar({
                     const date = new Date(pickerYear, pickerMonth, day);
                     const isSelected = date.toDateString() === selectedDate.toDateString();
                     const isToday = date.toDateString() === todayDate.toDateString();
+                    const dateValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
                     const isDisabled = date < todayDate;
 
                     return (
@@ -824,8 +849,7 @@ function DesktopCalendar({
                         type="button"
                         disabled={isDisabled}
                         onClick={() => {
-                          const nextDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-                          setTimelineStart(nextDate);
+                          setTimelineStart(dateValue);
                           setTimelinePickerOpen(false);
                         }}
                         className={`grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
@@ -1894,7 +1918,6 @@ export default function BookingWorkspace() {
           serviceId: string;
           originalQuantity: number;
           usedQuantity: number;
-          isPaid: boolean;
           minimumQuantity: number;
           detailId: string;
         }[] = [];
@@ -1908,13 +1931,11 @@ export default function BookingWorkspace() {
           const qty = Number(srv.quantity ?? srv.serviceQuantity ?? srv.quantityService ?? srv.amount ?? 0);
           if (!dId) return;
           const usedQuantity = usedQuantityOf(srv, qty);
-          const isPaid = booleanValueOf(srv.isPaid ?? srv.paid);
           origSelections.push({
             serviceId: sId,
             originalQuantity: qty,
             usedQuantity,
-            isPaid,
-            minimumQuantity: isPaid ? qty : usedQuantity,
+            minimumQuantity: usedQuantity,
             detailId: dId,
           });
         });
@@ -2125,18 +2146,23 @@ export default function BookingWorkspace() {
   return (
     <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "rooms" ? "bg-violet-600 text-white" : "bg-emerald-500 text-white"}`}>{step === "rooms" ? "1" : <Check size={14} />}</span>
-          <span className="text-xs font-semibold text-slate-500">{t("booking.dateAndRooms")}</span>
-          <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "guest" ? "bg-violet-600 text-white" : step === "services" || step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "services" || step === "promotion" ? <Check size={14} /> : "2"}</span>
-          <span className="text-xs font-semibold text-slate-500">{t("booking.guestInformation")}</span>
-          <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "services" ? "bg-violet-600 text-white" : step === "promotion" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{step === "promotion" ? <Check size={14} /> : "3"}</span>
-          <span className="text-xs font-semibold text-slate-500">{t("booking.selectServices")}</span>
-          <span className="h-px w-8 bg-slate-200" />
-          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${step === "promotion" ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-400"}`}>4</span>
-          <span className="text-xs font-semibold text-slate-500">{t("promotion.bookingTitle")}</span>
+        <div className="grid grid-cols-4">
+          {[
+            { label: t("booking.dateAndRooms"), active: step === "rooms", complete: step !== "rooms" },
+            { label: t("booking.guestInformation"), active: step === "guest", complete: step === "services" || step === "promotion" },
+            { label: t("booking.selectServices"), active: step === "services", complete: step === "promotion" },
+            { label: t("promotion.bookingTitle"), active: step === "promotion", complete: false },
+          ].map((item, index) => (
+            <div key={item.label} className="relative flex min-w-0 justify-center">
+              {index < 3 && <span className="absolute left-1/2 right-[-50%] top-3 h-px bg-slate-200" />}
+              <div className="relative z-10 flex min-w-0 items-center gap-2 bg-white px-1 sm:px-2">
+                <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${item.active ? "bg-violet-600 text-white" : item.complete ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>
+                  {item.complete ? <Check size={14} /> : index + 1}
+                </span>
+                <span className={`truncate text-[10px] font-semibold sm:text-xs ${item.active ? "text-slate-700" : "text-slate-500"}`}>{item.label}</span>
+              </div>
+            </div>
+          ))}
         </div>
         <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full bg-violet-600 transition-all ${step === "promotion" ? "w-full" : step === "services" ? "w-3/4" : step === "guest" ? "w-1/2" : "w-1/4"}`} /></div>
         <div className="mt-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -2167,20 +2193,16 @@ export default function BookingWorkspace() {
           </div>
 
           <div className="mt-5 flex flex-col gap-3">
-            <div className="grid w-full gap-2 sm:grid-cols-[minmax(260px,1.5fr)_repeat(3,minmax(150px,1fr))]">
-              <div className="relative w-full">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))_auto]">
+              <div className="relative w-full min-w-0">
               <Search size={15} className="absolute left-3 top-3 text-slate-400" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("booking.searchRooms")} className="h-9 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-xs outline-none focus:border-violet-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("booking.searchRooms")} aria-label={t("booking.searchRooms")} className="h-10 w-full rounded-lg border border-slate-200 pl-9 pr-9 text-xs outline-none focus:border-violet-400" />
+              <ClearSearchButton value={query} onClear={() => setQuery("")} label={t("common.clearSearch")} className="h-6 w-6" />
               </div>
-              <select value={roomType} onChange={(event) => setRoomType(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-violet-400">
-                {roomTypeOptions.map((item) => <option key={item}>{item}</option>)}
-              </select>
-              <select value={floor} onChange={(event) => setFloor(event.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-violet-400">
-                {floorOptions.map((item) => <option key={item}>{item}</option>)}
-              </select>
-              <select value={building} onChange={(event) => { setBuilding(event.target.value); setFloor(allFloorsLabel); }} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 outline-none focus:border-violet-400">
-                {buildingOptions.map((item) => <option key={item} value={item}>{item === allBuildingsLabel ? item : item}</option>)}
-              </select>
+              <SearchableFilter value={roomType} options={roomTypeOptions.map((item) => ({ value: item, label: item === allRoomTypesLabel ? localizedText("Tất cả loại phòng", "All room types") : item }))} onChange={setRoomType} searchPlaceholder={localizedText("Tìm loại phòng...", "Search room types...")} emptyMessage={localizedText("Không tìm thấy loại phòng.", "No room types found.")} ariaLabel={localizedText("Lọc theo loại phòng", "Filter by room type")} />
+              <SearchableFilter value={floor} options={floorOptions.map((item) => ({ value: item, label: item === allFloorsLabel ? localizedText("Tất cả các tầng", "All floors") : item }))} onChange={setFloor} searchPlaceholder={localizedText("Tìm tầng...", "Search floors...")} emptyMessage={localizedText("Không tìm thấy tầng.", "No floors found.")} ariaLabel={localizedText("Lọc theo tầng", "Filter by floor")} />
+              <SearchableFilter value={building} options={buildingOptions.map((item) => ({ value: item, label: item === allBuildingsLabel ? localizedText("Tất cả các tòa", "All buildings") : item }))} onChange={(value) => { setBuilding(value); setFloor(allFloorsLabel); }} searchPlaceholder={localizedText("Tìm tòa nhà...", "Search buildings...")} emptyMessage={localizedText("Không tìm thấy tòa nhà.", "No buildings found.")} ariaLabel={localizedText("Lọc theo tòa nhà", "Filter by building")} />
+              {hasRoomFilter && <div className="flex items-center xl:justify-center"><FilterResetButton onClick={() => { setQuery(""); setRoomType(allRoomTypesLabel); setBuilding(allBuildingsLabel); setFloor(allFloorsLabel); }} label={localizedText("Xóa tất cả bộ lọc", "Clear all filters")} /></div>}
             </div>
             <div className="flex w-full flex-wrap items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300 ring-1 ring-slate-200" />{t("booking.unavailable")}</span>
@@ -2192,13 +2214,16 @@ export default function BookingWorkspace() {
             </div>
           </div>
 
-          {isRoomsLoading ? <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách phòng...</p> : isRoomsError ? <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách phòng.</p> : <>
+          {isRoomsLoading ? <p className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">Đang tải danh sách phòng...</p> : isRoomsError ? <p className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-600">Không thể tải danh sách phòng.</p> : <FilterResultStatus filterKey={JSON.stringify([query, roomType, building, floor, showFull, showSelectedRoomsOnly])} className="mt-5 rounded-xl border border-slate-200 bg-slate-50">
+            {visibleRooms.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">{t("booking.noRooms")}</p> : <>
             <DesktopCalendar
               visibleRooms={paginatedVisibleRooms}
               selected={selected}
               setSelected={setSelected}
               checkIn={checkIn}
               checkOut={checkOut}
+              scrollTargetCheckIn={displayedCheckIn}
+              scrollTargetCheckOut={displayedCheckOut}
               setCheckIn={setCheckIn}
               setCheckOut={setCheckOut}
               selectedRanges={selectedRanges}
@@ -2217,49 +2242,16 @@ export default function BookingWorkspace() {
               canChangeRoom={(room) => !initialBooking || canChangeBookingRoom(findBookingDetailForRoom(room))}
               onStartRoomChange={beginRoomReplacement}
             />
-            {visibleRooms.length > 0 && (
-              <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  Hiển thị {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, visibleRooms.length)} trên {visibleRooms.length} phòng
-                </span>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2">
-                    Số dòng
-                    <select
-                      value={pageSize}
-                      onChange={(event) => setPageSize(Number(event.target.value))}
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    disabled={safePage === 1}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang trước"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className="min-w-12 text-center font-semibold text-slate-700">
-                    {safePage} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                    disabled={safePage === totalPages}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Trang sau"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </>}
+            <ListPagination
+              totalItems={visibleRooms.length}
+              page={safePage}
+              pageSize={pageSize}
+              mode="table"
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+            </>}
+          </FilterResultStatus>}
 
           <div className="mt-5 flex flex-col items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
             <div>

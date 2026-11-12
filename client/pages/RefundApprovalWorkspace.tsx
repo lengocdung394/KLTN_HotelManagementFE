@@ -3,18 +3,26 @@ import {
   AlertCircle,
   Banknote,
   Check,
-  Copy,
   ClipboardCheck,
+  Columns3,
   LoaderCircle,
   RefreshCw,
+  RotateCcw,
+  Search,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BankSelectionField from "../components/BankSelectionField";
 import CheckoutRefundApprovalsPanel from "../components/CheckoutRefundApprovalsPanel";
 import DatePickerPopover from "../components/DatePickerPopover";
+import ListPagination from "../components/ListPagination";
+import FilterResultStatus from "../components/FilterResultStatus";
+import SearchableFilter from "../components/SearchableFilter";
 import { localizedText } from "../i18n";
+import { toast } from "@/components/ui/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { useGetSuperAdminBranchDetailsQuery } from "../services/superAdminApi";
 import {
   useApproveBookingRefundMutation,
   useConfirmBookingRefundMutation,
@@ -31,11 +39,29 @@ import {
   type PayOSPayoutState,
 } from "../services/managementBookingApi";
 
+type BranchOption = { id: number; name: string };
+type Props = {
+  branches?: BranchOption[];
+};
+
 type CancellationAction = "approve" | "reject" | "payout" | "manual-confirm" | "bank-details";
 type CancellationFilter = "ALL" | BookingCancellationStatus;
 type BookingChannelFilter = "ALL" | BookingChannel;
 type RefundAccountChoice = "saved" | "alternate";
 type RefundQueue = "overpayment" | "cancellation";
+const CANCELLATION_TABLE_COLUMNS = [
+  { id: "booking", label: ["Mã booking", "Booking ID"], width: 190 },
+  { id: "customer", label: ["Khách hàng", "Guest"], width: 175 },
+  { id: "channel", label: ["Kênh đặt", "Booking channel"], width: 150 },
+  { id: "date", label: ["Ngày yêu cầu", "Request date"], width: 205 },
+  { id: "reason", label: ["Lý do", "Reason"], width: 190 },
+  { id: "account", label: ["Hình thức / tài khoản nhận", "Method / recipient account"], width: 220 },
+  { id: "amount", label: ["Chi tiết hoàn", "Refund details"], width: 210 },
+  { id: "refundedBy", label: ["Người hoàn tiền", "Refunded by"], width: 180 },
+  { id: "status", label: ["Trạng thái", "Status"], width: 240 },
+  { id: "actions", label: ["Thao tác", "Actions"], width: 300 },
+] as const;
+type CancellationTableColumnId = (typeof CANCELLATION_TABLE_COLUMNS)[number]["id"];
 
 const statusLabels: Record<BookingCancellationStatus, [string, string]> = {
   REFUND_BANK_DETAILS_REQUIRED: ["Chờ thông tin ngân hàng", "Awaiting bank details"],
@@ -66,14 +92,18 @@ const payoutStateLabels: Record<PayOSPayoutState, [string, string]> = {
   UNKNOWN: ["PayOS: Trạng thái chưa xác định", "PayOS: Unknown state"],
 };
 
-const money = (value: number | undefined) =>
-  `${new Intl.NumberFormat(localStorage.getItem("language") === "en" ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(value ?? 0))}₫`;
+const money = (value: number | undefined) => {
+  const isEnglish = localStorage.getItem("language") === "en";
+  return `${new Intl.NumberFormat(isEnglish ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(value ?? 0))}${isEnglish ? " VND" : "đ"}`;
+};
 
 const dateTime = (value: string | null | undefined) => {
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString(localStorage.getItem("language") === "en" ? "en-US" : "vi-VN");
 };
+
+const normalizeBookingId = (value: string | null | undefined) => value?.trim().toLocaleUpperCase() ?? "";
 
 const errorMessage = (error: unknown) => {
   if (!error || typeof error !== "object") return localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "Something went wrong. Please try again.");
@@ -95,7 +125,7 @@ const actionTitle: Record<CancellationAction, [string, string]> = {
   approve: ["Duyệt hoàn tiền", "Approve refund"],
   reject: ["Từ chối hoàn tiền", "Reject refund"],
   payout: ["Gửi payout hoàn tiền", "Send refund payout"],
-  "manual-confirm": ["Hoàn tiền thủ công", "Manual bank refund"],
+  "manual-confirm": ["Xác nhận hoàn tiền thủ công", "Confirm manual refund"],
   "bank-details": ["Nhập tài khoản nhận hoàn", "Enter refund recipient account"],
 };
 
@@ -107,13 +137,39 @@ const actionDescription: Record<CancellationAction, [string, string]> = {
   "bank-details": ["Nhập thông tin khách cung cấp. Khách không cần có tài khoản trên website.", "Enter the details provided by the guest. The guest does not need a website account."],
 };
 
-export default function RefundApprovalWorkspace() {
+export default function RefundApprovalWorkspace({ branches }: Props) {
   useTranslation();
   const roles = useAppSelector((state) => state.auth.roles);
   const canApproveRefund = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
+  const [selectedBranchId, setSelectedBranchId] = useState<number | undefined>();
+  const {
+    currentData: branchDetails,
+    isLoading: isBranchBookingsLoading,
+    isError: isBranchBookingsError,
+  } = useGetSuperAdminBranchDetailsQuery(selectedBranchId ?? 0, {
+    skip: selectedBranchId === undefined,
+  });
   const { data: cancellations = [], isLoading, isFetching, isError, error, refetch } =
-    useGetBookingCancellationsQuery();
-  const { data: surplusRefunds = [] } = useGetCheckoutRefundsQuery();
+    useGetBookingCancellationsQuery(selectedBranchId);
+  const { data: surplusRefunds = [] } = useGetCheckoutRefundsQuery(selectedBranchId);
+  const branchBookingIds = useMemo(
+    () => new Set((branchDetails?.bookings ?? [])
+      .map((booking) => normalizeBookingId(booking.bookingId))
+      .filter(Boolean)),
+    [branchDetails],
+  );
+  const branchCancellations = useMemo(
+    () => selectedBranchId === undefined
+      ? cancellations
+      : cancellations.filter((item) => branchBookingIds.has(normalizeBookingId(item.bookingId))),
+    [branchBookingIds, cancellations, selectedBranchId],
+  );
+  const branchSurplusRefunds = useMemo(
+    () => selectedBranchId === undefined
+      ? surplusRefunds
+      : surplusRefunds.filter((item) => branchBookingIds.has(normalizeBookingId(item.bookingId))),
+    [branchBookingIds, selectedBranchId, surplusRefunds],
+  );
   const [approveRefund, { isLoading: isApproving }] = useApproveBookingRefundMutation();
   const [confirmBookingRefund, { isLoading: isConfirmingManualRefund }] = useConfirmBookingRefundMutation();
   const [rejectRefund, { isLoading: isRejecting }] = useRejectBookingRefundMutation();
@@ -122,8 +178,24 @@ export default function RefundApprovalWorkspace() {
   const [submitBankDetails, { isLoading: isSavingBankDetails }] = useSubmitRefundBankDetailsByStaffMutation();
   const [filter, setFilter] = useState<CancellationFilter>("ALL");
   const [channelFilter, setChannelFilter] = useState<BookingChannelFilter>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<CancellationTableColumnId, boolean>>({
+    booking: true,
+    customer: true,
+    channel: true,
+    date: true,
+    reason: true,
+    account: true,
+    amount: true,
+    refundedBy: true,
+    status: true,
+    actions: true,
+  });
   const [activeQueue, setActiveQueue] = useState<RefundQueue>("overpayment");
   const [selectedRequestDate, setSelectedRequestDate] = useState<string | null>(null);
+  const [cancellationPage, setCancellationPage] = useState(1);
+  const [cancellationPageSize, setCancellationPageSize] = useState(10);
   const [activeCancellation, setActiveCancellation] = useState<BookingCancellation | null>(null);
   const [activeAction, setActiveAction] = useState<CancellationAction | null>(null);
   const [actionNote, setActionNote] = useState("");
@@ -141,35 +213,21 @@ export default function RefundApprovalWorkspace() {
   const [refundEmail, setRefundEmail] = useState("");
   const [actionError, setActionError] = useState("");
   const [feedback, setFeedback] = useState("");
-  const [copyError, setCopyError] = useState("");
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  const copyValue = async (value: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedField(field);
-      setCopyError("");
-      window.setTimeout(() => {
-        setCopiedField((current) => current === field ? null : current);
-      }, 1500);
-    } catch {
-      setCopyError(localizedText("Không thể sao chép. Vui lòng kiểm tra quyền clipboard của trình duyệt.", "Could not copy. Check your browser's clipboard permissions."));
-    }
-  };
 
   const counts = useMemo(() => {
-    const reviewPending = cancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length;
-    const needsBankDetails = cancellations.filter((item) => item.status === "REFUND_BANK_DETAILS_REQUIRED").length;
-    const checkoutPending = surplusRefunds.filter((item) => item.status === "PENDING").length;
-    const processing = cancellations.filter((item) => item.status === "REFUND_APPROVED").length
-      + cancellations.filter((item) => item.status === "PAYOUT_PROCESSING").length
-      + surplusRefunds.filter((item) => item.status === "APPROVED").length;
-    const refunded = cancellations.filter((item) => item.status === "REFUNDED").length
-      + surplusRefunds.filter((item) => item.status === "REFUNDED").length;
-    const totalRefunded = cancellations
+    const reviewPending = branchCancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length;
+    const needsBankDetails = branchCancellations.filter((item) => item.status === "REFUND_BANK_DETAILS_REQUIRED").length;
+    const checkoutPending = branchSurplusRefunds.filter((item) => item.status === "PENDING").length;
+    const processing = branchCancellations.filter((item) => item.status === "REFUND_APPROVED").length
+      + branchCancellations.filter((item) => item.status === "PAYOUT_PROCESSING").length
+      + branchSurplusRefunds.filter((item) => item.status === "APPROVED" || item.status === "PAYOUT_PROCESSING").length;
+    const checkoutFailed = branchSurplusRefunds.filter((item) => item.status === "PAYOUT_FAILED").length;
+    const refunded = branchCancellations.filter((item) => item.status === "REFUNDED").length
+      + branchSurplusRefunds.filter((item) => item.status === "REFUNDED").length;
+    const totalRefunded = branchCancellations
       .filter((item) => item.status === "REFUNDED")
       .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0)
-      + surplusRefunds
+      + branchSurplusRefunds
         .filter((item) => item.status === "REFUNDED")
         .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0);
 
@@ -177,15 +235,16 @@ export default function RefundApprovalWorkspace() {
       reviewPending,
       needsBankDetails,
       checkoutPending,
+      checkoutFailed,
       processing,
       refunded,
       totalRefunded,
     };
-  }, [cancellations, surplusRefunds]);
+  }, [branchCancellations, branchSurplusRefunds]);
 
   const refundRequestsByDate = useMemo(() => {
     const requestCounts = new Map<string, number>();
-    cancellations.forEach((item) => {
+    branchCancellations.forEach((item) => {
       if (Number(item.refundAmount) <= 0 || !item.requestedAt) return;
       const date = new Date(item.requestedAt);
       if (Number.isNaN(date.getTime())) return;
@@ -193,17 +252,18 @@ export default function RefundApprovalWorkspace() {
       requestCounts.set(key, (requestCounts.get(key) ?? 0) + 1);
     });
     return requestCounts;
-  }, [cancellations]);
+  }, [branchCancellations]);
   const refundRequestDates = useMemo(() => Array.from(refundRequestsByDate.keys()), [refundRequestsByDate]);
 
   const visibleCancellations = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const byStatus = filter === "ALL"
-      ? cancellations
-      : cancellations.filter((item) => item.status === filter);
+      ? branchCancellations
+      : branchCancellations.filter((item) => item.status === filter);
     const byChannel = channelFilter === "ALL"
       ? byStatus
       : byStatus.filter((item) => item.bookingChannel === channelFilter);
-    const filtered = selectedRequestDate
+    const byDate = selectedRequestDate
       ? byChannel.filter((item) => {
           if (Number(item.refundAmount) <= 0 || !item.requestedAt) return false;
           const date = new Date(item.requestedAt);
@@ -212,13 +272,70 @@ export default function RefundApprovalWorkspace() {
           return key === selectedRequestDate;
         })
       : byChannel;
+    const filtered = normalizedQuery
+      ? byDate.filter((item) => [
+          item.bookingId,
+          item.customerName,
+          item.customerPhone,
+          item.reason,
+        ].some((value) =>
+          (value ?? "").toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(normalizedQuery),
+        ))
+      : byDate;
     return [...filtered].sort((first, second) =>
       new Date(second.requestedAt ?? 0).getTime() - new Date(first.requestedAt ?? 0).getTime(),
     );
-  }, [cancellations, channelFilter, filter, selectedRequestDate]);
+  }, [branchCancellations, channelFilter, filter, searchQuery, selectedRequestDate]);
+  const cancellationTotalPages = Math.max(1, Math.ceil(visibleCancellations.length / cancellationPageSize));
+  const safeCancellationPage = Math.min(cancellationPage, cancellationTotalPages);
+  const paginatedCancellations = visibleCancellations.slice(
+    (safeCancellationPage - 1) * cancellationPageSize,
+    safeCancellationPage * cancellationPageSize,
+  );
+  const hasActiveFilters = Boolean(searchQuery.trim() || filter !== "ALL" || channelFilter !== "ALL" || selectedRequestDate);
+  const shownColumns = CANCELLATION_TABLE_COLUMNS.filter((column) => visibleColumns[column.id]);
+  const isListLoading = isLoading || isFetching || isManuallyRefreshing;
+
+  const refreshOrResetFilters = async () => {
+    if (isListLoading) return;
+    const refreshStartedAt = Date.now();
+    setIsManuallyRefreshing(true);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+    if (hasActiveFilters) {
+      setSearchQuery("");
+      setFilter("ALL");
+      setChannelFilter("ALL");
+      setSelectedRequestDate(null);
+      setCancellationPage(1);
+    }
+    try {
+      await refetch().unwrap();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể tải lại danh sách yêu cầu hoàn tiền", "Could not reload refund requests"),
+      });
+    } finally {
+      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
+      if (remainingLoadingTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
+      }
+      setIsManuallyRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    setCancellationPage(1);
+  }, [filter, channelFilter, searchQuery, selectedRequestDate, selectedBranchId, cancellationPageSize]);
+
+  useEffect(() => {
+    if (cancellationPage > cancellationTotalPages) setCancellationPage(cancellationTotalPages);
+  }, [cancellationPage, cancellationTotalPages]);
 
   const isSubmitting = isApproving || isConfirmingManualRefund || isRejecting || isRequestingPayout || isSavingBankDetails || isLoadingBankDetails;
-  const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending;
+  const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending + counts.checkoutFailed;
 
   const openAction = (cancellation: BookingCancellation, action: CancellationAction) => {
     resetBankDetailsQuery();
@@ -387,7 +504,7 @@ export default function RefundApprovalWorkspace() {
   };
 
   const filters: { value: CancellationFilter; label: string }[] = [
-    { value: "ALL", label: localizedText("Tất cả", "All") },
+    { value: "ALL", label: localizedText("Tất cả trạng thái", "All statuses") },
     { value: "REFUND_REVIEW_PENDING", label: localizedText("Chờ duyệt", "Pending review") },
     { value: "REFUND_BANK_DETAILS_REQUIRED", label: localizedText("Chờ thông tin ngân hàng", "Awaiting bank details") },
     { value: "REFUND_APPROVED", label: localizedText("Chờ chuyển khoản", "Awaiting transfer") },
@@ -400,6 +517,38 @@ export default function RefundApprovalWorkspace() {
 
   return (
     <section className="mt-4 space-y-4">
+      {branches && (
+        <label className="flex w-full max-w-sm flex-col gap-1.5 text-sm font-semibold text-slate-700">
+          {localizedText("Lọc theo chi nhánh", "Filter by branch")}
+          <select
+            value={selectedBranchId ?? ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSelectedBranchId(value ? Number(value) : undefined);
+              setSelectedRequestDate(null);
+            }}
+            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          >
+            <option value="">{localizedText("Tất cả chi nhánh", "All branches")}</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>{branch.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {selectedBranchId !== undefined && isBranchBookingsError && (
+        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {localizedText(
+            "Không thể tải dữ liệu booking của chi nhánh để đối chiếu khoản hoàn tiền. Vui lòng thử lại.",
+            "Could not load this branch's booking records to match refund requests. Please try again.",
+          )}
+        </p>
+      )}
+      {selectedBranchId !== undefined && isBranchBookingsLoading && (
+        <p role="status" className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          {localizedText("Đang tải booking của chi nhánh để lọc khoản hoàn tiền...", "Loading this branch's bookings to filter refund requests...")}
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label={localizedText("Chờ xử lý hoàn tiền", "Refunds pending action")}
@@ -419,7 +568,7 @@ export default function RefundApprovalWorkspace() {
             icon: Banknote,
             title: localizedText("Hoàn tiền sau khi checkout dư", "Checkout surplus refund"),
             description: localizedText("Hoàn khoản thanh toán thừa khi checkout booking", "Refund overpayment after booking checkout"),
-            count: counts.checkoutPending,
+            count: counts.checkoutPending + counts.checkoutFailed,
             tone: "amber",
           },
           {
@@ -470,7 +619,11 @@ export default function RefundApprovalWorkspace() {
       </div>
 
       {activeQueue === "overpayment" ? (
-        <CheckoutRefundApprovalsPanel />
+        <CheckoutRefundApprovalsPanel
+          hotelId={selectedBranchId}
+          bookingIds={selectedBranchId === undefined ? undefined : [...branchBookingIds]}
+          isBranchBookingsReady={selectedBranchId === undefined || (!isBranchBookingsLoading && !isBranchBookingsError)}
+        />
       ) : (
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -483,41 +636,8 @@ export default function RefundApprovalWorkspace() {
               <p className="mt-1 text-sm text-slate-500">
                 {localizedText("Theo dõi và duyệt khoản hoàn khi booking bị hủy; đây không phải khoản hoàn do hủy riêng một phòng.", "Review refunds when a booking is canceled; this does not cover cancellation of an individual room.")}
               </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  {localizedText("Ngày có yêu cầu", "Request dates")}
-                </span>
-                <DatePickerPopover
-                  value={selectedRequestDate ? new Date(`${selectedRequestDate}T00:00:00`) : undefined}
-                  onChange={(date) => setSelectedRequestDate(date
-                    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
-                    : null)}
-                  highlightDates={refundRequestDates}
-                  placeholder={localizedText("Chọn ngày", "Select date")}
-                  label={localizedText("Lịch yêu cầu", "Request calendar")}
-                />
-                {selectedRequestDate && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRequestDate(null)}
-                    className="rounded-lg px-2 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                  >
-                    {localizedText("Tất cả ngày", "All dates")}
-                  </button>
-                )}
-              </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            disabled={isFetching}
-            className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
-            {localizedText("Làm mới", "Refresh")}
-          </button>
         </div>
 
         {feedback && (
@@ -528,57 +648,133 @@ export default function RefundApprovalWorkspace() {
             </button>
           </div>
         )}
-        {copyError && (
-          <p role="alert" className="mx-5 mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            {copyError}
-          </p>
-        )}
-
-        <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-5 py-3">
-          {filters.map((item) => (
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3 xl:flex-nowrap">
+          <label className="relative min-w-[220px] flex-1">
+            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={localizedText("Tìm mã booking, khách hàng...", "Search booking ID or guest...")}
+              aria-label={localizedText("Tìm mã booking hoặc khách hàng", "Search booking ID or guest")}
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          <SearchableFilter
+              value={filter}
+              options={filters.map((item) => ({
+                value: item.value,
+                label: item.value === "REFUND_REVIEW_PENDING" && counts.reviewPending > 0
+                  ? `${item.label} (${counts.reviewPending})`
+                  : item.label,
+              }))}
+              onChange={(value) => setFilter(value as CancellationFilter)}
+              ariaLabel={localizedText("Lọc theo trạng thái hoàn tiền", "Filter by refund status")}
+              searchPlaceholder={localizedText("Tìm trạng thái...", "Search statuses...")}
+              emptyMessage={localizedText("Không tìm thấy trạng thái.", "No statuses found.")}
+              className="w-56"
+          />
+          <SearchableFilter
+            value={channelFilter}
+            options={[
+              { value: "ALL", label: localizedText("Tất cả kênh", "All channels") },
+              { value: "ONLINE", label: localizedText("Online", "Online") },
+              { value: "OFFLINE", label: localizedText("Tại quầy / Offline", "Front desk / Offline") },
+            ]}
+            onChange={(value) => setChannelFilter(value as BookingChannelFilter)}
+            ariaLabel={localizedText("Lọc theo kênh đặt", "Filter by booking channel")}
+            searchPlaceholder={localizedText("Tìm kênh đặt...", "Search booking channels...")}
+            emptyMessage={localizedText("Không tìm thấy kênh đặt.", "No booking channels found.")}
+            className="w-52"
+          />
+          <DatePickerPopover
+            value={selectedRequestDate ? new Date(`${selectedRequestDate}T00:00:00`) : undefined}
+            onChange={(date) => setSelectedRequestDate(date
+              ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+              : null)}
+            highlightDates={refundRequestDates}
+            placeholder={localizedText("Tất cả phạm vi", "All date ranges")}
+            buttonClassName="flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:text-blue-600"
+          />
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={localizedText("Tùy chỉnh cột", "Customize columns")}
+                  className="flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <Columns3 size={16} />
+                  {localizedText("Cột", "Columns")}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-60 p-2">
+                <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {localizedText("Hiển thị cột", "Show columns")}
+                </p>
+                {CANCELLATION_TABLE_COLUMNS.map((column) => {
+                  const isLastVisibleColumn = shownColumns.length === 1 && visibleColumns[column.id];
+                  return (
+                    <label key={column.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns[column.id]}
+                        disabled={isLastVisibleColumn}
+                        onChange={(event) => {
+                          setVisibleColumns((current) => ({ ...current, [column.id]: event.target.checked }));
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                      />
+                      {localizedText(column.label[0], column.label[1])}
+                    </label>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setVisibleColumns({
+                    booking: true,
+                    customer: true,
+                    channel: true,
+                    date: true,
+                    reason: true,
+                    account: true,
+                    amount: true,
+                    refundedBy: true,
+                    status: true,
+                    actions: true,
+                  })}
+                  className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+                >
+                  {localizedText("Hiện tất cả cột", "Show all columns")}
+                </button>
+              </PopoverContent>
+            </Popover>
             <button
-              key={item.value}
               type="button"
-              onClick={() => setFilter(item.value)}
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                filter === item.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+              onClick={() => void refreshOrResetFilters()}
+              disabled={isListLoading}
+              aria-label={hasActiveFilters
+                ? localizedText("Xóa bộ lọc", "Reset filters")
+                : localizedText("Tải lại danh sách yêu cầu hoàn tiền", "Reload refund requests")}
+              title={hasActiveFilters
+                ? localizedText("Xóa bộ lọc", "Reset filters")
+                : localizedText("Tải lại danh sách yêu cầu hoàn tiền", "Reload refund requests")}
+              aria-busy={isListLoading}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
             >
-              {item.label}
-              {item.value === "REFUND_REVIEW_PENDING" && counts.reviewPending > 0 && (
-                <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5">{counts.reviewPending}</span>
-              )}
+              {isListLoading
+                ? <RefreshCw size={16} className="animate-spin" />
+                : hasActiveFilters
+                ? <RotateCcw size={15} />
+                : <RefreshCw size={16} />}
             </button>
-          ))}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <span className="mr-1 text-xs font-semibold text-slate-500">{localizedText("Kênh đặt:", "Booking channel:")}</span>
-          {([
-            ["ALL", localizedText("Tất cả", "All")],
-            ["ONLINE", localizedText("Online", "Online")],
-            ["OFFLINE", localizedText("Tại quầy / Offline", "Front desk / Offline")],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setChannelFilter(value)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                channelFilter === value
-                  ? "bg-violet-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center gap-2 p-12 text-sm text-slate-500">
-            <LoaderCircle size={18} className="animate-spin" /> {localizedText("Đang tải yêu cầu hoàn tiền...", "Loading refund requests...")}
+        {isListLoading ? (
+          <div role="status" aria-live="polite" className="mx-5 my-4 flex min-h-48 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-8 text-sm text-blue-700">
+            <RefreshCw size={17} className="animate-spin" />
+            <span>{localizedText("Đang tải yêu cầu hoàn tiền...", "Loading refund requests...")}</span>
           </div>
         ) : isError ? (
           <div className="p-8 text-center">
@@ -594,63 +790,63 @@ export default function RefundApprovalWorkspace() {
             </button>
           </div>
         ) : visibleCancellations.length === 0 ? (
-          <div className="p-12 text-center">
+          <FilterResultStatus filterKey={JSON.stringify([filter, channelFilter, selectedRequestDate, searchQuery])}><div className="p-12 text-center">
             <ClipboardCheck size={28} className="mx-auto text-slate-300" />
             <p className="mt-3 text-sm font-semibold text-slate-700">
-              {selectedRequestDate
-                ? localizedText("Không có yêu cầu hoàn tiền phù hợp trong ngày đã chọn", "No refund requests match the selected date")
+              {selectedRequestDate || channelFilter !== "ALL" || searchQuery.trim()
+                ? localizedText("Không có yêu cầu phù hợp với bộ lọc", "No requests match these filters")
                 : filter === "ALL" ? localizedText("Chưa có yêu cầu hủy cần xử lý", "There are no cancellation requests to review") : localizedText("Không có yêu cầu ở trạng thái này", "No requests in this status")}
             </p>
             <p className="mt-1 text-xs text-slate-500">
               {localizedText("Yêu cầu hoàn tiền có thể cần tải lại sau khi nhân viên hủy booking.", "Refresh after a staff member cancels a booking to see new refund requests.")}
             </p>
-          </div>
+          </div></FilterResultStatus>
         ) : (
-          <div className="max-w-full overflow-x-auto">
-            <table className="w-[max(900px,100%)] table-fixed text-left text-sm">
+          <>
+            <div className="max-w-full overflow-x-auto">
+              <table className="table-fixed text-left text-sm" style={{ width: `max(100%, ${shownColumns.reduce((width, column) => width + column.width, 0)}px)` }}>
+              <colgroup>
+                {shownColumns.map((column) => <col key={column.id} style={{ width: `${column.width}px` }} />)}
+              </colgroup>
               <thead className="bg-blue-50 text-[11px] uppercase tracking-wide text-blue-800">
                 <tr>
-                  <th className="w-[23%] px-3 py-3">{localizedText("Booking / khách", "Booking / guest")}</th>
-                  <th className="w-[13%] px-3 py-3">{localizedText("Ngày yêu cầu", "Request date")}</th>
-                  <th className="w-[21%] px-3 py-3">{localizedText("Tài khoản nhận", "Recipient account")}</th>
-                  <th className="w-[18%] px-3 py-3">{localizedText("Chi tiết hoàn", "Refund details")}</th>
-                  <th className="w-[25%] px-3 py-3">{localizedText("Trạng thái / thao tác", "Status / actions")}</th>
+                  {shownColumns.map((column) => <th key={column.id} className="px-3 py-3">{localizedText(column.label[0], column.label[1])}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleCancellations.map((cancellation) => (
+                {paginatedCancellations.map((cancellation) => (
                   <tr key={cancellation.id} className="align-top transition-colors hover:bg-slate-50/70">
-                    <td className="px-3 py-4">
-                      <p className="break-words font-semibold text-blue-700">{cancellation.bookingId}</p>
-                      {cancellation.bookingChannel && (
-                          <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            cancellation.bookingChannel === "ONLINE" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700"
-                          }`}>
-                            {cancellation.bookingChannel === "ONLINE" ? "Online" : localizedText("Tại quầy", "Front desk")}
-                          </span>
-                      )}
-                      <div className="mt-2 flex min-w-0 items-center gap-1">
-                        <p className="truncate font-medium text-slate-800">{cancellation.customerName || localizedText("Khách hàng", "Guest")}</p>
-                        {cancellation.customerName && (
-                          <CopyValueButton
-                            label={localizedText("tên khách hàng", "guest name")}
-                            value={cancellation.customerName}
-                            copied={copiedField === `${cancellation.id}:customer`}
-                            onCopy={() => void copyValue(cancellation.customerName!, `${cancellation.id}:customer`)}
-                          />
-                        )}
-                      </div>
+                    {visibleColumns.booking && <td className="px-3 py-4">
+                      <p className="whitespace-nowrap font-semibold text-blue-700">{cancellation.bookingId}</p>
+                    </td>}
+                    {visibleColumns.customer && <td className="px-3 py-4">
+                      <p className="whitespace-nowrap font-medium text-slate-800">{cancellation.customerName || localizedText("Khách hàng", "Guest")}</p>
                       {cancellation.customerPhone && (
-                        <p className="mt-0.5 text-xs text-slate-500">{cancellation.customerPhone}</p>
+                        <p className="mt-0.5 whitespace-nowrap text-xs text-slate-500">{cancellation.customerPhone}</p>
                       )}
-                      {cancellation.reason && (
-                        <p className="mt-2 line-clamp-2 text-xs leading-4 text-slate-500" title={cancellation.reason}>
-                          {localizedText("Lý do:", "Reason:")} {cancellation.reason}
+                    </td>}
+                    {visibleColumns.channel && <td className="px-3 py-4">
+                      {cancellation.bookingChannel ? (
+                        <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${
+                          cancellation.bookingChannel === "ONLINE" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700"
+                        }`}>
+                          {cancellation.bookingChannel === "ONLINE" ? "Online" : localizedText("Tại quầy", "Front desk")}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>}
+                    {visibleColumns.date && <td className="whitespace-nowrap px-3 py-4 text-xs leading-5 text-slate-600">{dateTime(cancellation.requestedAt)}</td>}
+                    {visibleColumns.reason && <td className="px-3 py-4">
+                      {cancellation.reason ? (
+                        <p className="line-clamp-3 break-words text-xs leading-4 text-slate-600" title={cancellation.reason}>
+                          {cancellation.reason}
                         </p>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
                       )}
-                    </td>
-                    <td className="px-3 py-4 text-xs leading-5 text-slate-600">{dateTime(cancellation.requestedAt)}</td>
-                    <td className="px-3 py-4">
+                    </td>}
+                    {visibleColumns.account && <td className="px-3 py-4">
                       {cancellation.refundMethod === "CASH" ? (
                         <span className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-2 text-xs font-semibold text-emerald-700">
                           {localizedText("Hoàn tiền mặt tại khách sạn", "Cash refund at hotel")}
@@ -691,8 +887,8 @@ export default function RefundApprovalWorkspace() {
                             : localizedText("Chưa có thông tin ngân hàng", "Bank details not provided")}
                         </span>
                       )}
-                    </td>
-                    <td className="px-3 py-4">
+                    </td>}
+                    {visibleColumns.amount && <td className="px-3 py-4">
                       <p className="text-base font-bold tabular-nums text-slate-900">{money(cancellation.refundAmount)}</p>
                       <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">{localizedText("Tổng tiền hoàn", "Total refund")}</p>
                       {Number(cancellation.refundAmount ?? 0) > 0 ? (
@@ -719,15 +915,18 @@ export default function RefundApprovalWorkspace() {
                           <span className="whitespace-nowrap tabular-nums text-rose-600">{money(cancellation.roomPenaltyAmount)}</span>
                         </div>
                       )}
-                    </td>
-                    <td className="px-3 py-4">
-                      <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
+                    </td>}
+                    {visibleColumns.refundedBy && <td className="px-3 py-4 text-slate-700">
+                      {cancellation.status === "REFUNDED" ? cancellation.refundedBy || "—" : "—"}
+                    </td>}
+                    {visibleColumns.status && <td className="px-4 py-4">
+                      <span className={`inline-flex max-w-full whitespace-normal break-words rounded-full border px-3 py-2 text-xs font-semibold ${statusStyles[cancellation.status]}`}>
                         {cancellation.status === "NO_REFUND_REQUIRED"
                           ? localizedText("Không hoàn", "No refund")
                           : localizedText(...statusLabels[cancellation.status])}
                       </span>
                       {cancellation.payoutState && (
-                        <span className="mt-1 inline-flex max-w-full whitespace-normal break-words rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                        <span className="mt-1 inline-flex max-w-full whitespace-normal break-words rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600">
                           {localizedText(...payoutStateLabels[cancellation.payoutState])}
                         </span>
                       )}
@@ -748,20 +947,22 @@ export default function RefundApprovalWorkspace() {
                           {cancellation.payoutError}
                         </p>
                       )}
-                      <div className="mt-3 flex flex-col items-start gap-2">
+                    </td>}
+                    {visibleColumns.actions && <td className="border-l border-slate-200 px-4 py-4">
+                      <div className="flex min-w-0 flex-col items-start gap-2">
                         {canApproveRefund && cancellation.status === "REFUND_REVIEW_PENDING" && (
                           <>
                             <button
                               type="button"
                               onClick={() => openAction(cancellation, "approve")}
-                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                              className="inline-flex max-w-full items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-700"
                             >
                               <Check size={14} /> {localizedText("Duyệt", "Approve")}
                             </button>
                             <button
                               type="button"
                               onClick={() => openAction(cancellation, "reject")}
-                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                              className="inline-flex max-w-full items-center gap-1 rounded-lg border border-rose-200 px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50"
                             >
                               <X size={14} /> {localizedText("Từ chối", "Reject")}
                             </button>
@@ -772,9 +973,9 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "manual-confirm")}
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                            className="inline-flex max-w-full items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-emerald-700"
                           >
-                            <Check size={14} /> {localizedText("Xác nhận đã chuyển khoản", "Confirm transfer")}
+                            <Check size={14} /> {localizedText("Xác nhận hoàn tiền thủ công", "Confirm manual refund")}
                           </button>
                         )}
                         {canApproveRefund && cancellation.status === "REFUND_APPROVED"
@@ -782,7 +983,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "manual-confirm")}
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            className="inline-flex max-w-full items-center gap-1 rounded-lg border border-emerald-300 px-3 py-2 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
                           >
                             <Banknote size={14} /> {localizedText("Hoàn thủ công", "Manual refund")}
                           </button>
@@ -793,7 +994,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "payout")}
-                            className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                            className="inline-flex max-w-full items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-blue-700"
                           >
                             <Banknote size={14} />
                             {cancellation.status === "PAYOUT_PROCESSING"
@@ -806,7 +1007,7 @@ export default function RefundApprovalWorkspace() {
                           <button
                             type="button"
                             onClick={() => openAction(cancellation, "bank-details")}
-                            className="inline-flex whitespace-nowrap rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                            className="inline-flex max-w-full rounded-lg border border-amber-300 px-3 py-2 text-left text-xs font-semibold text-amber-800 hover:bg-amber-50"
                           >
                             {cancellation.status === "PAYOUT_FAILED"
                               ? localizedText("Cập nhật tài khoản để thử lại", "Update account to retry")
@@ -823,12 +1024,21 @@ export default function RefundApprovalWorkspace() {
                           </p>
                         )}
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+            <ListPagination
+              totalItems={visibleCancellations.length}
+              page={safeCancellationPage}
+              pageSize={cancellationPageSize}
+              mode="table"
+              onPageChange={setCancellationPage}
+              onPageSizeChange={setCancellationPageSize}
+            />
+          </>
         )}
       </div>
       )}
@@ -862,17 +1072,7 @@ export default function RefundApprovalWorkspace() {
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-500">{localizedText("Khách hàng", "Guest")}</span>
-                <div className="flex items-center gap-1.5 text-right font-semibold text-slate-800">
-                  <span>{activeCancellation.customerName || "—"}</span>
-                  {activeCancellation.customerName && (
-                    <CopyValueButton
-                      label={localizedText("tên khách hàng", "guest name")}
-                      value={activeCancellation.customerName}
-                      copied={copiedField === `${activeCancellation.id}:customer`}
-                      onCopy={() => void copyValue(activeCancellation.customerName!, `${activeCancellation.id}:customer`)}
-                    />
-                  )}
-                </div>
+                <span className="text-right font-semibold text-slate-800">{activeCancellation.customerName || "—"}</span>
               </div>
               <div className="mt-2 flex justify-between gap-3">
                 <span className="text-slate-500">{localizedText("Số tiền hoàn", "Refund amount")}</span>
@@ -935,12 +1135,11 @@ export default function RefundApprovalWorkspace() {
                       <dd className="font-bold text-blue-700">{money(activeCancellation.refundAmount)}</dd>
                     </div>
                   </dl>
-                  <p className="mt-3 text-xs leading-5 text-slate-600">
-                    {localizedText("Chính sách:", "Policy:")} {activeCancellation.refundPolicy || localizedText("Không có thông tin", "Not available")}
-                    {typeof activeCancellation.hoursBeforeCheckIn === "number"
-                      ? localizedText(` · Yêu cầu trước giờ nhận phòng ${activeCancellation.hoursBeforeCheckIn} giờ`, ` · Requested ${activeCancellation.hoursBeforeCheckIn} hours before check-in`)
-                      : ""}
-                  </p>
+                  {typeof activeCancellation.hoursBeforeCheckIn === "number" && (
+                    <p className="mt-3 text-xs leading-5 text-slate-600">
+                      {localizedText(`Yêu cầu trước giờ nhận phòng ${activeCancellation.hoursBeforeCheckIn} giờ`, `Requested ${activeCancellation.hoursBeforeCheckIn} hours before check-in`)}
+                    </p>
+                  )}
                   <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
                     <input
                       type="checkbox"
@@ -1186,31 +1385,6 @@ export default function RefundApprovalWorkspace() {
         </div>
       )}
     </section>
-  );
-}
-
-function CopyValueButton({
-  label,
-  value,
-  copied,
-  onCopy,
-}: {
-  label: string;
-  value?: string;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onCopy}
-      aria-label={copied ? `${localizedText("Đã sao chép", "Copied")} ${label}` : `${localizedText("Sao chép", "Copy")} ${label}`}
-      title={copied ? localizedText("Đã sao chép", "Copied") : `${localizedText("Sao chép", "Copy")} ${label}`}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50"
-    >
-      {copied ? <Check size={12} /> : <Copy size={12} />}
-      {copied ? localizedText("Đã copy", "Copied") : "Copy"}
-    </button>
   );
 }
 

@@ -110,6 +110,15 @@ const dispatchToSubscribers = (key: keyof HandlerMap, data: unknown) => {
 
 let superAdminSocketHandlers: SuperAdminSocketHandlers = {};
 let superAdminRoomRequested = false;
+type RefundRefreshSocketEvent =
+  | "room_update"
+  | "booking_state_updated"
+  | "new_booking_notification"
+  | "notification_created";
+const hotelSocketEventSubscribers = new Map<
+  RefundRefreshSocketEvent,
+  Set<(data: unknown) => void>
+>();
 const roomPolicyUpdatedSubscribers = new Set<(data: unknown) => void>();
 const dispatchRoomPolicyUpdated = (data: unknown) => {
   roomPolicyUpdatedSubscribers.forEach((handler) => handler(data));
@@ -244,6 +253,24 @@ const attachSuperAdminSocketHandlers = () => {
   });
 };
 
+export const subscribeHotelSocketEvents = (
+  events: readonly RefundRefreshSocketEvent[],
+  handler: (data: unknown) => void,
+) => {
+  events.forEach((event) => {
+    const subscribers = hotelSocketEventSubscribers.get(event) ?? new Set();
+    subscribers.add(handler);
+    hotelSocketEventSubscribers.set(event, subscribers);
+    socket?.on(event, handler);
+  });
+  return () => events.forEach((event) => {
+    socket?.off(event, handler);
+    const subscribers = hotelSocketEventSubscribers.get(event);
+    subscribers?.delete(handler);
+    if (subscribers?.size === 0) hotelSocketEventSubscribers.delete(event);
+  });
+};
+
 export const bindSuperAdminSocketEvents = (handlers: SuperAdminSocketHandlers) => {
   const previousHandlers = superAdminSocketHandlers;
   if (socket) {
@@ -331,6 +358,10 @@ export const initSocket = (token: string | null) => {
     reconnectionAttempts: 5,
   });
 
+  hotelSocketEventSubscribers.forEach((handlers, event) => {
+    handlers.forEach((handler) => socket?.on(event, handler));
+  });
+
   if (import.meta.env.DEV) {
     socket.onAny((eventName) => {
       console.debug("📨 [Socket] incoming event:", eventName);
@@ -386,6 +417,14 @@ export const initSocket = (token: string | null) => {
     } catch (e) {}
     dispatchToSubscribers("onRoomPolicyUpdated", data);
     dispatchRoomPolicyUpdated(data);
+  });
+
+  socket.on("amenity_catalog_updated", () => {
+    try {
+      store.dispatch(baseApi.util.invalidateTags(["Amenity", "Room", "Booking"]));
+    } catch (error) {
+      console.error("Could not refresh room prices after amenity update:", error);
+    }
   });
 
   socket.on("new_booking_notification", (data) => {

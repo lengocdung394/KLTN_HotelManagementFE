@@ -77,6 +77,12 @@ const dayLabels = [
 ] as const;
 const staffRoles = ["Lễ tân", "Buồng phòng", "Bảo vệ"] as const;
 type StaffRole = (typeof staffRoles)[number];
+type CoverageFocus = {
+  code: Exclude<ShiftCode, "">;
+  role: StaffRole;
+  dayIndex: number;
+  weekStart: string;
+};
 const taskByRole: Record<StaffRole, string> = {
   "Lễ tân": "Trực quầy lễ tân",
   "Buồng phòng": "Dọn phòng",
@@ -261,6 +267,9 @@ export default function WeeklyShiftPrototype() {
   const initialWeekStart = useMemo(() => dateKey(mondayOf(new Date())), []);
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedTool, setSelectedTool] = useState<ShiftTool>("M");
+  const [coverageFocus, setCoverageFocus] = useState<CoverageFocus | null>(
+    null,
+  );
   const [copyCellSource, setCopyCellSource] = useState<{
     employeeId: string;
     workDate: string;
@@ -374,6 +383,35 @@ export default function WeeklyShiftPrototype() {
       ),
     0,
   );
+  const focusCoverage = (
+    code: Exclude<ShiftCode, "">,
+    role: StaffRole,
+    dayIndex: number,
+  ) => {
+    if (
+      coverageFocus?.weekStart === weekStart &&
+      coverageFocus.code === code &&
+      coverageFocus.role === role &&
+      coverageFocus.dayIndex === dayIndex
+    ) {
+      setCoverageFocus(null);
+      return;
+    }
+
+    setCoverageFocus({ code, role, dayIndex, weekStart });
+    const employeeIndex = employees.findIndex(
+      (employee) => employeeShiftRole(employee.position) === role,
+    );
+    const targetId =
+      employeeIndex >= 0
+        ? `weekly-shift-cell-${employeeIndex}-${dayIndex}`
+        : "weekly-shift-assignment-grid";
+    document.getElementById(targetId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "center",
+    });
+  };
   const saveGrid = (nextGrid: ShiftCode[][]) => {
     setGridsByWeek((current) => ({ ...current, [weekKey]: nextGrid }));
     setDirtyWeeks((current) => ({ ...current, [weekKey]: true }));
@@ -1006,10 +1044,50 @@ export default function WeeklyShiftPrototype() {
         </article>
       </div>
 
-      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_176px]">
-        <section className="order-2 min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 xl:order-1">
+      <div className="sticky top-16 z-30 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-md backdrop-blur">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h3 className="font-bold text-slate-900">
+              {localizedText("Chọn màu ca", "Shift colors")}
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {copyCellSource
+                ? localizedText(
+                    "Đã sao chép trạng thái ô. Chọn ô đích; bấm màu để hủy sao chép.",
+                    "Cell state copied. Choose a target; click a color to cancel.",
+                  )
+                : localizedText(
+                    "Bấm ô đã xếp ca để sao chép trạng thái; chọn màu để xếp ca mới.",
+                    "Click an assigned cell to copy its state; choose a color to assign a new shift.",
+                  )}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {toolOptions.map((option) => (
+              <button
+                type="button"
+                key={option.code}
+                onClick={() => {
+                  setSelectedTool(option.code);
+                  setCopyCellSource(null);
+                }}
+                aria-pressed={!copyCellSource && selectedTool === option.code}
+                className={`flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-left transition ${!copyCellSource && selectedTool === option.code ? "border-blue-600 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+              >
+                <span className={`h-5 w-5 shrink-0 rounded-md border ${option.swatch}`} />
+                <span className="text-xs font-semibold text-slate-800">{option.label}</span>
+                <span className="text-[11px] text-slate-500">{option.detail}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <section className="min-w-0 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
           <div className="min-w-[700px] space-y-2 xl:min-w-0">
-            <div className="grid grid-cols-[170px_repeat(7,minmax(0,1fr))_68px] items-stretch gap-1">
+            <div
+              id="weekly-shift-assignment-grid"
+              className="grid grid-cols-[170px_repeat(7,minmax(0,1fr))_68px] items-stretch gap-1"
+            >
               <div className="flex items-end px-2 pb-2 text-xs font-semibold text-slate-500">
                 {localizedText("Nhân viên", "Employee")}
               </div>
@@ -1076,6 +1154,7 @@ export default function WeeklyShiftPrototype() {
                         <button
                           type="button"
                           key={`${employee.id}-${dayIndex}`}
+                          id={`weekly-shift-cell-${employeeIndex}-${dayIndex}`}
                           onClick={() => assignShift(employeeIndex, dayIndex)}
                           disabled={
                             (dateKey(dates[dayIndex]) <= todayKey &&
@@ -1087,7 +1166,7 @@ export default function WeeklyShiftPrototype() {
                             isClearing
                           }
                           aria-label={`${employee.fullName}, ${localizedText(dayLabels[dayIndex][0], dayLabels[dayIndex][1])} ${formatDate(dates[dayIndex])}: ${shift?.label ?? localizedText("Chưa xếp ca", "Unassigned")}${copyCellSource ? localizedText(" · chọn làm ô đích", " · select as target") : shift ? localizedText(" · bấm để sao chép ca", " · click to copy shift") : ""}`}
-                          className={`flex min-h-[58px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-2 text-center transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-70 ${copyCellSource?.employeeId === employee.id && copyCellSource.workDate === dateKey(dates[dayIndex]) ? "ring-2 ring-violet-500 ring-offset-1" : ""} ${shift ? shift.classes : "border-dashed border-slate-300 bg-white text-slate-500"}`}
+                          className={`flex min-h-[58px] flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-2 text-center transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-70 ${copyCellSource?.employeeId === employee.id && copyCellSource.workDate === dateKey(dates[dayIndex]) ? "ring-2 ring-violet-500 ring-offset-1" : coverageFocus?.weekStart === weekStart && coverageFocus.role === role && coverageFocus.dayIndex === dayIndex ? "ring-2 ring-amber-500 ring-offset-1" : ""} ${shift ? shift.classes : "border-dashed border-slate-300 bg-white text-slate-500"}`}
                         >
                           <span className="text-xs font-bold">
                             {shift?.shortLabel ?? "+"}
@@ -1150,9 +1229,21 @@ export default function WeeklyShiftPrototype() {
                 {counts.map((count, dayIndex) => {
                   const missing = required - count;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={`${code}-${dayIndex}`}
-                      className={`flex min-h-12 flex-col items-center justify-center rounded-lg border ${missing > 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}
+                      onClick={() => focusCoverage(code, role, dayIndex)}
+                      aria-pressed={
+                        coverageFocus?.weekStart === weekStart &&
+                        coverageFocus.code === code &&
+                        coverageFocus.role === role &&
+                        coverageFocus.dayIndex === dayIndex
+                      }
+                      aria-label={localizedText(
+                        `${localizedShift(code)} · ${localizedRole(role)} · ${dayLabels[dayIndex][0]} ${formatDate(dates[dayIndex])}: ${count}/${required} người`,
+                        `${localizedShift(code)} · ${localizedRole(role)} · ${dayLabels[dayIndex][1]} ${formatDate(dates[dayIndex])}: ${count}/${required} employees`,
+                      )}
+                      className={`flex min-h-12 flex-col items-center justify-center rounded-lg border transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${coverageFocus?.weekStart === weekStart && coverageFocus.code === code && coverageFocus.role === role && coverageFocus.dayIndex === dayIndex ? "ring-2 ring-amber-500 ring-offset-1" : ""} ${missing > 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}
                     >
                       <span className="text-xs font-bold">
                         {count} / {required}
@@ -1165,59 +1256,14 @@ export default function WeeklyShiftPrototype() {
                             )
                           : localizedText("Đủ người", "Fully staffed")}
                       </span>
-                    </div>
+                    </button>
                   );
                 })}
                 <span />
               </div>
             ))}
           </div>
-        </section>
-        <aside className="order-1 space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm xl:sticky xl:top-4 xl:order-2">
-          <div>
-            <h3 className="font-bold text-slate-900">
-              {localizedText("Chọn màu ca", "Shift colors")}
-            </h3>
-            <p className="mt-1 text-xs text-slate-500">
-              {copyCellSource
-                ? localizedText(
-                    "Đã sao chép trạng thái ô. Chọn ô đích; bấm màu để hủy sao chép.",
-                    "Cell state copied. Choose a target; click a color to cancel.",
-                  )
-                : localizedText(
-                    "Bấm ô đã xếp ca để sao chép trạng thái; chọn màu để xếp ca mới.",
-                    "Click an assigned cell to copy its state; choose a color to assign a new shift.",
-                  )}
-            </p>
-          </div>
-          <div className="grid gap-2">
-            {toolOptions.map((option) => (
-              <button
-                type="button"
-                key={option.code}
-                onClick={() => {
-                  setSelectedTool(option.code);
-                  setCopyCellSource(null);
-                }}
-                aria-pressed={!copyCellSource && selectedTool === option.code}
-                className={`flex min-h-12 items-center gap-2 rounded-lg border px-3 py-2 text-left transition ${!copyCellSource && selectedTool === option.code ? "border-blue-600 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-              >
-                <span
-                  className={`h-5 w-5 shrink-0 rounded-md border ${option.swatch}`}
-                />
-                <span>
-                  <span className="block text-xs font-semibold text-slate-800">
-                    {option.label}
-                  </span>
-                  <span className="block text-[11px] text-slate-500">
-                    {option.detail}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </aside>
-      </div>
+      </section>
 
       <footer className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
         <span

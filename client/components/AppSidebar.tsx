@@ -22,6 +22,13 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
 import { isEmployeePortalUser } from "../lib/employeeRoles";
+import { localizedText } from "../i18n";
+import { useGetHotelHousekeepingTasksQuery } from "../services/shiftApi";
+import { useGetCheckInOutSummaryQuery } from "../services/checkInOutApi";
+import {
+  useGetBookingCancellationsQuery,
+  useGetCheckoutRefundsQuery,
+} from "../services/managementBookingApi";
 import UserProfileCard from "./UserProfileCard";
 
 type AppSidebarProps = {
@@ -40,15 +47,28 @@ const items = [
   ["/customers", "customers", UserRound],
   ["/rooms", "rooms", DoorOpen],
   ["/invoices", "invoices", WalletCards],
+  ["/reports", "reports", FileText],
   ["/promotions", "promotions", Tag],
   ["/services", "services", ConciergeBell],
 ] as const;
 const adminItems = [
   ["/staff", "staff", Users],
   ["/permissions", "permissions", ShieldCheck],
-  ["/reports", "reports", FileText],
   ["/settings", "settings", Settings],
 ] as const;
+const sidebarOrder: Record<string, string> = {
+  "/overview": "order-1",
+  "/bookings": "order-2",
+  "/check-in-out": "order-3",
+  "/rooms": "order-4",
+  "/services": "order-5",
+  "/customers": "order-6",
+  "/invoices": "order-7",
+  "/refund-approvals": "order-8",
+  "/reports": "order-9",
+  "/promotions": "order-10",
+  "/hotel-rules": "order-11",
+};
 
 export default function AppSidebar({
   mobile,
@@ -60,8 +80,39 @@ export default function AppSidebar({
   onToggleCollapse,
 }: AppSidebarProps) {
   const { t } = useTranslation();
-  const { hotelName, roles } = useAppSelector((state) => state.auth);
+  const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
   const isEmployee = isEmployeePortalUser(roles);
+  const canManageHousekeepingTasks = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_ADMIN");
+  const canViewHousekeepingTasks = canManageHousekeepingTasks || isEmployee;
+  const today = new Date();
+  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const { data: checkInOutSummary } = useGetCheckInOutSummaryQuery(
+    { date: todayDate },
+    { skip: !hotelId, pollingInterval: 30000 },
+  );
+  const pendingCheckInOutCount =
+    (checkInOutSummary?.waitingCheckIn ?? 0) + (checkInOutSummary?.waitingCheckOut ?? 0);
+  const { data: housekeepingTasks = [] } = useGetHotelHousekeepingTasksQuery(undefined, {
+    skip: !canViewHousekeepingTasks,
+    pollingInterval: 30000,
+  });
+  const pendingHousekeepingTaskCount = housekeepingTasks.filter((task) => task.status === "NEEDS_ASSIGNMENT").length;
+  const canApproveRefunds = roles.includes("ROLE_MANAGER")
+    || roles.includes("ROLE_SUPER_ADMIN")
+    || roles.includes("ROLE_ADMIN");
+  const { data: bookingCancellations = [] } = useGetBookingCancellationsQuery(undefined, {
+    skip: !canApproveRefunds,
+    pollingInterval: 30000,
+  });
+  const { data: checkoutRefunds = [] } = useGetCheckoutRefundsQuery(undefined, {
+    skip: !canApproveRefunds,
+    pollingInterval: 30000,
+  });
+  const pendingRefundApprovalCount =
+    bookingCancellations.filter((item) =>
+      item.status === "REFUND_REVIEW_PENDING" || item.status === "REFUND_BANK_DETAILS_REQUIRED",
+    ).length
+    + checkoutRefunds.filter((item) => item.status === "PENDING").length;
   const location = useLocation();
   const [bookingMenuOpen, setBookingMenuOpen] = useState(
     () =>
@@ -83,6 +134,9 @@ export default function AppSidebar({
   const servicesActive = location.pathname.startsWith("/services");
   const staffActive = location.pathname === "/staff";
   const canManageServices = roles.includes("ROLE_MANAGER");
+  const canViewServiceCatalog = canManageServices
+    || roles.includes("ROLE_ADMIN")
+    || isEmployee;
   const currentRoomTab = new URLSearchParams(location.search).get("tab");
   const currentStaffTab =
     new URLSearchParams(location.search).get("tab") ?? "today";
@@ -130,22 +184,27 @@ export default function AppSidebar({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-        <nav className="mt-8 space-y-1">
+        <nav className="mt-8 flex flex-col gap-1">
           {items.slice(0, 2).map(([href, label, Icon]) => (
             <Link
               key={href}
               to={href}
               onClick={onCloseMobile}
-              className={`flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+              className={`${sidebarOrder[href]} flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
             >
               <span className="flex shrink-0 items-center gap-3 whitespace-nowrap">
                 <Icon size={17} />
                 {t(`navigation.${label}`)}
               </span>
+              {href === "/check-in-out" && pendingCheckInOutCount > 0 && (
+                <span className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white" aria-label={`${pendingCheckInOutCount} ${t("navigation.checkInOut")}`}>
+                  {pendingCheckInOutCount}
+                </span>
+              )}
             </Link>
           ))}
           <div
-            className={`rounded-xl ${bookingActive ? "bg-blue-900/50" : ""}`}
+            className={`order-2 rounded-xl ${bookingActive ? "bg-blue-900/50" : ""}`}
           >
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${bookingActive ? "text-white" : "text-slate-400"}`}
@@ -192,20 +251,27 @@ export default function AppSidebar({
           <Link
             to="/refund-approvals"
             onClick={onCloseMobile}
-            className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+            className={`order-8 flex items-center justify-between gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
           >
-            <ClipboardCheck size={17} />
-            {t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}
+            <span className="flex items-center gap-3">
+              <ClipboardCheck size={17} />
+              {t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}
+            </span>
+            {pendingRefundApprovalCount > 0 && (
+              <span className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white" aria-label={`${pendingRefundApprovalCount} ${t("navigation.refundApprovals", "Phê duyệt hoàn tiền")}`}>
+                {pendingRefundApprovalCount}
+              </span>
+            )}
           </Link>
           <Link
             to="/hotel-rules"
             onClick={onCloseMobile}
-            className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/hotel-rules" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+            className={`order-10 flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/hotel-rules" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
           >
             <ClipboardList size={17} />
             {t("navigation.hotelRules", "Nội quy khách sạn")}
           </Link>
-          <div className={`rounded-xl ${roomsActive ? "bg-blue-900/50" : ""}`}>
+          <div className={`order-4 rounded-xl ${roomsActive ? "bg-blue-900/50" : ""}`}>
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${roomsActive ? "text-white" : "text-slate-400"}`}
             >
@@ -252,13 +318,18 @@ export default function AppSidebar({
           </div>
           {items
             .slice(2)
-            .filter(([href]) => href !== "/rooms" && href !== "/services")
+            .filter(
+              ([href]) =>
+                href !== "/rooms"
+                && href !== "/services"
+                && !(isEmployee && href === "/reports"),
+            )
             .map(([href, label, Icon]) => (
               <Link
                 key={href}
                 to={href}
                 onClick={onCloseMobile}
-                className={`flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                className={`${sidebarOrder[href]} flex flex-nowrap items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
               >
                 <span className="flex shrink-0 items-center gap-3 whitespace-nowrap">
                   <Icon size={17} />
@@ -267,7 +338,7 @@ export default function AppSidebar({
               </Link>
             ))}
           <div
-            className={`rounded-xl ${servicesActive ? "bg-blue-900/50" : ""}`}
+            className={`order-5 rounded-xl ${servicesActive ? "bg-blue-900/50" : ""}`}
           >
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${servicesActive ? "text-white" : "text-slate-400"}`}
@@ -301,13 +372,15 @@ export default function AppSidebar({
                 >
                   {t("navigation.serviceUsage", "Thao tác dịch vụ khách hàng")}
                 </Link>
-                {canManageServices && (
+                {canViewServiceCatalog && (
                   <Link
                     to="/services/catalog"
                     onClick={onCloseMobile}
                     className={`block whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-4 ${location.pathname === "/services/catalog" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                   >
-                    {t("navigation.serviceCatalog", "Quản lý danh mục dịch vụ")}
+                    {isEmployee
+                      ? localizedText("Danh sách dịch vụ", "Service list")
+                      : t("navigation.serviceCatalog", "Quản lý danh mục dịch vụ")}
                   </Link>
                 )}
               </div>
@@ -335,14 +408,14 @@ export default function AppSidebar({
               >
                 <ClipboardList size={17} />
                 {t("staff.housekeepingAssignment")}
-              </Link>
-              <Link
-                to="/reports"
-                onClick={onCloseMobile}
-                className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/reports" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
-              >
-                <FileText size={17} />
-                {t("navigation.reports")}
+                {pendingHousekeepingTaskCount > 0 && (
+                  <span
+                    className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white"
+                    aria-label={`${pendingHousekeepingTaskCount} ${t("staff.housekeepingAssignment")}`}
+                  >
+                    {pendingHousekeepingTaskCount}
+                  </span>
+                )}
               </Link>
               <Link
                 to="/settings"
@@ -425,9 +498,21 @@ export default function AppSidebar({
                     <Link
                       to="/staff?tab=tasks"
                       onClick={onCloseMobile}
-                      className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                      className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                     >
                       {t("staff.assignTasks")}
+                      {pendingHousekeepingTaskCount > 0 && (
+                        <span
+                          className="shrink-0 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white"
+                          aria-label={`${pendingHousekeepingTaskCount} ${t("staff.assignTasks")}`}
+                          title={localizedText(
+                            `${pendingHousekeepingTaskCount} phòng đang chờ phân công`,
+                            `${pendingHousekeepingTaskCount} rooms awaiting assignment`,
+                          )}
+                        >
+                          {pendingHousekeepingTaskCount}
+                        </span>
+                      )}
                     </Link>
                   )}
                 </div>

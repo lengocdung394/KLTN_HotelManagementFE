@@ -4,7 +4,7 @@ import type {
   SuperAdminRolePermissionGroup,
 } from "../services/superAdminApi";
 
-const permissionHeaders = ["Role", "Mã quyền", "Tên quyền", "Mô tả quyền", "Cấp quyền (Có/Không)"];
+const permissionHeaders = ["Role", "Mã quyền", "Tên quyền", "Mô tả quyền"];
 
 const normalizeCode = (value: string) => value.trim().toLocaleUpperCase();
 const normalizeHeader = (value: string) =>
@@ -38,7 +38,7 @@ export const parseSuperAdminRolePermissionsRows = (
     if (row.every((cell) => !cell?.trim())) return;
     const rowNumber = rowIndex + 2;
     const values = indexes.map((index) => row[index ?? -1]?.trim() ?? "");
-    const [rawRoleCode, rawPermissionCode, name, description, rawGranted] = values;
+    const [rawRoleCode, rawPermissionCode, name, description] = values;
     const category = categoryIndex === undefined
       ? "Chưa phân loại"
       : row[categoryIndex]?.trim() || "Chưa phân loại";
@@ -52,12 +52,6 @@ export const parseSuperAdminRolePermissionsRows = (
       throw new Error(`Mã quyền ở dòng ${rowNumber} không hợp lệ.`);
     }
     if (!name) throw new Error(`Tên quyền ở dòng ${rowNumber} không được để trống.`);
-    const grantedValue = normalizeHeader(rawGranted);
-    const granted = ["co", "yes", "true", "1"].includes(grantedValue);
-    if (!granted && !["khong", "no", "false", "0"].includes(grantedValue)) {
-      throw new Error(`Cấp quyền ở dòng ${rowNumber} phải là Có/Không, Yes/No hoặc True/False.`);
-    }
-
     const assignmentKey = `${roleCode}:${permissionCode}`;
     if (seenAssignments.has(assignmentKey)) {
       throw new Error(`Quyền ${permissionCode} bị lặp cho role ${roleCode} ở dòng ${rowNumber}.`);
@@ -70,7 +64,7 @@ export const parseSuperAdminRolePermissionsRows = (
       name,
       category,
       description,
-      granted,
+      granted: true,
     });
     importedRowCount += 1;
   });

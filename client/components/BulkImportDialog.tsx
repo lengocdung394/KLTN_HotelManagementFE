@@ -1,6 +1,7 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, Upload, X } from "lucide-react";
+import { localizedText } from "../i18n";
 
 type BulkImportDialogProps = {
   open: boolean;
@@ -39,6 +40,7 @@ export default function BulkImportDialog({
 }: BulkImportDialogProps) {
   const { t } = useTranslation();
   const titleId = useId();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -78,7 +80,7 @@ export default function BulkImportDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]"
       onMouseDown={() => {
         if (!isUploading) onOpenChange(false);
       }}
@@ -87,14 +89,14 @@ export default function BulkImportDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+        className="my-auto max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-blue-600">{eyebrow}</p>
-            <h4 id={titleId} className="mt-1 text-2xl font-bold text-slate-900">{title}</h4>
-            <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
+            <h4 id={titleId} className="mt-1 font-serif text-lg font-bold text-slate-900">{title}</h4>
+            <p className="mt-1 text-sm leading-5 text-slate-500">{description}</p>
           </div>
           <button
             type="button"
@@ -110,24 +112,38 @@ export default function BulkImportDialog({
         <button
           type="button"
           onClick={onDownloadTemplate}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
         >
           <Download size={17} />{templateLabel}
         </button>
 
-        <label className="mt-5 block rounded-xl border border-slate-200 p-4">
+        <div className="mt-4 rounded-lg border border-slate-200 p-3.5">
           <div className="text-sm font-semibold text-slate-800">{fileLabel}</div>
           <input
+            ref={fileInputRef}
             type="file"
             accept={acceptedFileTypes}
             disabled={isUploading}
             onChange={(event) => selectFile(event.target.files?.[0])}
-            className="mt-3 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+            className="sr-only"
+            aria-label={fileLabel}
           />
-          {selectedFile && <span className="mt-2 block truncate text-xs text-slate-500">{selectedFile.name}</span>}
-        </label>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50"
+            >
+              {localizedText("Chọn tệp", "Choose file")}
+            </button>
+            <span className="min-w-0 truncate text-sm text-slate-500">
+              {selectedFile?.name ?? localizedText("Chưa có tệp nào được chọn", "No file selected")}
+            </span>
+          </div>
+        </div>
 
-        <div className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+        <div className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-700">
           {instructions}
         </div>
 
@@ -163,7 +179,7 @@ export default function BulkImportDialog({
             type="button"
             disabled={isUploading}
             onClick={() => onOpenChange(false)}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
             {t("common.cancel")}
           </button>
@@ -171,7 +187,7 @@ export default function BulkImportDialog({
             type="button"
             disabled={isUploading || !selectedFile}
             onClick={() => void upload()}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Upload size={16} />{isUploading ? t("room.importDialog.uploading") : uploadLabel}
           </button>

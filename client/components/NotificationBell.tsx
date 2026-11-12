@@ -155,7 +155,12 @@ export default function NotificationBell() {
         void refetchNotifications();
         void refetchSummary();
         if (payload && typeof payload === "object") {
-          const notification = payload as { type?: unknown; title?: unknown; description?: unknown };
+          const notification = payload as {
+            type?: unknown;
+            title?: unknown;
+            description?: unknown;
+            referenceType?: unknown;
+          };
           if (notification.type === "PROMOTION_CREATED" || notification.type === "PROMOTION_UPDATED") {
             dispatch(baseApi.util.invalidateTags(["Promotion"]));
           }
@@ -206,6 +211,7 @@ export default function NotificationBell() {
                 <ToastAction
                   altText={localizedText("Mở trang phân công dọn phòng", "Open housekeeping assignments")}
                   onClick={() => navigate("/staff?tab=tasks")}
+                  className="h-9 border border-amber-950 bg-amber-900 px-3 text-xs font-bold text-white shadow-sm hover:bg-amber-950 focus:ring-amber-800"
                 >
                   {localizedText("Mở phân công", "View assignments")}
                 </ToastAction>

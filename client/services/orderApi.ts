@@ -6,7 +6,7 @@ export interface PaymentTransactionResponse {
   amount?: number;
   paymentType?: string;
   cashFlowType?: string;
-  paymentSource?: "FRONT_DESK" | "CUSTOMER" | "ONLINE_GATEWAY" | "UNKNOWN";
+  paymentSource?: "FRONT_DESK" | "ONLINE_BOOKING" | "UNKNOWN";
   note?: string;
   createdAt?: string;
   transactionDate?: string;

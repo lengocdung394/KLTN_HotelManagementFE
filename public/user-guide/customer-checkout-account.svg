@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-labelledby="title">
+  <title id="title">Booking checkout and account illustration</title>
+  <rect width="960" height="420" rx="24" fill="#f3f4f6"/>
+  <rect x="22" y="22" width="916" height="376" rx="20" fill="white"/>
+  <text x="52" y="62" fill="#0f172a" font-family="Arial" font-size="20" font-weight="700">Review and confirm your booking</text>
+  <rect x="52" y="84" width="522" height="270" rx="14" fill="#f8fafc" stroke="#e2e8f0"/>
+  <g font-family="Arial"><text x="76" y="118" fill="#0f172a" font-size="15" font-weight="700">Guest details</text><rect x="76" y="132" width="220" height="38" rx="7" fill="white" stroke="#cbd5e1"/><rect x="310" y="132" width="238" height="38" rx="7" fill="white" stroke="#cbd5e1"/><text x="76" y="198" fill="#0f172a" font-size="15" font-weight="700">Services / promotion</text><rect x="76" y="212" width="472" height="38" rx="7" fill="white" stroke="#cbd5e1"/><text x="76" y="278" fill="#0f172a" font-size="15" font-weight="700">Payment method</text><rect x="76" y="292" width="220" height="38" rx="7" fill="white" stroke="#cbd5e1"/><rect x="310" y="292" width="238" height="38" rx="7" fill="white" stroke="#cbd5e1"/></g>
+  <rect x="596" y="84" width="312" height="270" rx="14" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="620" y="118" fill="#1e3a8a" font-family="Arial" font-size="15" font-weight="700">Booking summary</text>
+  <g fill="#475569" font-family="Arial" font-size="12"><text x="620" y="152">Stay dates</text><text x="620" y="180">Room and guest count</text><text x="620" y="208">Services and discounts</text></g>
+  <path d="M620 226h264" stroke="#bfdbfe" stroke-width="2"/>
+  <text x="620" y="254" fill="#0f172a" font-family="Arial" font-size="14" font-weight="700">Total amount</text>
+  <text x="620" y="282" fill="#1d4ed8" font-family="Arial" font-size="19" font-weight="700">Review before confirming</text>
+  <rect x="620" y="304" width="264" height="32" rx="9" fill="#1e3a8a"/>
+  <text x="685" y="325" fill="white" font-family="Arial" font-size="12" font-weight="700">Confirm booking</text>
+  <text x="52" y="383" fill="#64748b" font-family="Arial" font-size="12">After booking: save the reference · sign in to view bookings, invoices, and profile</text>
+</svg>

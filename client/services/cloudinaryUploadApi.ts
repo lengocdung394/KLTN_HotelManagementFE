@@ -14,7 +14,7 @@ const getCloudinaryConfig = () => {
   return { cloudName, uploadPreset };
 };
 
-const getBranchImageFolder = (branchName: string, category: "rooms" | "services" | "employees") => {
+const getBranchImageFolder = (branchName: string, category: "rooms" | "services" | "employees" | "branch-images") => {
   const normalized = branchName.trim().normalize("NFD");
   const slug = normalized
     .replace(/[\u0300-\u036f]+/g, "")
@@ -27,9 +27,18 @@ const getBranchImageFolder = (branchName: string, category: "rooms" | "services"
   return `hotel-management/branches/${slug}/${category}`;
 };
 
-const uploadImage = async (file: File, cloudName: string, uploadPreset: string, folder: string) => {
+const uploadImage = async (
+  file: File,
+  cloudName: string,
+  uploadPreset: string,
+  folder: string,
+  validateImageType = false,
+) => {
   if (file.size > MAX_ROOM_IMAGE_BYTES) {
     throw new Error(`Ảnh "${file.name}" vượt quá giới hạn 5 MB.`);
+  }
+  if (validateImageType && !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    throw new Error(`Ảnh "${file.name}" phải có định dạng JPG, PNG hoặc WebP.`);
   }
 
   const formData = new FormData();
@@ -54,7 +63,7 @@ const uploadImage = async (file: File, cloudName: string, uploadPreset: string, 
 export const uploadImagesToCloudinary = async (
   files: File[],
   branchName: string,
-  category: "rooms" | "services" | "employees",
+  category: "rooms" | "services" | "employees" | "branch-images",
   onProgress?: (uploaded: number, total: number) => void,
 ) => {
   const { cloudName, uploadPreset } = getCloudinaryConfig();
@@ -69,7 +78,13 @@ export const uploadImagesToCloudinary = async (
       const index = nextIndex;
       nextIndex += 1;
       const file = uniqueFiles[index];
-      const url = await uploadImage(file, cloudName, uploadPreset, folder);
+      const url = await uploadImage(
+        file,
+        cloudName,
+        uploadPreset,
+        folder,
+        category === "branch-images",
+      );
       urlsByFileName.set(file.name.toLocaleLowerCase(), url);
       uploadedCount += 1;
       onProgress?.(uploadedCount, uniqueFiles.length);
@@ -98,6 +113,12 @@ export const uploadEmployeeImageToCloudinary = (file: File, branchName: string) 
     if (!imageUrl) throw new Error("Không tải được ảnh nhân viên lên Cloudinary.");
     return imageUrl;
   });
+
+export const uploadBranchImagesToCloudinary = (
+  files: File[],
+  branchName: string,
+  onProgress?: (uploaded: number, total: number) => void,
+) => uploadImagesToCloudinary(files, branchName, "branch-images", onProgress);
 
 export const uploadProvinceBackgroundToCloudinary = async (file: File, provinceName: string) => {
   const normalized = provinceName.trim().normalize("NFD");

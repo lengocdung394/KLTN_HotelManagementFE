@@ -165,6 +165,7 @@ export type SuperAdminAccountUpdateRequest = {
   phone?: string;
   address?: string;
   position?: string;
+  password?: string;
   role?: "ROLE_ADMIN" | "ROLE_MANAGER" | "ROLE_EMPLOYEE";
 };
 
@@ -204,6 +205,14 @@ export const superAdminApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<SuperAdminAccount>) => response.result,
       invalidatesTags: ["SuperAdminAccounts"],
     }),
+    updateOwnSuperAdminProfile: builder.mutation<SuperAdminAccount, { fullName: string }>({
+      query: (request) => ({
+        url: "/super-admin/accounts/me/profile",
+        method: "PUT",
+        data: request,
+      }),
+      transformResponse: (response: ApiResponse<SuperAdminAccount>) => response.result,
+    }),
     updateSuperAdminCustomer: builder.mutation<
       SuperAdminAccount,
       { customerId: string; request: SuperAdminCustomerUpdateRequest }
@@ -219,6 +228,13 @@ export const superAdminApi = baseApi.injectEndpoints({
     requestSuperAdminPasswordReset: builder.mutation<void, string>({
       query: (accountId) => ({
         url: `/super-admin/accounts/${encodeURIComponent(accountId)}/password-reset`,
+        method: "POST",
+      }),
+      transformResponse: (response: ApiResponse<void>) => response?.result,
+    }),
+    requestOwnSuperAdminPasswordReset: builder.mutation<void, void>({
+      query: () => ({
+        url: "/super-admin/accounts/me/password-reset",
         method: "POST",
       }),
       transformResponse: (response: ApiResponse<void>) => response?.result,
@@ -361,8 +377,10 @@ export const {
   useLazyGetSuperAdminAccountDetailsQuery,
   useLazyGetSuperAdminCustomerDetailsQuery,
   useUpdateSuperAdminAccountMutation,
+  useUpdateOwnSuperAdminProfileMutation,
   useUpdateSuperAdminCustomerMutation,
   useRequestSuperAdminPasswordResetMutation,
+  useRequestOwnSuperAdminPasswordResetMutation,
   useGetSuperAdminRolesQuery,
   useCreateSuperAdminRoleMutation,
   useGetSuperAdminPermissionCatalogQuery,

@@ -11,6 +11,8 @@ interface DatePickerPopoverProps {
   buttonClassName?: string;
   align?: "start" | "center" | "end";
   label?: string;
+  minDate?: Date;
+  maxDate?: Date;
   highlightDates?: Array<Date | string>;
   highlightDateMarkers?: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">>;
   iconOnly?: boolean;
@@ -51,11 +53,13 @@ export default function DatePickerPopover({
   buttonClassName,
   align = "end",
   label,
+  minDate,
+  maxDate,
   highlightDates = [],
   highlightDateMarkers = {},
   iconOnly = false,
 }: DatePickerPopoverProps) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const resolvedPlaceholder = placeholder ?? (i18n.language.startsWith("en") ? "Select date" : "Chọn ngày");
   const weekDays = i18n.language.startsWith("en")
     ? ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
@@ -73,11 +77,11 @@ export default function DatePickerPopover({
 
   const pickerMonthLabel = useMemo(
     () =>
-      pickerMonth.toLocaleDateString("vi-VN", {
+      pickerMonth.toLocaleDateString(i18n.language.startsWith("en") ? "en-US" : "vi-VN", {
         month: "long",
         year: "numeric",
       }),
-    [pickerMonth],
+    [i18n.language, pickerMonth],
   );
 
   const highlightDateKeys = useMemo(() => {
@@ -108,7 +112,14 @@ export default function DatePickerPopover({
   const firstDayOfMonth = new Date(pickerYear, pickerMonthIndex, 1).getDay();
   const daysInMonth = new Date(pickerYear, pickerMonthIndex + 1, 0).getDate();
   const today = new Date();
-  const selectedDateLabel = value?.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const isTodayOutsideDateRange = Boolean(
+    (minDate && today < new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()))
+    || (maxDate && today > new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate())),
+  );
+  const selectedDateLabel = value?.toLocaleDateString(
+    i18n.language.startsWith("en") ? "en-US" : "vi-VN",
+    { day: "2-digit", month: "2-digit", year: "numeric" },
+  );
   const accessibleLabel = selectedDateLabel ? `${resolvedPlaceholder}: ${selectedDateLabel}` : resolvedPlaceholder;
 
   return (
@@ -137,6 +148,7 @@ export default function DatePickerPopover({
         <div className="flex items-center justify-between pb-3">
           <button
             type="button"
+            disabled={isTodayOutsideDateRange}
             onClick={() => {
               const nextMonth = new Date(pickerYear, pickerMonthIndex - 1, 1);
               setPickerMonth(nextMonth);
@@ -183,6 +195,10 @@ export default function DatePickerPopover({
             const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             const isSelected = value && date.toDateString() === value.toDateString();
             const isToday = date.toDateString() === today.toDateString();
+            const isOutsideDateRange = Boolean(
+              (minDate && date < new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()))
+              || (maxDate && date > new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate())),
+            );
             const markers = [...new Set(highlightDateMarkers[dateKey] ?? [])];
             const isHighlighted = highlightDateKeys.has(dateKey) || markers.length > 0;
             const markerColors = {
@@ -195,13 +211,16 @@ export default function DatePickerPopover({
               <button
                 key={day}
                 type="button"
+                disabled={isOutsideDateRange}
                 onClick={() => {
                   onChange(date);
                   setPickerMonth(new Date(date.getFullYear(), date.getMonth(), 1));
                   setOpen(false);
                 }}
                 className={`relative grid h-9 w-9 place-items-center rounded-lg text-xs font-medium transition ${
-                  isSelected
+                  isOutsideDateRange
+                    ? "cursor-not-allowed text-slate-300"
+                    : isSelected
                     ? "bg-blue-600 text-white shadow-sm"
                     : isHighlighted
                       ? "border border-emerald-300 bg-emerald-100 font-bold text-emerald-800 shadow-sm"
@@ -233,7 +252,7 @@ export default function DatePickerPopover({
             onMonthChange?.(nextMonth);
             setOpen(false);
           }}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Check size={14} />
           {i18n.language.startsWith("en") ? "Today" : "Hôm nay"}
