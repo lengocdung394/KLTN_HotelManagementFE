@@ -505,6 +505,7 @@
     "removeSelectedRoom": "Remove room",
     "roomCancelledOnSave": "This room will be cancelled when the booking is saved.",
     "cannotRemoveRoom": "Cannot remove a room after check-in or when its booking detail is no longer pending.",
+    "guestCountsLockedAfterCheckIn": "This room has been checked in or is no longer pending; guest counts cannot be changed.",
     "guestInfo": "Guest information",
     "roomInfo": "Room information",
     "multipleSchedules": "Multiple schedules",

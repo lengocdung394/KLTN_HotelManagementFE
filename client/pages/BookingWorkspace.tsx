@@ -20,7 +20,7 @@ import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import ListPagination from "../components/ListPagination";
-import { getServicePriceBreakdown, sumRoomPriceForRange } from "../lib/bookingPricing";
+import { getServicePriceBreakdown, getServiceQuantityForRoom, sumRoomPriceForRange } from "../lib/bookingPricing";
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
 import { calculatePromotionDiscount } from "../lib/promotionPricing";
 import { localizedText } from "../i18n";
@@ -1154,7 +1154,7 @@ export default function BookingWorkspace() {
         if (detail.counts) setRoomGuestCounts((current) => ({ ...current, [detail.roomId as string]: detail.counts as RoomGuestCounts }));
         if (detail.counts) {
           const selectedGuestCount = detail.counts.adults + detail.counts.children + detail.counts.infants;
-          setRoomServices((current) => ({ ...current, [detail.roomId as string]: (current[detail.roomId as string] ?? []).map((selection) => selection.applyToRoom !== false ? { ...selection, quantity: selectedGuestCount } : selection) }));
+          setRoomServices((current) => ({ ...current, [detail.roomId as string]: (current[detail.roomId as string] ?? []).map((selection) => selection.applyToRoom === true ? { ...selection, quantity: selectedGuestCount } : selection) }));
         }
         setRoomGuestSurcharges((current) => ({ ...current, [detail.roomId as string]: detail.surcharge ?? 0 }));
         setRoomGuestSurchargeDetails((current) => ({ ...current, [detail.roomId as string]: { adult: detail.adultSurcharge ?? 0, child: detail.childSurcharge ?? 0 } }));
@@ -1623,8 +1623,10 @@ export default function BookingWorkspace() {
       ?? (room.databaseId ? roomGuestCounts[String(room.databaseId)] : undefined);
     const adults = selectedGuestCount?.adults ?? Number(detail.numAdults ?? detail.adults ?? 0);
     const children = selectedGuestCount?.children ?? Number(detail.numChildren ?? detail.children ?? 0);
+    const infants = selectedGuestCount?.infants ?? Number(detail.numInfants ?? detail.infants ?? 0);
     const guestCountChanged = adults !== Number(detail.numAdults ?? detail.adults ?? 0)
-      || children !== Number(detail.numChildren ?? detail.children ?? 0);
+      || children !== Number(detail.numChildren ?? detail.children ?? 0)
+      || infants !== Number(detail.numInfants ?? detail.infants ?? 0);
     let roomBaseTotal = 0;
     let surchargeTotal = 0;
 
@@ -1682,10 +1684,8 @@ export default function BookingWorkspace() {
   const getRoomRangeTotal = (room: BookingRoom, range: RoomDateRange = selectedRanges[room.id] ?? { checkIn, checkOut }) =>
     getRoomBaseRangeTotal(room, range) + getRoomSurchargeRangeTotal(room, range);
 
-  const calculatedRoomTotal = selectedRooms.reduce((sum, room) => sum + getRoomRangeTotal(room), 0);
-  const roomTotal = initialBooking && selectedRooms.length === 0 && Number.isFinite(persistedRoomTotal) ? persistedRoomTotal : calculatedRoomTotal;
   const getServiceTotal = (selections: ServiceSelection[], room?: BookingRoom) => selections.reduce((sum, selection) => {
-    const qty = selection.applyToRoom !== false && room ? selectedGuestsForRoom(room) : selection.quantity;
+    const qty = room ? getServiceQuantityForRoom(selection, selectedGuestsForRoom(room)) : selection.quantity;
     const currentPrice = services.find((service) => String(service.id) === selection.serviceId)?.price
       ?? selection.price
       ?? 0;
@@ -1695,14 +1695,26 @@ export default function BookingWorkspace() {
   const selectedGuestsForRoom = (room: BookingRoom) => roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
   const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections, room);
   const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => {
-    const qty = selection.applyToRoom !== false ? selectedGuestsForRoom(room) : selection.quantity;
+    const qty = getServiceQuantityForRoom(selection, selectedGuestsForRoom(room));
     return `${services.find((service) => String(service.id) === selection.serviceId)?.name ?? "Dịch vụ"} x${qty}`;
   }).join(", ");
-  const calculatedServiceTotal = selectedRooms.reduce((sum, room) => {
+  const roomEstimates = selectedRooms.map((room) => {
+    const range = selectedRanges[room.id]
+      ?? (room.databaseId ? selectedRanges[String(room.databaseId)] : undefined)
+      ?? { checkIn, checkOut };
     const roomSelections = getRoomServiceSelections(room);
     const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
-    return sum + getServiceTotal(selections, room);
-  }, 0);
+    return {
+      room,
+      range,
+      roomBaseTotal: getRoomBaseRangeTotal(room, range),
+      roomSurchargeTotal: getRoomSurchargeRangeTotal(room, range),
+      roomServiceTotal: getRoomServiceTotal(room, selections),
+    };
+  });
+  const calculatedRoomTotal = roomEstimates.reduce((sum, estimate) => sum + estimate.roomBaseTotal + estimate.roomSurchargeTotal, 0);
+  const calculatedServiceTotal = roomEstimates.reduce((sum, estimate) => sum + estimate.roomServiceTotal, 0);
+  const roomTotal = initialBooking && selectedRooms.length === 0 && Number.isFinite(persistedRoomTotal) ? persistedRoomTotal : calculatedRoomTotal;
   const serviceTotal = calculatedServiceTotal;
   const subtotal = roomTotal + serviceTotal;
   const discountAmount = appliedPromotion
@@ -2126,7 +2138,13 @@ export default function BookingWorkspace() {
     }
   }, [step, hasGuestDetails]);
   useEffect(() => () => clearRoomGuestCache(), []);
-  const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
+  const summaryRanges = roomEstimates;
+  const guestCountLockedRoomIds = initialBooking
+    ? selectedRooms.filter((room) => {
+      const detail = findBookingDetailForRoom(room);
+      return Boolean(detail && !canChangeBookingRoom(detail));
+    }).map((room) => room.id)
+    : [];
   const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
   const canContinue = selected.length > 0 && selectedRooms.every((room) => {
     const range = selectedRanges[room.id] ?? (hasDates ? { checkIn, checkOut } : undefined);
@@ -2371,7 +2389,68 @@ export default function BookingWorkspace() {
           {step === "promotion" && <PromotionSelector customerId={bookingGuest.customerId} initialPromotionId={initialBooking?.promotionId} initialCustomerPromotionId={initialBooking?.customerPromotionId} initialPromotionApplyAt={bookingPromotionApplyAt(initialBooking)} orderTotal={subtotal} roomTotal={roomTotal} serviceTotal={serviceTotal} onApply={setAppliedPromotion} onEligibilityChange={setPromotionBlocked} />}
           <div className={step === "promotion" ? "hidden" : "payment-column"}>
             {false && <div className="payment-heading flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3"><CreditCard size={16} className="text-blue-600" /><div><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-0.5 text-xs text-slate-500">{t("booking.paymentRequired")}</p></div></div>}
-            {step === "guest" ? <><div className="mb-4 grid gap-2 sm:grid-cols-2">{selectedRooms.map((room) => <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600"><strong className="text-blue-700">Phòng {room.roomNumber}</strong><span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span></div>)}</div><GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} customerLocked={Boolean(initialBooking)} /></> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
+            {step === "guest" ? (
+              <>
+                <div className="mb-4 grid gap-2 sm:grid-cols-2">
+                  {selectedRooms.map((room) => (
+                    <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600">
+                      <strong className="text-blue-700">Phòng {room.roomNumber}</strong>
+                      <span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span>
+                    </div>
+                  ))}
+                </div>
+                <GuestRoomForms
+                  rooms={selectedRooms}
+                  guest={bookingGuest}
+                  onGuestChange={setBookingGuest}
+                  lockedRoomIds={guestCountLockedRoomIds}
+                  customerLocked={Boolean(initialBooking)}
+                />
+              </>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white p-5">
+                <p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p>
+                <p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p>
+                <div className="mt-4 grid gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("cash")}
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}
+                  >
+                    <Banknote size={20} className="text-emerald-600" />
+                    <span>
+                      <strong className="block text-sm text-slate-800">{t("booking.cash")}</strong>
+                      <small className="text-xs text-slate-500">{t("booking.cashDescription")}</small>
+                    </span>
+                    {paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("bank")}
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}
+                  >
+                    <QrCode size={20} className="text-blue-600" />
+                    <span>
+                      <strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong>
+                      <small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small>
+                    </span>
+                    {paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("wallet")}
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}
+                  >
+                    <Wallet size={20} className="text-orange-500" />
+                    <span>
+                      <strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong>
+                      <small className="text-xs text-slate-500">{t("booking.walletDescription")}</small>
+                    </span>
+                    {paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
             <p className="text-center text-xs font-bold uppercase tracking-wider text-blue-600">{t("booking.bookingSummary")}</p>
@@ -2387,14 +2466,8 @@ export default function BookingWorkspace() {
               <span className="text-xs font-semibold text-slate-500">{hasDifferentStayPeriods ? t("booking.multipleSchedules") : t("booking.selected")}</span>
             </div>
             <div className="mt-3 space-y-3">
-              {summaryRanges.map(({ room, range }) => {
-                const roomSelections = getRoomServiceSelections(room);
-                const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
+              {summaryRanges.map(({ room, range, roomBaseTotal, roomSurchargeTotal, roomServiceTotal }) => {
                 const roomBookingDetail = findBookingDetailForRoom(room);
-                const roomServiceTotal = getServiceTotal(selections) * (roomSelections.length > 0 || serviceMode !== "all" ? 1 : selectedGuestsForRoom(room));
-                const roomRange = selectedRanges[room.id] ?? { checkIn, checkOut };
-                const roomBaseTotal = getRoomBaseRangeTotal(room, roomRange);
-                const roomSurchargeTotal = getRoomSurchargeRangeTotal(room, roomRange);
                 const roomSubtotal = roomBaseTotal + roomSurchargeTotal + roomServiceTotal;
                 const selectedGuestCount = roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
                 const isSummaryRoomCollapsed = collapsedSummaryRooms.includes(room.id);

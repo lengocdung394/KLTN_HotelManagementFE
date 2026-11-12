@@ -621,7 +621,7 @@ export default function ReportWorkspace() {
                 <p className="text-xs font-semibold">{localizedText("Tiền phòng", "Room revenue")}</p>
               </div>
               <p className="mt-2 text-xl font-bold text-slate-900">{formatMoney(report.roomRevenue)}</p>
-              <p className="mt-1 text-xs text-slate-500">{localizedText("Theo các đêm lưu trú trong khoảng ngày đã chọn", "Based on stay nights within the selected date range")}</p>
+              <p className="mt-1 text-xs text-slate-500">{localizedText("Ghi nhận toàn bộ tiền phòng vào ngày check-in", "Room revenue is recorded on the check-in date")}</p>
             </article>
             <article className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 text-blue-600">
@@ -738,7 +738,7 @@ export default function ReportWorkspace() {
               <div className="mb-5 flex items-start justify-between">
                 <div>
                   <h3 className="font-bold text-slate-900">{localizedText(`Doanh thu dịch vụ ${reportPeriodLabel}`, `Service revenue ${reportPeriodLabel}`)}</h3>
-                  <p className="mt-1 text-xs text-slate-400">{localizedText("Tính theo ngày xác nhận sử dụng hoặc checkout · đ", "Based on service confirmation or checkout date · VND")}</p>
+                  <p className="mt-1 text-xs text-slate-400">{localizedText("Tính theo ngày xác nhận dịch vụ · đ", "Based on the service confirmation date · VND")}</p>
                 </div>
                 <TrendingUp size={18} className="text-emerald-500" />
               </div>

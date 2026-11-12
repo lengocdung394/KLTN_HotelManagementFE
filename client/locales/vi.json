@@ -500,6 +500,7 @@
     "removeSelectedRoom": "Bỏ chọn phòng",
     "roomCancelledOnSave": "Phòng sẽ được hủy khi lưu booking.",
     "cannotRemoveRoom": "Không thể bỏ phòng sau khi check-in hoặc khi booking-detail không còn PENDING.",
+    "guestCountsLockedAfterCheckIn": "Phòng đã check-in hoặc không còn chờ nhận phòng; không thể chỉnh sửa số lượng khách.",
     "guestInfo": "Thông tin người đặt",
     "roomInfo": "Thông tin phòng",
     "multipleSchedules": "Nhiều lịch",

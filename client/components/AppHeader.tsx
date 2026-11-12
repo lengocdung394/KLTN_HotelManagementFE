@@ -79,9 +79,9 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
                 : "text-slate-500 hover:text-slate-900"
             }`}
           >
-            <span className="text-xs">🇬🇧</span>
+            <span className="text-xs font-bold">EN</span>
             <span className="hidden sm:inline">English</span>
-            <span className="sm:hidden">ENG</span>
+            <span className="sm:hidden">EN</span>
           </button>
         </div>
 

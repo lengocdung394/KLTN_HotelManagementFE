@@ -37,6 +37,7 @@ import { useCancelBookingByStaffMutation, useGetBookingCancellationPreviewQuery 
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import ListPagination from "../components/ListPagination";
 import { bindHotelSocketEvents } from "../lib/socket";
+import { getBookingSurchargeBreakdown, getBookingTotalFromBreakdown, roundVndAmount } from "../lib/bookingPricing";
 import { baseApi } from "../services/baseApi";
 import i18n, { localizedText } from "../i18n";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -111,37 +112,55 @@ const bookingId = (booking: BookingListItem) => textOf(booking, ["bookingId", "o
 const bookingTotalIncludingSurcharges = (booking: BookingListItem) => {
   const storedTotal = bookingAmount(booking, ["finalAmount", "totalAmount"]);
   const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
-  const detailSurchargeTotal = details.reduce((total, detail) => {
-    if (isCancelledBookingDetail(detail)) return total;
-    const earlyFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
-    const lateFee = Number(detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee ?? 0);
-    const otherSurcharges = Number(detail.otherSurcharges ?? 0);
-    return total
-      + (Number.isFinite(earlyFee) ? earlyFee : 0)
-      + (Number.isFinite(lateFee) ? lateFee : 0)
-      + (Number.isFinite(otherSurcharges) ? otherSurcharges : 0);
-  }, 0);
-  const storedSurchargeTotal = bookingAmount(booking, ["surchargeTotalAmount"], 0);
+  const activeDetails = details.filter((detail) => !isCancelledBookingDetail(detail));
+  const { earlyCheckinFeeTotal, lateCheckoutFeeTotal, otherSurchargesTotal } = getBookingSurchargeBreakdown(details);
+  const detailSurchargeTotal = earlyCheckinFeeTotal + lateCheckoutFeeTotal + otherSurchargesTotal;
   const roomTotal = bookingAmount(booking, ["roomTotal"], Number.NaN);
   const serviceTotal = bookingAmount(booking, ["serviceTotal"], Number.NaN);
+  const detailRoomTotal = activeDetails.reduce((total, detail) => {
+    const subtotal = Number(detail.roomSubTotal ?? detail.roomSubtotal);
+    return total + (Number.isFinite(subtotal) ? subtotal : 0);
+  }, 0);
+  const hasDetailRoomTotals = activeDetails.length > 0 && activeDetails.every((detail) =>
+    Number.isFinite(Number(detail.roomSubTotal ?? detail.roomSubtotal)),
+  );
+  const detailServiceTotal = activeDetails.reduce((total, detail) => total + bookingServices(detail).reduce((serviceTotal, service) => {
+    const quantity = Number(service.quantity ?? service.amount ?? 1);
+    const price = Number(service.price ?? 0);
+    const subtotal = service.subTotal == null ? Number.NaN : Number(service.subTotal);
+    return serviceTotal + (Number.isFinite(subtotal) ? subtotal : Number.isFinite(price * quantity) ? price * quantity : 0);
+  }, 0), 0);
+  const explicitDiscounts = [
+    bookingAmount(booking, ["discountRoomAmount", "roomDiscountAmount"], 0),
+    bookingAmount(booking, ["discountServiceAmount", "serviceDiscountAmount"], 0),
+    bookingAmount(booking, ["discountAmountTotal", "totalDiscountAmount"], 0),
+  ].reduce((total, discount) => total + discount, 0);
+  const totalDiscount = explicitDiscounts > 0
+    ? explicitDiscounts
+    : bookingAmount(booking, ["discountTotal"], 0);
 
   if (Number.isFinite(roomTotal) && Number.isFinite(serviceTotal)) {
-    const explicitDiscounts = [
-      bookingAmount(booking, ["discountRoomAmount", "roomDiscountAmount"], 0),
-      bookingAmount(booking, ["discountServiceAmount", "serviceDiscountAmount"], 0),
-      bookingAmount(booking, ["discountAmountTotal", "totalDiscountAmount"], 0),
-    ].reduce((total, discount) => total + discount, 0);
-    const totalDiscount = explicitDiscounts > 0
-      ? explicitDiscounts
-      : bookingAmount(booking, ["discountTotal"], 0);
-    const expectedTotal = Math.max(
-      0,
-      roomTotal + serviceTotal + Math.max(detailSurchargeTotal, storedSurchargeTotal) - totalDiscount,
-    );
-    return Math.max(storedTotal, expectedTotal);
+    return getBookingTotalFromBreakdown({
+      storedTotal,
+      roomTotal,
+      serviceTotal,
+      surchargeTotal: detailSurchargeTotal,
+      discountTotal: totalDiscount,
+    });
   }
 
-  return storedTotal + Math.max(0, detailSurchargeTotal - storedSurchargeTotal);
+  if (hasDetailRoomTotals) {
+    return getBookingTotalFromBreakdown({
+      storedTotal,
+      roomTotal: detailRoomTotal,
+      serviceTotal: detailServiceTotal,
+      surchargeTotal: detailSurchargeTotal,
+      discountTotal: totalDiscount,
+    });
+  }
+
+  const storedSurchargeTotal = bookingAmount(booking, ["surchargeTotalAmount"], 0);
+  return roundVndAmount(storedTotal + Math.max(0, detailSurchargeTotal - storedSurchargeTotal));
 };
 
 const formatDate = (value: unknown) => {
@@ -174,7 +193,7 @@ const isCancelledService = (service: Record<string, unknown>) => {
 };
 
 const isCancelledBookingDetail = (detail: Record<string, unknown>) =>
-  String(detail.bookingStatusType ?? "").trim().toUpperCase() === "CANCELLED";
+  String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").trim().toUpperCase() === "CANCELLED";
 
 const isCancelledBooking = (booking: Partial<Record<string, unknown>> | null | undefined) => {
   if (!booking) return false;
@@ -290,13 +309,13 @@ export default function BookingListWorkspace() {
   const [pageSize, setPageSize] = useState(10);
   const [visibleColumns, setVisibleColumns] = useState<Record<BookingTableColumnId, boolean>>({
     booking: true,
-    date: true,
+    date: false,
     customer: true,
     room: true,
     services: true,
-    discount: true,
-    collected: true,
-    refunded: true,
+    discount: false,
+    collected: false,
+    refunded: false,
     balance: true,
     total: true,
     status: true,
@@ -334,6 +353,7 @@ export default function BookingListWorkspace() {
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<"bank" | "cash" | "">("bank");
   const [cashAmountPaid, setCashAmountPaid] = useState("");
+  const [cashAmountTouched, setCashAmountTouched] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(0);
   const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null);
@@ -390,14 +410,14 @@ export default function BookingListWorkspace() {
     mode: "single" | "group";
   } | null>(null);
   const {
-    data: fetchedBookings = [],
+    currentData: fetchedBookings = [],
     isLoading,
     isFetching,
     isError,
     refetch,
   } = useGetBookingsByHotelQuery(Number(hotelId), {
     skip: !hotelId || Number.isNaN(Number(hotelId)),
-    pollingInterval: 10000,
+    pollingInterval: 60000,
   });
   const { data: hotelServices = [] } = useGetAllServicesQuery(
     hotelId ? { hotelId: Number(hotelId), activeOnly: true } : { activeOnly: true },
@@ -415,10 +435,9 @@ export default function BookingListWorkspace() {
       },
       onBookingStateUpdated: () => {
         dispatch(baseApi.util.invalidateTags(["Booking"]));
-        void refetch();
       },
     });
-  }, [dispatch, hotelId, refetch]);
+  }, [dispatch, hotelId]);
 
   // Merge API bookings with local overrides
   const bookings = useMemo(
@@ -578,11 +597,11 @@ export default function BookingListWorkspace() {
   const safePage = Math.min(page, totalPages);
   const paginatedBookings = sortedBookings.slice((safePage - 1) * pageSize, safePage * pageSize);
   const shownBookingColumns = BOOKING_TABLE_COLUMNS.filter((column) => visibleColumns[column.id]);
-  const isBookingListLoading = isLoading || isFetching || isManuallyRefreshingBookings;
+  const isBookingListLoading = isLoading && fetchedBookings.length === 0;
+  const isRefreshingBookings = isFetching || isManuallyRefreshingBookings;
 
   const refreshBookingsOrResetFilters = async () => {
-    if (isBookingListLoading) return;
-    const refreshStartedAt = Date.now();
+    if (isRefreshingBookings) return;
     setIsManuallyRefreshingBookings(true);
     await new Promise<void>((resolve) => {
       window.requestAnimationFrame(() => resolve());
@@ -602,10 +621,6 @@ export default function BookingListWorkspace() {
         title: localizedText("Không thể tải lại danh sách booking", "Could not reload bookings"),
       });
     } finally {
-      const remainingLoadingTime = 2000 - (Date.now() - refreshStartedAt);
-      if (remainingLoadingTime > 0) {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
-      }
       setIsManuallyRefreshingBookings(false);
     }
   };
@@ -622,6 +637,7 @@ export default function BookingListWorkspace() {
   useEffect(() => {
     setPaymentMethod("bank");
     setCashAmountPaid("");
+    setCashAmountTouched(false);
     setCheckoutUrl(null);
     setQrSecondsLeft(0);
     setQrExpiresAt(null);
@@ -634,6 +650,14 @@ export default function BookingListWorkspace() {
       focusPaymentAfterRedirect.current = false;
     }
   }, [selectedBooking]);
+
+  useEffect(() => {
+    if (paymentMethod !== "cash" || !selectedBooking || cashAmountTouched) return;
+
+    const paidAmount = roundVndAmount(Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0));
+    const due = roundVndAmount(Math.max(0, bookingTotalIncludingSurcharges(selectedBooking) - paidAmount));
+    setCashAmountPaid(String(due));
+  }, [cashAmountTouched, paymentMethod, selectedBooking]);
 
   // Keep the displayed countdown aligned with the expiration time returned by PayOS.
   useEffect(() => {
@@ -745,14 +769,14 @@ export default function BookingListWorkspace() {
     try {
       if (paymentMethod === "cash") {
         const id = bookingId(selectedBooking);
-        const amountPaid = Number(cashAmountPaid) || 0;
+        const amountPaid = roundVndAmount(Number(cashAmountPaid) || 0);
         const orderId = String(selectedBooking.orderId ?? selectedBooking.bookingId ?? id);
         if (!orderId || amountPaid <= 0) {
           setPaymentError(localizedText("Vui lòng nhập số tiền khách đưa hợp lệ.", "Enter a valid amount received from the guest."));
           return;
         }
-        const totalDue = bookingTotalIncludingSurcharges(selectedBooking);
-        const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+        const totalDue = roundVndAmount(bookingTotalIncludingSurcharges(selectedBooking));
+        const paidSoFar = roundVndAmount(Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0));
         const remainingDue = Math.max(0, totalDue - paidSoFar);
         const totalPaidAfterPayment = paidSoFar + amountPaid;
         const isFullyPaid = totalPaidAfterPayment >= totalDue;
@@ -766,7 +790,7 @@ export default function BookingListWorkspace() {
             ?? paymentResponse?.change
             ?? fallbackChange,
           );
-          setCashChangeAmount(Number.isFinite(responseChange) ? responseChange : fallbackChange);
+          setCashChangeAmount(Number.isFinite(responseChange) ? roundVndAmount(responseChange) : fallbackChange);
           setLocalOverrides((prev) => ({
             ...prev,
             [id]: {
@@ -838,34 +862,18 @@ export default function BookingListWorkspace() {
   const isCancelledAfterPayment = Boolean(paymentStatus?.bookingStatus?.startsWith("CANCELLED"));
   const selectedBookingTotal = selectedBooking ? bookingTotalIncludingSurcharges(selectedBooking) : 0;
   const cashBillTotal = selectedBookingTotal;
-  const enteredCashAmount = Number(cashAmountPaid) || 0;
-  const paidSoFar = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+  const enteredCashAmount = roundVndAmount(Number(cashAmountPaid) || 0);
+  const paidSoFar = roundVndAmount(Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0));
   const cashRemainingDue = Math.max(0, cashBillTotal - paidSoFar);
-  const computedCashChange = Math.max(0, enteredCashAmount - cashRemainingDue);
+  const computedCashChange = roundVndAmount(Math.max(0, enteredCashAmount - cashRemainingDue));
   const displayCashChange = cashChangeAmount ?? computedCashChange;
   const paymentBlocked = !!selectedBooking && (() => {
     const finalAmount = selectedBookingTotal;
     const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
-    return paidAmount >= finalAmount;
+    return roundVndAmount(paidAmount) >= finalAmount;
   })();
-  const earlyCheckinFeeTotal = (selectedBooking?.bookingDetails ?? [])
-    .filter((detail) => !isCancelledBookingDetail(detail))
-    .reduce((total, detail) => {
-      const fee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
-      return total + (Number.isFinite(fee) ? fee : 0);
-    }, 0);
-  const lateCheckoutFeeTotal = (selectedBooking?.bookingDetails ?? [])
-    .filter((detail) => !isCancelledBookingDetail(detail))
-    .reduce((total, detail) => {
-      const fee = Number(detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee ?? 0);
-      return total + (Number.isFinite(fee) ? fee : 0);
-    }, 0);
-  const otherSurchargesTotal = (selectedBooking?.bookingDetails ?? [])
-    .filter((detail) => !isCancelledBookingDetail(detail))
-    .reduce((total, detail) => {
-      const amount = Number(detail.otherSurcharges ?? 0);
-      return total + (Number.isFinite(amount) ? amount : 0);
-    }, 0);
+  const { earlyCheckinFeeTotal, lateCheckoutFeeTotal, otherSurchargesTotal } =
+    getBookingSurchargeBreakdown(selectedBooking?.bookingDetails ?? []);
 
   const canCancelSelectedBooking = !!selectedBooking
     && ["PENDING", "CONFIRMED"].includes(
@@ -1125,7 +1133,7 @@ export default function BookingListWorkspace() {
             <button
               type="button"
               onClick={() => void refreshBookingsOrResetFilters()}
-              disabled={isBookingListLoading}
+              disabled={isRefreshingBookings}
               aria-label={hasActiveFilters
                 ? localizedText("Xóa bộ lọc", "Reset filters")
                 : localizedText("Tải lại danh sách booking", "Reload bookings")}
@@ -1133,9 +1141,9 @@ export default function BookingListWorkspace() {
                 ? localizedText("Xóa bộ lọc", "Reset filters")
                 : localizedText("Tải lại danh sách booking", "Reload bookings")}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
-              aria-busy={isBookingListLoading}
+              aria-busy={isRefreshingBookings}
             >
-              {isBookingListLoading
+              {isRefreshingBookings
                 ? <RefreshCw size={16} className="animate-spin" />
                 : hasActiveFilters
                 ? <RotateCcw size={15} />
@@ -1151,7 +1159,7 @@ export default function BookingListWorkspace() {
           <RefreshCw size={17} className="animate-spin" />
           <span>{localizedText("Đang tải danh sách booking...", "Loading bookings...")}</span>
         </div>
-      ) : isError ? (
+      ) : isError && fetchedBookings.length === 0 ? (
         <div role="alert" className="mx-5 my-4 rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
           <p className="text-sm text-rose-700">{localizedText("Không thể tải danh sách booking của chi nhánh.", "Could not load this branch's bookings.")}</p>
           <button type="button" onClick={() => void refetch()} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
@@ -1162,11 +1170,11 @@ export default function BookingListWorkspace() {
         <FilterResultStatus filterKey={JSON.stringify([search, dateFrom, dateTo, statusFilter, dateSort])}>
         {filteredBookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có booking phù hợp.", "No matching bookings found.")}</p> : <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-max text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
                   {shownBookingColumns.map((column) => (
-                    <th key={column.id} className={`px-5 py-3 ${["room", "services", "discount", "collected", "refunded", "balance", "total"].includes(column.id) ? "text-right" : ""}`}>
+                    <th key={column.id} className={`whitespace-nowrap px-3 py-3 ${["room", "services", "discount", "collected", "refunded", "balance", "total"].includes(column.id) ? "text-right" : ""}`}>
                       {localizedText(column.label[0], column.label[1])}
                     </th>
                   ))}
@@ -1190,19 +1198,19 @@ export default function BookingListWorkspace() {
                   const displayRemaining = Math.abs(guestDue);
                   return (
                     <tr key={`${bookingId(booking)}-${index}`} className="hover:bg-slate-50/80 transition-colors">
-                      {visibleColumns.booking && <td className="px-5 py-4 font-semibold text-blue-700">{bookingId(booking)}</td>}
-                      {visibleColumns.date && <td className="px-5 py-4 text-slate-600">{formatDate(booking.createdAt)}</td>}
-                      {visibleColumns.customer && <td className="px-5 py-4 font-medium text-slate-800">{textOf(booking, ["customerName"])}</td>}
-                      {visibleColumns.room && <td className="px-5 py-4 text-right text-slate-700">{money(booking.roomTotal)}</td>}
-                      {visibleColumns.services && <td className="px-5 py-4 text-right text-slate-700">{money(booking.serviceTotal)}</td>}
-                      {visibleColumns.discount && <td className="px-5 py-4 text-right text-rose-600">{money(bookingDiscount)}</td>}
-                      {visibleColumns.collected && <td className="px-5 py-4 text-right text-emerald-700">{money(collectedAmount)}</td>}
-                      {visibleColumns.refunded && <td className="px-5 py-4 text-right text-purple-700">{money(refundedAmount)}</td>}
-                      {visibleColumns.balance && <td className={`px-5 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
+                    {visibleColumns.booking && <td className="whitespace-nowrap px-3 py-4 font-semibold text-blue-700">{bookingId(booking)}</td>}
+                    {visibleColumns.date && <td className="whitespace-nowrap px-3 py-4 text-slate-600">{formatDate(booking.createdAt)}</td>}
+                    {visibleColumns.customer && <td className="max-w-40 truncate px-3 py-4 font-medium text-slate-800">{textOf(booking, ["customerName"])}</td>}
+                    {visibleColumns.room && <td className="whitespace-nowrap px-3 py-4 text-right text-slate-700">{money(booking.roomTotal)}</td>}
+                    {visibleColumns.services && <td className="whitespace-nowrap px-3 py-4 text-right text-slate-700">{money(booking.serviceTotal)}</td>}
+                    {visibleColumns.discount && <td className="whitespace-nowrap px-3 py-4 text-right text-rose-600">{money(bookingDiscount)}</td>}
+                    {visibleColumns.collected && <td className="whitespace-nowrap px-3 py-4 text-right text-emerald-700">{money(collectedAmount)}</td>}
+                    {visibleColumns.refunded && <td className="whitespace-nowrap px-3 py-4 text-right text-purple-700">{money(refundedAmount)}</td>}
+                    {visibleColumns.balance && <td className={`whitespace-nowrap px-3 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
                         {isFullyPaid ? "0 đ" : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
                       </td>}
-                      {visibleColumns.total && <td className="px-5 py-4 text-right font-bold text-blue-700">{money(finalAmountNumber)}</td>}
-                      {visibleColumns.status && <td className="px-5 py-4">
+                    {visibleColumns.total && <td className="whitespace-nowrap px-3 py-4 text-right font-bold text-blue-700">{money(finalAmountNumber)}</td>}
+                    {visibleColumns.status && <td className="whitespace-nowrap px-3 py-4">
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
                             isPaid
@@ -1215,15 +1223,15 @@ export default function BookingListWorkspace() {
                           {bookingStatusLabel(booking)}
                         </span>
                       </td>}
-                      {visibleColumns.actions && <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
+                      {visibleColumns.actions && <td className="px-3 py-4">
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => {
                               setSelectedBooking(booking);
                               setPaymentError("");
                             }}
-                            className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
+                            className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-blue-200 px-2 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
                           >
                             <Eye size={14} />
                             Chi tiết
@@ -1233,7 +1241,7 @@ export default function BookingListWorkspace() {
                             disabled={isCancelled || isCheckedOut}
                             title={isCancelled ? "Booking đã hủy nên không thể chỉnh sửa" : isCheckedOut ? "Booking đã checkout hoàn tất nên không thể chỉnh sửa" : "Chỉnh sửa booking"}
                             onClick={() => handleOpenEdit(booking)}
-                            className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            className={`flex items-center gap-1 whitespace-nowrap rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors ${
                               isCancelled || isCheckedOut
                                 ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                                 : "border-amber-200 text-amber-700 hover:bg-amber-50"
@@ -1394,7 +1402,7 @@ export default function BookingListWorkspace() {
                       }
 
                       const finalAmount = selectedBookingTotal;
-                      const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
+                      const paidAmount = roundVndAmount(Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0));
                       const diff = finalAmount - paidAmount;
 
                       if (diff === 0) {
@@ -1621,10 +1629,10 @@ export default function BookingListWorkspace() {
                       type="button"
                       onClick={() => {
                         setPaymentMethod("cash");
-                        if (!cashAmountPaid && selectedBooking) {
+                        if (!cashAmountTouched && selectedBooking) {
                           const finalAmount = selectedBookingTotal;
-                          const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
-                          const due = Math.max(0, finalAmount - paidAmount);
+                          const paidAmount = roundVndAmount(Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0));
+                          const due = roundVndAmount(Math.max(0, finalAmount - paidAmount));
                           setCashAmountPaid(String(due));
                         }
                         setPaymentError("");
@@ -1652,14 +1660,17 @@ export default function BookingListWorkspace() {
                         <label className="block text-sm font-semibold text-slate-700">
                           {localizedText("Tiền khách đưa", "Cash received")}
                           <div className="relative mt-1.5">
-                            <input type="number" min="1" step="1000" value={cashAmountPaid} onChange={(event) => setCashAmountPaid(event.target.value)} placeholder={localizedText("Nhập số tiền khách đưa", "Enter the amount received")} className="h-10 w-full rounded-lg border border-emerald-200 bg-white px-3 pr-10 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                            <input type="number" min="1" step="1" value={cashAmountPaid} onChange={(event) => {
+                              setCashAmountPaid(event.target.value);
+                              setCashAmountTouched(true);
+                            }} placeholder={localizedText("Nhập số tiền khách đưa", "Enter the amount received")} className="h-10 w-full rounded-lg border border-emerald-200 bg-white px-3 pr-10 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
                             <span className="pointer-events-none absolute right-3 top-2.5 text-sm text-slate-400">{i18n.language.startsWith("en") ? "VND" : "đ"}</span>
                           </div>
                           <span className="mt-1 block text-xs font-normal text-slate-500">
                             {(() => {
                               const finalAmount = selectedBookingTotal;
-                              const paidAmount = Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0);
-                              const remainingToCollect = Math.max(0, finalAmount - paidAmount);
+                              const paidAmount = roundVndAmount(Number(valueOf(selectedBooking, ["paidAmount", "amountPaid", "totalPaidAmount"]) ?? 0));
+                              const remainingToCollect = roundVndAmount(Math.max(0, finalAmount - paidAmount));
                               return `${localizedText("Tổng cần thu", "Total to collect")}: ${money(remainingToCollect)}`;
                             })()}
                           </span>
