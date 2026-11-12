@@ -25,6 +25,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/dateTime";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -136,6 +137,9 @@ function getSlugFromHotelName(name?: string): string {
   if (lower.includes("an nhơn") || lower.includes("an nhon")) {
     return "sen-viet-an-nhon";
   }
+  if (lower.includes("quy nhơn") || lower.includes("quy nhon")) {
+    return "sen-viet-quy-nhon";
+  }
   return "sen-viet-an-nhon";
 }
 
@@ -238,12 +242,60 @@ export function openAdminChatWidget() {
   window.dispatchEvent(new Event(CHAT_OPEN_EVENT));
 }
 
-function formatReply(text: string): string {
+function escapeHtml(text: string): string {
   return text
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/^\s*[-•]\s+(.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul class="my-1 space-y-0.5">$&</ul>')
-    .replace(/\n/g, "<br/>");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatReply(text: string): string {
+  if (!text) return "";
+  const safe = escapeHtml(text.trim());
+  const formatted = safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  const lines = formatted.split("\n");
+  const processed: string[] = [];
+  let inList = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const listMatch = trimmed.match(/^[-•*]\s+(.+)$/);
+    if (listMatch) {
+      if (!inList) {
+        processed.push('<ul class="my-1.5 space-y-1 list-disc pl-5">');
+        inList = true;
+      }
+      processed.push(`<li>${listMatch[1]}</li>`);
+    } else {
+      if (inList) {
+        processed.push("</ul>");
+        inList = false;
+      }
+      processed.push(trimmed);
+    }
+  }
+  if (inList) {
+    processed.push("</ul>");
+  }
+
+  const res: string[] = [];
+  for (const item of processed) {
+    if (item.startsWith("<ul") || item.endsWith("</ul>") || item.startsWith("<li>")) {
+      res.push(item);
+    } else if (!item) {
+      res.push("<br/>");
+    } else {
+      res.push(`<span>${item}</span><br/>`);
+    }
+  }
+
+  let output = res.join("");
+  while (output.endsWith("<br/>")) {
+    output = output.slice(0, -5);
+  }
+  return output;
 }
 
 /**
@@ -323,7 +375,8 @@ function getInitialCachedMessages(cacheKey: string, greeting: string): Message[]
 }
 
 export default function ChatWidget() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language === "en";
   const defaultGreeting = t(
     "ai.widgetAdminGreeting",
     "Kính chào Quý Quản lý / Admin Sen Việt! 👋\nEm là Trợ lý AI Quản trị & Vận hành (Staff & Admin Copilot). Em sẵn sàng hỗ trợ Anh/Chị:\n• 🛎️ Tra cứu ca trực hôm nay & thời khóa biểu tuần\n• 🏨 Tra cứu phòng trống thời gian thực & phòng chờ dọn\n• 🔍 Tra cứu chi tiết booking, trạng thái thanh toán\n• 📊 Báo cáo doanh thu, công suất phòng & phân tích đánh giá khách\n• 📝 Hướng dẫn quy trình chuẩn SOP (hoàn tiền, check-in sớm, bồi thường)\n• ✍️ Soạn thảo nhanh email xin lỗi, phản hồi đánh giá 5 sao."
@@ -336,6 +389,26 @@ export default function ChatWidget() {
 
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [customWidth, setCustomWidth] = useState<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleStartResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const rightOffset = 24;
+      const newWidth = Math.max(460, Math.min(window.innerWidth * 0.65, window.innerWidth - moveEvent.clientX - rightOffset));
+      setCustomWidth(Math.round(newWidth));
+    };
+    const onMouseUp = () => {
+      setIsResizing(false);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, []);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>(() =>
     getInitialCachedMessages(cacheKey, defaultGreeting)
@@ -348,37 +421,92 @@ export default function ChatWidget() {
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const wantsListeningRef = useRef(false);
+  const voiceBaseInputRef = useRef("");
+  const finalTranscriptRef = useRef("");
 
   useEffect(() => {
-    if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.lang = "vi-VN";
+    if (typeof window === "undefined") return;
+    if (!("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = isEn ? "en-US" : "vi-VN";
 
-      recognitionRef.current.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput((prev) => (prev ? prev + " " + transcript : transcript));
-      };
+    rec.onresult = (event: any) => {
+      let interim = "";
+      let addedFinal = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        const txt = res[0]?.transcript || "";
+        if (res.isFinal) {
+          addedFinal += txt + " ";
+        } else {
+          interim += txt;
+        }
+      }
+      if (addedFinal) {
+        finalTranscriptRef.current = (finalTranscriptRef.current + " " + addedFinal).trim();
+      }
+      const combined = [voiceBaseInputRef.current, finalTranscriptRef.current, interim.trim()]
+        .filter(Boolean)
+        .join(" ");
+      setInput(combined);
+    };
 
-      recognitionRef.current.onend = () => {
+    rec.onend = () => {
+      if (wantsListeningRef.current) {
+        voiceBaseInputRef.current = (inputRef.current?.value || "").trim();
+        finalTranscriptRef.current = "";
+        setTimeout(() => {
+          if (!wantsListeningRef.current) return;
+          try {
+            rec.start();
+          } catch {
+            wantsListeningRef.current = false;
+            setIsListening(false);
+          }
+        }, 150);
+      } else {
         setIsListening(false);
-      };
+      }
+    };
 
-      recognitionRef.current.onerror = (event: any) => {
-        console.error("Speech recognition error", event.error);
-        setIsListening(false);
-      };
-    }
-  }, []);
+    rec.onerror = (event: any) => {
+      if (event.error === "no-speech" || event.error === "aborted") {
+        return;
+      }
+      console.error("Speech recognition error", event.error);
+      wantsListeningRef.current = false;
+      setIsListening(false);
+    };
+
+    recognitionRef.current = rec;
+    return () => {
+      wantsListeningRef.current = false;
+      try { rec.abort(); } catch {}
+    };
+  }, [isEn]);
 
   const toggleListening = () => {
+    if (!recognitionRef.current) return;
     if (isListening) {
-      recognitionRef.current?.stop();
+      wantsListeningRef.current = false;
+      try { recognitionRef.current.stop(); } catch {}
       setIsListening(false);
     } else {
-      recognitionRef.current?.start();
-      setIsListening(true);
+      voiceBaseInputRef.current = input.trim();
+      finalTranscriptRef.current = "";
+      wantsListeningRef.current = true;
+      try {
+        recognitionRef.current.lang = isEn ? "en-US" : "vi-VN";
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch {
+        wantsListeningRef.current = false;
+        setIsListening(false);
+      }
     }
   };
 
@@ -465,6 +593,13 @@ export default function ChatWidget() {
   const send = useCallback(
     async (text: string) => {
       if (!text.trim() || isTyping) return;
+      if (wantsListeningRef.current) {
+        wantsListeningRef.current = false;
+        try { recognitionRef.current?.stop(); } catch {}
+        setIsListening(false);
+      }
+      voiceBaseInputRef.current = "";
+      finalTranscriptRef.current = "";
 
       const userMsg: Message = { id: Date.now(), from: "user", text };
       setMessages((prev) => [...prev, userMsg]);
@@ -485,6 +620,7 @@ export default function ChatWidget() {
           "5": "Sen Việt Đà Lạt",
           "6": "Sen Việt Gò Công",
           "7": "Sen Việt An Nhơn",
+          "8": "Sen Việt Quy Nhơn",
         };
         const isSuperAdminUser = (auth?.roles || []).includes("ROLE_SUPER_ADMIN") || (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
         const currentHotelId = isSuperAdminUser ? undefined : auth?.hotelId;
@@ -543,6 +679,7 @@ export default function ChatWidget() {
     "5": "Đà Lạt",
     "6": "Gò Công",
     "7": "An Nhơn",
+    "8": "Quy Nhơn",
   };
   const branchShortName = auth?.hotelName?.replace("Sen Việt ", "") || (auth?.hotelId ? BRANCH_SHORT_NAMES[String(auth.hotelId)] : "Đà Nẵng") || "Đà Nẵng";
 
@@ -650,6 +787,7 @@ export default function ChatWidget() {
         else if (lower.includes("đà lạt") || lower.includes("da lat")) resolvedHId = 5;
         else if (lower.includes("gò công") || lower.includes("go cong")) resolvedHId = 6;
         else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
+        else if (lower.includes("quy nhơn") || lower.includes("quy nhon")) resolvedHId = 8;
       }
 
       // Chỉ nhân viên thuộc đúng chi nhánh mới tiếp nhận tin nhắn này (Super Admin không nhận chat chi nhánh)
@@ -781,6 +919,7 @@ export default function ChatWidget() {
         else if (lower.includes("đà lạt") || lower.includes("da lat")) resolvedHId = 5;
         else if (lower.includes("gò công") || lower.includes("go cong")) resolvedHId = 6;
         else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
+        else if (lower.includes("quy nhơn") || lower.includes("quy nhon")) resolvedHId = 8;
       }
 
       if (isSuperAdmin || !staffHotelId) {
@@ -957,6 +1096,7 @@ export default function ChatWidget() {
       "5": "Sen Việt Đà Lạt",
       "6": "Sen Việt Gò Công",
       "7": "Sen Việt An Nhơn",
+      "8": "Sen Việt Quy Nhơn",
     };
     const staffHotelName = auth?.hotelName || (staffHotelId ? HOTEL_NAMES_MAP[String(staffHotelId)] : null);
     const staffName = auth?.fullName || (staffHotelName ? `Lễ tân (${staffHotelName})` : "Lễ tân Sen Việt");
@@ -1053,12 +1193,21 @@ export default function ChatWidget() {
       {/* Chat window */}
       {open && (
         <div
-          className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all duration-300 ease-in-out ${
+          style={customWidth ? { width: `${customWidth}px`, maxWidth: "calc(100vw - 1.5rem)" } : undefined}
+          className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${isResizing ? "" : "transition-all duration-300 ease-in-out"} ${
             isExpanded
-              ? "bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[48rem] md:w-[56rem] h-[92vh] max-h-[58rem]"
-              : "bottom-24 right-6 w-[26rem] max-w-[calc(100vw-2rem)] sm:w-[28rem] h-[36rem] max-h-[82vh]"
+              ? "bottom-3 right-3 sm:bottom-6 sm:right-6 w-[calc(100vw-1.5rem)] sm:w-[48rem] md:w-[50vw] max-w-[60rem] h-[93vh] max-h-[58rem]"
+              : "bottom-20 right-4 sm:bottom-24 sm:right-6 w-[calc(100vw-2rem)] sm:w-[30rem] h-[37rem] max-h-[85vh]"
           }`}
         >
+          {/* Thanh kéo tinh chỉnh chiều rộng ở cạnh trái */}
+          <div
+            onMouseDown={handleStartResize}
+            title={isEn ? "Drag left edge to adjust chat width" : "Kéo cạnh trái để tinh chỉnh độ rộng khung chat"}
+            className="hidden sm:flex absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-50 items-center justify-center group hover:bg-blue-500/20 transition-colors"
+          >
+            <div className="h-10 w-0.5 rounded-full bg-slate-300 group-hover:bg-blue-500 transition-colors" />
+          </div>
           {/* Header */}
           <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 text-white shadow-sm">
             <div className="flex items-center gap-2.5">
@@ -1066,9 +1215,9 @@ export default function ChatWidget() {
                 {activeTab === "ai" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
               </span>
               <div>
-                <div className="text-base font-semibold leading-tight flex items-center gap-2">
-                  <span>{activeTab === "ai" ? "Trợ lý AI Quản trị" : "Tư vấn Khách hàng (Live)"}</span>
-                  <span className="rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
+                <div className="text-sm font-semibold leading-tight flex items-center gap-1.5 min-w-0">
+                  <span className="truncate whitespace-nowrap">{activeTab === "ai" ? (isEn ? "AI Admin Copilot" : "Trợ lý AI Quản trị") : (isEn ? "Customer Live Chat" : "Tư vấn Khách hàng (Live)")}</span>
+                  <span className="rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-medium text-emerald-200 truncate max-w-[140px] shrink-0">
                     {isSuperAdmin ? "Toàn hệ thống Sen Việt" : (auth?.hotelName || "Chi nhánh Sen Việt")}
                   </span>
                 </div>
@@ -1088,7 +1237,7 @@ export default function ChatWidget() {
                 </button>
               )}
               <button
-                onClick={() => setIsExpanded((prev) => !prev)}
+                onClick={() => { setCustomWidth(null); setIsExpanded((prev) => !prev); }}
                 className="rounded-full p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"
                 title={isExpanded ? "Thu nhỏ" : "Phóng to cửa sổ"}
               >
@@ -1157,13 +1306,14 @@ export default function ChatWidget() {
             {messages.map((m) => {
               if (m.from === "user") {
                 return (
-                  <div
-                    key={m.id}
-                    className={`ml-auto rounded-2xl bg-blue-600 px-4 py-2.5 text-white shadow-sm ${
-                      isExpanded ? "max-w-[70%]" : "max-w-[85%]"
-                    }`}
-                  >
-                    {m.text}
+                  <div key={m.id} className="flex justify-end">
+                    <div
+                      className={`w-fit rounded-2xl rounded-tr-xs bg-blue-600 px-4 py-2.5 text-white shadow-sm break-words ${
+                        isExpanded ? "max-w-[70%]" : "max-w-[85%]"
+                      }`}
+                    >
+                      {m.text}
+                    </div>
                   </div>
                 );
               }
@@ -1202,13 +1352,13 @@ export default function ChatWidget() {
                           {bookingCard.checkInDate && (
                             <div className="flex items-center gap-1.5">
                               <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Nhận: {bookingCard.checkInDate}</span>
+                              <span>{isEn ? "Check-in:" : "Nhận:"} {formatDisplayDate(bookingCard.checkInDate, i18n.language)}</span>
                             </div>
                           )}
                           {bookingCard.checkOutDate && (
                             <div className="flex items-center gap-1.5">
                               <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Trả: {bookingCard.checkOutDate}</span>
+                              <span>{isEn ? "Check-out:" : "Trả:"} {formatDisplayDate(bookingCard.checkOutDate, i18n.language)}</span>
                             </div>
                           )}
                           <div className="flex items-center gap-1.5">

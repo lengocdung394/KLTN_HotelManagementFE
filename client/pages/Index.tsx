@@ -197,11 +197,11 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const occupancyRate = roomsAvailableForOccupancy > 0
     ? Math.round((occupiedRooms / roomsAvailableForOccupancy) * 100)
     : 0;
-  const currentGuestCountResult = bookings.reduce((result, booking) => {
+  const currentGuestCountResult = bookings.reduce<{ count: number; incomplete: boolean; checkedInDetails: number }>((result, booking) => {
     const bookingStatus = normalizeStatus(booking.bookingStatus ?? booking.status);
     if (bookingStatus.startsWith("CANCEL") || ["CANCELED", "REFUNDED", "REJECTED"].includes(bookingStatus)) return result;
-    const details = Array.isArray(booking.bookingDetails) ? booking.bookingDetails : [];
-    return details.reduce((current, detail) => {
+    const details = (Array.isArray(booking.bookingDetails) ? booking.bookingDetails : []) as Record<string, unknown>[];
+    return details.reduce<{ count: number; incomplete: boolean; checkedInDetails: number }>((current, detail) => {
       if (!isCurrentlyCheckedIn(detail)) return current;
       const count = guestCountOf(detail);
       return count === undefined
