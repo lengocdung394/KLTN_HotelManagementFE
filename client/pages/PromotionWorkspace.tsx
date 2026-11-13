@@ -1073,7 +1073,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
           </p>
         ) : displayedPromotions.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-500">
-            Chi nhánh chưa có khuyến mãi.
+            {localizedText("Chi nhánh chưa có khuyến mãi.", "This branch has no promotions yet.")}
           </p>
         ) : visiblePromotions.length === 0 ? (
           <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter, scopeFilter, selectedDate, isDateFilterActive])}><p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery || statusFilter !== "ALL" || scopeFilter !== "ALL" ? label("noPromotionsMatchingFilters") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p></FilterResultStatus>

@@ -28,6 +28,7 @@ export const parseSuperAdminRolePermissionsRows = (
     throw new Error(`File Excel thiếu cột: ${missingHeaders.join(", ")}.`);
   }
   const categoryIndex = headerIndexes.get(normalizeHeader("Danh mục"));
+  const grantedIndex = headerIndexes.get(normalizeHeader("Cấp quyền (Có/Không)"));
 
   const roleByCode = new Map(roles.map((role) => [normalizeCode(role.code), role]));
   const groups = new Map<string, Map<string, SuperAdminRolePermissionGroup["permissions"][number]>>();
@@ -42,6 +43,13 @@ export const parseSuperAdminRolePermissionsRows = (
     const category = categoryIndex === undefined
       ? "Chưa phân loại"
       : row[categoryIndex]?.trim() || "Chưa phân loại";
+    const rawGranted = grantedIndex === undefined ? "" : row[grantedIndex]?.trim() ?? "";
+    const normalizedGranted = normalizeHeader(rawGranted);
+    const granted = !normalizedGranted || ["co", "yes", "true", "1"].includes(normalizedGranted)
+      ? true
+      : ["khong", "no", "false", "0"].includes(normalizedGranted)
+        ? false
+        : undefined;
     const roleCode = normalizeCode(rawRoleCode);
     const permissionCode = normalizeCode(rawPermissionCode);
 
@@ -52,6 +60,9 @@ export const parseSuperAdminRolePermissionsRows = (
       throw new Error(`Mã quyền ở dòng ${rowNumber} không hợp lệ.`);
     }
     if (!name) throw new Error(`Tên quyền ở dòng ${rowNumber} không được để trống.`);
+    if (granted === undefined) {
+      throw new Error(`Cột Cấp quyền ở dòng ${rowNumber} chỉ nhận Có hoặc Không.`);
+    }
     const assignmentKey = `${roleCode}:${permissionCode}`;
     if (seenAssignments.has(assignmentKey)) {
       throw new Error(`Quyền ${permissionCode} bị lặp cho role ${roleCode} ở dòng ${rowNumber}.`);
@@ -64,7 +75,7 @@ export const parseSuperAdminRolePermissionsRows = (
       name,
       category,
       description,
-      granted: true,
+      granted,
     });
     importedRowCount += 1;
   });

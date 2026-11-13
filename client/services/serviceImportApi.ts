@@ -51,10 +51,11 @@ export const getServiceImportErrorMessage = (error: unknown) => {
   return error instanceof Error ? error.message : "Không thể nhập dịch vụ.";
 };
 
-export const startServiceImport = async (request: ServiceImportRequest) => {
+export const startServiceImport = async (request: ServiceImportRequest, hotelId?: number) => {
   const response = await axiosClient.post<StartServiceImportResponse>(
     "/servicesImport/import-urls-async",
     request,
+    { params: hotelId === undefined ? undefined : { hotelId } },
   );
   if (!response.data.success || !response.data.taskId) {
     throw new Error(response.data.message || "Máy chủ không trả về mã tiến trình nhập.");

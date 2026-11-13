@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
-import { Banknote, CalendarDays, CheckCircle2, Clock3, Columns3, ConciergeBell, Eye, ImagePlus, Pencil, Plus, RefreshCw, RotateCcw, Upload, X, Search } from "lucide-react";
+import { Banknote, CalendarDays, CheckCircle2, Clock3, Columns3, ConciergeBell, Eye, FileSpreadsheet, ImagePlus, Pencil, Plus, RefreshCw, RotateCcw, Upload, X, Search } from "lucide-react";
 import ListPagination from "../components/ListPagination";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { localizedText } from "../i18n";
@@ -20,7 +20,7 @@ import { uploadServiceImagesToCloudinary } from "../services/cloudinaryUploadApi
 import { bindHotelSocketEvents } from "../lib/socket";
 import type { SuperAdminBranch } from "../services/superAdminApi";
 import { useConfirmServiceUsedMutation, useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
-import BulkImportDialog from "../components/BulkImportDialog";
+import type { CatalogEntryMode } from "../components/CatalogEntryDialog";
 import ServiceImportProgressCard from "../components/ServiceImportProgressCard";
 import ClearSearchButton from "../components/ClearSearchButton";
 import FilterSelect from "../components/FilterSelect";
@@ -237,11 +237,14 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const [showCreate, setShowCreate] = useState(false);
   const [editingService, setEditingService] = useState<HotelService | null>(null);
   const [targetHotelId, setTargetHotelId] = useState("");
+  const [serviceEntryMode, setServiceEntryMode] = useState<CatalogEntryMode>("manual");
+  const [selectedServiceArchive, setSelectedServiceArchive] = useState<File | null>(null);
+  const [serviceImportFileError, setServiceImportFileError] = useState("");
+  const [isImportingServiceFile, setIsImportingServiceFile] = useState(false);
   const [newService, setNewService] = useState({ name: "", detail: "", price: "", unit: "lần", category: "Khác", imageUrl: "", active: true });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [saveError, setSaveError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<ServiceFormErrors>({});
-  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [serviceImportTaskId, setServiceImportTaskId] = useState("");
   const [serviceImportRows, setServiceImportRows] = useState<ServiceImportRowResult[]>([]);
   const [serviceImportArchiveError, setServiceImportArchiveError] = useState("");
@@ -290,6 +293,12 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const { data: services = [], isLoading, isFetching, isError, refetch } = useGetAllServicesQuery(
     isSystemAdmin ? (selectedBranchId ? { hotelId: Number(selectedBranchId) } : undefined) : hasHotelId ? { hotelId: Number(hotelId) } : undefined,
     { skip: mode !== "catalog" || (!hasHotelId && !isSystemAdmin) },
+  );
+  const {
+    refetch: refetchServiceImportScope,
+  } = useGetAllServicesQuery(
+    targetHotelId ? { hotelId: Number(targetHotelId) } : undefined,
+    { skip: !isSystemAdmin || !showCreate || serviceEntryMode !== "file" || mode !== "catalog" },
   );
   const allServices = services;
   const serviceCatalogStats = useMemo(() => {
@@ -514,6 +523,10 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
   const openCreateForm = () => {
     setEditingService(null);
     setTargetHotelId("");
+    setServiceEntryMode("manual");
+    setSelectedServiceArchive(null);
+    setServiceImportFileError("");
+    setServiceImportUploadProgress("");
     setSelectedImage(null);
     setSaveError("");
     setFieldErrors({});
@@ -531,6 +544,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       return;
     }
     setEditingService(service);
+    setServiceEntryMode("manual");
     setSelectedImage(null);
     setSaveError("");
     setFieldErrors({});
@@ -596,7 +610,19 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
 
   const importServicesFromFile = async (archiveFile: File) => {
     try {
-      const validation = await validateServiceImportArchive(archiveFile, allServices.map((service) => service.name));
+      const targetBranch = branches.find((branch) => String(branch.id) === targetHotelId);
+      if (isSystemAdmin && targetHotelId && !targetBranch) {
+        throw new Error(t("serviceWorkspace.importBranchUnknown"));
+      }
+      const imageFolderName = isSystemAdmin
+        ? targetBranch?.name ?? "Toàn hệ thống"
+        : hotelName;
+      if (!imageFolderName) throw new Error(t("serviceWorkspace.importBranchUnknown"));
+
+      const servicesForImport = isSystemAdmin
+        ? await refetchServiceImportScope().unwrap()
+        : allServices;
+      const validation = await validateServiceImportArchive(archiveFile, servicesForImport.map((service) => service.name));
       setServiceImportRows(validation.rows);
       setServiceImportArchiveError("");
       if (validation.validCount === 0) {
@@ -604,7 +630,6 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         setServiceImportValidationOnly(true);
         return true;
       }
-      if (!hotelName) throw new Error(t("serviceWorkspace.importBranchUnknown"));
 
       setServiceImportUploadProgress(t("serviceWorkspace.importReadingImages"));
       const parsed = await parseServiceImportArchive(archiveFile);
@@ -624,7 +649,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
 
       const imageFiles = [...filesByName.values()];
       setServiceImportUploadProgress(t("serviceWorkspace.importUploadingImages", { count: imageFiles.length }));
-      const imageUrls = await uploadServiceImagesToCloudinary(imageFiles, hotelName, (uploaded, total) => {
+      const imageUrls = await uploadServiceImagesToCloudinary(imageFiles, imageFolderName, (uploaded, total) => {
         setServiceImportUploadProgress(t("serviceWorkspace.importUploadingImagesProgress", { uploaded, total }));
       });
       const request = {
@@ -636,7 +661,10 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       };
 
       setServiceImportUploadProgress(t("serviceWorkspace.importSendingServices"));
-      const taskId = await startServiceImport(request);
+      const taskId = await startServiceImport(
+        request,
+        isSystemAdmin && targetHotelId ? Number(targetHotelId) : undefined,
+      );
       setServiceImportTaskId(taskId);
       setServiceImportSocketStatus(undefined);
       setServiceImportValidationOnly(false);
@@ -650,6 +678,20 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
       setServiceImportValidationOnly(true);
       setServiceImportUploadProgress("");
       return true;
+    }
+  };
+
+  const importSelectedServiceFile = async () => {
+    if (!selectedServiceArchive || isImportingServiceFile) return;
+    setIsImportingServiceFile(true);
+    setServiceImportFileError("");
+    setServiceImportUploadProgress("");
+    try {
+      await importServicesFromFile(selectedServiceArchive);
+      setShowCreate(false);
+      setSelectedServiceArchive(null);
+    } finally {
+      setIsImportingServiceFile(false);
     }
   };
 
@@ -1003,15 +1045,6 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         </div>
         {canManageServices && (
           <div className="flex shrink-0 flex-nowrap gap-2">
-            {!isSystemAdmin && (
-              <button
-                type="button"
-                onClick={() => setIsBulkImportOpen(true)}
-                className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
-              >
-                <Upload size={16} />{t("serviceWorkspace.uploadFromFile")}
-              </button>
-            )}
             <button type="button" onClick={openCreateForm} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />{t("serviceWorkspace.addService")}</button>
           </div>
         )}
@@ -1346,65 +1379,84 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           </div>
         </div>
       )}
-      <BulkImportDialog
-        open={isBulkImportOpen}
-        onOpenChange={setIsBulkImportOpen}
-        eyebrow={t("serviceWorkspace.importServices")}
-        title={t("serviceWorkspace.importServices")}
-        description={t("serviceWorkspace.bulkImportDescription")}
-        templateLabel={t("serviceWorkspace.downloadTemplate")}
-        onDownloadTemplate={downloadServiceTemplate}
-        acceptedFileTypes=".zip,application/zip"
-        fileLabel={t("serviceWorkspace.zipFileLabel")}
-        validateFile={(file) =>
-          file.name.toLocaleLowerCase() === "dichvu.zip"
-            ? null
-              : t("serviceWorkspace.importWrongZip")
-        }
-        instructions={
-          <>
-            <p className="font-bold">{t("serviceWorkspace.importZipStructure")}</p>
-            <pre className="my-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dichvu.zip
-└── dich-vu/
-    ├── mau-nhap-dich-vu.xlsx
-    └── images/
-        ├── massage.jpg
-        └── buffet.png`}</pre>
-            <p>{t("serviceWorkspace.importZipInstruction")}</p>
-            <p className="mt-2">{t("serviceWorkspace.importImageColumnInstruction")}</p>
-          </>
-        }
-        uploadLabel={t("serviceWorkspace.importServices")}
-        progress={serviceImportUploadProgress || undefined}
-        onUpload={importServicesFromFile}
-      />
       {showCreate && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => setShowCreate(false)}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm" onMouseDown={() => {
+          if (!isSaving && !isImportingServiceFile) setShowCreate(false);
+        }}>
           <form
             noValidate
-            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl shrink-0 overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="service-entry-title"
+            className="my-auto max-h-[90vh] w-full max-w-2xl shrink-0 overflow-y-auto rounded-2xl bg-white shadow-2xl"
             onSubmit={(event) => {
               event.preventDefault();
-              void saveService();
+              if (editingService || serviceEntryMode === "manual") void saveService();
             }}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4">
+            <header className="flex items-start justify-between gap-4 px-5 pt-5 sm:px-6 sm:pt-6">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("serviceWorkspace.serviceType")}</p>
-                <h4 className="mt-1 font-serif text-lg font-bold leading-tight text-slate-900">{editingService ? t("serviceWorkspace.editService") : t("serviceWorkspace.addService")}</h4>
+                <h4 id="service-entry-title" className="font-serif text-lg font-bold leading-tight text-slate-900">
+                  {editingService
+                    ? t("serviceWorkspace.editService")
+                    : localizedText("Thêm dịch vụ vào danh mục", "Add services to the catalog")}
+                </h4>
+                {!editingService && (
+                  <p className="mt-1 text-sm leading-5 text-slate-500">
+                    {localizedText("Thêm thủ công một dịch vụ hoặc nhập nhiều dịch vụ từ file.", "Add a service manually or import multiple services from a file.")}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
-                onClick={() => setShowCreate(false)}
+                onClick={() => {
+                  if (!isSaving && !isImportingServiceFile) setShowCreate(false);
+                }}
+                disabled={isSaving || isImportingServiceFile}
                 aria-label={t("serviceWorkspace.close")}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
-            </div>
+            </header>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+              {!editingService && (
+                <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServiceEntryMode("manual");
+                      setServiceImportFileError("");
+                    }}
+                    aria-pressed={serviceEntryMode === "manual"}
+                    className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition ${
+                      serviceEntryMode === "manual" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Plus size={15} /> {localizedText("Tạo thủ công", "Create manually")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServiceEntryMode("file");
+                      setSaveError("");
+                      setFieldErrors({});
+                      setServiceImportFileError("");
+                    }}
+                    aria-pressed={serviceEntryMode === "file"}
+                    className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition ${
+                      serviceEntryMode === "file" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <FileSpreadsheet size={15} /> {localizedText("Nhập từ Excel", "Import from Excel")}
+                  </button>
+                </div>
+              )}
+              {editingService || serviceEntryMode === "manual" ? (
+                <>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               {isSystemAdmin && !editingService && (
                 <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
                   {t("serviceWorkspace.serviceScope")}
@@ -1575,6 +1627,112 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 {editingService ? <Pencil size={16} /> : <Plus size={16} />}
                 {isSaving ? t("serviceWorkspace.saving") : editingService ? t("serviceWorkspace.saveChanges") : t("serviceWorkspace.addService")}
               </button>
+            </div>
+                </>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {isSystemAdmin && (
+                    <label className="block text-sm font-semibold text-slate-700">
+                      {t("serviceWorkspace.serviceScope")}
+                      <select
+                        value={targetHotelId}
+                        onChange={(event) => setTargetHotelId(event.target.value)}
+                        disabled={isImportingServiceFile}
+                        className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+                      >
+                        <option value="">{t("serviceWorkspace.entireSystem")}</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+                        ))}
+                      </select>
+                      <span className="mt-1 block text-xs font-normal text-slate-500">
+                        {targetHotelId ? t("serviceWorkspace.branchOnly") : t("serviceWorkspace.allBranchesApply")}
+                      </span>
+                    </label>
+                  )}
+                  <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                    <div className="flex items-start gap-3">
+                      <FileSpreadsheet size={19} className="mt-0.5 shrink-0 text-blue-700" />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-slate-800">
+                          {localizedText("Bước 1: Chuẩn bị file theo mẫu", "Step 1: Prepare a file using the template")}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-600">
+                          {t("serviceWorkspace.importZipInstruction")}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={downloadServiceTemplate}
+                          disabled={isImportingServiceFile}
+                          className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
+                        >
+                          <FileSpreadsheet size={15} /> {t("serviceWorkspace.downloadTemplate")}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs font-bold text-slate-700">{t("serviceWorkspace.importZipStructure")}</p>
+                    <pre className="mt-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dichvu.zip
+└── dich-vu/
+    ├── mau-nhap-dich-vu.xlsx
+    └── images/
+        ├── massage.jpg
+        └── buffet.png`}</pre>
+                    <p className="mt-2 text-xs leading-5 text-slate-600">{t("serviceWorkspace.importImageColumnInstruction")}</p>
+                  </div>
+                  <label className={`flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition hover:border-emerald-400 hover:bg-emerald-50/50 ${isImportingServiceFile ? "pointer-events-none opacity-60" : ""}`}>
+                    <Upload size={22} className="text-emerald-700" />
+                    <span className="mt-2 text-sm font-semibold text-slate-800">
+                      {selectedServiceArchive?.name ?? localizedText("Bước 2: Chọn file dichvu.zip", "Step 2: Choose dichvu.zip")}
+                    </span>
+                    <span className="mt-1 text-xs text-slate-500">
+                      {localizedText("Nhấn vào đây để chọn file từ thiết bị", "Click here to browse for a file")}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".zip,application/zip"
+                      className="sr-only"
+                      disabled={isImportingServiceFile}
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0];
+                        event.currentTarget.value = "";
+                        if (!file) return;
+                        if (file.name.toLocaleLowerCase() !== "dichvu.zip") {
+                          setSelectedServiceArchive(null);
+                          setServiceImportFileError(t("serviceWorkspace.importWrongZip"));
+                          return;
+                        }
+                        setSelectedServiceArchive(file);
+                        setServiceImportFileError("");
+                      }}
+                    />
+                  </label>
+                  {serviceImportFileError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{serviceImportFileError}</p>}
+                  {isImportingServiceFile && (
+                    <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                      {serviceImportUploadProgress || localizedText("Đang kiểm tra dữ liệu dịch vụ...", "Validating service data...")}
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreate(false)}
+                      disabled={isImportingServiceFile}
+                      className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {t("serviceWorkspace.cancel")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void importSelectedServiceFile()}
+                      disabled={!selectedServiceArchive || isImportingServiceFile}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Upload size={16} />
+                      {isImportingServiceFile ? localizedText("Đang nhập...", "Importing...") : t("serviceWorkspace.importServices")}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </form>
         </div>,

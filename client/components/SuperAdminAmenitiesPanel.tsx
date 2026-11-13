@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FileSpreadsheet, LoaderCircle, Plus, Save, Sparkles, Upload } from "lucide-react";
+import { FileSpreadsheet, LoaderCircle, Plus, Sparkles, Upload } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import RoomAmenitiesTab from "./RoomAmenitiesTab";
 import CatalogEntryDialog, { type CatalogEntryMode } from "./CatalogEntryDialog";
@@ -169,7 +169,7 @@ export default function SuperAdminAmenitiesPanel() {
                 </label>
               </div>
               <button type="submit" disabled={isCreating} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                <Save size={15} /> {isCreating ? localizedText("Đang lưu...", "Saving...") : localizedText("Thêm tiện ích", "Add amenity")}
+                <Plus size={15} /> {isCreating ? localizedText("Đang lưu...", "Saving...") : localizedText("Thêm tiện ích", "Add amenity")}
               </button>
             </form>
           }

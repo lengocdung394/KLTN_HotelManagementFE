@@ -218,27 +218,13 @@ export default function RefundApprovalWorkspace({ branches }: Props) {
     const reviewPending = branchCancellations.filter((item) => item.status === "REFUND_REVIEW_PENDING").length;
     const needsBankDetails = branchCancellations.filter((item) => item.status === "REFUND_BANK_DETAILS_REQUIRED").length;
     const checkoutPending = branchSurplusRefunds.filter((item) => item.status === "PENDING").length;
-    const processing = branchCancellations.filter((item) => item.status === "REFUND_APPROVED").length
-      + branchCancellations.filter((item) => item.status === "PAYOUT_PROCESSING").length
-      + branchSurplusRefunds.filter((item) => item.status === "APPROVED" || item.status === "PAYOUT_PROCESSING").length;
     const checkoutFailed = branchSurplusRefunds.filter((item) => item.status === "PAYOUT_FAILED").length;
-    const refunded = branchCancellations.filter((item) => item.status === "REFUNDED").length
-      + branchSurplusRefunds.filter((item) => item.status === "REFUNDED").length;
-    const totalRefunded = branchCancellations
-      .filter((item) => item.status === "REFUNDED")
-      .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0)
-      + branchSurplusRefunds
-        .filter((item) => item.status === "REFUNDED")
-        .reduce((total, item) => total + Number(item.refundAmount ?? 0), 0);
 
     return {
       reviewPending,
       needsBankDetails,
       checkoutPending,
       checkoutFailed,
-      processing,
-      refunded,
-      totalRefunded,
     };
   }, [branchCancellations, branchSurplusRefunds]);
 
@@ -335,7 +321,7 @@ export default function RefundApprovalWorkspace({ branches }: Props) {
   }, [cancellationPage, cancellationTotalPages]);
 
   const isSubmitting = isApproving || isConfirmingManualRefund || isRejecting || isRequestingPayout || isSavingBankDetails || isLoadingBankDetails;
-  const pendingTotal = counts.reviewPending + counts.needsBankDetails + counts.checkoutPending + counts.checkoutFailed;
+
 
   const openAction = (cancellation: BookingCancellation, action: CancellationAction) => {
     resetBankDetailsQuery();
@@ -549,18 +535,6 @@ export default function RefundApprovalWorkspace({ branches }: Props) {
           {localizedText("Đang tải booking của chi nhánh để lọc khoản hoàn tiền...", "Loading this branch's bookings to filter refund requests...")}
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label={localizedText("Chờ xử lý hoàn tiền", "Refunds pending action")}
-          value={String(pendingTotal)}
-          detail={`${counts.reviewPending + counts.needsBankDetails} ${localizedText("hoàn do hủy booking", "booking cancellation refunds")} · ${counts.checkoutPending} ${localizedText("hoàn dư sau checkout", "checkout surplus refunds")}`}
-          tone="violet"
-        />
-        <StatCard label={localizedText("Đang xử lý hoàn tiền", "Refunds in progress")} value={String(counts.processing)} tone="blue" />
-        <StatCard label={localizedText("Đã hoàn tiền", "Refunded")} value={String(counts.refunded)} tone="green" />
-        <StatCard label={localizedText("Tổng tiền đã hoàn", "Total refunded")} value={money(counts.totalRefunded)} tone="slate" />
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2" role="group" aria-label={localizedText("Loại yêu cầu hoàn tiền", "Refund request type")}>
         {([
           {
@@ -1388,32 +1362,5 @@ export default function RefundApprovalWorkspace({ branches }: Props) {
         </div>
       )}
     </section>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  tone: "violet" | "blue" | "green" | "slate";
-}) {
-  const toneClasses = {
-    violet: "border-violet-200 bg-violet-50 text-violet-800",
-    blue: "border-blue-200 bg-blue-50 text-blue-800",
-    green: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    slate: "border-slate-200 bg-white text-slate-800",
-  };
-
-  return (
-    <div className={`rounded-xl border p-3 shadow-sm sm:p-4 ${toneClasses[tone]}`}>
-      <p className="text-xs font-medium opacity-80">{label}</p>
-      <p className="mt-1.5 text-xl font-bold">{value}</p>
-      {detail && <p className="mt-1 text-[11px] opacity-75">{detail}</p>}
-    </div>
   );
 }

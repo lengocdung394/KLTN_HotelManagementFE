@@ -6,16 +6,6 @@ type ApiResponse<T> = {
   result: T;
 };
 
-type ProvinceApiOption = ProvinceOption & {
-  background_image_url?: string | null;
-};
-
-export type ProvinceOption = {
-  id: string;
-  name: string;
-  backgroundImageUrl?: string | null;
-};
-
 export type SuperAdminBranch = {
   id: number;
   name: string;
@@ -90,11 +80,6 @@ export type CreateBranchRequest = {
   adminAccount: CreateBranchAdminAccountRequest;
   managerAccount: CreateBranchAccountRequest;
   roomPolicies: SuperAdminRoomPolicy[];
-};
-
-export type CreateProvinceRequest = {
-  name: string;
-  backgroundImageUrl: string;
 };
 
 export type SuperAdminRole = {
@@ -249,6 +234,11 @@ export const superAdminApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<SuperAdminRole>) => response.result,
       invalidatesTags: ["SuperAdminRole"],
     }),
+    updateSuperAdminRole: builder.mutation<SuperAdminRole, { roleCode: string; data: CreateSuperAdminRoleRequest }>({
+      query: ({ roleCode, data }) => ({ url: `/role_permissions/roles/${encodeURIComponent(roleCode)}`, method: "PUT", data }),
+      transformResponse: (response: ApiResponse<SuperAdminRole>) => response.result,
+      invalidatesTags: ["SuperAdminRole"],
+    }),
     getSuperAdminPermissionCatalog: builder.query<SuperAdminPermissionCatalogItem[], void>({
       query: () => ({ url: "/role_permissions/permissions", method: "GET" }),
       transformResponse: (response: ApiResponse<SuperAdminPermissionCatalogGroup[]>) =>
@@ -265,6 +255,18 @@ export const superAdminApi = baseApi.injectEndpoints({
       CreateSuperAdminPermissionRequest
     >({
       query: (data) => ({ url: "/role_permissions/permissions", method: "POST", data }),
+      transformResponse: (response: ApiResponse<SuperAdminPermissionCatalogItem>) => response.result,
+      invalidatesTags: ["SuperAdminPermissionCatalog", "SuperAdminRole"],
+    }),
+    updateSuperAdminPermission: builder.mutation<
+      SuperAdminPermissionCatalogItem,
+      { permissionCode: string; data: CreateSuperAdminPermissionRequest }
+    >({
+      query: ({ permissionCode, data }) => ({
+        url: `/role_permissions/permissions/${encodeURIComponent(permissionCode)}`,
+        method: "PUT",
+        data,
+      }),
       transformResponse: (response: ApiResponse<SuperAdminPermissionCatalogItem>) => response.result,
       invalidatesTags: ["SuperAdminPermissionCatalog", "SuperAdminRole"],
     }),
@@ -323,32 +325,9 @@ export const superAdminApi = baseApi.injectEndpoints({
       providesTags: ["SuperAdminBranch"],
     }),
     getSuperAdminBranchesByProvince: builder.query<SuperAdminBranch[], string>({
-      query: (provinceId) => ({ url: `/superAdmin/branches/by-province/${encodeURIComponent(provinceId)}`, method: "GET" }),
+      query: (provinceName) => ({ url: `/superAdmin/branches/by-province/${encodeURIComponent(provinceName)}`, method: "GET" }),
       transformResponse: (response: ApiResponse<SuperAdminBranch[]>) => response?.result ?? [],
       providesTags: ["SuperAdminBranch"],
-    }),
-    getSuperAdminProvinces: builder.query<ProvinceOption[], void>({
-      query: () => ({ url: "/superAdmin/provinces", method: "GET" }),
-      transformResponse: (response: ApiResponse<ProvinceApiOption[]>) => (response?.result ?? []).map((province) => ({
-        id: province.id,
-        name: province.name,
-        backgroundImageUrl: province.backgroundImageUrl ?? province.background_image_url ?? null,
-      })),
-      providesTags: ["SuperAdminProvince"],
-    }),
-    createSuperAdminProvince: builder.mutation<ProvinceOption, CreateProvinceRequest>({
-      query: (data) => ({ url: "/superAdmin/createProvince", method: "POST", data }),
-      transformResponse: (response: ApiResponse<ProvinceOption>) => response.result,
-      invalidatesTags: ["SuperAdminProvince"],
-    }),
-    updateSuperAdminProvinceBackground: builder.mutation<ProvinceOption, { provinceId: string; backgroundImageUrl: string }>({
-      query: ({ provinceId, backgroundImageUrl }) => ({
-        url: `/superAdmin/provinces/${encodeURIComponent(provinceId)}/background-image`,
-        method: "PUT",
-        data: { backgroundImageUrl },
-      }),
-      transformResponse: (response: ApiResponse<ProvinceOption>) => response.result,
-      invalidatesTags: ["SuperAdminProvince"],
     }),
     createSuperAdminBranch: builder.mutation<SuperAdminBranch, CreateBranchRequest>({
       query: (data) => ({ url: "/superAdmin/branches", method: "POST", data }),
@@ -383,8 +362,10 @@ export const {
   useRequestOwnSuperAdminPasswordResetMutation,
   useGetSuperAdminRolesQuery,
   useCreateSuperAdminRoleMutation,
+  useUpdateSuperAdminRoleMutation,
   useGetSuperAdminPermissionCatalogQuery,
   useCreateSuperAdminPermissionMutation,
+  useUpdateSuperAdminPermissionMutation,
   useImportSuperAdminPermissionCatalogMutation,
   useGetSuperAdminRolePermissionsQuery,
   useImportSuperAdminRolePermissionsMutation,
@@ -392,9 +373,6 @@ export const {
   useRemoveSuperAdminPermissionFromRoleMutation,
   useGetSuperAdminBranchesQuery,
   useGetSuperAdminBranchesByProvinceQuery,
-  useGetSuperAdminProvincesQuery,
-  useCreateSuperAdminProvinceMutation,
-  useUpdateSuperAdminProvinceBackgroundMutation,
   useCreateSuperAdminBranchMutation,
   useGetSuperAdminBranchDetailsQuery,
   useLazyGetSuperAdminBranchDetailsQuery,

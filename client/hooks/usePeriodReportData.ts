@@ -66,7 +66,7 @@ export default function usePeriodReportData(
     const buckets = enabled
       ? buildReportDateBuckets(period, startDate, endDate, "en-US")
       : [];
-    if (!enabled || buckets.length === 0 || buckets.length > 366) {
+    if (!enabled || buckets.length === 0 || buckets.length > 366 || hotelIds.length === 0) {
       setState({ data: [], isLoading: false, isError: false });
       return;
     }
