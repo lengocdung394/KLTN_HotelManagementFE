@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   Bell,
   BarChart3,
+  Bot,
   Building2,
   CalendarDays,
   CheckCheck,
@@ -110,6 +111,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VIETNAM_PROVINCES } from "../lib/vietnamProvinces";
+import AiCmsPage from "./AiCmsPage";
 
 type AdminSection =
   | "overview"
@@ -126,7 +128,8 @@ type AdminSection =
   | "services"
   | "accounts-overview"
   | "staff-accounts"
-  | "customer-accounts";
+  | "customer-accounts"
+  | "ai-cms";
 
 type AdminNotification = {
   id: number;
@@ -848,6 +851,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "branches", label: localizedText("Quản lý chi nhánh", "Branch management"), icon: Building2 },
     { id: "permissions", label: localizedText("Quản lý Role và quyền", "Roles and permissions"), icon: ShieldCheck },
     { id: "resource-stats", label: localizedText("Thống kê", "Statistics"), icon: BarChart3 },
+    { id: "ai-cms", label: localizedText("Cấu hình AI & Playground", "AI CMS & Playground"), icon: Bot },
     { id: "profile", label: localizedText("Cá nhân", "Profile"), icon: CircleUserRound },
   ];
   const isAccountSection =
@@ -1768,6 +1772,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           )}
 
           {section === "refund-approvals" && <RefundApprovalWorkspace branches={branches} />}
+
+          {section === "ai-cms" && <AiCmsPage homePath="/admin" />}
 
           {section === "overview" && (
             <>

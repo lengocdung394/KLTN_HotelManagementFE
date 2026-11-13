@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import {
+  Bot,
   CalendarCheck,
   CalendarDays,
   ClipboardCheck,
@@ -518,6 +519,20 @@ export default function AppSidebar({
                 </div>
               )}
             </div>
+          )}
+          {(roles.includes("ROLE_ADMIN") || roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN")) && (
+            <Link
+              to="/ai-cms"
+              onClick={onCloseMobile}
+              className={`mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                location.pathname === "/ai-cms"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-300 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Bot className="h-4 w-4 shrink-0" />
+              {!collapsed && <span className="truncate">{localizedText("Cấu hình AI & Playground", "AI CMS & Playground")}</span>}
+            </Link>
           )}
         </nav>
       </div>

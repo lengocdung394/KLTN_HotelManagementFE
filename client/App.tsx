@@ -12,6 +12,7 @@ import { logout } from "./store/authSlice";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import AiCmsPage from "./pages/AiCmsPage";
 import NotFound from "./pages/NotFound";
 import ModulePage from "./pages/ModulePage";
 import CustomerPage from "./pages/CustomerPage";
@@ -61,6 +62,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
       <Routes>
         <Route path="/" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<AdminDashboardPage onLogout={onLogout} />} />
+        <Route path="/ai-cms" element={<AiCmsPage onLogout={onLogout} homePath="/admin" />} />
         <Route path="/refund-approvals" element={<ModulePage path="/refund-approvals" onLogout={onLogout} />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
@@ -105,6 +107,7 @@ function AppRoutes({ authenticated, onLogin, onLogout }: AppRoutesProps) {
         <Route path="/reports" element={<ModulePage path="/reports" onLogout={onLogout} />} />
         <Route path="/bao-cao" element={<Navigate to="/reports" replace />} />
         <Route path="/staff" element={<ModulePage path="/staff" onLogout={onLogout} />} />
+        <Route path="/ai-cms" element={<AiCmsPage onLogout={onLogout} homePath="/overview" />} />
         <Route path="/settings" element={<ModulePage path="/settings" onLogout={onLogout} />} />
         <Route path="/permissions" element={<Navigate to="/overview" replace />} />
         <Route path="*" element={<Navigate to="/overview" replace />} />
