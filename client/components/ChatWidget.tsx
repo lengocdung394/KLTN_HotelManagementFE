@@ -424,6 +424,8 @@ export default function ChatWidget() {
   const wantsListeningRef = useRef(false);
   const voiceBaseInputRef = useRef("");
   const finalTranscriptRef = useRef("");
+  const voiceTargetRef = useRef<"ai" | "customer">("ai");
+  const customerReplyInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -452,12 +454,20 @@ export default function ChatWidget() {
       const combined = [voiceBaseInputRef.current, finalTranscriptRef.current, interim.trim()]
         .filter(Boolean)
         .join(" ");
-      setInput(combined);
+      if (voiceTargetRef.current === "customer") {
+        setCustomerReplyInput(combined);
+      } else {
+        setInput(combined);
+      }
     };
 
     rec.onend = () => {
       if (wantsListeningRef.current) {
-        voiceBaseInputRef.current = (inputRef.current?.value || "").trim();
+        voiceBaseInputRef.current = (
+          (voiceTargetRef.current === "customer"
+            ? customerReplyInputRef.current?.value
+            : inputRef.current?.value) || ""
+        ).trim();
         finalTranscriptRef.current = "";
         setTimeout(() => {
           if (!wantsListeningRef.current) return;
@@ -489,14 +499,15 @@ export default function ChatWidget() {
     };
   }, [isEn]);
 
-  const toggleListening = () => {
+  const toggleListening = (target: "ai" | "customer" = "ai") => {
     if (!recognitionRef.current) return;
     if (isListening) {
       wantsListeningRef.current = false;
       try { recognitionRef.current.stop(); } catch {}
       setIsListening(false);
     } else {
-      voiceBaseInputRef.current = input.trim();
+      voiceTargetRef.current = target;
+      voiceBaseInputRef.current = (target === "customer" ? customerReplyInput : input).trim();
       finalTranscriptRef.current = "";
       wantsListeningRef.current = true;
       try {
@@ -703,12 +714,6 @@ export default function ChatWidget() {
       ];
 
   const [activeTab, setActiveTab] = useState<"ai" | "customer">(isSuperAdmin ? "ai" : "customer");
-
-  useEffect(() => {
-    if (isSuperAdmin && activeTab !== "ai") {
-      setActiveTab("ai");
-    }
-  }, [isSuperAdmin, activeTab]);
   const staffHotelId = auth?.hotelId;
   const staffStorageKey = `senviet_staff_customer_sessions_${staffHotelId || (isSuperAdmin ? "all" : "default")}`;
 
@@ -1267,7 +1272,6 @@ export default function ChatWidget() {
               <Bot className="h-4 w-4" />
               <span>Trợ lý AI Quản trị</span>
             </button>
-            {!isSuperAdmin && (
             <button
               type="button"
               onClick={() => {
@@ -1290,7 +1294,6 @@ export default function ChatWidget() {
                 </span>
               )}
             </button>
-            )}
           </div>
 
           {activeTab === "ai" && (
@@ -1477,7 +1480,7 @@ export default function ChatWidget() {
             {recognitionRef.current && (
               <button
                 type="button"
-                onClick={toggleListening}
+                onClick={() => toggleListening("ai")}
                 className={`rounded-xl p-2 transition ${
                   isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
@@ -1560,12 +1563,14 @@ export default function ChatWidget() {
                       <div className="text-right text-[11px] text-slate-400 font-medium">
                         {m.senderName} (Bạn) · {new Date(m.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
                       </div>
-                      <div
-                        className={`ml-auto rounded-2xl bg-indigo-600 px-4 py-2.5 text-white shadow-sm ${
-                          isExpanded ? "max-w-[70%]" : "max-w-[85%]"
-                        }`}
-                      >
-                        {m.message}
+                      <div className="flex justify-end">
+                        <div
+                          className={`w-fit rounded-2xl bg-indigo-600 px-4 py-2.5 text-white shadow-sm ${
+                            isExpanded ? "max-w-[70%]" : "max-w-[85%]"
+                          }`}
+                        >
+                          {m.message}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1578,7 +1583,7 @@ export default function ChatWidget() {
                       <span className="text-slate-400">{new Date(m.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
                     <div
-                      className={`mr-auto rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-800 shadow-sm ${
+                      className={`w-fit mr-auto rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-800 shadow-sm ${
                         isExpanded ? "max-w-[70%]" : "max-w-[85%]"
                       }`}
                     >
@@ -1621,6 +1626,7 @@ export default function ChatWidget() {
             className="flex items-center gap-2 border-t border-slate-200 bg-white p-3"
           >
             <input
+              ref={customerReplyInputRef}
               type="text"
               value={customerReplyInput}
               onChange={(e) => setCustomerReplyInput(e.target.value)}
@@ -1632,6 +1638,21 @@ export default function ChatWidget() {
               disabled={!selectedCustomerId}
               className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
             />
+            {recognitionRef.current && (
+              <button
+                type="button"
+                onClick={() => toggleListening("customer")}
+                disabled={!selectedCustomerId}
+                className={`rounded-xl p-2 transition disabled:opacity-40 ${
+                  isListening && voiceTargetRef.current === "customer"
+                    ? "bg-red-500 text-white animate-pulse"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+                title="Nhập bằng giọng nói"
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            )}
             <button
               type="submit"
               disabled={!customerReplyInput.trim() || !selectedCustomerId}

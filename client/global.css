@@ -760,4 +760,17 @@ form.max-w-lg label > textarea {
     color: rgb(30 58 138) !important;
     border-bottom: 1px solid rgb(191 219 254) !important;
   }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  select:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
