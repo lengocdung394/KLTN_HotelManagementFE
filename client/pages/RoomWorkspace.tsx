@@ -23,7 +23,8 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { downloadBuildingTemplate, downloadFloorTemplate, downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
-import { getRoomAmenityTranslationKey } from "../lib/roomLocalization";
+import { getRoomAmenityTranslationKey, localizeRoomNamePrefix } from "../lib/roomLocalization";
+import { formatVnd } from "../lib/currency";
 import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
 import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
 
@@ -233,7 +234,7 @@ const statusLabels: Record<string, string> = { READY: "Sẵn sàng", MAINTENANCE
 const statusValues: Record<string, string> = Object.fromEntries(Object.entries(statusLabels).map(([value, label]) => [label, value]));
 const roomTypeLabel = (value: string) => roomTypeLabels[value] ?? value;
 const statusLabel = (value: string) => statusLabels[value] ?? value;
-const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
+const money = (value: number) => formatVnd(value);
 const formatRoomArea = (value: unknown) => {
   if (typeof value === "number") {
     return Number.isFinite(value) && value > 0 ? `${value} m²` : "Chưa cập nhật";
@@ -319,7 +320,7 @@ const emptyCreateRoomForm: CreateRoomFormState = {
   defaultImage: null,
   status: "Sẵn sàng",
 };
-const emptyBuildingForm = { name: "", code: "" };
+const emptyBuildingForm = { name: "" };
 const emptyFloorForm = { name: "" };
 
 export default function RoomWorkspace() {
@@ -567,7 +568,7 @@ export default function RoomWorkspace() {
     const key = keys[status];
     return key ? t(key) : value;
   };
-  const localizedBuildingName = (value: string) => value.replace(/^Tòa\s*/i, `${t("room.buildingPrefix")} `);
+  const localizedBuildingName = (value: string) => localizeRoomNamePrefix(value, "toa", t("room.buildingPrefix"));
   const localizedBedTypeName = (value: string) => {
     const normalized = value.toLocaleLowerCase();
     if (normalized.includes("2 giường đơn") || normalized.includes("2 single beds")) return t("room.doubleSingleBeds");
@@ -1154,7 +1155,7 @@ export default function RoomWorkspace() {
   };
   const openEditBuildingModal = (building: Building) => {
     setEditingBuildingId(building.id);
-    setBuildingForm({ name: building.name, code: building.id });
+    setBuildingForm({ name: building.name });
     setBuildingNameError("");
     setShowCreateBuilding(true);
   };
@@ -2197,7 +2198,7 @@ export default function RoomWorkspace() {
     {showCreateBuilding && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]" onMouseDown={() => { if (!isCreatingBuilding) closeCreateBuildingModal(); }}>
       <div role="dialog" aria-modal="true" className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
-          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{localizedText("Quản lý cơ sở vật chất", "FACILITY MANAGEMENT")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingBuildingId ? localizedText("Sửa tòa nhà", "Edit building") : localizedText("Tạo tòa nhà mới", "Create new building")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingBuildingId ? localizedText("Cập nhật tên tòa nhà. Mã tòa được giữ nguyên.", "Update the building name. The building code will remain unchanged.") : localizedText("Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu.", "Enter a building name; its code will be generated when saved.")}</p></div>
+          <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{localizedText("Quản lý cơ sở vật chất", "FACILITY MANAGEMENT")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingBuildingId ? localizedText("Sửa tòa nhà", "Edit building") : localizedText("Tạo tòa nhà mới", "Create new building")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingBuildingId ? localizedText("Cập nhật tên tòa nhà.", "Update the building name.") : localizedText("Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu.", "Enter a building name; its code will be generated when saved.")}</p></div>
           <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
         <div className="mt-4 space-y-4">
@@ -2209,7 +2210,6 @@ export default function RoomWorkspace() {
             }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveBuilding(); } }} aria-invalid={Boolean(buildingNameError)} aria-describedby={buildingNameError ? "building-name-error" : undefined} placeholder={localizedText("Ví dụ: Tòa Sunrise", "e.g. Sunrise Building")} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none transition focus:ring-2 ${buildingNameError ? "border-rose-400 focus:border-rose-400 focus:ring-rose-100" : "border-slate-200 focus:border-blue-400 focus:ring-blue-100"}`} />
             {buildingNameError && <span id="building-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{buildingNameError}</span>}
           </label>
-          {editingBuildingId && <label className="block text-sm font-semibold text-slate-700">{localizedText("Mã tòa nhà", "Building code")}<input value={buildingForm.code} readOnly className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold tracking-wider text-slate-700 outline-none" /></label>}
         </div>
         <div className="mt-6 flex justify-start gap-2"><button type="button" onClick={() => void saveBuilding()} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{isCreatingBuilding || isUpdatingBuilding ? localizedText("Đang lưu...", "Saving...") : editingBuildingId ? localizedText("Lưu thay đổi", "Save changes") : localizedText("Tạo tòa nhà", "Create building")}</button><button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button></div>
       </div>
@@ -2220,7 +2220,7 @@ export default function RoomWorkspace() {
           <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
           <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
         </div>
-        <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Tòa nhà", "Building")} <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Tòa nhà", "Building")} <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{localizedBuildingName(item.name)}</option>)}</select></label>
         <label className="mt-4 block text-sm font-semibold text-slate-700">
           {localizedText("Số tầng", "Floor number")} <span className="text-rose-500">*</span>
           <input autoFocus type="number" min="1" step="1" value={floorForm.name} aria-invalid={Boolean(floorNameError)} aria-describedby={floorNameError ? "floor-number-error" : undefined} onChange={(event) => {
@@ -2278,7 +2278,7 @@ export default function RoomWorkspace() {
                   <label className="block text-sm font-semibold text-slate-700">
                     {t("room.buildingLabel")} <span className="text-rose-500">*</span>
                     <select value={createRoomForm.building} onChange={(event) => { const buildingId = event.target.value; setSelectedBuildingId(buildingId); setCreateRoomForm((current) => ({ ...current, building: buildingId, floor: "" })); clearRoomFormErrors("building", "floor", "form"); }} className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
-                      {buildings.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      {buildings.map((item) => <option key={item.id} value={item.id}>{localizedBuildingName(item.name)}</option>)}
                     </select>
                     {roomFormErrors.building && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">{roomFormErrors.building}</p>}
                   </label>

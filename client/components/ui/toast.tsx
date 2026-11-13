@@ -28,17 +28,17 @@ const toastVariants = cva(
     variants: {
       variant: {
         default:
-          "border-2 border-yellow-400 bg-yellow-100 text-slate-900 shadow-[0_8px_24px_rgba(250,204,21,0.28)]",
+          "border-2 border-blue-200 bg-blue-50 text-blue-900 shadow-[0_8px_20px_rgba(59,130,246,0.16)]",
         success:
-          "border-2 border-emerald-300 bg-emerald-50 text-emerald-800 shadow-[0_8px_20px_rgba(16,185,129,0.18)]",
+          "border-2 border-blue-200 bg-blue-50 text-blue-900 shadow-[0_8px_20px_rgba(59,130,246,0.16)]",
         promotion:
-          "border-2 border-purple-300 bg-purple-50 text-purple-800 shadow-[0_8px_20px_rgba(168,85,247,0.2)]",
+          "border-2 border-blue-200 bg-blue-50 text-blue-900 shadow-[0_8px_20px_rgba(59,130,246,0.16)]",
         checkin:
-          "border-2 border-blue-300 bg-blue-50 text-blue-800 shadow-[0_8px_20px_rgba(59,130,246,0.18)]",
+          "border-2 border-blue-200 bg-blue-50 text-blue-900 shadow-[0_8px_20px_rgba(59,130,246,0.16)]",
         checkout:
-          "border-2 border-orange-300 bg-orange-50 text-orange-800 shadow-[0_8px_20px_rgba(249,115,22,0.18)]",
+          "border-2 border-blue-200 bg-blue-50 text-blue-900 shadow-[0_8px_20px_rgba(59,130,246,0.16)]",
         booking:
-          "border-2 border-yellow-400 bg-yellow-50 text-slate-800 shadow-[0_8px_24px_rgba(250,204,21,0.22)]",
+          "border-2 border-blue-200 bg-blue-50 text-blue-900 shadow-[0_8px_20px_rgba(59,130,246,0.16)]",
         destructive:
           "destructive group border-red-300 bg-red-50 text-red-700 shadow-[0_8px_20px_rgba(239,68,68,0.18)]",
       },
@@ -86,7 +86,7 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-2 top-2 rounded-full bg-yellow-200/80 p-1.5 text-amber-900/80 transition-all hover:bg-yellow-300 hover:text-amber-950 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-yellow-400/50",
+      "absolute right-2 top-2 rounded-full bg-blue-100 p-1.5 text-blue-700 transition-all hover:bg-blue-200 hover:text-blue-900 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-300/50",
       className,
     )}
     toast-close=""
@@ -115,7 +115,7 @@ const ToastDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Description
     ref={ref}
-    className={cn("text-sm opacity-90", className)}
+    className={cn("whitespace-pre-line text-sm leading-5 opacity-90", className)}
     {...props}
   />
 ));

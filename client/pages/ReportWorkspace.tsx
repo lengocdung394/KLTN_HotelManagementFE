@@ -364,7 +364,7 @@ export default function ReportWorkspace() {
 
   return (
     <div className="mt-6 space-y-5">
-      <section className="grid gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm xl:grid-cols-[minmax(240px,1fr)_minmax(0,2fr)] xl:items-center">
+      <section className="grid gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm xl:grid-cols-[minmax(220px,1fr)_minmax(0,3fr)] xl:items-center">
         <div className="flex min-w-0 items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-600">
             <CalendarDays size={18} />
@@ -378,7 +378,7 @@ export default function ReportWorkspace() {
             </p>
           </div>
         </div>
-        <div className={`grid min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-4 ${isSystemAdmin ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}>
+        <div className={`grid min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-4 ${isSystemAdmin ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
           <label className="block min-w-0 text-xs font-semibold text-slate-500">
             {localizedText("Theo", "By")}
             <FilterSelect
@@ -985,9 +985,10 @@ export default function ReportWorkspace() {
                         ) : (
                           <>
                             <div className="overflow-x-auto">
-                              <table className="w-full min-w-[660px] text-left text-xs">
+                              <table className="w-full min-w-[724px] text-left text-xs">
                               <thead>
                                 <tr className="border-b border-slate-100 text-slate-500">
+                                  <th className="px-2 py-2 font-semibold">{localizedText("STT", "No.")}</th>
                                   <th className="px-2 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
                                   <th className="px-2 py-2 font-semibold">{localizedText("Số tiền", "Amount")}</th>
                                   <th className="px-2 py-2 font-semibold">{localizedText("Phương thức", "Method")}</th>
@@ -997,8 +998,9 @@ export default function ReportWorkspace() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {paginatedRefunds.map((refund) => (
+                                {paginatedRefunds.map((refund, index) => (
                                   <tr key={refund.bookingId} className="border-b border-slate-50 last:border-0">
+                                    <td className="whitespace-nowrap px-2 py-2.5 tabular-nums text-slate-500">{(page - 1) * pageSize + index + 1}</td>
                                     <td className="whitespace-nowrap px-2 py-2.5 font-semibold text-slate-800">{refund.bookingId}</td>
                                     <td className="whitespace-nowrap px-2 py-2.5 text-slate-700">{formatMoney(refund.amount)}</td>
                                     <td className="whitespace-nowrap px-2 py-2.5 text-slate-600">{paymentMethodLabel(refund.paymentMethod)}</td>
@@ -1042,9 +1044,10 @@ export default function ReportWorkspace() {
             ) : (
               <>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[620px] text-left text-sm">
+                  <table className="w-full min-w-[684px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-xs text-slate-500">
+                      <th className="px-3 py-2 font-semibold">{localizedText("STT", "No.")}</th>
                       <th className="px-3 py-2 font-semibold">{localizedText("Mã booking", "Booking ID")}</th>
                       <th className="px-3 py-2 font-semibold">{localizedText("Kênh đặt", "Booking channel")}</th>
                       <th className="px-3 py-2 font-semibold">{localizedText("Lý do hủy", "Cancellation reason")}</th>
@@ -1052,8 +1055,9 @@ export default function ReportWorkspace() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedCancelledBookings.map((booking) => (
+                    {paginatedCancelledBookings.map((booking, index) => (
                       <tr key={booking.bookingId} className="border-b border-slate-50 last:border-0">
+                        <td className="whitespace-nowrap px-3 py-3 tabular-nums text-slate-500">{(safeCancelledPage - 1) * cancelledPageSize + index + 1}</td>
                         <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-800">{booking.bookingId}</td>
                         <td className="whitespace-nowrap px-3 py-3">
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${

@@ -21,6 +21,7 @@
     "back": "Quay lại",
     "previousPage": "Trang trước",
     "nextPage": "Trang sau",
+    "serialNumber": "STT",
     "paginationSummary": "Hiển thị {{from}}-{{to}} trên {{total}}",
     "pageOf": "{{current}} / {{total}}",
     "rowsPerPage": "Số dòng",
@@ -284,7 +285,7 @@
       "cancelledPaymentTimeout": "Hết hạn thanh toán",
       "completed": "Hoàn thành"
     },
-    "tiers": { "loyal": "Thân thiết", "potential": "Tiềm năng", "new": "Mới" }
+    "tiers": { "bronze": "Hạng Đồng", "silver": "Hạng Bạc", "gold": "Hạng Vàng", "platinum": "Hạng Bạch Kim" }
   },
   "pages": {
     "bookings": {
@@ -404,6 +405,12 @@
     "selectRoomHint": "Nhấn để chọn phòng",
     "booked": "Đã kín",
     "selecting": "Đang chọn",
+    "calendarLegend": {
+      "selecting": "Đang chọn đặt",
+      "reserved": "Đã đặt / Giữ chỗ",
+      "available": "Phòng trống",
+      "past": "Đã qua"
+    },
     "dragToSelect": "Kéo / bấm chọn",
     "today": "Hôm nay",
     "viewBookedRooms": "Xem phòng đã chọn",
@@ -453,6 +460,7 @@
     "nights": "đêm lưu trú",
     "noDateSelected": "Chưa chọn ngày",
     "searchRooms": "Tìm số hoặc loại phòng",
+    "noRooms": "Không tìm thấy phòng phù hợp với tiêu chí hiện tại.",
     "searchCustomer": "Tìm khách hàng đã lưu",
     "searchCustomerPlaceholder": "Tìm theo tên hoặc số điện thoại",
     "changeCustomer": "Đổi khách hàng",
@@ -508,7 +516,7 @@
     "enterGuestDetailsForSummary": "Nhập đủ họ tên, số điện thoại và CCCD để hiển thị thông tin khách hàng.",
     "promoSelected": "Khuyến mãi đã chọn: {{code}}",
     "people": "người",
-    "currencyPerPerson": "đ/người",
+    "currencyPerPerson": "/người",
     "specialGuestRequests": "Yêu cầu đặc biệt của khách...",
     "continueToServices": "Tiếp tục chọn dịch vụ",
     "guestDetailsRequired": "Vui lòng nhập đủ họ tên, số điện thoại và CCCD của khách hàng.",
@@ -556,8 +564,15 @@
     "roomList": "Danh sách phòng",
     "roomsAtBranch": "phòng tại chi nhánh Sen Việt",
     "buildingList": "Danh sách tòa nhà",
+    "searchBuildings": "Tìm tên hoặc mã tòa...",
+    "addBuildingHint": "Bạn có thể thêm tòa nhà riêng lẻ bằng nút “Thêm tòa nhà”.",
+    "noBuildingsFound": "Không tìm thấy tòa nhà phù hợp.",
+    "editBuilding": "Sửa tòa nhà",
     "buildingNameColumn": "Tên tòa nhà",
     "floorNameColumn": "Tầng",
+    "searchFloors": "Tìm tầng nhà...",
+    "addFloorHint": "Chọn tòa nhà, sau đó thêm từng tầng bằng nút “Thêm tầng”.",
+    "noFloorsFound": "Không tìm thấy tầng nhà phù hợp.",
     "roomCountColumn": "Số phòng",
     "actionsColumn": "Thao tác",
     "amenityList": "Danh sách tiện nghi",

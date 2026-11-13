@@ -804,18 +804,21 @@ export default function RefundApprovalWorkspace({ branches }: Props) {
         ) : (
           <>
             <div className="max-w-full overflow-x-auto">
-              <table className="table-fixed text-left text-sm" style={{ width: `max(100%, ${shownColumns.reduce((width, column) => width + column.width, 0)}px)` }}>
+              <table className="table-fixed text-left text-sm" style={{ width: `max(100%, ${shownColumns.reduce((width, column) => width + column.width, 64)}px)` }}>
               <colgroup>
+                <col style={{ width: "64px" }} />
                 {shownColumns.map((column) => <col key={column.id} style={{ width: `${column.width}px` }} />)}
               </colgroup>
               <thead className="bg-blue-50 text-[11px] uppercase tracking-wide text-blue-800">
                 <tr>
+                  <th scope="col" className="whitespace-nowrap px-3 py-3">{localizedText("STT", "No.")}</th>
                   {shownColumns.map((column) => <th key={column.id} className="px-3 py-3">{localizedText(column.label[0], column.label[1])}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {paginatedCancellations.map((cancellation) => (
+                {paginatedCancellations.map((cancellation, index) => (
                   <tr key={cancellation.id} className="align-top transition-colors hover:bg-slate-50/70">
+                    <td className="whitespace-nowrap px-3 py-4 tabular-nums text-slate-500">{(safeCancellationPage - 1) * cancellationPageSize + index + 1}</td>
                     {visibleColumns.booking && <td className="px-3 py-4">
                       <p className="whitespace-nowrap font-semibold text-blue-700">{cancellation.bookingId}</p>
                     </td>}

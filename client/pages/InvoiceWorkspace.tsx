@@ -213,9 +213,10 @@ export default function InvoiceWorkspace() {
 
       {!isLoading && !isError && completedBookings.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[950px] table-fixed text-left">
+          <table className="w-full min-w-[1014px] table-fixed text-left">
             <thead className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <tr>
+                <th className="w-16 whitespace-nowrap px-4 py-3">{localizedText("STT", "No.")}</th>
                 <th className="w-[17%] px-5 py-3">{localizedText("Khách hàng", "Guest")}</th>
                 <th className="w-[20%] px-4 py-3">{localizedText("Booking / Đơn hàng", "Booking / Order")}</th>
                 <th className="w-[16%] px-4 py-3">{localizedText("Phòng", "Rooms")}</th>
@@ -226,7 +227,7 @@ export default function InvoiceWorkspace() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedBookings.map((booking) => {
+              {paginatedBookings.map((booking, index) => {
                 const bookingId = String(booking.bookingId ?? booking.id ?? "—");
                 const details = getBookingDetails(booking);
                 const total = booking.finalAmount ?? (
@@ -238,6 +239,7 @@ export default function InvoiceWorkspace() {
 
                 return (
                   <tr key={bookingId} className="align-middle transition hover:bg-slate-50/70">
+                    <td className="whitespace-nowrap px-4 py-4 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                     <td className="px-5 py-4">
                       <p className="text-sm font-bold text-slate-900">{booking.customerName ?? localizedText("Khách hàng", "Guest")}</p>
                       <span className="mt-1.5 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">

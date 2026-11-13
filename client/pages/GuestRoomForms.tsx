@@ -5,6 +5,7 @@ import { emitCustomerCreated } from "../lib/socket";
 import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazyGetCustomerByIdQuery, type CustomerResponse } from "../services/customerApi";
 import { useAppSelector } from "../store/hooks";
 import { toast } from "@/components/ui/use-toast";
+import { formatVnd } from "../lib/currency";
 
 type GuestRoom = {
   id: string;
@@ -416,8 +417,8 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <p className="text-slate-600">{t("booking.standardCapacity")} <strong className="text-slate-800">{room.guests} {t("booking.people")}</strong></p>
               <p className="text-slate-600">{t("booking.maxAdditionalGuests")} <strong className="text-slate-800">{room.maxExtraGuests ?? 0} {t("booking.people")}</strong></p>
-              <p className="text-slate-600">{t("booking.adultAgeRange")}: <strong className="text-amber-800">{(room.extraAdultFee ?? 0).toLocaleString("vi-VN")}{t("booking.currencyPerPerson")}</strong></p>
-              <p className="text-slate-600">{t("booking.childAgeRange")}: <strong className="text-amber-800">{(room.extraChildFee ?? 0).toLocaleString("vi-VN")}{t("booking.currencyPerPerson")}</strong></p>
+              <p className="text-slate-600">{t("booking.adultAgeRange")}: <strong className="text-amber-800">{formatVnd(room.extraAdultFee ?? 0)}{t("booking.currencyPerPerson")}</strong></p>
+              <p className="text-slate-600">{t("booking.childAgeRange")}: <strong className="text-amber-800">{formatVnd(room.extraChildFee ?? 0)}{t("booking.currencyPerPerson")}</strong></p>
             </div>
             <p className="mt-2 border-t border-blue-100 pt-2 text-slate-500">{t("booking.infantAgeRange")}: <strong className="text-emerald-700">{t("booking.infantFree")}</strong></p>
           </div>

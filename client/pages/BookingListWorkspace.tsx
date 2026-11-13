@@ -715,15 +715,48 @@ export default function BookingListWorkspace() {
       notes: editNotes,
     };
 
+    const changes: string[] = [];
+    const englishChanges: string[] = [];
+    const addFieldChange = (changed: boolean, vietnamese: string, english: string) => {
+      if (!changed) return;
+      changes.push(vietnamese);
+      englishChanges.push(english);
+    };
+    addFieldChange(editCustomerName !== String(valueOf(editingBooking, ["customerName"]) ?? ""), "tên khách hàng", "customer name");
+    addFieldChange(editBookingStatus !== String(valueOf(editingBooking, ["bookingStatus", "status"]) ?? ""), "trạng thái", "status");
+    addFieldChange(editBookingChannel !== String(valueOf(editingBooking, ["bookingChannel", "channel"]) ?? ""), "kênh đặt phòng", "booking channel");
+    addFieldChange(roomAmt !== bookingAmount(editingBooking, ["roomTotal"]), "tiền phòng", "room charge");
+    addFieldChange(srvAmt !== bookingAmount(editingBooking, ["serviceTotal"]), "tiền dịch vụ", "service charge");
+    addFieldChange(discAmt !== bookingAmount(editingBooking, ["discountTotal", "discountAmountTotal"]), "giảm giá", "discount");
+    addFieldChange(editNotes !== String(valueOf(editingBooking, ["notes", "bookingNotes"]) ?? ""), "ghi chú", "notes");
+    const updateDescription = changes.length > 0
+      ? localizedText(
+        `Booking #${id}: cập nhật ${changes.join(", ")}.`,
+        `Booking #${id}: updated ${englishChanges.join(", ")}.`,
+      )
+      : localizedText(`Thông tin booking #${id} đã được lưu.`, `Booking #${id} information was saved.`);
+
     setEditError("");
+    setEditSuccess("");
     if (bookingUpdateInFlight.current) return;
     bookingUpdateInFlight.current = true;
     try {
       await updateBookingApi({ id, request: updatePayload }).unwrap();
-      setEditSuccess(localizedText("Cập nhật thông tin booking thành công!", "Booking information updated successfully!"));
-    } catch {
-      // Fallback optimistic update if backend endpoint is mock/unavailable
-      setEditSuccess(localizedText("Đã lưu thông tin chỉnh sửa booking thành công!", "Booking changes saved successfully!"));
+      setEditSuccess(updateDescription);
+    } catch (requestError) {
+      console.error("Could not update booking", requestError);
+      const responseError = requestError as { data?: { message?: string; error?: string }; error?: string };
+      const errorMessage = responseError.data?.message
+        ?? responseError.data?.error
+        ?? responseError.error
+        ?? localizedText("Không thể cập nhật booking. Vui lòng thử lại.", "Could not update booking. Please try again.");
+      setEditError(errorMessage);
+      toast({
+        variant: "destructive",
+        title: localizedText("Cập nhật booking thất bại", "Booking update failed"),
+        description: errorMessage,
+      });
+      return;
     } finally {
       bookingUpdateInFlight.current = false;
     }
@@ -1170,9 +1203,10 @@ export default function BookingListWorkspace() {
         <FilterResultStatus filterKey={JSON.stringify([search, dateFrom, dateTo, statusFilter, dateSort])}>
         {filteredBookings.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{localizedText("Chưa có booking phù hợp.", "No matching bookings found.")}</p> : <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
+                  <th scope="col" className="whitespace-nowrap px-3 py-3">{localizedText("STT", "No.")}</th>
                   {shownBookingColumns.map((column) => (
                     <th key={column.id} className={`whitespace-nowrap px-3 py-3 ${["room", "services", "discount", "collected", "refunded", "balance", "total"].includes(column.id) ? "text-right" : ""}`}>
                       {localizedText(column.label[0], column.label[1])}
@@ -1198,6 +1232,7 @@ export default function BookingListWorkspace() {
                   const displayRemaining = Math.abs(guestDue);
                   return (
                     <tr key={`${bookingId(booking)}-${index}`} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="whitespace-nowrap px-3 py-4 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                     {visibleColumns.booking && <td className="whitespace-nowrap px-3 py-4 font-semibold text-blue-700">{bookingId(booking)}</td>}
                     {visibleColumns.date && <td className="whitespace-nowrap px-3 py-4 text-slate-600">{formatDate(booking.createdAt)}</td>}
                     {visibleColumns.customer && <td className="max-w-40 truncate px-3 py-4 font-medium text-slate-800">{textOf(booking, ["customerName"])}</td>}
@@ -1207,7 +1242,7 @@ export default function BookingListWorkspace() {
                     {visibleColumns.collected && <td className="whitespace-nowrap px-3 py-4 text-right text-emerald-700">{money(collectedAmount)}</td>}
                     {visibleColumns.refunded && <td className="whitespace-nowrap px-3 py-4 text-right text-purple-700">{money(refundedAmount)}</td>}
                     {visibleColumns.balance && <td className={`whitespace-nowrap px-3 py-4 text-right font-medium ${isFullyPaid ? "text-emerald-700 font-semibold" : isHotelOwesCustomer ? "text-purple-700" : "text-amber-700"}`}>
-                        {isFullyPaid ? "0 đ" : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
+                        {isFullyPaid ? money(0) : isHotelOwesCustomer ? `(-${money(displayRemaining)})` : money(displayRemaining)}
                       </td>}
                     {visibleColumns.total && <td className="whitespace-nowrap px-3 py-4 text-right font-bold text-blue-700">{money(finalAmountNumber)}</td>}
                     {visibleColumns.status && <td className="whitespace-nowrap px-3 py-4">
@@ -1554,9 +1589,9 @@ export default function BookingListWorkspace() {
                             <p className="font-semibold text-slate-600">{localizedText("Dịch vụ", "Services")} ({serviceRequests.length})</p>
                             {serviceRequests.length > 0 ? (
                               <div className="mt-1">
-                                <div className="grid grid-cols-[minmax(0,1fr)_3rem_5rem_6rem] gap-3 border-b border-slate-100 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_5rem_6rem] gap-3 border-b border-slate-100 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                   <span>{localizedText("Tên dịch vụ", "Service")}</span>
-                                  <span className="text-right">{localizedText("Số lượng", "Quantity")}</span>
+                                  <span className="whitespace-nowrap text-right">{localizedText("Số lượng", "Quantity")}</span>
                                   <span className="text-right">{localizedText("Đơn giá", "Unit price")}</span>
                                   <span className="text-right">{localizedText("Thành tiền", "Amount")}</span>
                                 </div>

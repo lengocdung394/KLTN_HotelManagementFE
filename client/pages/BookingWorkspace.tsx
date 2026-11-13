@@ -24,6 +24,9 @@ import { getServicePriceBreakdown, getServiceQuantityForRoom, sumRoomPriceForRan
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
 import { calculatePromotionDiscount } from "../lib/promotionPricing";
 import { localizedText } from "../i18n";
+import { localizeBedDescription, localizeRoomNamePrefix } from "../lib/roomLocalization";
+import { describeBookingModification } from "../lib/bookingModificationSummary";
+import { formatVnd } from "../lib/currency";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
@@ -40,7 +43,7 @@ const booked: Record<string, { start: string; end: string; guest: string }[]> = 
 
 
 const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"];
-const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
+const money = (value: number) => formatVnd(value);
 const serviceDetailIdOf = (service: Record<string, unknown>) => String(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? "");
 const isCancelledBookingDetail = (detail: Record<string, unknown>) => String(detail.bookingStatusType ?? "").toUpperCase() === "CANCELLED";
 const bookingDetailIdOf = (detail: Record<string, unknown>) => String(detail.bookingDetailId ?? detail.bookingDetailsId ?? detail.bookingDetailID ?? detail.detailId ?? detail.detailID ?? detail.id ?? "");
@@ -104,6 +107,10 @@ const allFloorsLabel = "Tất cả các tầng";
 const allBuildingsLabel = "Tất cả các tòa";
 const allRoomTypesLabel = "Tất cả loại phòng";
 const roomTypeLabel = (value: string) => ({ STANDARD: "Standard Room", SUPERIOR: "Superior Room", DELUXE: "Deluxe Room", SUITE: "Suite Room", FAMILY: "Family Room" }[value] ?? value);
+const localizeBuildingOption = (value: string) =>
+  localizeRoomNamePrefix(value, "toa", localizedText("Tòa", "Building"));
+const localizeFloorOption = (value: string) =>
+  localizeRoomNamePrefix(value, "tang", localizedText("Tầng", "Floor"));
 const roomFloor = (room: BookingRoom) => room.floor ?? `Tầng ${room.id.split("-")[1] ?? ""}`;
 const todayLocal = () => {
   const date = new Date();
@@ -485,20 +492,6 @@ function DesktopCalendar({
     });
   }, [timelineStart]);
   const timelineEnd = stableTimeline[stableTimeline.length - 1]?.value ?? timelineStart;
-  const timelineStartDate = new Date(`${timelineStart}T00:00:00`);
-  const timelineEndDate = new Date(`${timelineEnd}T00:00:00`);
-  const { data: startMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
-    { hotelId, month: timelineStartDate.getMonth() + 1, year: timelineStartDate.getFullYear() },
-    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
-  );
-  const { data: endMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
-    { hotelId, month: timelineEndDate.getMonth() + 1, year: timelineEndDate.getFullYear() },
-    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
-  );
-  const seasonalEventDates = useMemo(
-    () => new Set(getSeasonalEventDates([...(startMonthEvents?.content ?? []), ...(endMonthEvents?.content ?? [])])),
-    [startMonthEvents?.content, endMonthEvents?.content],
-  );
   const { data: dailyRoomPrices = {} } = useGetBranchRoomDailyPricesQuery(
     { hotelId, startDate: timelineStart, endDate: timelineEnd },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
@@ -745,19 +738,19 @@ function DesktopCalendar({
         <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 shadow-2xs" />
-            Đang chọn đặt
+            {t("booking.calendarLegend.selecting")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-2xs" />
-            Đã đặt / Giữ chỗ
+            {t("booking.calendarLegend.reserved")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-sky-200 border border-sky-400 shadow-2xs" />
-            Phòng trống
+            {t("booking.calendarLegend.available")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-400">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-            Đã qua
+            {t("booking.calendarLegend.past")}
           </span>
         </div>
 
@@ -902,7 +895,6 @@ function DesktopCalendar({
             {stableTimeline.map((date) => {
               const isWeekend = date.day === "T7" || date.day === "CN";
               const isToday = date.value === todayValue;
-              const hasEvent = seasonalEventDates.has(date.value);
 
               return (
                 <div
@@ -921,7 +913,6 @@ function DesktopCalendar({
                   <p className={`mt-0.5 text-xs font-extrabold ${isPastDate(date.value) ? "text-slate-400" : isToday ? "text-blue-900" : "text-slate-800"}`}>
                     {date.label}
                   </p>
-                  {hasEvent && <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span>}
                 </div>
               );
             })}
@@ -990,7 +981,7 @@ function DesktopCalendar({
                   </span>
                   <span className="min-w-0 flex-1 text-left">
                     <strong className="block truncate text-xs font-bold text-slate-800">{room.type}</strong>
-                    <small className="mt-0.5 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
+                    <small className="mt-0.5 block truncate text-[10px] text-slate-500">{localizeBedDescription(room.beds, (key) => t(key))} · {room.size}</small>
                   </span>
                 </button>
                 <div className="my-auto mr-2 flex shrink-0 items-center gap-1">
@@ -1081,7 +1072,7 @@ function DesktopCalendar({
                       <span className="whitespace-nowrap text-center text-[10px] font-extrabold">
                         {reservation || matrixReserved
                           ? bookedGuestName ?? "Đã đặt"
-                          : money(roomPriceForDay(room, day)).replace("đ", "Đ")}
+                          : money(roomPriceForDay(room, day))}
                       </span>
                     </div>
                   </div>
@@ -2044,10 +2035,11 @@ export default function BookingWorkspace() {
       try {
         const res = await modifyBooking({ bookingId: id, request: modificationRequest }).unwrap();
         console.log("===> [BOOKING WORKSPACE MODIFY SUCCESS]:", res);
+        const changeDescription = describeBookingModification(id, modificationRequest);
         toast({
           variant: "default",
-          title: "Cập nhật booking thành công!",
-          description: `Đã cập nhật các thay đổi cho booking #${id}.`,
+          title: localizedText("Cập nhật booking thành công!", "Booking updated successfully!"),
+          description: localizedText(changeDescription.vi, changeDescription.en),
         });
         dispatch(baseApi.util.invalidateTags(["Customer"]));
         clearRoomGuestCache();
@@ -2218,8 +2210,8 @@ export default function BookingWorkspace() {
               <ClearSearchButton value={query} onClear={() => setQuery("")} label={t("common.clearSearch")} className="h-6 w-6" />
               </div>
               <SearchableFilter value={roomType} options={roomTypeOptions.map((item) => ({ value: item, label: item === allRoomTypesLabel ? localizedText("Tất cả loại phòng", "All room types") : item }))} onChange={setRoomType} searchPlaceholder={localizedText("Tìm loại phòng...", "Search room types...")} emptyMessage={localizedText("Không tìm thấy loại phòng.", "No room types found.")} ariaLabel={localizedText("Lọc theo loại phòng", "Filter by room type")} />
-              <SearchableFilter value={floor} options={floorOptions.map((item) => ({ value: item, label: item === allFloorsLabel ? localizedText("Tất cả các tầng", "All floors") : item }))} onChange={setFloor} searchPlaceholder={localizedText("Tìm tầng...", "Search floors...")} emptyMessage={localizedText("Không tìm thấy tầng.", "No floors found.")} ariaLabel={localizedText("Lọc theo tầng", "Filter by floor")} />
-              <SearchableFilter value={building} options={buildingOptions.map((item) => ({ value: item, label: item === allBuildingsLabel ? localizedText("Tất cả các tòa", "All buildings") : item }))} onChange={(value) => { setBuilding(value); setFloor(allFloorsLabel); }} searchPlaceholder={localizedText("Tìm tòa nhà...", "Search buildings...")} emptyMessage={localizedText("Không tìm thấy tòa nhà.", "No buildings found.")} ariaLabel={localizedText("Lọc theo tòa nhà", "Filter by building")} />
+              <SearchableFilter value={floor} options={floorOptions.map((item) => ({ value: item, label: item === allFloorsLabel ? localizedText("Tất cả các tầng", "All floors") : localizeFloorOption(item) }))} onChange={setFloor} searchPlaceholder={localizedText("Tìm tầng...", "Search floors...")} emptyMessage={localizedText("Không tìm thấy tầng.", "No floors found.")} ariaLabel={localizedText("Lọc theo tầng", "Filter by floor")} />
+              <SearchableFilter value={building} options={buildingOptions.map((item) => ({ value: item, label: item === allBuildingsLabel ? localizedText("Tất cả các tòa", "All buildings") : localizeBuildingOption(item) }))} onChange={(value) => { setBuilding(value); setFloor(allFloorsLabel); }} searchPlaceholder={localizedText("Tìm tòa nhà...", "Search buildings...")} emptyMessage={localizedText("Không tìm thấy tòa nhà.", "No buildings found.")} ariaLabel={localizedText("Lọc theo tòa nhà", "Filter by building")} />
               {hasRoomFilter && <div className="flex items-center xl:justify-center"><FilterResetButton onClick={() => { setQuery(""); setRoomType(allRoomTypesLabel); setBuilding(allBuildingsLabel); setFloor(allFloorsLabel); }} label={localizedText("Xóa tất cả bộ lọc", "Clear all filters")} /></div>}
             </div>
             <div className="flex w-full flex-wrap items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
@@ -2351,7 +2343,7 @@ export default function BookingWorkspace() {
             {services.map((service) => {
               const selection = allRoomServices.find((item) => item.serviceId === service.id);
               return <div key={service.id} className={`rounded-xl border p-4 ${selection ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}>
-                <label className="flex items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setAllRoomServices((current) => event.target.checked ? [...current, { serviceId: service.id, quantity: 1 }] : current.filter((item) => item.serviceId !== service.id))} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span><strong className="block text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{service.price.toLocaleString("vi-VN")}đ / người</small></span></label>
+                <label className="flex items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setAllRoomServices((current) => event.target.checked ? [...current, { serviceId: service.id, quantity: 1 }] : current.filter((item) => item.serviceId !== service.id))} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span><strong className="block text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{money(service.price)}{localizedText(" / người", " / person")}</small></span></label>
               </div>;
             })}
           </div> : <div className="mt-4 space-y-2">
@@ -2364,7 +2356,7 @@ export default function BookingWorkspace() {
                   <span className="flex shrink-0 items-center gap-3"><strong className="text-xs text-blue-700">{money(getServiceTotal(selections))}</strong><ChevronRight size={16} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} /></span>
                 </button>
                 {isExpanded && <div className="border-t border-slate-100 bg-slate-50 p-3"><p className="mb-2 text-xs font-semibold text-slate-500">Chọn dịch vụ và số lượng</p><div className="grid gap-2 sm:grid-cols-2">
-                  {services.map((service) => { const selection = selections.find((item) => item.serviceId === String(service.id)); return <div key={service.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: event.target.checked ? [...(current[room.id] ?? []), { serviceId: String(service.id), quantity: room.guests }] : (current[room.id] ?? []).filter((item) => item.serviceId !== String(service.id)) }))} className="h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="truncate text-xs font-semibold text-slate-700">{service.name} · {service.price.toLocaleString("vi-VN")}đ/người</span></label>{selection && <input type="number" min="1" value={selection.quantity} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: (current[room.id] ?? []).map((item) => item.serviceId === String(service.id) ? { ...item, quantity: Math.max(1, Number(event.target.value) || 1) } : item) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" />}</div>; })}
+                  {services.map((service) => { const selection = selections.find((item) => item.serviceId === String(service.id)); return <div key={service.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: event.target.checked ? [...(current[room.id] ?? []), { serviceId: String(service.id), quantity: room.guests }] : (current[room.id] ?? []).filter((item) => item.serviceId !== String(service.id)) }))} className="h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="truncate text-xs font-semibold text-slate-700">{service.name} · {money(service.price)}{localizedText("/người", "/person")}</span></label>{selection && <input type="number" min="1" value={selection.quantity} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: (current[room.id] ?? []).map((item) => item.serviceId === String(service.id) ? { ...item, quantity: Math.max(1, Number(event.target.value) || 1) } : item) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" />}</div>; })}
                 </div></div>}
               </div>;
             })}

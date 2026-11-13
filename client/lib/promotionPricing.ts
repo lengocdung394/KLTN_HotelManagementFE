@@ -1,4 +1,5 @@
 import type { Promotion } from "../services/promotionApi";
+import { formatVnd } from "./currency";
 
 type PromotionDiscount = Pick<Promotion, "type" | "value" | "valueType" | "maxDiscountAmount">;
 type PromotionEligibility = Pick<
@@ -37,9 +38,9 @@ export const promotionEligibilityMessage = (
   const roomMinimum = Number(promotion.minRoomValue ?? 0);
   const serviceMinimum = Number(promotion.minServiceValue ?? 0);
 
-  if (bookingMinimum > orderTotal) failures.push(`Tổng booking cần đạt ${bookingMinimum.toLocaleString("vi-VN")}đ`);
-  if (roomMinimum > roomTotal) failures.push(`Tiền phòng cần đạt ${roomMinimum.toLocaleString("vi-VN")}đ`);
-  if (serviceMinimum > serviceTotal) failures.push(`Tiền dịch vụ cần đạt ${serviceMinimum.toLocaleString("vi-VN")}đ`);
+  if (bookingMinimum > orderTotal) failures.push(`Tổng booking cần đạt ${formatVnd(bookingMinimum)}`);
+  if (roomMinimum > roomTotal) failures.push(`Tiền phòng cần đạt ${formatVnd(roomMinimum)}`);
+  if (serviceMinimum > serviceTotal) failures.push(`Tiền dịch vụ cần đạt ${formatVnd(serviceMinimum)}`);
 
   const status = String(promotion.status ?? "").toUpperCase();
   const startTimestamp = promotionDateTimestamp(promotion.startDate);

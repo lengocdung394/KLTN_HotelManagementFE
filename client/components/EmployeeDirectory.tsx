@@ -581,13 +581,15 @@ export default function EmployeeDirectory() {
       {filteredEmployees.length ? <table className="w-full min-w-[560px] border-collapse text-left">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
+            <th scope="col" className="whitespace-nowrap px-5 py-3 font-semibold">{localizedText("STT", "No.")}</th>
             <th scope="col" className="px-5 py-3 font-semibold">{localizedText("Tên nhân viên", "Employee name")}</th>
             <th scope="col" className="px-5 py-3 font-semibold">{localizedText("Chức vụ", "Position")}</th>
             <th scope="col" className="px-5 py-3 text-right font-semibold">{localizedText("Thao tác", "Actions")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {paginatedEmployees.map((employee) => <tr key={employee.id} className="hover:bg-slate-50/70">
+          {paginatedEmployees.map((employee, index) => <tr key={employee.id} className="hover:bg-slate-50/70">
+            <td className="whitespace-nowrap px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
             <td className="px-5 py-3">
               <div className="flex min-w-0 items-center gap-3">
                 {employee.avatarUrl

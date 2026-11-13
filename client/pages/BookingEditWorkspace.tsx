@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, RefreshCw, Save, Trash2, UserPlus, X } from "lucid
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { localizedText } from "../i18n";
+import { describeBookingModification } from "../lib/bookingModificationSummary";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import { useGetAllServicesQuery } from "../services/serviceApi";
 import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
@@ -476,13 +477,11 @@ export default function BookingEditWorkspace() {
       console.log(`===> Calling modifyBooking mutation: PUT /management-bookings/${bookingId}/modify ...`);
       const res = await modifyBooking({ bookingId, request: currentPayload }).unwrap();
       console.log("===> [MODIFY BOOKING BE RESPONSE SUCCESS]:", res);
+      const changeDescription = describeBookingModification(bookingId, currentPayload);
       toast({
         variant: "default",
         title: localizedText("Cập nhật booking thành công!", "Booking updated successfully!"),
-        description: localizedText(
-          `Đã lưu các chỉnh sửa phòng và dịch vụ cho booking ${bookingId}.`,
-          `Room and service changes for booking ${bookingId} have been saved.`,
-        ),
+        description: localizedText(changeDescription.vi, changeDescription.en),
       });
       setSuccess(true);
     } catch (requestError) {

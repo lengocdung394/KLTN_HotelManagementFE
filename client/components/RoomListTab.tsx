@@ -6,6 +6,7 @@ import SearchableFilter from "./SearchableFilter";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 import { localizedText } from "../i18n";
+import { localizeBedDescription, localizeRoomNamePrefix } from "../lib/roomLocalization";
 
 export type RoomListItem = {
   id: string;
@@ -140,20 +141,7 @@ export default function RoomListTab({
   };
   const money = (value: number) =>
     `${value.toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
-  const translateBed = (bed: string) => bed.split(" · ").map((item) => {
-    if (item.toLowerCase().includes("chưa cập nhật loại giường")) return t("room.bedNotUpdated");
-    const quantity = item.match(/\s*[×x]\s*(\d+)$/i)?.[1];
-    const name = quantity ? item.replace(/\s*[×x]\s*\d+$/i, "") : item;
-    const normalized = name.toLowerCase();
-    const translated = normalized.includes("2 giường đơn") || normalized.includes("2 single beds")
-      ? t("room.doubleSingleBeds")
-      : normalized.includes("giường đơn") || normalized.includes("single bed")
-        ? t("room.singleBed")
-        : normalized.includes("giường king") || normalized.includes("king-size") || normalized.includes("king size")
-          ? t("room.kingBed")
-          : name;
-    return `${translated}${quantity ? ` × ${quantity}` : ""}`;
-  }).join(" · ");
+  const translateBed = (bed: string) => localizeBedDescription(bed, (key) => t(key));
   const localizeStatus = (value: string) => {
     if (value === "Sẵn sàng") return t("room.ready");
     if (value === "Đang dọn") return t("room.cleaning");
@@ -164,7 +152,7 @@ export default function RoomListTab({
   const localizeSize = (value: string) => value === "Chưa cập nhật" ? t("room.areaNotUpdated") : value;
   const localizeBuilding = (buildingName?: string) => {
     if (!buildingName) return t("room.buildingNotUpdated");
-    return buildingName.replace(/^Tòa\s*/i, `${t("room.buildingPrefix")} `);
+    return localizeRoomNamePrefix(buildingName, "toa", t("room.buildingPrefix"));
   };
 
   return (

@@ -21,6 +21,7 @@
     "back": "Back",
     "previousPage": "Previous page",
     "nextPage": "Next page",
+    "serialNumber": "No.",
     "paginationSummary": "Showing {{from}}-{{to}} of {{total}}",
     "pageOf": "{{current}} / {{total}}",
     "rowsPerPage": "Rows per page",
@@ -284,7 +285,7 @@
       "cancelledPaymentTimeout": "Payment timed out",
       "completed": "Completed"
     },
-    "tiers": { "loyal": "Loyal", "potential": "Potential", "new": "New" }
+    "tiers": { "bronze": "Bronze", "silver": "Silver", "gold": "Gold", "platinum": "Platinum" }
   },
   "pages": {
     "bookings": {
@@ -409,6 +410,12 @@
     "selectRoomHint": "Click to select room",
     "booked": "Booked",
     "selecting": "Selecting",
+    "calendarLegend": {
+      "selecting": "Selecting for booking",
+      "reserved": "Booked / on hold",
+      "available": "Available",
+      "past": "Past"
+    },
     "dragToSelect": "Drag / click to select",
     "today": "Today",
     "viewBookedRooms": "View selected rooms",
@@ -458,6 +465,7 @@
     "nights": "nights",
     "noDateSelected": "No dates selected",
     "searchRooms": "Search room number or type",
+    "noRooms": "No rooms match the current filters.",
     "searchCustomer": "Find saved customer",
     "searchCustomerPlaceholder": "Search by name or phone number",
     "changeCustomer": "Change customer",
@@ -513,7 +521,7 @@
     "enterGuestDetailsForSummary": "Enter the guest's full name, phone number, and citizen ID to show their details.",
     "promoSelected": "Promotion applied: {{code}}",
     "people": "people",
-    "currencyPerPerson": "VND/person",
+    "currencyPerPerson": "/person",
     "specialGuestRequests": "Special guest requests...",
     "continueToServices": "Continue to select services",
     "guestDetailsRequired": "Enter the guest's full name, phone number, and citizen ID.",
@@ -561,8 +569,15 @@
     "roomList": "Room list",
     "roomsAtBranch": "rooms at Sen Viet branch",
     "buildingList": "Building list",
+    "searchBuildings": "Search by building name or code...",
+    "addBuildingHint": "You can add a standalone building using the “Add building” button.",
+    "noBuildingsFound": "No matching buildings found.",
+    "editBuilding": "Edit building",
     "buildingNameColumn": "Building name",
     "floorNameColumn": "Floor",
+    "searchFloors": "Search floors...",
+    "addFloorHint": "Select a building, then add floors using the “Add floor” button.",
+    "noFloorsFound": "No matching floors found.",
     "roomCountColumn": "Rooms",
     "actionsColumn": "Actions",
     "amenityList": "Amenity list",

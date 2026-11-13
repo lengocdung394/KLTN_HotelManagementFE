@@ -42,23 +42,25 @@ export default function FloorManagementPanel({ floors, rooms, buildings, selecte
       </FilterSelect>
       <div className="relative w-full sm:w-64">
         <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("room.searchFloors", "Tìm tầng nhà...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("room.searchFloors")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
         <ClearSearchButton value={query} onClear={() => setQuery("")} label={t("common.clearSearch")} className="h-6 w-6" />
       </div>
     </div>
-    {canManage && <p className="mb-3 text-xs text-slate-500">Chọn tòa nhà, sau đó thêm từng tầng bằng nút “Thêm tầng”.</p>}
+    {canManage && <p className="mb-3 text-xs text-slate-500">{t("room.addFloorHint")}</p>}
     <div className="overflow-x-auto rounded-xl border border-slate-200">
       <table className="w-full min-w-[420px] text-left text-sm">
         <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
+            <th scope="col" className="whitespace-nowrap px-4 py-3">{t("common.serialNumber", "STT")}</th>
             <th scope="col" className="px-4 py-3">{t("room.floorNameColumn")}</th>
             <th scope="col" className="px-4 py-3">{t("room.roomCountColumn")}</th>
             {canManage && <th scope="col" className="px-4 py-3 text-right">{t("room.actionsColumn")}</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {paginatedFloors.map((floor) => <tr key={floor} className="hover:bg-slate-50/70">
-            <td className="px-4 py-3 font-semibold text-slate-800">{t("room.floorLabel", "Tầng: {{floor}}", { floor })}</td>
+          {paginatedFloors.map((floor, index) => <tr key={floor} className="hover:bg-slate-50/70">
+            <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
+            <td className="px-4 py-3 font-semibold text-slate-800">{t("room.floorLabel", { floor })}</td>
             <td className="px-4 py-3 text-slate-600">{rooms.filter((room) => room.floor === floor).length} {t("room.rooms")}</td>
             {canManage && <td className="px-4 py-2 text-right">
               <button type="button" onClick={() => onEdit(floor)} aria-label={`${t("room.editFloor")} ${floor}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
@@ -66,7 +68,7 @@ export default function FloorManagementPanel({ floors, rooms, buildings, selecte
               </button>
             </td>}
           </tr>)}
-          {filteredFloors.length === 0 && <tr><td colSpan={canManage ? 3 : 2} className="p-0"><FilterResultStatus filterKey={JSON.stringify([query, selectedBuildingId])}><p className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noFloorsFound", "Không tìm thấy tầng nhà phù hợp.")}</p></FilterResultStatus></td></tr>}
+          {filteredFloors.length === 0 && <tr><td colSpan={canManage ? 4 : 3} className="p-0"><FilterResultStatus filterKey={JSON.stringify([query, selectedBuildingId])}><p className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noFloorsFound")}</p></FilterResultStatus></td></tr>}
         </tbody>
       </table>
     </div>

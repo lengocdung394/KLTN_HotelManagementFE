@@ -27,6 +27,7 @@ import FilterSelect from "../components/FilterSelect";
 import FilterResultStatus from "../components/FilterResultStatus";
 import { FilterResetButton } from "../components/SearchableFilter";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { formatVnd } from "../lib/currency";
 
 const SERVICE_TABLE_COLUMNS = [
   { id: "name", labelKey: "serviceWorkspace.serviceName", width: 240 },
@@ -689,7 +690,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2 text-blue-600"><Banknote size={16} /><p className="text-xs font-semibold">{t("serviceWorkspace.estimatedRevenueToday")}</p></div>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : `${todayServiceStats.estimatedRevenue.toLocaleString("vi-VN")}đ`}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{isLoadingUsage || isUsageError ? "—" : formatVnd(todayServiceStats.estimatedRevenue)}</p>
             <p className="mt-1 text-xs text-slate-500">{t("serviceWorkspace.revenueHelp")}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -854,9 +855,10 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                       {expandedUsageBookingIds.has(group.bookingId) && <div className="px-3">
                         <p className="inline-flex items-center gap-1 border-b border-slate-100 py-2 text-[11px] text-slate-500"><Clock3 size={12} />{t("serviceWorkspace.bookedAt")} {formatUsageDateTime(group.bookingCreatedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</p>
                         <div className="overflow-x-auto">
-                          <table className="w-full min-w-[760px] text-left text-sm">
+                          <table className="w-full min-w-[824px] text-left text-sm">
                             <thead>
                               <tr className="border-b border-slate-100 text-xs font-semibold text-slate-500">
+                                <th scope="col" className="px-3 py-2.5">{localizedText("STT", "No.")}</th>
                                 <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.serviceName")}</th>
                                 <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.unitPrice")}</th>
                                 <th scope="col" className="px-3 py-2.5">{t("serviceWorkspace.confirmQuantity")}</th>
@@ -865,8 +867,9 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {group.services.map((row) => (
+                              {group.services.map((row, index) => (
                                 <tr key={`${row.bookingDetailId}-${row.serviceDetailId}`} className="text-slate-700">
+                                  <td className="px-3 py-3 tabular-nums text-slate-500">{index + 1}</td>
                                   <td className="px-3 py-3 font-semibold text-slate-900">{row.serviceName}</td>
                                   <td className="px-3 py-3 whitespace-nowrap">{formatServicePrice(row.price, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
                                   <td className="px-3 py-3">
@@ -927,30 +930,42 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               )}
               {!isLoadingUsage && !isUsageError && filteredUsedServiceRows.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                  <table className="w-full min-w-[900px] text-left text-sm">
+                  <table className="w-full min-w-[1474px] table-fixed text-left text-sm">
+                    <colgroup>
+                      <col style={{ width: "64px" }} />
+                      <col style={{ width: "280px" }} />
+                      <col style={{ width: "170px" }} />
+                      <col style={{ width: "120px" }} />
+                      <col style={{ width: "240px" }} />
+                      <col style={{ width: "160px" }} />
+                      <col style={{ width: "200px" }} />
+                      <col style={{ width: "240px" }} />
+                    </colgroup>
                     <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
                       <tr>
-                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.serviceName")}</th>
-                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.unitPrice")}</th>
-                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.quantity")}</th>
-                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.booking")}</th>
-                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.roomDetails")}</th>
-                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.usedAt")}</th>
-                        <th scope="col" className="px-4 py-3">{t("serviceWorkspace.confirmedByLabel")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{localizedText("STT", "No.")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.serviceName")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.unitPrice")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.quantity")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.booking")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.roomDetails")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.usedAt")}</th>
+                        <th scope="col" className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.confirmedByLabel")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredUsedServiceRows.map((row) => (
+                      {filteredUsedServiceRows.map((row, index) => (
                         <tr key={`${row.bookingId}-${row.serviceDetailId}`} className="text-slate-700">
+                          <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-500">{index + 1}</td>
                           <td className="px-4 py-3 font-semibold text-slate-900">{row.serviceName}</td>
                           <td className="px-4 py-3 whitespace-nowrap">{formatServicePrice(row.price, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
-                          <td className="px-4 py-3">{row.quantity}</td>
+                          <td className="px-4 py-3 whitespace-nowrap tabular-nums">{row.quantity}</td>
                           <td className="px-4 py-3">
-                            <p className="font-medium text-slate-800">{row.bookingId}</p>
+                            <p className="whitespace-nowrap font-medium text-slate-800">{row.bookingId}</p>
                             <p className="mt-1 text-xs text-slate-500">{row.customerName}</p>
                           </td>
-                          <td className="px-4 py-3">{t("serviceWorkspace.room", { room: row.roomNumber })}</td>
-                          <td className="px-4 py-3">{formatUsageDateTime(row.usedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{t("serviceWorkspace.room", { room: row.roomNumber })}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{formatUsageDateTime(row.usedAt, i18n.language.startsWith("en") ? "en-US" : "vi-VN")}</td>
                           <td className="px-4 py-3">{row.usedBy || "—"}</td>
                         </tr>
                       ))}
@@ -1157,17 +1172,17 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         <div className="overflow-x-auto">
           <table
             className="min-w-full table-fixed border-collapse text-left text-sm"
-            style={{ width: `${serviceTableWidth + (isSystemAdmin ? 64 : 0)}px` }}
+            style={{ width: `${serviceTableWidth + 64}px` }}
           >
             <colgroup>
-              {isSystemAdmin && <col style={{ width: "64px" }} />}
+              <col style={{ width: "64px" }} />
               {shownServiceColumns.map((column) => (
                 <col key={column.id} style={{ width: `${column.width}px` }} />
               ))}
             </colgroup>
             <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
               <tr>
-                {isSystemAdmin && <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>}
+                <th scope="col" className="whitespace-nowrap px-5 py-3">{localizedText("STT", "No.")}</th>
                 {shownServiceColumns.map((column) => (
                   <th
                     key={column.id}
@@ -1184,7 +1199,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 const isActive = service.active;
                 return (
                   <tr key={service.id} className="text-slate-700 transition hover:bg-slate-50/70">
-                    {isSystemAdmin && <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>}
+                    <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                     {visibleServiceColumns.name && <td className="max-w-56 px-5 py-3 font-semibold text-slate-900">
                       <p className="truncate" title={service.name}>{service.name}</p>
                     </td>}
@@ -1295,7 +1310,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                 <div>
                   <p className="text-xs font-medium text-slate-500">{t("serviceWorkspace.unitPrice")}</p>
                   <p className="mt-1 text-xl font-bold text-blue-700">
-                    {detailService.price.toLocaleString("vi-VN")}đ
+                    {formatVnd(detailService.price)}
                     <span className="ml-1 text-sm font-medium text-slate-500">/ {detailService.unit}</span>
                   </p>
                 </div>

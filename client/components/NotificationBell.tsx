@@ -21,6 +21,7 @@ import {
   formatRoomUpdateNotification,
 } from "../lib/roomUpdateNotification";
 import { localizedText } from "../i18n";
+import { formatToastDescription } from "../lib/notificationFormatting";
 
 const formatOccurredAt = (value: string) =>
   new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
@@ -396,7 +397,9 @@ export default function NotificationBell() {
                   <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notification.read ? "bg-transparent" : "bg-blue-600"}`} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-slate-800">{notification.title}</span>
-                    <span className="mt-1 block text-xs leading-5 text-slate-600">{notification.description}</span>
+                    <span className="mt-1 block whitespace-pre-line text-xs leading-5 text-slate-600">
+                      {formatToastDescription(notification.description)}
+                    </span>
                     <span className="mt-1.5 block text-[11px] text-slate-400">{formatOccurredAt(notification.createdAt)}</span>
                   </span>
                 </span>

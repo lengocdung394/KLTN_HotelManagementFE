@@ -6,6 +6,7 @@ import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { formatVnd } from "../lib/currency";
 import { useGetHotelReportQuery } from "../services/reportApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
@@ -366,7 +367,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const toDateTimeInput = (value: string) => value ? value.replace(" ", "T").slice(0, 16) : "";
   const formatValue = (promotion: Promotion) => isPercentageDiscount(promotion.valueType)
     ? `${promotion.value}%`
-    : `${promotion.value.toLocaleString(locale)}${locale === "en-US" ? " VND" : "đ"}`;
+    : formatVnd(promotion.value, locale);
   const copyCode = (code: string) => { navigator.clipboard?.writeText(code); setCopied(code); window.setTimeout(() => setCopied(null), 1500); };
   const label = (key: string, options?: Record<string, string>) => t(`promotion.${key}`, options);
   const requiredMinimumField: PromotionFormField = form.type === "ROOM"
@@ -779,7 +780,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     ["code", detailPromotion.code || label("codeGenerated")],
                     ["discountType", label(isPercentageDiscount(detailPromotion.valueType) ? "percentage" : "fixedAmount")],
                     ["offerLevel", formatValue(detailPromotion)],
-                    ...(isPercentageDiscount(detailPromotion.valueType) ? [["maxDiscountAmount", detailPromotion.maxDiscountAmount == null ? "-" : `${detailPromotion.maxDiscountAmount.toLocaleString("vi-VN")}đ`]] : []),
+                    ...(isPercentageDiscount(detailPromotion.valueType) ? [["maxDiscountAmount", detailPromotion.maxDiscountAmount == null ? "-" : formatVnd(detailPromotion.maxDiscountAmount, locale)]] : []),
                   ].map(([key, value]) => (
                     <div key={key}>
                       <dt className="text-xs font-semibold text-slate-500">{label(key)}</dt>
@@ -793,9 +794,9 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                 <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                   {[
                     ["scope", label(`scope${String(detailPromotion.type ?? "TOTAL").toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
-                    ["minBookingValue", Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)) > 0 ? `${Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)).toLocaleString("vi-VN")}đ` : "-"],
-                    ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : `${detailPromotion.minRoomValue.toLocaleString("vi-VN")}đ`],
-                    ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : `${detailPromotion.minServiceValue.toLocaleString("vi-VN")}đ`],
+                    ["minBookingValue", Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)) > 0 ? formatVnd(Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)), locale) : "-"],
+                    ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : formatVnd(detailPromotion.minRoomValue, locale)],
+                    ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : formatVnd(detailPromotion.minServiceValue, locale)],
                     ["usageLimit", detailPromotion.usageLimit == null ? "-" : detailPromotion.usageLimit.toLocaleString("vi-VN")],
                     ["claimedCount", (detailPromotion.claimedCount ?? 0).toLocaleString(locale)],
                     ["usedCount", (detailPromotion.usedCount ?? 0).toLocaleString(locale)],
@@ -1081,17 +1082,17 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
             <div className="overflow-x-auto">
               <table
                 className="min-w-full table-fixed border-collapse text-left text-sm"
-                style={{ width: `${promotionTableWidth + (isSystemAdmin ? 64 : 0)}px` }}
+                style={{ width: `${promotionTableWidth + 64}px` }}
               >
                 <colgroup>
-                  {isSystemAdmin && <col style={{ width: "64px" }} />}
+                  <col style={{ width: "64px" }} />
                   {shownPromotionColumns.map((column) => (
                     <col key={column.id} style={{ width: `${column.width}px` }} />
                   ))}
                 </colgroup>
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
                   <tr>
-                    {isSystemAdmin && <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>}
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{localizedText("STT", "No.")}</th>
                     {shownPromotionColumns.map((column) => (
                       <th
                         key={column.id}
@@ -1112,7 +1113,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     const editDisabledReason = expired ? label("editDisabledExpired") : label("editDisabledUsed");
                     return (
                       <tr key={promotion.id} className="text-slate-700 transition hover:bg-slate-50/70">
-                      {isSystemAdmin && <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>}
+                      <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                       {visiblePromotionColumns.program && <td className="max-w-80 px-5 py-3">
                           <p className="truncate font-semibold text-slate-900" title={promotion.name}>{promotion.name}</p>
                           {promotion.description && <p className="mt-1 truncate text-xs text-slate-500" title={promotion.description}>{promotion.description}</p>}
