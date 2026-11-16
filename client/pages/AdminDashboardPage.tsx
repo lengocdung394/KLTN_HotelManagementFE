@@ -90,6 +90,7 @@ import {
   type BedTypeRequest,
 } from "../services/roomApi";
 import { downloadBedTypeTemplate, parseBedTypeFile } from "../lib/bedTypeImport";
+import { getStandardBedTypeEnglishValue } from "../lib/roomLocalization";
 import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } from "../lib/superAdminRoomPolicyImport";
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
@@ -1870,8 +1871,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                             {bedTypes.map((bedType, index) => (
                               <tr key={bedType.id} className="text-slate-700 transition hover:bg-slate-50/70">
                                 <td className="px-4 py-3.5 tabular-nums text-slate-500">{index + 1}</td>
-                                <td className="px-4 py-3.5 font-semibold text-slate-900">{bedType.name}</td>
-                                <td className="px-4 py-3.5 text-slate-500">{bedType.description || localizedText("Không có mô tả", "No description")}</td>
+                                <td className="px-4 py-3.5 font-semibold text-slate-900">
+                                  {localizedText(bedType.name, getStandardBedTypeEnglishValue(bedType.name) ?? bedType.name)}
+                                </td>
+                                <td className="px-4 py-3.5 text-slate-500">{bedType.description
+                                  ? localizedText(bedType.description, getStandardBedTypeEnglishValue(bedType.description) ?? bedType.description)
+                                  : localizedText("Không có mô tả", "No description")}</td>
                                 <td className="px-4 py-3.5">
                                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bedType.isExtraBed ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}>
                                     {bedType.isExtraBed ? localizedText("Giường phụ", "Extra bed") : localizedText("Giường thường", "Standard bed")}
@@ -1880,7 +1885,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                                 <td className="px-4 py-3 text-right">
                                   <button
                                     type="button"
-                                    aria-label={localizedText(`Chỉnh sửa ${bedType.name}`, `Edit ${bedType.name}`)}
+                                    aria-label={localizedText(
+                                      `Chỉnh sửa ${bedType.name}`,
+                                      `Edit ${getStandardBedTypeEnglishValue(bedType.name) ?? bedType.name}`,
+                                    )}
                                     disabled={bedType.id == null}
                                     onClick={() => {
                                       if (bedType.id == null) return;
@@ -3213,7 +3221,7 @@ function RoomPolicyEditor({
         <table className="w-full min-w-[1250px] text-left text-xs">
           <thead className="bg-slate-50 font-semibold text-slate-500">
             <tr>
-              <th scope="col" className="px-3 py-3">STT</th>
+              <th scope="col" className="w-14 min-w-14 whitespace-nowrap px-3 py-3">STT</th>
               <th scope="col" className="px-3 py-3">{localizedText("Loại phòng", "Room type")}</th>
               <th scope="col" className="px-3 py-3">{localizedText("Trạng thái", "Status")}</th>
               <th scope="col" className="px-3 py-3">{localizedText("Giá cơ bản", "Base price")}</th>
@@ -3235,7 +3243,7 @@ function RoomPolicyEditor({
                   id={highlightedRoomType === roomType ? "highlighted-branch-detail-row" : undefined}
                   className={`align-middle text-slate-700 ${highlightedRoomType === roomType ? "bg-amber-100 outline outline-2 outline-amber-400" : ""}`}
                 >
-                  <td className="px-3 py-3 tabular-nums text-slate-500">{index + 1}</td>
+                  <td className="w-14 min-w-14 whitespace-nowrap px-3 py-3 tabular-nums text-slate-500">{index + 1}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{roomTypeName(roomType)}</td>
                   <td className="px-3 py-3">
                     <span className={`whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${exists ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
@@ -3392,6 +3400,13 @@ function DetailList({
                 </label>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setVisibleColumns(columns.map(() => true))}
+              className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+            >
+              {localizedText("Hiện tất cả cột", "Show all columns")}
+            </button>
           </PopoverContent>
         </Popover>
         <span className="ml-auto text-xs text-slate-500">

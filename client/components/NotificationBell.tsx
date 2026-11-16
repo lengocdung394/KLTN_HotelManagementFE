@@ -62,6 +62,7 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
     && type !== "PROMOTION_UPDATED"
     && type !== "SERVICE_CREATED"
     && type !== "SERVICE_UPDATED"
+    && type !== "SHIFT_SCHEDULE_REMINDER"
     && type !== "HOUSEKEEPING_TASK_ASSIGNED"
     && type !== "HOUSEKEEPING_TASK_REASSIGNED"
     && type !== "HOUSEKEEPING_TASK_COMPLETED"

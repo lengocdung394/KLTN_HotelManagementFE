@@ -13,6 +13,43 @@ export type RoomBedTranslationKey =
   | "room.singleBed"
   | "room.kingBed";
 
+export type RoomBedTypeTranslationKey =
+  | "room.singleBed"
+  | "room.queenBed"
+  | "room.kingBed"
+  | "room.createForm.extraBed";
+
+const normalizeBedTypeCatalogValue = (value: string) => value.toLowerCase().normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/đ/g, "d");
+
+const STANDARD_BED_TYPE_ENGLISH: Record<string, string> = {
+  "giuong don (single)": "Single bed",
+  "giuong danh cho mot nguoi": "A bed for one person",
+  "giuong doi (queen)": "Queen bed",
+  "giuong doi co queen": "Queen-size double bed",
+  "giuong king": "King-size bed",
+  "giuong doi co king": "King-size double bed",
+  "sofa bed": "Sofa bed",
+  "sofa co the chuyen thanh giuong": "Convertible sofa bed",
+  "giuong phu (extra bed)": "Extra bed",
+  "giuong bo sung cho khach": "Extra bed for guests",
+};
+
+export const getStandardBedTypeEnglishValue = (value: string) =>
+  STANDARD_BED_TYPE_ENGLISH[normalizeBedTypeCatalogValue(value)] ?? null;
+
+export const getRoomBedTypeTranslationKey = (value: string): RoomBedTypeTranslationKey | null => {
+  const normalized = normalizeBedTypeCatalogValue(value);
+  if (normalized.includes("giuong don") || normalized.includes("single bed")) return "room.singleBed";
+  if (normalized.includes("queen") || normalized.includes("giuong doi")) return "room.queenBed";
+  if (normalized.includes("giuong king") || normalized.includes("king-size") || normalized.includes("king size")) {
+    return "room.kingBed";
+  }
+  if (normalized.includes("giuong phu") || normalized.includes("extra bed")) return "room.createForm.extraBed";
+  return null;
+};
+
 export const localizeRoomNamePrefix = (value: string, prefix: string, translatedPrefix: string) => {
   const trimmedValue = value.trim();
   const normalizedValue = trimmedValue.toLowerCase().normalize("NFD")

@@ -85,6 +85,11 @@ export const authApi = baseApi.injectEndpoints({
       }),
       transformResponse: (response: ApiResponse<void>) => response.result,
     }),
+    getCurrentUserPermissions: builder.query<string[], void>({
+      query: () => ({ url: "/role_permissions/me/permissions", method: "GET" }),
+      transformResponse: (response: ApiResponse<string[]>) => response.result,
+      providesTags: ["CurrentUserPermissions"],
+    }),
   }),
 });
 
@@ -95,4 +100,5 @@ export const {
   useRequestPasswordResetLinkMutation,
   useResetPasswordWithLinkMutation,
   useResetPasswordMutation,
+  useGetCurrentUserPermissionsQuery,
 } = authApi;

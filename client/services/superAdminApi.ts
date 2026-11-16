@@ -303,21 +303,21 @@ export const superAdminApi = baseApi.injectEndpoints({
         data: { rolePermissions },
       }),
       transformResponse: (response: ApiResponse<SuperAdminRolePermissionOverview[]>) => response.result,
-      invalidatesTags: ["SuperAdminRole"],
+      invalidatesTags: ["SuperAdminRole", "CurrentUserPermissions"],
     }),
     addSuperAdminPermissionToRole: builder.mutation<void, { roleCode: string; permissionCode: string }>({
       query: ({ roleCode, permissionCode }) => ({
         url: `/role_permissions/roles/${encodeURIComponent(roleCode)}/permissions/${encodeURIComponent(permissionCode)}`,
         method: "POST",
       }),
-      invalidatesTags: ["SuperAdminRole"],
+      invalidatesTags: ["SuperAdminRole", "CurrentUserPermissions"],
     }),
     removeSuperAdminPermissionFromRole: builder.mutation<void, { roleCode: string; permissionCode: string }>({
       query: ({ roleCode, permissionCode }) => ({
         url: `/role_permissions/roles/${encodeURIComponent(roleCode)}/permissions/${encodeURIComponent(permissionCode)}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["SuperAdminRole"],
+      invalidatesTags: ["SuperAdminRole", "CurrentUserPermissions"],
     }),
     getSuperAdminBranches: builder.query<SuperAdminBranch[], void>({
       query: () => ({ url: "/superAdmin/branches", method: "GET" }),

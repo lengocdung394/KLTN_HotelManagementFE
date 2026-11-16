@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Upload,
@@ -19,7 +20,12 @@ import { parseSuperAdminRolesFile } from "../lib/superAdminRolesImport";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 import ListPagination from "./ListPagination";
-import i18n, { localizedText } from "../i18n";
+import { localizedText } from "../i18n";
+import {
+  translateDisplayText,
+  translateRoleDescription,
+  translateRoleName,
+} from "../lib/permissionLocalization";
 import { useAppDispatch } from "../store/hooks";
 import {
   superAdminApi,
@@ -93,199 +99,6 @@ const roleColumnLabel = (id: RoleTableColumnId) => ({
 }[id]);
 const normalizeCode = (value: string) => value.trim().toLocaleUpperCase();
 const categoryOf = (category?: string) => category?.trim() || UNCATEGORIZED;
-const normalizePermissionName = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[đĐ]/g, "d")
-    .toLocaleLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-const permissionNameTranslations: Record<string, string> = {
-  "xem bao cao doanh thu": "View revenue reports",
-  "quan ly cai dat chi nhanh": "Manage branch settings",
-  "quan ly cai dat he thong": "Manage system settings",
-  "tao cong viec": "Create tasks",
-  "xoa cong viec": "Delete tasks",
-  "cap nhat trang thai cong viec": "Update task status",
-  "xem cong viec": "View tasks",
-  "quan ly tien nghi": "Manage amenities",
-  "quan ly toa nha": "Manage buildings",
-  "quan ly tang": "Manage floors",
-  "xem tien nghi": "View amenities",
-  "xem toa nha": "View buildings",
-  "xem tang": "View floors",
-  "tao dich vu": "Create services",
-  "xoa dich vu": "Delete services",
-  "quan ly trang thai dich vu": "Manage service status",
-  "cap nhat dich vu": "Update services",
-  "xem dich vu": "View services",
-  "tao hoa don": "Create invoices",
-  "in hoa don": "Print invoices",
-  "xem hoa don": "View invoices",
-  "tao khuyen mai": "Create promotions",
-  "xoa khuyen mai": "Delete promotions",
-  "cap nhat khuyen mai": "Update promotions",
-  "xem khuyen mai": "View promotions",
-  "quan ly khach hang": "Manage customers",
-  "xem khach hang": "View customers",
-  "them nhan vien": "Add employees",
-  "xoa nhan vien": "Delete employees",
-  "quan ly ca lam viec": "Manage shifts",
-  "cap nhat nhan vien": "Update employees",
-  "xem nhan vien": "View employees",
-  "xem ca lam viec": "View shifts",
-  "quan ly nhan/tra phong": "Manage check-in/check-out",
-  "xem nhan/tra phong": "View check-in/check-out",
-  "tao phong": "Create rooms",
-  "xoa phong": "Delete rooms",
-  "cap nhat phong": "Update rooms",
-  "cap nhat trang thai phong": "Update room status",
-  "xem phong": "View rooms",
-  "tao chi nhanh": "Create branches",
-  "tao quyen": "Create permissions",
-  "tao vai tro": "Create roles",
-  "xoa quyen": "Delete permissions",
-  "xoa vai tro": "Delete roles",
-  "quan ly phan quyen": "Manage role permissions",
-  "quan ly role": "Manage roles",
-  "cap nhat quyen": "Update permissions",
-  "cap nhat vai tro": "Update roles",
-  "xem quyen": "View permissions",
-  "xem vai tro": "View roles",
-  "quan ly ho so ca nhan": "Manage personal profiles",
-  "xem bang dieu khien": "View dashboard",
-  "tong quan": "Overview",
-  "tổng quan": "Overview",
-  "cong viec": "Tasks",
-  "công việc": "Tasks",
-  "co so vat chat": "Facilities",
-  "cơ sở vật chất": "Facilities",
-  "tao dat phong": "Create bookings",
-  "xoa dat phong": "Delete bookings",
-  "cap nhat dat phong": "Update bookings",
-  "xem dat phong": "View bookings",
-  "dat phong": "Bookings",
-  "cai dat": "Settings",
-  "cài đặt": "Settings",
-  "hoa don": "Invoices",
-  "hóa đơn": "Invoices",
-  "tai khoan": "Account",
-  "tài khoản": "Account",
-  "tai khoan ca nhan": "Personal account",
-  "tài khoản cá nhân": "Personal account",
-  "quan tri phan quyen": "Access management",
-  "quản trị phân quyền": "Access management",
-  "quan li chi nhanh": "Branch management",
-  "quản lý chi nhánh": "Branch management",
-  "khuyen mai": "Promotions",
-  "khuyến mãi": "Promotions",
-  "nhan su": "Human resources",
-  "nhân sự": "Human resources",
-  "nhan tra phong": "Check-in/out",
-  "nhận trả phòng": "Check-in/out",
-  "nhan/tra phong": "Check-in/out",
-  "nhận/trả phòng": "Check-in/out",
-  "khach hang": "Customers",
-  "khách hàng": "Customers",
-  "nhan vien": "Employees",
-  "nhân viên": "Employees",
-  "phong": "Rooms",
-  "phòng": "Rooms",
-  "dich vu": "Services",
-  "dịch vụ": "Services",
-  "bao cao": "Reports",
-  "báo cáo": "Reports",
-  "chuyen doi": "Conversion",
-  "chuyển đổi": "Conversion",
-  "thiet lap": "Configuration",
-  "thiết lập": "Configuration",
-  "tao role": "Create roles",
-  "xoa role": "Delete roles",
-  "cap nhat role": "Update roles",
-  "xem role": "View roles",
-  "quan ly role": "Manage roles",
-  "cho phep xem bao cao doanh thu": "Allows viewing revenue reports",
-  "cho phep quan ly cai dat chi nhanh": "Allows managing branch settings",
-  "cho phep quan ly cai dat he thong": "Allows managing system settings",
-  "cho phep tao cong viec": "Allows creating tasks",
-  "cho phep xoa cong viec": "Allows deleting tasks",
-  "cho phep cap nhat trang thai cong viec": "Allows updating task status",
-  "cho phep xem cong viec": "Allows viewing tasks",
-  "cho phep quan ly tien nghi": "Allows managing amenities",
-  "cho phep quan ly toa nha": "Allows managing buildings",
-  "cho phep quan ly tang": "Allows managing floors",
-  "cho phep xem tien nghi": "Allows viewing amenities",
-  "cho phep xem toa nha": "Allows viewing buildings",
-  "cho phep xem tang": "Allows viewing floors",
-  "cho phep tao dich vu": "Allows creating services",
-  "cho phep xoa dich vu": "Allows deleting services",
-  "tao chi nhanh va tai khoan ban dau": "Create a branch and initial account",
-  "nhap va gan permission": "Import and assign permissions",
-  "cho phép xem đặt phòng": "Allows viewing bookings",
-  "cho phép tạo đặt phòng": "Allows creating bookings",
-  "cho phép cập nhật đặt phòng": "Allows updating bookings",
-  "cho phép xóa đặt phòng": "Allows deleting bookings",
-  "cho phép xem quyền": "Allows viewing permissions",
-  "cho phép quản lý quyền": "Allows managing permissions",
-  "cho phép xem vai trò": "Allows viewing roles",
-  "cho phép quản lý vai trò": "Allows managing roles",
-  "cho phép xem dashboard": "Allows viewing dashboard",
-  "cho phép xem đặt phòng": "Allows viewing bookings",
-  "cho phép tạo đặt phòng": "Allows creating bookings",
-  "cho phép cập nhật đặt phòng": "Allows updating bookings",
-  "cho phép xóa đặt phòng": "Allows deleting bookings",
-  "cho phép xem quyền": "Allows viewing permissions",
-  "cho phép quản lý quyền": "Allows managing permissions",
-  "cho phép xem vai trò": "Allows viewing roles",
-  "cho phép quản lý vai trò": "Allows managing roles",
-  "cho phép xem dashboard": "Allows viewing dashboard",
-  "cho phep xem dat phong": "Allows viewing bookings",
-  "cho phep tao dat phong": "Allows creating bookings",
-  "cho phep cap nhat dat phong": "Allows updating bookings",
-  "cho phep xoa dat phong": "Allows deleting bookings",
-  "cho phep xem quyen": "Allows viewing permissions",
-  "cho phep quan ly quyen": "Allows managing permissions",
-  "cho phep xem vai tro": "Allows viewing roles",
-  "cho phep quan ly vai tro": "Allows managing roles",
-  "cho phep xem bang dieu khien": "Allows viewing dashboard",
-  "có quyền xem đặt phòng": "Allows viewing bookings",
-  "có quyền tạo đặt phòng": "Allows creating bookings",
-  "có quyền cập nhật đặt phòng": "Allows updating bookings",
-  "có quyền xóa đặt phòng": "Allows deleting bookings",
-  "có quyền xem quyền": "Allows viewing permissions",
-  "có quyền quản lý quyền": "Allows managing permissions",
-  "có quyền xem vai trò": "Allows viewing roles",
-  "có quyền quản lý vai trò": "Allows managing roles",
-  "có quyền xem dashboard": "Allows viewing dashboard",
-};
-const translateDisplayText = (value: string | undefined | null) => {
-  if (!value) return value ?? "";
-  if (!i18n.language.startsWith("en")) return value;
-  const normalized = normalizePermissionName(value).replace(/[.!?]+$/, "");
-  const translation = permissionNameTranslations[normalized];
-  if (translation) return translation;
-
-  const descriptionPrefix = "cho phep ";
-  if (!normalized.startsWith(descriptionPrefix)) return value;
-
-  const permissionLabel = permissionNameTranslations[normalized.slice(descriptionPrefix.length)];
-  if (!permissionLabel) return value;
-
-  const actionForms: Record<string, string> = {
-    "View ": "viewing ",
-    "Create ": "creating ",
-    "Delete ": "deleting ",
-    "Update ": "updating ",
-    "Manage ": "managing ",
-    "Add ": "adding ",
-    "Print ": "printing ",
-  };
-  const action = Object.entries(actionForms).find(([prefix]) => permissionLabel.startsWith(prefix));
-  return action
-    ? `Allows ${action[1]}${permissionLabel.slice(action[0].length)}`
-    : value;
-};
 const permissionNameLabel = (name: string) => translateDisplayText(name);
 const getApiFieldErrors = (
   error: unknown,
@@ -446,21 +259,43 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
   const {
     data: roles = [],
     isLoading: isRolesLoading,
+    isFetching: isRolesFetching,
     isError: isRolesError,
     refetch: refetchRoles,
   } = useGetSuperAdminRolesQuery();
   const {
     data: rolePermissionGroups = [],
     isLoading: isRolePermissionsLoading,
+    isFetching: isRolePermissionsFetching,
     isError: isRolePermissionsError,
     refetch: refetchRolePermissions,
   } = useGetSuperAdminRolePermissionsQuery();
   const {
     data: permissions = [],
     isLoading: isPermissionCatalogLoading,
+    isFetching: isPermissionCatalogFetching,
     isError: isPermissionCatalogError,
     refetch: refetchPermissionCatalog,
   } = useGetSuperAdminPermissionCatalogQuery();
+  const isRefreshingData =
+    isRolesFetching || isRolePermissionsFetching || isPermissionCatalogFetching;
+  const reloadApiData = () => {
+    void refetchRoles();
+    void refetchRolePermissions();
+    void refetchPermissionCatalog();
+  };
+  const apiReloadButton = (
+    <button
+      type="button"
+      onClick={reloadApiData}
+      disabled={isRefreshingData}
+      aria-label={localizedText("Tải lại dữ liệu API", "Reload API data")}
+      title={localizedText("Tải lại dữ liệu API", "Reload API data")}
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <RefreshCw size={16} className={isRefreshingData ? "animate-spin" : ""} />
+    </button>
+  );
   const [createPermissionRequest, { isLoading: isCreatingPermission }] =
     useCreateSuperAdminPermissionMutation();
   const [updatePermissionRequest, { isLoading: isUpdatingPermission }] =
@@ -492,6 +327,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [editingRoleCode, setEditingRoleCode] = useState<string | null>(null);
+  const isEditingSystemRole = roles.some((role) => role.code === editingRoleCode && role.system);
   const [roleError, setRoleError] = useState("");
   const [roleFieldErrors, setRoleFieldErrors] = useState<Record<string, string>>({});
   const [addRoleMode, setAddRoleMode] = useState<"single" | "excel">("single");
@@ -969,17 +805,19 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
   return (
     <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="border-b border-slate-100 p-5 sm:p-6">
-        <div className="flex items-center gap-2">
-          <ShieldCheck size={19} className="text-blue-600" />
-          <h2 className="text-lg font-bold text-slate-900">
-            {view === "roles" ? localizedText("Quản lý vai trò", "Manage roles") : localizedText("Quản lý quyền", "Manage permissions")}
-          </h2>
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={19} className="text-blue-600" />
+            <h2 className="text-lg font-bold text-slate-900">
+              {view === "roles" ? localizedText("Quản lý vai trò", "Manage roles") : localizedText("Quản lý quyền", "Manage permissions")}
+            </h2>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            {view === "roles"
+              ? localizedText("Tạo và xem các vai trò được sử dụng trong hệ thống.", "Create and view roles used in the system.")
+              : localizedText("Quản lý danh mục quyền, gán quyền cho vai trò và xem tổng quan phân quyền.", "Manage the permission catalog, assign permissions to roles, and review permission assignments.")}
+          </p>
         </div>
-        <p className="mt-1 text-sm text-slate-500">
-          {view === "roles"
-            ? localizedText("Tạo và xem các vai trò được sử dụng trong hệ thống.", "Create and view roles used in the system.")
-            : localizedText("Quản lý danh mục quyền, gán quyền cho vai trò và xem tổng quan phân quyền.", "Manage the permission catalog, assign permissions to roles, and review permission assignments.")}
-        </p>
       </header>
 
       {(isRolesError || isRolePermissionsError || isPermissionCatalogError) && (
@@ -1084,6 +922,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     <Plus size={16} />
                     {localizedText("Thêm vai trò", "Add role")}
                   </button>
+                  {apiReloadButton}
                 </div>
               </div>
             </div>
@@ -1167,12 +1006,12 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                             <td className="px-4 py-3 tabular-nums text-slate-500">{(safeRolePage - 1) * rolePageSize + index + 1}</td>
                             {visibleRoleColumns.name && <td className="break-words px-4 py-3 font-semibold text-slate-900">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span>{translateDisplayText(role.name)}</span>
+                              <span>{translateRoleName(role.code, role.name)}</span>
                               {role.system && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{localizedText("Hệ thống", "System")}</span>}
                             </div>
                             </td>}
                             {visibleRoleColumns.code && <td className="break-all px-4 py-3 font-mono text-xs text-slate-600">{role.code}</td>}
-                            {visibleRoleColumns.description && <td className="break-words px-4 py-3 text-slate-600">{role.description || "—"}</td>}
+                            {visibleRoleColumns.description && <td className="break-words px-4 py-3 text-slate-600">{translateRoleDescription(role.code, role.description) || "—"}</td>}
                             {visibleRoleColumns.count && <td className="px-4 py-3 text-center">
                             <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                               {grantedCount} {localizedText("quyền", "permissions")}
@@ -1358,6 +1197,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     <Plus size={16} />
                     {localizedText("Thêm quyền", "Add permission")}
                   </button>
+                  {apiReloadButton}
                 </div>
               </div>
             </div>
@@ -1403,7 +1243,13 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                           .filter((group) => group.permissions.some((item) =>
                             item.code === permission.code && item.granted,
                           ))
-                          .map((group) => roles.find((role) => role.code === group.roleCode)?.name ?? group.roleCode);
+                          .map((group) => {
+                            const role = roles.find((item) => item.code === group.roleCode);
+                            return {
+                              code: group.roleCode,
+                              name: translateRoleName(group.roleCode, role?.name ?? group.roleCode),
+                            };
+                          });
                         return (
                           <tr
                             key={permission.code}
@@ -1433,9 +1279,9 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                             {visibleCatalogColumns.roles && <td className="px-4 py-3">
                               {assignedRoles.length > 0 ? (
                                 <div className="flex flex-wrap gap-1.5">
-                                  {assignedRoles.map((roleName) => (
-                                    <span key={roleName} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
-                                      {roleName}
+                                  {assignedRoles.map((role) => (
+                                    <span key={role.code} className="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+                                      {role.name}
                                     </span>
                                   ))}
                                 </div>
@@ -1779,6 +1625,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   {localizedText("Mã role", "Role code")} <span aria-hidden="true" className="text-rose-600">*</span>
                   <input
                     value={roleCode}
+                    disabled={isEditingSystemRole}
                     aria-invalid={Boolean(roleFieldErrors.code)}
                     aria-describedby={roleFieldErrors.code ? "role-code-error" : undefined}
                     onChange={(event) => {
@@ -1788,7 +1635,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     }}
                     placeholder="ROLE_RECEPTIONIST"
                     autoComplete="off"
-                    className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 ${roleFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
+                    className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 ${roleFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
                   />
                   {roleFieldErrors.code && <span id="role-code-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.code}</span>}
                 </label>
@@ -1896,7 +1743,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
               >
                 {roles.length === 0 && <option value="">{localizedText("Chưa có role", "No roles available")}</option>}
                 {roles.map((role) => (
-                  <option key={role.code} value={role.code}>{translateDisplayText(role.name)} ({role.code})</option>
+                  <option key={role.code} value={role.code}>{translateRoleName(role.code, role.name)} ({role.code})</option>
                 ))}
               </select>
             </label>
@@ -2090,9 +1937,12 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   chọn nhóm ở đây chỉ giúp lọc quyền.
                 </p>
               </div>
-              <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
-                {permissions.length} quyền trong danh mục
-              </span>
+              <div className="flex items-center gap-2">
+                {apiReloadButton}
+                <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                  {permissions.length} quyền trong danh mục
+                </span>
+              </div>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -2106,7 +1956,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 >
                   {roles.length === 0 && <option value="">{localizedText("Chưa có role", "No roles available")}</option>}
                   {roles.map((role) => (
-                    <option key={role.code} value={role.code}>{translateDisplayText(role.name)} ({role.code})</option>
+                    <option key={role.code} value={role.code}>{translateRoleName(role.code, role.name)} ({role.code})</option>
                   ))}
                 </select>
               </label>
@@ -2366,13 +2216,16 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 {roles.length} role · {permissions.length} quyền trong danh mục
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => navigateToStep("catalog")}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              + Tạo role
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigateToStep("catalog")}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                + Tạo role
+              </button>
+              {apiReloadButton}
+            </div>
           </div>
           {isRolePermissionsLoading ? (
             <p className="mt-4 text-sm text-slate-500">Đang tải cấu hình quyền...</p>
@@ -2450,7 +2303,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                           </span>
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="font-bold text-slate-900">{translateDisplayText(role.name)}</h4>
+                              <h4 className="font-bold text-slate-900">{translateRoleName(role.code, role.name)}</h4>
                               {role.system && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{localizedText("Hệ thống", "System")}</span>}
                             </div>
                             <p className="mt-0.5 truncate font-mono text-xs text-slate-500">{role.code}</p>
@@ -2464,7 +2317,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                         </div>
                       </summary>
                       <div className="border-t border-slate-100 p-4">
-                        {role.description && <p className="mb-3 text-sm text-slate-500">{translateDisplayText(role.description)}</p>}
+                        {role.description && <p className="mb-3 text-sm text-slate-500">{translateRoleDescription(role.code, role.description)}</p>}
                         {visiblePermissions.length > 0 ? (
                           <div className="space-y-4">
                             {[...visiblePermissionsByCategory].map(([category, categoryPermissions]) => (

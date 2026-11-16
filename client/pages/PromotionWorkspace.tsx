@@ -5,9 +5,8 @@ import { CalendarDays, Columns3, Copy, Eye, Pencil, Plus, RefreshCw, RotateCcw, 
 import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
-import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionUsageReportQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
 import { formatVnd } from "../lib/currency";
-import { useGetHotelReportQuery } from "../services/reportApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
@@ -153,6 +152,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const [form, setForm] = useState<PromotionFormValues>(initialForm);
   const [formErrors, setFormErrors] = useState<Partial<Record<PromotionFormField, string>>>({});
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [formError, setFormError] = useState("");
   const pendingLocalPromotionName = useRef("");
   const [page, setPage] = useState(1);
@@ -201,9 +201,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
     data: promotionUsageReport,
     isLoading: isPromotionUsageLoading,
     isError: isPromotionUsageError,
-  } = useGetHotelReportQuery({
-    startDate: monthStartKey,
-    endDate: monthEndKey,
+  } = useGetPromotionUsageReportQuery({
+    month: summaryMonth,
     ...(isSystemAdmin && selectedBranchId
       ? { hotelId: Number(selectedBranchId) }
       : !isSystemAdmin && hasHotelId
@@ -211,7 +210,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
         : {}),
   }, { skip: !hasHotelId && !isSystemAdmin });
   const promotionSavingsById = new Map(
-    (promotionUsageReport?.promotions ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
+    (promotionUsageReport ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
   );
   const promotionDateMarkers = useMemo(() => {
     const markers: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">> = {};
@@ -638,10 +637,29 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                       <option value="EXPIRED">{label("statusExpired")}</option>
                     </select>
                   </label>
-                  <label className="text-sm font-semibold text-slate-700">
+                  <div className="text-sm font-semibold text-slate-700">
                     {label("image")} <span className="text-xs font-normal text-slate-400">({label("optional")})</span>
-                    <input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-sm font-normal text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
-                  </label>
+                    <div className="mt-1.5 flex min-w-0 items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        className="shrink-0 rounded-md bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                      >
+                        {localizedText("Chọn tệp", "Choose file")}
+                      </button>
+                      <span className="min-w-0 truncate text-sm font-normal text-slate-600">
+                        {imageFile?.name ?? localizedText("Chưa có tệp nào được chọn", "No file selected")}
+                      </span>
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/*"
+                        aria-label={label("image")}
+                        onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+                        className="sr-only"
+                      />
+                    </div>
+                  </div>
                 </div>
               </section>
 

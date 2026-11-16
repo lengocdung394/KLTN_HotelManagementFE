@@ -625,6 +625,7 @@
     "singleBed": "giường đơn",
     "doubleSingleBeds": "2 giường đơn",
     "kingBed": "giường King Size",
+    "queenBed": "giường đôi (Queen)",
     "housekeepingReady": "Sẵn sàng nhận việc",
     "floorLabel": "Tầng: {{floor}}",
     "photoCount": "{{count}} ảnh",

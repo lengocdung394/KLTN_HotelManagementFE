@@ -181,6 +181,14 @@ form.max-w-lg label > textarea {
     cursor: not-allowed;
   }
 
+  input[type="file"]:not(:disabled)::file-selector-button {
+    cursor: pointer;
+  }
+
+  input[type="file"]:disabled::file-selector-button {
+    cursor: not-allowed;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: "DM Sans", sans-serif;

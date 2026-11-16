@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getRoomBedTranslationKey, localizeBedDescription, localizeRoomNamePrefix } from "./roomLocalization";
+import {
+  getRoomBedTranslationKey,
+  getRoomBedTypeTranslationKey,
+  getStandardBedTypeEnglishValue,
+  localizeBedDescription,
+  localizeRoomNamePrefix,
+} from "./roomLocalization";
 
 const translations = {
   "room.bedNotUpdated": "Bed type not updated",
@@ -13,6 +19,23 @@ describe("room bed localization", () => {
     expect(getRoomBedTranslationKey("1 giường đơn")).toBe("room.singleBed");
     expect(getRoomBedTranslationKey("2 single beds")).toBe("room.doubleSingleBeds");
     expect(getRoomBedTranslationKey("1 giường King Size")).toBe("room.kingBed");
+  });
+
+  it("recognizes bed type labels from the room setup form", () => {
+    expect(getRoomBedTypeTranslationKey("Giường đơn (Single)")).toBe("room.singleBed");
+    expect(getRoomBedTypeTranslationKey("Giường đôi (Queen)")).toBe("room.queenBed");
+    expect(getRoomBedTypeTranslationKey("Giường King")).toBe("room.kingBed");
+    expect(getRoomBedTypeTranslationKey("Giường phụ (Extra bed)")).toBe("room.createForm.extraBed");
+    expect(getRoomBedTypeTranslationKey("Sofa bed")).toBeNull();
+  });
+
+  it("translates only the built-in bed catalog names and descriptions", () => {
+    expect(getStandardBedTypeEnglishValue("Giường đơn (Single)")).toBe("Single bed");
+    expect(getStandardBedTypeEnglishValue("Giường dành cho một người")).toBe("A bed for one person");
+    expect(getStandardBedTypeEnglishValue("Giường đôi cỡ Queen")).toBe("Queen-size double bed");
+    expect(getStandardBedTypeEnglishValue("Sofa có thể chuyển thành giường")).toBe("Convertible sofa bed");
+    expect(getStandardBedTypeEnglishValue("Giường bổ sung cho khách")).toBe("Extra bed for guests");
+    expect(getStandardBedTypeEnglishValue("Custom bed type")).toBeNull();
   });
 
   it("localizes multiple bed types while preserving separators and quantities", () => {

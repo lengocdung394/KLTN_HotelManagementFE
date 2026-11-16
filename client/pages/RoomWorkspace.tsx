@@ -23,7 +23,11 @@ import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { baseApi } from "../services/baseApi";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { downloadBuildingTemplate, downloadFloorTemplate, downloadRoomTemplate, parseRoomImportArchive, type RoomImportOptions, type RoomImportRowResult } from "../lib/roomBulkImport";
-import { getRoomAmenityTranslationKey, localizeRoomNamePrefix } from "../lib/roomLocalization";
+import {
+  getRoomAmenityTranslationKey,
+  getRoomBedTypeTranslationKey,
+  localizeRoomNamePrefix,
+} from "../lib/roomLocalization";
 import { formatVnd } from "../lib/currency";
 import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
 import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
@@ -570,12 +574,8 @@ export default function RoomWorkspace() {
   };
   const localizedBuildingName = (value: string) => localizeRoomNamePrefix(value, "toa", t("room.buildingPrefix"));
   const localizedBedTypeName = (value: string) => {
-    const normalized = value.toLocaleLowerCase();
-    if (normalized.includes("2 giường đơn") || normalized.includes("2 single beds")) return t("room.doubleSingleBeds");
-    if (normalized.includes("giường đơn") || normalized.includes("single bed")) return t("room.singleBed");
-    if (normalized.includes("giường king") || normalized.includes("king-size") || normalized.includes("king size")) return t("room.kingBed");
-    if (normalized.includes("giường phụ") || normalized.includes("extra bed")) return t("room.createForm.extraBed");
-    return value;
+    const key = getRoomBedTypeTranslationKey(value);
+    return key ? t(key) : value;
   };
   const localizedAmenityName = (value: string) => {
     const translationKey = getRoomAmenityTranslationKey(value);
@@ -2379,7 +2379,7 @@ export default function RoomWorkspace() {
                                 }}
                                 className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                               />
-                              <span className="truncate">{bedType.name ?? bedType.bedTypeName}</span>
+                              <span className="truncate">{localizedBedTypeName(String(bedType.name ?? bedType.bedTypeName ?? ""))}</span>
                               {bedType.isExtraBed && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{t("room.createForm.extraBed")}</span>}
                             </label>
                             {selected && (
@@ -2390,7 +2390,7 @@ export default function RoomWorkspace() {
                                   min="1"
                                   step="1"
                                   value={selected.quantity}
-                                  aria-label={t("room.createForm.quantityFor", { bedType: bedType.name ?? bedType.bedTypeName })}
+                                  aria-label={t("room.createForm.quantityFor", { bedType: localizedBedTypeName(String(bedType.name ?? bedType.bedTypeName ?? "")) })}
                                   onChange={(event) => {
                                     const quantity = Number(event.target.value);
                                     setCreateRoomForm((current) => ({
