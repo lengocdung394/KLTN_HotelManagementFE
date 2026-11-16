@@ -697,9 +697,10 @@ export default function BookingListWorkspace() {
     try {
       await updateBookingApi({ id, request: updatePayload }).unwrap();
       setEditSuccess(localizedText("Cập nhật thông tin booking thành công!", "Booking information updated successfully!"));
-    } catch {
-      // Fallback optimistic update if backend endpoint is mock/unavailable
-      setEditSuccess(localizedText("Đã lưu thông tin chỉnh sửa booking thành công!", "Booking changes saved successfully!"));
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || localizedText("Không thể lưu thay đổi lên hệ thống. Vui lòng thử lại.", "Unable to save booking changes. Please try again.");
+      setEditError(msg);
+      return;
     } finally {
       bookingUpdateInFlight.current = false;
     }
