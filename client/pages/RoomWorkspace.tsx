@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
 import { localizedText } from "../i18n";
-import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, RotateCcw, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
+import { Baby, BedDouble, Building2, CalendarDays, Check, ChevronLeft, ChevronRight, Coins, ImagePlus, Info, MoreHorizontal, Pencil, Plus, RotateCcw, Save, Search, SlidersHorizontal, Sparkles, Star, Upload, Users, X } from "lucide-react";
 import BuildingManagementPanel from "../components/BuildingManagementPanel";
 import FloorManagementPanel from "../components/FloorManagementPanel";
 import EventPricingCalendar from "../components/EventPricingCalendar";
@@ -12,6 +12,7 @@ import RoomDetailModal, { type RoomDetailsData } from "../components/RoomDetailM
 import BulkImportDialog from "../components/BulkImportDialog";
 import RoomImportProgressCard from "../components/RoomImportProgressCard";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
+import type { CatalogEntryMode } from "../components/CatalogEntryDialog";
 import ClearSearchButton from "../components/ClearSearchButton";
 import { Label } from "@radix-ui/react-label";
 import { useCreateRoomMutation, useGetAllBedTypesQuery, useGetRoomStatusesQuery, useGetRoomTypeDetailQuery, useGetRoomTypesQuery, useGetRoomsByCurrentHotelQuery, useUpdateRoomMutation, useUpdateRoomStatusMutation } from "../services/roomApi";
@@ -457,7 +458,7 @@ export default function RoomWorkspace() {
   const [buildingQuery, setBuildingQuery] = useState("");
   const [importingRooms, setImportingRooms] = useState(false);
   const [roomImportUploadProgress, setRoomImportUploadProgress] = useState("");
-  const [isRoomImportDialogOpen, setIsRoomImportDialogOpen] = useState(false);
+  const [roomEntryMode, setRoomEntryMode] = useState<CatalogEntryMode>("manual");
   const [structureImportTarget, setStructureImportTarget] = useState<ImportTarget | null>(null);
   const [roomImportReport, setRoomImportReport] = useState<{
     processing: boolean;
@@ -1033,6 +1034,7 @@ export default function RoomWorkspace() {
   };
   const closeCreateRoomModal = () => {
     setShowCreateRoom(false);
+    setRoomEntryMode("manual");
     setEditingRoomId(null);
     setEditingRoomDatabaseId(null);
     setCreateRoomForm(emptyCreateRoomForm);
@@ -1076,6 +1078,7 @@ export default function RoomWorkspace() {
   };
   const openCreateRoomModal = () => {
     resetCreateRoomForm();
+    setRoomEntryMode("manual");
     setShowCreateRoom(true);
   };
   const handlePricingDraftChange = (roomType: string, field: "price" | "extraAdultFee" | "extraChildFee" | "standardCapacity" | "maxExtraGuests", value: string) => {
@@ -1586,7 +1589,7 @@ export default function RoomWorkspace() {
         completed: false,
         rows: parsed.rows.filter((row) => !row.passed),
       });
-      setIsRoomImportDialogOpen(false);
+      closeCreateRoomModal();
       return true;
     } catch (error) {
       setRoomImportReport({
@@ -1733,23 +1736,16 @@ export default function RoomWorkspace() {
           {canManageRooms && (activeTab === "rooms" || activeTab === "buildings" || activeTab === "floors") && <button
             type="button"
             onClick={() => {
-              if (activeTab === "rooms") setIsRoomImportDialogOpen(true);
-              else if (activeTab === "buildings" || activeTab === "floors") setStructureImportTarget(activeTab);
+              if (activeTab === "rooms") openCreateRoomModal();
+              else if (activeTab === "buildings") openCreateBuildingModal();
+              else openCreateFloorModal();
             }}
             disabled={importingRooms}
-            className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:opacity-50"
+            className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-50"
           >
-            <Upload size={16} />{importingRooms && activeTab === "rooms" ? t("room.importDialog.readingFile") : t("room.importDialog.roomImportButton")}
-          </button>}
-          {canManageRooms && (
-            <button
-              type="button"
-              onClick={() => activeTab === "rooms" ? openCreateRoomModal() : activeTab === "buildings" ? openCreateBuildingModal() : openCreateFloorModal()}
-              className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700"
-            >
-              <span className="text-lg leading-none">+</span>{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
-            </button>
-          )}
+            <Plus size={16} />{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
+          </button>
+          }
         </div>
       </div>
       <div className="flex flex-wrap border-b border-slate-100 bg-slate-50/60 p-2">
@@ -1770,64 +1766,6 @@ export default function RoomWorkspace() {
       {(isFloorsLoading || isFloorsFetching) && <p className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-medium text-blue-700">Đang tải danh sách tầng...</p>}
       <FloorManagementPanel floors={floors} rooms={rooms} buildings={buildings} selectedBuildingId={selectedBuildingId} onBuildingChange={setSelectedBuildingId} onEdit={openEditFloorModal} canManage={canManageRooms} />
     </>}
-    <BulkImportDialog
-      open={isRoomImportDialogOpen}
-      onOpenChange={setIsRoomImportDialogOpen}
-      eyebrow={t("room.importDialog.eyebrow")}
-      title={t("room.importDialog.roomsTitle")}
-      description={t("room.importDialog.roomsDescription")}
-      templateLabel={t("room.importDialog.downloadRoomTemplate")}
-      onDownloadTemplate={() => {
-        if (isBedTypesLoading) {
-          toast({ title: t("room.importDialog.loadingBedTypesTitle"), description: t("room.importDialog.loadingBedTypesDescription") });
-          return;
-        }
-        if (isBedTypesError) {
-          toast({ variant: "destructive", title: t("room.importDialog.bedTypesErrorTitle"), description: t("room.importDialog.serverRetry") });
-          return;
-        }
-        if (isBuildingsLoading || isHotelFloorsLoading) {
-          toast({ title: t("room.importDialog.loadingBuildingsFloorsTitle"), description: t("room.importDialog.loadingTemplateWait") });
-          return;
-        }
-        if (isBuildingsError || isHotelFloorsError) {
-          toast({ variant: "destructive", title: t("room.importDialog.buildingsFloorsErrorTitle"), description: t("room.importDialog.serverRetry") });
-          return;
-        }
-        try {
-          downloadRoomTemplate(roomImportOptions);
-        } catch (error) {
-          toast({
-            variant: "destructive",
-            title: t("room.importDialog.templateErrorTitle"),
-            description: error instanceof Error ? error.message : t("room.importDialog.unknownError"),
-          });
-        }
-      }}
-      acceptedFileTypes=".zip,application/zip"
-      fileLabel={t("room.importDialog.roomZipLabel")}
-      validateFile={(file) => file.name.toLocaleLowerCase() === "dulieuphong.zip" ? null : t("room.importDialog.roomZipValidation")}
-      instructions={
-        <>
-          <p className="font-bold">{t("room.importDialog.zipStructure")}</p>
-          <pre className="my-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dulieuphong.zip
-└── dulieuphong/
-    ├── phong.xlsx
-    └── images/
-        ├── 101-1.jpg
-        ├── 101-2.jpg
-        ├── 101-3.jpg
-        └── 101-4.jpg`}</pre>
-          <p>{t("room.importDialog.roomInstructionsTypes")}</p>
-          <p className="mt-2">{t("room.importDialog.roomInstructionsBeds")}</p>
-          <p className="mt-2">{t("room.importDialog.roomInstructionsImages")}</p>
-          <p className="mt-2">{t("room.importDialog.roomInstructionsArchive")}</p>
-        </>
-      }
-      uploadLabel={t("room.importDialog.importRooms")}
-      progress={roomImportUploadProgress || undefined}
-      onUpload={importRoomsFromFile}
-    />
     {structureImportTarget && <BulkImportDialog
       open
       onOpenChange={(open) => { if (!open) closeStructureImportDialog(); }}
@@ -1851,7 +1789,14 @@ export default function RoomWorkspace() {
         ? <p>{localizedText("Cột bắt buộc: Tên tòa nhà. Mã tòa được hệ thống tự tạo; các tòa trùng tên sẽ được bỏ qua.", "Required column: Building name. Building codes are generated automatically; duplicate names are skipped.")}</p>
         : <p>{localizedText("Các cột: Tòa nhà (có thể để trống để dùng tòa đang chọn) và Số tầng. Chỉ nhận số nguyên từ 1 trở lên; tầng đã có sẽ được bỏ qua.", "Columns: Building (optional; uses the selected building when blank) and Floor number. Only whole numbers of at least 1 are accepted; existing floors are skipped.")}</p>}
       uploadLabel={localizedText("Nhập dữ liệu", "Import data")}
-      onUpload={(file) => importStructureFile(file, structureImportTarget)}
+      onUpload={async (file) => {
+        const imported = await importStructureFile(file, structureImportTarget);
+        if (imported) {
+          if (structureImportTarget === "buildings") closeCreateBuildingModal();
+          else closeCreateFloorModal();
+        }
+        return imported;
+      }}
     />}
     {(roomImportReport || roomSocketImportProgress) && (
       <RoomImportProgressCard
@@ -2199,7 +2144,10 @@ export default function RoomWorkspace() {
       <div role="dialog" aria-modal="true" className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{localizedText("Quản lý cơ sở vật chất", "FACILITY MANAGEMENT")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingBuildingId ? localizedText("Sửa tòa nhà", "Edit building") : localizedText("Tạo tòa nhà mới", "Create new building")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingBuildingId ? localizedText("Cập nhật tên tòa nhà.", "Update the building name.") : localizedText("Nhập tên tòa nhà; mã sẽ được tạo sau khi lưu.", "Enter a building name; its code will be generated when saved.")}</p></div>
+        <div className="flex shrink-0 items-center gap-2">
+          {!editingBuildingId && <button type="button" onClick={() => setStructureImportTarget("buildings")} disabled={isCreatingBuilding} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"><Upload size={14} />{localizedText("Nhập từ Excel", "Import from Excel")}</button>}
           <button type="button" onClick={closeCreateBuildingModal} disabled={isCreatingBuilding || isUpdatingBuilding} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
+        </div>
         </div>
         <div className="mt-4 space-y-4">
           <label className="block text-sm font-semibold text-slate-700">
@@ -2218,7 +2166,10 @@ export default function RoomWorkspace() {
       <div role="dialog" aria-modal="true" className="my-auto w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{t("room.floorManagement")}</p><h3 className="mt-1 font-serif text-lg font-bold text-slate-900">{editingFloor ? t("room.editFloor") : t("room.createFloor")}</h3><p className="mt-1 text-sm leading-5 text-slate-500">{editingFloor ? t("room.editFloorDescription") : t("room.createFloorDescription")}</p></div>
+        <div className="flex shrink-0 items-center gap-2">
+          {!editingFloor && <button type="button" onClick={() => setStructureImportTarget("floors")} disabled={isCreatingFloor || isUpdatingFloor} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"><Upload size={14} />{localizedText("Nhập từ Excel", "Import from Excel")}</button>}
           <button type="button" onClick={closeCreateFloorModal} disabled={isCreatingFloor || isUpdatingFloor} aria-label={localizedText("Đóng", "Close")} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"><X size={18} /></button>
+        </div>
         </div>
         <label className="mt-4 block text-sm font-semibold text-slate-700">{localizedText("Tòa nhà", "Building")} <span className="text-rose-500">*</span><select value={selectedBuildingId} onChange={(event) => setSelectedBuildingId(event.target.value)} disabled={Boolean(editingFloor) || buildings.length === 0 || isCreatingFloor || isUpdatingFloor} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">{buildings.map((item) => <option key={item.id} value={item.id}>{localizedBuildingName(item.name)}</option>)}</select></label>
         <label className="mt-4 block text-sm font-semibold text-slate-700">
@@ -2243,18 +2194,23 @@ export default function RoomWorkspace() {
               </div>
               <h3 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">{t(editingRoomId ? "room.editRoomTitle" : "room.createRoomTitle")}</h3>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={resetCreateRoomForm} disabled={isCreatingRoom || isUpdatingRoom} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
-                <RotateCcw size={15} />
-                {t("room.createForm.reset")}
-              </button>
-              <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">{t("common.cancel")}</button>
-              <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom || isUpdatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom || isUpdatingRoom ? t("room.createForm.saving") : editingRoomId ? t("room.saveChanges") : t("room.createRoom")}</button>
-            </div>
+            <button type="button" onClick={closeCreateRoomModal} aria-label={t("common.cancel")} className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+              <X size={20} />
+            </button>
           </div>
 
-          <div className="grid gap-5 overflow-y-auto p-5 lg:grid-cols-[1.4fr_0.8fr]">
+          <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-white px-5 py-3">
+            <button type="button" onClick={() => setRoomEntryMode("manual")} aria-pressed={roomEntryMode === "manual"} className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${roomEntryMode === "manual" ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}>
+              <Plus size={15} />{localizedText("Tạo thủ công", "Create manually")}
+            </button>
+            <button type="button" onClick={() => setRoomEntryMode("file")} aria-pressed={roomEntryMode === "file"} className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${roomEntryMode === "file" ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"}`}>
+              <Upload size={15} />{localizedText("Nhập từ Excel", "Import from Excel")}
+            </button>
+          </div>
+
+          {roomEntryMode === "manual" && <>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid gap-5 p-5 lg:grid-cols-[1.4fr_0.8fr]">
             <div className="space-y-5">
               {roomFormErrors.form && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{roomFormErrors.form}</p>}
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -2443,8 +2399,7 @@ export default function RoomWorkspace() {
                     })}
                   </div>
                 </div>
-              </div>
-
+                </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -2603,6 +2558,77 @@ export default function RoomWorkspace() {
               </div>
             </div>
           </div>
+          </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
+              <button type="button" onClick={resetCreateRoomForm} disabled={isCreatingRoom || isUpdatingRoom} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+                <RotateCcw size={15} />{t("room.createForm.reset")}
+              </button>
+              <button type="button" onClick={closeCreateRoomModal} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">{t("common.cancel")}</button>
+              <button type="button" onClick={() => void saveRoom()} disabled={isCreatingRoom || isUpdatingRoom} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isCreatingRoom || isUpdatingRoom ? t("room.createForm.saving") : t("room.createRoom")}</button>
+            </div>
+            </>}
+            <div className={roomEntryMode === "file" ? "min-h-0 flex-1 overflow-y-auto p-5" : "hidden"}>
+              <BulkImportDialog
+                open={showCreateRoom}
+                embedded
+                visible={roomEntryMode === "file"}
+                onOpenChange={(open) => { if (!open) setRoomEntryMode("manual"); }}
+                eyebrow={t("room.importDialog.eyebrow")}
+                title={t("room.importDialog.roomsTitle")}
+                description={t("room.importDialog.roomsDescription")}
+                templateLabel={t("room.importDialog.downloadRoomTemplate")}
+                onDownloadTemplate={() => {
+                  if (isBedTypesLoading) {
+                    toast({ title: t("room.importDialog.loadingBedTypesTitle"), description: t("room.importDialog.loadingBedTypesDescription") });
+                    return;
+                  }
+                  if (isBedTypesError) {
+                    toast({ variant: "destructive", title: t("room.importDialog.bedTypesErrorTitle"), description: t("room.importDialog.serverRetry") });
+                    return;
+                  }
+                  if (isBuildingsLoading || isHotelFloorsLoading) {
+                    toast({ title: t("room.importDialog.loadingBuildingsFloorsTitle"), description: t("room.importDialog.loadingTemplateWait") });
+                    return;
+                  }
+                  if (isBuildingsError || isHotelFloorsError) {
+                    toast({ variant: "destructive", title: t("room.importDialog.buildingsFloorsErrorTitle"), description: t("room.importDialog.serverRetry") });
+                    return;
+                  }
+                  try {
+                    downloadRoomTemplate(roomImportOptions);
+                  } catch (error) {
+                    toast({
+                      variant: "destructive",
+                      title: t("room.importDialog.templateErrorTitle"),
+                      description: error instanceof Error ? error.message : t("room.importDialog.unknownError"),
+                    });
+                  }
+                }}
+                acceptedFileTypes=".zip,application/zip"
+                fileLabel={t("room.importDialog.roomZipLabel")}
+                validateFile={(file) => file.name.toLocaleLowerCase() === "dulieuphong.zip" ? null : t("room.importDialog.roomZipValidation")}
+                instructions={
+                  <>
+                    <p className="font-bold">{t("room.importDialog.zipStructure")}</p>
+                    <pre className="my-2 overflow-x-auto rounded-lg bg-amber-100/70 p-3 font-mono text-[11px] leading-5 text-amber-950">{`dulieuphong.zip
+└── dulieuphong/
+    ├── phong.xlsx
+    └── images/
+          ├── 101-1.jpg
+          ├── 101-2.jpg
+          ├── 101-3.jpg
+          └── 101-4.jpg`}</pre>
+                    <p>{t("room.importDialog.roomInstructionsTypes")}</p>
+                    <p className="mt-2">{t("room.importDialog.roomInstructionsBeds")}</p>
+                    <p className="mt-2">{t("room.importDialog.roomInstructionsImages")}</p>
+                    <p className="mt-2">{t("room.importDialog.roomInstructionsArchive")}</p>
+                  </>
+                }
+                uploadLabel={t("room.importDialog.importRooms")}
+                progress={roomImportUploadProgress || undefined}
+                onUpload={importRoomsFromFile}
+              />
+            </div>
         </div>
       </div>
     )}

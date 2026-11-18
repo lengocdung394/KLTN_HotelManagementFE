@@ -18,6 +18,8 @@ type BulkImportDialogProps = {
   validateFile?: (file: File) => string | null;
   progress?: string;
   progressPercent?: number;
+  embedded?: boolean;
+  visible?: boolean;
   onUpload: (file: File) => Promise<boolean>;
 };
 
@@ -36,6 +38,8 @@ export default function BulkImportDialog({
   validateFile,
   progress,
   progressPercent,
+  embedded = false,
+  visible = true,
   onUpload,
 }: BulkImportDialogProps) {
   const { t } = useTranslation();
@@ -80,16 +84,18 @@ export default function BulkImportDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]"
+      className={embedded ? (visible ? "w-full" : "hidden") : "fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-[1px]"}
       onMouseDown={() => {
-        if (!isUploading) onOpenChange(false);
+        if (!embedded && !isUploading) onOpenChange(false);
       }}
     >
       <div
-        role="dialog"
-        aria-modal="true"
+        role={embedded ? "region" : "dialog"}
+        aria-modal={embedded ? undefined : true}
         aria-labelledby={titleId}
-        className="my-auto max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+        className={embedded
+          ? "w-full rounded-xl border border-slate-200 bg-white p-4 sm:p-5"
+          : "my-auto max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">

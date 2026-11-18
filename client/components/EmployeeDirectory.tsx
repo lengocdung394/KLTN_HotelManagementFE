@@ -23,6 +23,14 @@ import { localizedText } from "../i18n";
 import ClearSearchButton from "./ClearSearchButton";
 import ListPagination from "./ListPagination";
 import SearchableFilter from "./SearchableFilter";
+import EmployeeImportProgressCard from "./EmployeeImportProgressCard";
+import type { CatalogEntryMode } from "./CatalogEntryDialog";
+import {
+  getEmployeeImportStatus,
+  isEmployeeImportFinished,
+  startEmployeeImport,
+  type EmployeeImportTaskStatus,
+} from "../services/employeeImportApi";
 
 const MAX_EMPLOYEE_IMAGE_BYTES = 5 * 1024 * 1024;
 const EMPLOYEE_ROLES = ["Lễ tân", "Buồng phòng", "Bảo vệ"] as const;
@@ -107,6 +115,7 @@ export default function EmployeeDirectory() {
     }
   };
   const [addOpen, setAddOpen] = useState(false);
+  const [employeeEntryMode, setEmployeeEntryMode] = useState<CatalogEntryMode>("manual");
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -123,8 +132,11 @@ export default function EmployeeDirectory() {
   const [imagePreview, setImagePreview] = useState("");
   const [saveError, setSaveError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<AddEmployeeField, string>>>({});
-  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [importProgress, setImportProgress] = useState("");
+  const [importProgressPercent, setImportProgressPercent] = useState<number>();
+  const [importFinished, setImportFinished] = useState(false);
+  const [importArchiveError, setImportArchiveError] = useState("");
+  const [importTaskId, setImportTaskId] = useState("");
   const [importRows, setImportRows] = useState<EmployeeImportRowResult[]>([]);
   const [detailEmployee, setDetailEmployee] = useState<EmployeeRecord | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
@@ -168,6 +180,36 @@ export default function EmployeeDirectory() {
   useEffect(() => () => {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
   }, [imagePreview]);
+
+  useEffect(() => {
+    if (!importTaskId) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const status = await getEmployeeImportStatus(importTaskId, controller.signal);
+        if (controller.signal.aborted) return;
+        setImportProgress(status.message || importProgress);
+        setImportProgressPercent(status.percent);
+        if (isEmployeeImportFinished(status)) {
+          setImportFinished(true);
+          setImportProgress(status.message || "");
+          void reloadEmployees();
+          return;
+        }
+        timer = window.setTimeout(() => void poll(), 1500);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setImportArchiveError(getErrorMessage(error));
+        setImportFinished(true);
+      }
+    };
+    void poll();
+    return () => {
+      controller.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [importTaskId]);
 
   const resetForm = () => {
     setName("");
@@ -261,12 +303,18 @@ export default function EmployeeDirectory() {
     if (!hasHotelId) throw new Error("Không xác định được chi nhánh làm việc.");
 
     setImportProgress("Đang kiểm tra file Excel và ảnh...");
+    setImportProgressPercent(5);
+    setImportFinished(false);
+    setImportArchiveError("");
+    setImportTaskId("");
     setImportRows([]);
     try {
       const validation = await validateEmployeeImportArchive(archiveFile, employees);
       setImportRows(validation.rows);
       if (!validation.validCount) {
         setImportProgress("");
+        setImportProgressPercent(undefined);
+        setImportFinished(true);
         return true;
       }
       const parsed = await parseEmployeeImportArchive(archiveFile);
@@ -285,57 +333,39 @@ export default function EmployeeDirectory() {
       const branchName = hotelName || `chi-nhanh-${numericHotelId}`;
       const imageFiles = [...imageFilesByName.values()];
       setImportProgress(`Đang tải ${imageFiles.length} ảnh lên Cloudinary...`);
+      setImportProgressPercent(20);
       const imageUrls = await uploadImagesToCloudinary(imageFiles, branchName, "employees", (uploaded, total) => {
         setImportProgress(`Đang tải ảnh nhân viên lên Cloudinary: ${uploaded}/${total}...`);
+        setImportProgressPercent(20 + Math.round((uploaded / total) * 25));
       });
 
-      const resultsByRow = new Map(validation.rows.map((row) => [row.rowNumber, row]));
-      for (let index = 0; index < validEmployees.length; index += 1) {
-        const employee = validEmployees[index];
-        setImportProgress(`Đang tạo nhân viên ${index + 1}/${validEmployees.length}: ${employee.fullName}...`);
-        try {
-          const avatarUrl = imageUrls.get(employee.imageFileName.toLocaleLowerCase());
-          if (!avatarUrl) throw new Error(`Không tìm thấy URL ảnh Cloudinary cho "${employee.imageFileName}".`);
-          await createEmployee({
-            fullName: employee.fullName,
-            email: employee.email,
-            phone: employee.phone,
-            cccd: employee.cccd,
-            address: employee.address,
-            position: getEditablePosition(employee.position),
-            hotelId: numericHotelId,
-            avatarUrl,
-          }).unwrap();
-          resultsByRow.set(employee.rowNumber, {
-            rowNumber: employee.rowNumber,
-            fullName: employee.fullName,
-            passed: true,
-            message: "Đã tạo tài khoản thành công.",
-          });
-        } catch (error) {
-          resultsByRow.set(employee.rowNumber, {
-            rowNumber: employee.rowNumber,
-            fullName: employee.fullName,
-            passed: false,
-            message: getErrorMessage(error),
-          });
-        }
-        setImportRows([...resultsByRow.values()].sort((first, second) => first.rowNumber - second.rowNumber));
-      }
-
-      const results = [...resultsByRow.values()];
-      const createdCount = results.filter((row) => row.passed).length;
-      const failedCount = results.filter((row) => !row.passed).length;
-      setImportProgress("");
-      toast({
-        variant: createdCount > 0 ? "checkin" : "destructive",
-        title: createdCount > 0 ? "Hoàn tất nhập nhân viên" : "Không thể thêm nhân viên",
-        description: `${createdCount} nhân viên được tạo thành công, ${failedCount} dòng cần xem lại. Tài khoản mới dùng mật khẩu mặc định 1111.`,
+      const employeesForImport = validEmployees.map((employee) => {
+        const avatarUrl = imageUrls.get(employee.imageFileName.toLocaleLowerCase());
+        if (!avatarUrl) throw new Error(`Không tìm thấy URL ảnh Cloudinary cho "${employee.imageFileName}".`);
+        return {
+          fullName: employee.fullName,
+          email: employee.email,
+          phone: employee.phone,
+          cccd: employee.cccd,
+          address: employee.address,
+          position: getEditablePosition(employee.position),
+          avatarUrl,
+        };
       });
+
+      setImportProgress("Đang gửi dữ liệu nhân viên đến máy chủ...");
+      setImportProgressPercent(50);
+      const taskId = await startEmployeeImport(employeesForImport);
+      setImportTaskId(taskId);
+      setAddOpen(false);
       return true;
     } catch (error) {
-      setImportProgress("");
-      throw error;
+      const message = getErrorMessage(error);
+      setImportProgress(message);
+      setImportArchiveError(message);
+      setImportFinished(true);
+      setImportTaskId("");
+      throw new Error(message);
     }
   };
 
@@ -443,8 +473,9 @@ export default function EmployeeDirectory() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canManageBranchEmployees && <>
-            <button type="button" onClick={() => setIsBulkImportOpen(true)} className="flex w-fit items-center gap-2 rounded-lg border border-blue-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Upload size={15} />{localizedText("Thêm bằng Excel", "Import from Excel")}</button>
-            <button type="button" onClick={() => setAddOpen(true)} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-xs font-semibold text-white hover:bg-blue-700"><Plus size={15} />{localizedText("Thêm nhân viên", "Add employee")}</button>
+            <button type="button" onClick={() => { setEmployeeEntryMode("manual"); setAddOpen(true); }} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-xs font-semibold text-white hover:bg-blue-700">
+              <Plus size={15} />{localizedText("Thêm nhân viên", "Add employee")}
+            </button>
           </>}
         </div>
       </div>
@@ -513,7 +544,21 @@ export default function EmployeeDirectory() {
           </div>
           <button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="shrink-0 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" aria-label={localizedText("Đóng", "Close")}><X size={18} /></button>
         </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+          <button type="button" onClick={() => setEmployeeEntryMode("manual")} aria-pressed={employeeEntryMode === "manual"} className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${employeeEntryMode === "manual" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>
+            <Plus size={15} />{localizedText("Tạo thủ công", "Create manually")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEmployeeEntryMode("file")}
+            aria-pressed={employeeEntryMode === "file"}
+            className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-semibold ${employeeEntryMode === "file" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+          >
+            <Upload size={15} />{localizedText("Nhập từ Excel", "Import from Excel")}
+          </button>
+        </div>
+        {employeeEntryMode === "manual" && <>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
             {localizedText("Ảnh nhân viên", "Employee photo")} <span className="text-rose-500">*</span>
             <input
@@ -567,6 +612,25 @@ export default function EmployeeDirectory() {
           <button type="submit" disabled={isAddingEmployee || isSaving} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isAddingEmployee || isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu nhân viên", "Save employee")}</button>
           <button type="button" onClick={closeForm} disabled={isAddingEmployee || isSaving} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 disabled:opacity-50">{localizedText("Hủy", "Cancel")}</button>
         </div>
+        </>}
+        <BulkImportDialog
+          open={addOpen}
+          embedded
+          visible={employeeEntryMode === "file"}
+          onOpenChange={(open) => { if (!open) setEmployeeEntryMode("manual"); }}
+          eyebrow={localizedText("Nhân sự", "Staff")}
+          title={localizedText("Thêm nhân viên bằng Excel", "Import employees from Excel")}
+          description={localizedText("Tải mẫu, điền hồ sơ nhân viên và đóng gói file Excel cùng thư mục ảnh thành ZIP.", "Download the template, fill in employee details, and package the spreadsheet and image folder in a ZIP file.")}
+          templateLabel={localizedText("Tải file Excel mẫu", "Download Excel template")}
+          onDownloadTemplate={downloadEmployeeTemplate}
+          acceptedFileTypes=".zip,application/zip"
+          fileLabel={localizedText("Chọn file ZIP chứa Excel và ảnh nhân viên", "Choose a ZIP file containing the spreadsheet and employee photos")}
+          validateFile={(file) => file.name.toLocaleLowerCase().endsWith(".zip") ? null : localizedText("Vui lòng chọn file ZIP chứa file Excel mẫu và thư mục images.", "Choose a ZIP file containing the Excel template and images folder.")}
+          instructions={<><p className="font-semibold">{localizedText("Các bước nhập:", "Import steps:")}</p><ol className="mt-1 list-inside list-decimal space-y-1"><li>{localizedText("Giải nén thư mục mẫu, giữ nguyên tên file Excel và các cột.", "Extract the template folder and keep the Excel filename and columns unchanged.")}</li><li>{localizedText("Đặt ảnh JPG, PNG hoặc WebP vào thư mục", "Put JPG, PNG, or WebP photos in the")} <strong>images</strong>{localizedText(", tên ảnh phải khớp với cột Tên file ảnh.", " folder; each filename must match the Image filename column.")}</li><li>{localizedText("Nén file Excel và thư mục images thành ZIP rồi chọn file để nhập.", "Zip the Excel file and images folder, then select the ZIP file to import.")}</li><li>{localizedText("Ảnh được tải trực tiếp từ trình duyệt lên Cloudinary theo chi nhánh; hệ thống chỉ gửi URL ảnh đến máy chủ.", "Photos are uploaded directly from the browser to the branch's Cloudinary folder; only image URLs are sent to the server.")}</li></ol><p className="mt-2">{localizedText("Dòng hợp lệ được tạo độc lập. Mật khẩu mặc định của tài khoản mới là", "Valid rows are created independently. New accounts use the default password")} <strong>1111</strong>.</p></>}
+          uploadLabel={localizedText("Kiểm tra và nhập", "Validate and import")}
+          progress={importProgress}
+          onUpload={importEmployeesFromFile}
+        />
       </form>
     </div>}
     <div>
@@ -613,23 +677,23 @@ export default function EmployeeDirectory() {
     </div>}
     {!isFetching && !isError && <ListPagination totalItems={filteredEmployees.length} page={safePage} pageSize={pageSize} mode="table" onPageChange={setPage} onPageSizeChange={setPageSize} />}
     </div>
-    {importRows.length > 0 && <div className="border-t border-slate-100 p-5"><div className="flex items-center justify-between gap-2"><h4 className="text-sm font-bold text-slate-800">{localizedText("Kết quả nhập file", "Import results")}</h4><span className="text-xs text-slate-500">{importRows.filter((row) => row.passed && row.message === "Đã tạo tài khoản thành công.").length} {localizedText("thành công", "successful")} · {importRows.filter((row) => !row.passed).length} {localizedText("cần kiểm tra", "need review")}</span></div><div className="mt-3 max-h-56 space-y-2 overflow-y-auto">{importRows.map((row) => <div key={row.rowNumber} className={`rounded-lg px-3 py-2 text-xs ${row.passed ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}><span className="font-semibold">{localizedText("Dòng", "Row")} {row.rowNumber} · {row.fullName}:</span> {row.message || localizedText("Hợp lệ.", "Valid.")}</div>)}</div></div>}
-    <BulkImportDialog
-      open={isBulkImportOpen}
-      onOpenChange={setIsBulkImportOpen}
-      eyebrow={localizedText("Nhân sự", "Staff")}
-      title={localizedText("Thêm nhân viên bằng Excel", "Import employees from Excel")}
-      description={localizedText("Tải mẫu, điền hồ sơ nhân viên và đóng gói file Excel cùng thư mục ảnh thành ZIP.", "Download the template, fill in employee details, and package the spreadsheet and image folder in a ZIP file.")}
-      templateLabel={localizedText("Tải file Excel mẫu", "Download Excel template")}
-      onDownloadTemplate={downloadEmployeeTemplate}
-      acceptedFileTypes=".zip,application/zip"
-      fileLabel={localizedText("Chọn file ZIP chứa Excel và ảnh nhân viên", "Choose a ZIP file containing the spreadsheet and employee photos")}
-      validateFile={(file) => file.name.toLocaleLowerCase().endsWith(".zip") ? null : localizedText("Vui lòng chọn file ZIP chứa file Excel mẫu và thư mục images.", "Choose a ZIP file containing the Excel template and images folder.")}
-      instructions={<><p className="font-semibold">{localizedText("Các bước nhập:", "Import steps:")}</p><ol className="mt-1 list-inside list-decimal space-y-1"><li>{localizedText("Giải nén thư mục mẫu, giữ nguyên tên file Excel và các cột.", "Extract the template folder and keep the Excel filename and columns unchanged.")}</li><li>{localizedText("Đặt ảnh JPG, PNG hoặc WebP vào thư mục", "Put JPG, PNG, or WebP photos in the")} <strong>images</strong>{localizedText(", tên ảnh phải khớp với cột Tên file ảnh.", " folder; each filename must match the Image filename column.")}</li><li>{localizedText("Nén file Excel và thư mục images thành ZIP rồi chọn file để nhập.", "Zip the Excel file and images folder, then select the ZIP file to import.")}</li><li>{localizedText("Ảnh được tải trực tiếp từ trình duyệt lên Cloudinary theo chi nhánh; hệ thống chỉ gửi URL ảnh đến máy chủ.", "Photos are uploaded directly from the browser to the branch's Cloudinary folder; only image URLs are sent to the server.")}</li></ol><p className="mt-2">{localizedText("Dòng hợp lệ được tạo độc lập. Mật khẩu mặc định của tài khoản mới là", "Valid rows are created independently. New accounts use the default password")} <strong>1111</strong>.</p></>}
-      uploadLabel={localizedText("Kiểm tra và nhập", "Validate and import")}
-      progress={importProgress}
-      onUpload={importEmployeesFromFile}
-    />
+    {(importTaskId || importRows.length > 0 || importArchiveError) && (
+      <EmployeeImportProgressCard
+        progress={importProgress}
+        progressPercent={importProgressPercent}
+        rows={importRows}
+        finished={importFinished}
+        archiveError={importArchiveError}
+        onDismiss={() => {
+          setImportTaskId("");
+          setImportRows([]);
+          setImportProgress("");
+          setImportProgressPercent(undefined);
+          setImportFinished(false);
+          setImportArchiveError("");
+        }}
+      />
+    )}
     {detailEmployee && <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4" onMouseDown={() => setDetailEmployee(null)}><section role="dialog" aria-modal="true" aria-labelledby="employee-detail-title" onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"><div className="flex items-start justify-between border-b border-slate-100 pb-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">{localizedText("Hồ sơ nhân sự", "Staff profile")}</p><h3 id="employee-detail-title" className="mt-1 text-xl font-bold text-slate-900">{localizedText("Chi tiết nhân viên", "Employee details")}</h3></div><button type="button" onClick={() => setDetailEmployee(null)} aria-label={localizedText("Đóng", "Close")} className="text-slate-400 hover:text-slate-700"><X size={20} /></button></div><div className="mt-5 flex items-center gap-4">{detailEmployee.avatarUrl ? <img src={detailEmployee.avatarUrl} alt={detailEmployee.fullName} className="h-20 w-20 rounded-2xl object-cover" /> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-blue-100 text-xl font-bold text-blue-700">{getInitials(detailEmployee.fullName)}</div>}<div><h4 className="text-lg font-bold text-slate-900">{detailEmployee.fullName}</h4><p className="mt-1 text-sm text-blue-700">{employeeRoleLabel(detailEmployee.position)}</p><p className="mt-1 text-xs text-slate-500">{localizedText("Mã nhân viên:", "Employee ID:")} {detailEmployee.id}</p></div></div><dl className="mt-5 grid gap-4 sm:grid-cols-2">{[[localizedText("Email / tài khoản", "Email / account"), detailEmployee.email], [localizedText("Số điện thoại", "Phone number"), detailEmployee.phone], ["CCCD", detailEmployee.cccd], [localizedText("Chi nhánh", "Branch"), detailEmployee.hotelName], [localizedText("Địa chỉ", "Address"), detailEmployee.address]].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><dt className="text-xs font-semibold text-slate-500">{label}</dt><dd className="mt-1 break-words text-sm font-medium text-slate-800">{value || localizedText("Chưa cập nhật", "Not provided")}</dd></div>)}</dl><div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={() => setDetailEmployee(null)} className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">{localizedText("Đóng", "Close")}</button>{canManageBranchEmployees && isEditableEmployee(detailEmployee, roles) && <button type="button" onClick={() => openEditEmployee(detailEmployee)} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"><Pencil size={15} />{localizedText("Sửa hồ sơ / tài khoản", "Edit profile / account")}</button>}</div></section></div>}
     {editingEmployee && <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4" onMouseDown={() => { if (!isUpdatingEmployee) setEditingEmployee(null); }}>
       <form onSubmit={saveEmployeeChanges} onMouseDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
