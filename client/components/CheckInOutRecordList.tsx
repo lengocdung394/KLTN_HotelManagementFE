@@ -35,6 +35,7 @@ export type DailyRecord = {
   paidAmount?: number;
   roomAmount?: number;
   totalAmount?: number;
+  discountAmount?: number;
   earlyCheckInFee?: number;
   otherSurcharges?: number;
   estimatedEarlyCheckInFee?: number;
@@ -91,7 +92,13 @@ export default function CheckInOutRecordList({
     const canUndo = !record.historical && isCheckIn && record.status === "Đã check-in";
     const services = recordServices[record.id] ?? record.services ?? [];
     const serviceTotal = services.reduce((total, service) => total + service.amount, 0) + (record.lateFee || 0);
-    const totalAmount = Number(record.roomAmount ?? 0) + serviceTotal + Number(record.earlyCheckInFee ?? 0);
+    const totalAmount = Math.max(
+      0,
+      Number(record.roomAmount ?? 0)
+        + serviceTotal
+        + Number(record.earlyCheckInFee ?? 0)
+        - Number(record.discountAmount ?? 0),
+    );
     const matrixConflict = isCheckIn && record.status === "Chờ check-in" ? checkMatrixCheckInConflict(record) : null;
     const statusLabel = record.status === "Chờ check-in"
       ? t("frontDesk.waitingCheckIn")

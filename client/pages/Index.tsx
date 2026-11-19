@@ -287,7 +287,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {reportLoading
                   ? "—"
                   : reportError
-                    ? t("dashboard.error")
+                    ? "—"
                     : `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(dailyReport?.netCashReceived ?? 0))}${i18n.language.startsWith("en") ? " VND" : "đ"}`}
               </p>
               <p className="mt-1 text-xs text-blue-100">

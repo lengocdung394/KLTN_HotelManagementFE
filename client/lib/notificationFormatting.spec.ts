@@ -8,6 +8,14 @@ describe("formatToastDescription", () => {
     )).toBe("Mã booking: #BK-1\nKhách hàng: Lan\nSố tiền: 500.000đ\nPhương thức: Tiền mặt");
   });
 
+  it("places service fields separated by commas on separate lines without splitting names", () => {
+    expect(formatToastDescription(
+      'Dịch vụ "Đồ ăn, thức uống", giá 250.000đ/người, danh mục Ăn uống, trạng thái đang hoạt động.',
+    )).toBe(
+      'Dịch vụ "Đồ ăn, thức uống"\ngiá 250.000đ/người\ndanh mục Ăn uống\ntrạng thái đang hoạt động.',
+    );
+  });
+
   it("leaves descriptions without dividers unchanged", () => {
     expect(formatToastDescription("Booking updated successfully.")).toBe("Booking updated successfully.");
   });

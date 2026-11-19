@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import {
   superAdminApi,
   useCreateSuperAdminPermissionMutation,
   useUpdateSuperAdminPermissionMutation,
+  useDeleteSuperAdminPermissionMutation,
   useCreateSuperAdminRoleMutation,
   useUpdateSuperAdminRoleMutation,
   useGetSuperAdminPermissionCatalogQuery,
@@ -69,7 +71,7 @@ const CATALOG_TABLE_COLUMNS = [
   { id: "code", label: "Mã quyền", width: 240 },
   { id: "description", label: "Mô tả", width: 340 },
   { id: "roles", label: "Vai trò được gán", width: 480 },
-  { id: "actions", label: "Thao tác", width: 160 },
+  { id: "actions", label: "Thao tác", width: 420 },
 ] as const;
 type CatalogTableColumnId = (typeof CATALOG_TABLE_COLUMNS)[number]["id"];
 const catalogColumnLabel = (id: CatalogTableColumnId) => ({
@@ -300,6 +302,8 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
     useCreateSuperAdminPermissionMutation();
   const [updatePermissionRequest, { isLoading: isUpdatingPermission }] =
     useUpdateSuperAdminPermissionMutation();
+  const [deletePermissionRequest, { isLoading: isDeletingPermission }] =
+    useDeleteSuperAdminPermissionMutation();
   const [importPermissionCatalogRequest, { isLoading: isSavingPermissionCatalog }] =
     useImportSuperAdminPermissionCatalogMutation();
   const [createRoleRequest, { isLoading: isCreatingRole }] = useCreateSuperAdminRoleMutation();
@@ -370,6 +374,8 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
     roleCode: string;
     permission: SuperAdminPermissionAssignment;
   } | null>(null);
+  const [pendingPermissionDelete, setPendingPermissionDelete] =
+    useState<SuperAdminPermissionCatalogItem | null>(null);
   const [pendingBulkPermissionAssignment, setPendingBulkPermissionAssignment] = useState<{
     permission: SuperAdminPermissionCatalogItem;
     roleCodes: string[];
@@ -524,6 +530,29 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
     setPermissionFieldErrors({});
     setCatalogError("");
     setEditingPermissionCode(null);
+  };
+
+  const deletePermission = async () => {
+    if (!pendingPermissionDelete) return;
+    setCatalogError("");
+    setCatalogMessage("");
+    try {
+      await deletePermissionRequest(pendingPermissionDelete.code).unwrap();
+      setCatalogMessage(
+        localizedText(
+          `Đã xóa quyền ${pendingPermissionDelete.code}.`,
+          `Permission ${pendingPermissionDelete.code} deleted.`,
+        ),
+      );
+      setPendingPermissionDelete(null);
+    } catch (error) {
+      setCatalogError(
+        getErrorMessage(
+          error,
+          localizedText("Không thể xóa quyền. Vui lòng thử lại.", "Could not delete the permission. Please try again."),
+        ),
+      );
+    }
   };
 
   const createPermission = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1289,11 +1318,11 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                 <span className="text-xs text-slate-400">{localizedText("Chưa gán", "Not assigned")}</span>
                               )}
                             </td>}
-                            {visibleCatalogColumns.actions && <td className="whitespace-nowrap px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                            {visibleCatalogColumns.actions && <td className="px-4 py-3">
+                              <div className="grid grid-cols-3 gap-2">
                                 <button
                                   type="button"
-                                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                                   onClick={() => {
                                     setPermissionCode(permission.code);
                                     setPermissionName(permission.name);
@@ -1317,9 +1346,21 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                     setCatalogAssignmentRoleCode(roles[0]?.code ?? "");
                                     setPermissionToAssign(permission);
                                   }}
-                                  className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="h-10 rounded-lg border border-blue-200 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {localizedText("Gán quyền", "Assign permission")}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isDeletingPermission}
+                                  onClick={() => {
+                                    setCatalogError("");
+                                    setPendingPermissionDelete(permission);
+                                  }}
+                                  className="inline-flex h-10 items-center justify-center gap-1 rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Trash2 size={11} />
+                                  {localizedText("Xóa", "Delete")}
                                 </button>
                               </div>
                             </td>}
@@ -1800,6 +1841,53 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
           </DialogContent>
         </Dialog>
       )}
+
+      <Dialog
+        open={pendingPermissionDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingPermission) setPendingPermissionDelete(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{localizedText("Xác nhận xóa quyền", "Confirm permission deletion")}</DialogTitle>
+            <DialogDescription>
+              {pendingPermissionDelete && (
+                <>
+                  {localizedText("Bạn có chắc muốn xóa quyền ", "Are you sure you want to delete permission ")}
+                  <strong>{permissionNameLabel(pendingPermissionDelete.name)}</strong> ({pendingPermissionDelete.code})?
+                  {" "}
+                  {localizedText(
+                    "Quyền này cũng sẽ bị gỡ khỏi tất cả role đang được gán.",
+                    "It will also be removed from every role that currently has this permission.",
+                  )}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {catalogError && <p role="alert" className="text-sm text-rose-600">{catalogError}</p>}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingPermissionDelete(null)}
+              disabled={isDeletingPermission}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {localizedText("Hủy", "Cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void deletePermission()}
+              disabled={isDeletingPermission || !pendingPermissionDelete}
+              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isDeletingPermission
+                ? localizedText("Đang xóa...", "Deleting...")
+                : localizedText("Xóa quyền", "Delete permission")}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={pendingPermissionChange !== null}

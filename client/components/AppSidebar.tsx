@@ -384,11 +384,11 @@ export default function AppSidebar({
               </button>
             </div>
             {servicesMenuOpen && (
-              <div className="space-y-1 pb-2 pl-6 pr-2">
+              <div className="space-y-1 pb-2 pl-4 pr-1">
                 {canViewServiceUsage && <Link
                   to="/services/usage"
                   onClick={onCloseMobile}
-                  className={`block whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-4 ${location.pathname === "/services/usage" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                  className={`block whitespace-nowrap rounded-lg px-2 py-2 text-left text-sm ${location.pathname === "/services/usage" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                 >
                   {t("navigation.serviceUsage", "Thao tác dịch vụ khách hàng")}
                 </Link>}
@@ -396,7 +396,7 @@ export default function AppSidebar({
                   <Link
                     to="/services/catalog"
                     onClick={onCloseMobile}
-                    className={`block whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-4 ${location.pathname === "/services/catalog" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                    className={`block whitespace-nowrap rounded-lg px-2 py-2 text-left text-sm ${location.pathname === "/services/catalog" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                   >
                     {isEmployee
                       ? localizedText("Danh sách dịch vụ", "Service list")

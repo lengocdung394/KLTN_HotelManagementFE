@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getBookingSurchargeBreakdown, getBookingTotalFromBreakdown, getServicePriceBreakdown, getServiceQuantityForRoom, roundVndAmount } from "./bookingPricing";
+import { allocateDiscountByAmount, getBookingSurchargeBreakdown, getBookingTotalFromBreakdown, getServicePriceBreakdown, getServiceQuantityForRoom, roundVndAmount } from "./bookingPricing";
 
 describe("getServicePriceBreakdown", () => {
   it("uses the stored price for booked quantity and current price for newly added quantity", () => {
@@ -32,6 +32,14 @@ describe("getServiceQuantityForRoom", () => {
 describe("roundVndAmount", () => {
   it("removes floating-point residue from whole-dong amounts", () => {
     expect(roundVndAmount(3938.999999999993)).toBe(3939);
+  });
+});
+
+describe("allocateDiscountByAmount", () => {
+  it("allocates a booking discount proportionally and caps it at the booking amount", () => {
+    expect(allocateDiscountByAmount(101, [100, 200])).toEqual([34, 67]);
+    expect(allocateDiscountByAmount(101, [100, 100, 100])).toEqual([34, 34, 33]);
+    expect(allocateDiscountByAmount(500, [100, 200])).toEqual([100, 200]);
   });
 });
 

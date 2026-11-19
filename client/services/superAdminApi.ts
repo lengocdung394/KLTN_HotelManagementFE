@@ -270,6 +270,13 @@ export const superAdminApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<SuperAdminPermissionCatalogItem>) => response.result,
       invalidatesTags: ["SuperAdminPermissionCatalog", "SuperAdminRole"],
     }),
+    deleteSuperAdminPermission: builder.mutation<void, string>({
+      query: (permissionCode) => ({
+        url: `/role_permissions/permissions/${encodeURIComponent(permissionCode)}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["SuperAdminPermissionCatalog", "SuperAdminRole", "CurrentUserPermissions"],
+    }),
     importSuperAdminPermissionCatalog: builder.mutation<
       SuperAdminPermissionCatalogItem[],
       SuperAdminPermissionCatalogItem[]
@@ -366,6 +373,7 @@ export const {
   useGetSuperAdminPermissionCatalogQuery,
   useCreateSuperAdminPermissionMutation,
   useUpdateSuperAdminPermissionMutation,
+  useDeleteSuperAdminPermissionMutation,
   useImportSuperAdminPermissionCatalogMutation,
   useGetSuperAdminRolePermissionsQuery,
   useImportSuperAdminRolePermissionsMutation,

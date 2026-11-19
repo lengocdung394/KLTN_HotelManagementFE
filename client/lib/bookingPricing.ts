@@ -16,6 +16,24 @@ export function roundVndAmount(amount: number) {
   return Math.round(amount);
 }
 
+export function allocateDiscountByAmount(discountTotal: number, amounts: number[]) {
+  const validAmounts = amounts.map((amount) => Number.isFinite(amount) ? Math.max(0, amount) : 0);
+  const totalAmount = validAmounts.reduce((total, amount) => total + amount, 0);
+  if (totalAmount === 0) return validAmounts.map(() => 0);
+
+  const discount = Math.min(
+    totalAmount,
+    Math.max(0, roundVndAmount(Number.isFinite(discountTotal) ? discountTotal : 0)),
+  );
+  let remainingDiscount = discount;
+  return validAmounts.map((amount, index) => {
+    if (index === validAmounts.length - 1) return remainingDiscount;
+    const share = Math.min(amount, remainingDiscount, roundVndAmount(discount * amount / totalAmount));
+    remainingDiscount -= share;
+    return share;
+  });
+}
+
 export function getBookingTotalFromBreakdown({
   storedTotal,
   roomTotal,
