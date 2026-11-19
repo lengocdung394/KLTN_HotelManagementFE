@@ -36,29 +36,31 @@ export default function BuildingManagementPanel({ query, filteredBuildings, onQu
       <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{t("room.buildingList", "Danh sách tòa nhà")}</p>
       <div className="relative w-full sm:w-64">
         <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-        <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchBuildings", "Tìm tên hoặc mã tòa...")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+        <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder={t("room.searchBuildings")} className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-9 text-xs outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
         <ClearSearchButton value={query} onClear={() => onQueryChange("")} label={t("common.clearSearch")} className="h-6 w-6" />
       </div>
     </div>
-    {canManage && <p className="mb-3 text-xs text-slate-500">Bạn có thể thêm tòa nhà riêng lẻ bằng nút “Thêm tòa nhà”.</p>}
+    {canManage && <p className="mb-3 text-xs text-slate-500">{t("room.addBuildingHint")}</p>}
     <div className="overflow-x-auto rounded-xl border border-slate-200">
       <table className="w-full min-w-[480px] text-left text-sm">
         <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
+            <th scope="col" className="whitespace-nowrap px-4 py-3">{t("common.serialNumber", "STT")}</th>
             <th scope="col" className="px-4 py-3">{t("room.buildingNameColumn")}</th>
             {canManage && <th scope="col" className="px-4 py-3 text-right">{t("room.actionsColumn")}</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {paginatedBuildings.map((building) => <tr key={building.id} className="hover:bg-slate-50/70">
+          {paginatedBuildings.map((building, index) => <tr key={building.id} className="hover:bg-slate-50/70">
+            <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
             <td className="px-4 py-3 font-semibold text-slate-800">{building.name}</td>
             {canManage && <td className="px-4 py-2 text-right">
-              <button type="button" onClick={() => onEdit(building)} aria-label={`${t("room.editBuilding", "Sửa tòa nhà")} ${building.name}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+              <button type="button" onClick={() => onEdit(building)} aria-label={`${t("room.editBuilding")} ${building.name}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
                 <Pencil size={13} />{t("common.edit")}
               </button>
             </td>}
           </tr>)}
-          {filteredBuildings.length === 0 && <tr><td colSpan={canManage ? 2 : 1} className="p-0"><FilterResultStatus filterKey={query}><p className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noBuildingsFound", "Không tìm thấy tòa nhà phù hợp.")}</p></FilterResultStatus></td></tr>}
+          {filteredBuildings.length === 0 && <tr><td colSpan={canManage ? 3 : 2} className="p-0"><FilterResultStatus filterKey={query}><p className="px-4 py-6 text-center text-xs text-slate-400">{t("room.noBuildingsFound")}</p></FilterResultStatus></td></tr>}
         </tbody>
       </table>
     </div>

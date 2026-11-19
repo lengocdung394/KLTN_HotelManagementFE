@@ -252,7 +252,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
               type="button"
               onClick={() => void sendPasswordReset()}
               disabled={isSaving || isRequestingPasswordReset}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
             >
               {isRequestingPasswordReset && <LoaderCircle className="h-4 w-4 animate-spin" />}
               {isRequestingPasswordReset ? localizedText("Đang cấp lại mật khẩu...", "Resetting password...") : localizedText("Cấp lại mật khẩu và đăng xuất", "Reset password and sign out")}
@@ -260,7 +260,7 @@ export default function SuperAdminProfileSettings({ onLogout }: SuperAdminProfil
             <button
               type="submit"
               disabled={isSaving || isRequestingPasswordReset || !form.fullName.trim() || !form.email.trim() || (requiresCurrentPassword && !form.currentPassword) || (emailChanged && !passwordChanged)}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
+              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
             >
               {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : saved ? <Check size={16} /> : <Save size={16} />}
               {isSaving ? localizedText("Đang lưu...", "Saving...") : localizedText("Lưu thay đổi", "Save changes")}

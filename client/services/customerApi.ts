@@ -1,5 +1,7 @@
 import { baseApi } from "./baseApi";
 
+export type CustomerLoyaltyTier = "bronze" | "silver" | "gold" | "platinum";
+
 export type CustomerResponse = {
 	id: string;
 	name: string;
@@ -14,7 +16,7 @@ export type CustomerResponse = {
 	lastStay: string;
 	totalSpend: number;
 	totalRoomAmount: number;
-	tier: "loyal" | "new" | "potential";
+	tier: CustomerLoyaltyTier;
 	note: string;
 };
 
@@ -41,17 +43,32 @@ const numberOf = (value: unknown) => {
 	return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const normalizeCustomer = (item: ApiCustomer): CustomerResponse => {
+const loyaltyTierFromValue = (value: unknown): CustomerLoyaltyTier | undefined => {
+	const values = value && typeof value === "object"
+		? ["name", "code", "tier", "description"].map((key) => (value as ApiCustomer)[key])
+		: [value];
+	for (const candidate of values) {
+		const normalized = String(candidate ?? "").toLowerCase();
+		if (normalized.includes("platinum") || normalized.includes("bạch kim")) return "platinum";
+		if (normalized.includes("gold") || normalized.includes("vàng")) return "gold";
+		if (normalized.includes("silver") || normalized.includes("bạc")) return "silver";
+		if (normalized.includes("bronze") || normalized.includes("đồng")) return "bronze";
+	}
+	return undefined;
+};
+
+const loyaltyTierFromSpend = (totalSpend: number): CustomerLoyaltyTier => {
+	if (totalSpend >= 40_000_000) return "platinum";
+	if (totalSpend >= 15_000_000) return "gold";
+	if (totalSpend >= 5_000_000) return "silver";
+	return "bronze";
+};
+
+export const normalizeCustomer = (item: ApiCustomer): CustomerResponse => {
 	const visits = numberOf(valueOf(item, ["visits", "visitCount", "totalVisits", "numberOfBookings", "totalBookings"]));
 	const totalSpend = numberOf(valueOf(item, ["totalSpend", "totalSpending", "spending", "totalAmount", "totalSpent"]));
-	const loyaltyTier = valueOf(item, ["loyaltyTier"]);
-	const loyaltyDescription = loyaltyTier && typeof loyaltyTier === "object" ? String((loyaltyTier as { description?: unknown }).description ?? "") : String(loyaltyTier ?? "");
-	const tierValue = String(valueOf(item, ["tier", "customerTier", "level"]) ?? "").toLowerCase();
-	const tier = tierValue.includes("bạc") || tierValue.includes("silver") || loyaltyDescription.toLowerCase().includes("bạc") || loyaltyDescription.toLowerCase().includes("silver")
-		? "potential"
-		: tierValue.includes("vàng") || tierValue.includes("gold") || loyaltyDescription.toLowerCase().includes("vàng") || loyaltyDescription.toLowerCase().includes("gold")
-			? "loyal"
-			: visits >= 4 ? "loyal" : visits > 0 ? "potential" : "new";
+	const tier = loyaltyTierFromValue(valueOf(item, ["loyaltyTier", "tier", "customerTier", "level"]))
+		?? loyaltyTierFromSpend(totalSpend);
 	return {
 		id: String(valueOf(item, ["id", "customerId", "customerID", "idCustomer"]) ?? ""),
 		name: String(valueOf(item, ["name", "fullName", "customerName"]) ?? "Chưa cập nhật"),

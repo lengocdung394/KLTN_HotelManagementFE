@@ -5,8 +5,8 @@ import { CalendarDays, Columns3, Copy, Eye, Pencil, Plus, RefreshCw, RotateCcw, 
 import ListPagination from "../components/ListPagination";
 import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
-import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
-import { useGetHotelReportQuery } from "../services/reportApi";
+import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionUsageReportQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
+import { formatVnd } from "../lib/currency";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
@@ -152,6 +152,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const [form, setForm] = useState<PromotionFormValues>(initialForm);
   const [formErrors, setFormErrors] = useState<Partial<Record<PromotionFormField, string>>>({});
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [formError, setFormError] = useState("");
   const pendingLocalPromotionName = useRef("");
   const [page, setPage] = useState(1);
@@ -200,9 +201,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
     data: promotionUsageReport,
     isLoading: isPromotionUsageLoading,
     isError: isPromotionUsageError,
-  } = useGetHotelReportQuery({
-    startDate: monthStartKey,
-    endDate: monthEndKey,
+  } = useGetPromotionUsageReportQuery({
+    month: summaryMonth,
     ...(isSystemAdmin && selectedBranchId
       ? { hotelId: Number(selectedBranchId) }
       : !isSystemAdmin && hasHotelId
@@ -210,7 +210,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
         : {}),
   }, { skip: !hasHotelId && !isSystemAdmin });
   const promotionSavingsById = new Map(
-    (promotionUsageReport?.promotions ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
+    (promotionUsageReport ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
   );
   const promotionDateMarkers = useMemo(() => {
     const markers: Record<string, Array<"ROOM" | "SERVICE" | "TOTAL">> = {};
@@ -366,7 +366,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const toDateTimeInput = (value: string) => value ? value.replace(" ", "T").slice(0, 16) : "";
   const formatValue = (promotion: Promotion) => isPercentageDiscount(promotion.valueType)
     ? `${promotion.value}%`
-    : `${promotion.value.toLocaleString(locale)}${locale === "en-US" ? " VND" : "đ"}`;
+    : formatVnd(promotion.value, locale);
   const copyCode = (code: string) => { navigator.clipboard?.writeText(code); setCopied(code); window.setTimeout(() => setCopied(null), 1500); };
   const label = (key: string, options?: Record<string, string>) => t(`promotion.${key}`, options);
   const requiredMinimumField: PromotionFormField = form.type === "ROOM"
@@ -637,10 +637,29 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                       <option value="EXPIRED">{label("statusExpired")}</option>
                     </select>
                   </label>
-                  <label className="text-sm font-semibold text-slate-700">
+                  <div className="text-sm font-semibold text-slate-700">
                     {label("image")} <span className="text-xs font-normal text-slate-400">({label("optional")})</span>
-                    <input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-sm font-normal text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700 hover:file:bg-blue-100" />
-                  </label>
+                    <div className="mt-1.5 flex min-w-0 items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        className="shrink-0 rounded-md bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                      >
+                        {localizedText("Chọn tệp", "Choose file")}
+                      </button>
+                      <span className="min-w-0 truncate text-sm font-normal text-slate-600">
+                        {imageFile?.name ?? localizedText("Chưa có tệp nào được chọn", "No file selected")}
+                      </span>
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/*"
+                        aria-label={label("image")}
+                        onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+                        className="sr-only"
+                      />
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -779,7 +798,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     ["code", detailPromotion.code || label("codeGenerated")],
                     ["discountType", label(isPercentageDiscount(detailPromotion.valueType) ? "percentage" : "fixedAmount")],
                     ["offerLevel", formatValue(detailPromotion)],
-                    ...(isPercentageDiscount(detailPromotion.valueType) ? [["maxDiscountAmount", detailPromotion.maxDiscountAmount == null ? "-" : `${detailPromotion.maxDiscountAmount.toLocaleString("vi-VN")}đ`]] : []),
+                    ...(isPercentageDiscount(detailPromotion.valueType) ? [["maxDiscountAmount", detailPromotion.maxDiscountAmount == null ? "-" : formatVnd(detailPromotion.maxDiscountAmount, locale)]] : []),
                   ].map(([key, value]) => (
                     <div key={key}>
                       <dt className="text-xs font-semibold text-slate-500">{label(key)}</dt>
@@ -793,9 +812,9 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                 <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                   {[
                     ["scope", label(`scope${String(detailPromotion.type ?? "TOTAL").toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}`)],
-                    ["minBookingValue", Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)) > 0 ? `${Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)).toLocaleString("vi-VN")}đ` : "-"],
-                    ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : `${detailPromotion.minRoomValue.toLocaleString("vi-VN")}đ`],
-                    ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : `${detailPromotion.minServiceValue.toLocaleString("vi-VN")}đ`],
+                    ["minBookingValue", Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)) > 0 ? formatVnd(Math.max(Number(detailPromotion.minimumOrderAmount ?? 0), Number(detailPromotion.minBookingValue ?? 0)), locale) : "-"],
+                    ["minRoomValue", detailPromotion.minRoomValue == null ? "-" : formatVnd(detailPromotion.minRoomValue, locale)],
+                    ["minServiceValue", detailPromotion.minServiceValue == null ? "-" : formatVnd(detailPromotion.minServiceValue, locale)],
                     ["usageLimit", detailPromotion.usageLimit == null ? "-" : detailPromotion.usageLimit.toLocaleString("vi-VN")],
                     ["claimedCount", (detailPromotion.claimedCount ?? 0).toLocaleString(locale)],
                     ["usedCount", (detailPromotion.usedCount ?? 0).toLocaleString(locale)],
@@ -1072,7 +1091,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
           </p>
         ) : displayedPromotions.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-500">
-            Chi nhánh chưa có khuyến mãi.
+            {localizedText("Chi nhánh chưa có khuyến mãi.", "This branch has no promotions yet.")}
           </p>
         ) : visiblePromotions.length === 0 ? (
           <FilterResultStatus filterKey={JSON.stringify([searchQuery, statusFilter, scopeFilter, selectedDate, isDateFilterActive])}><p className="p-8 text-center text-sm text-slate-500">{normalizedSearchQuery || statusFilter !== "ALL" || scopeFilter !== "ALL" ? label("noPromotionsMatchingFilters") : label(isDateFilterActive ? "noPromotionsOnDate" : "noPromotionsThisMonth")}</p></FilterResultStatus>
@@ -1081,17 +1100,17 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
             <div className="overflow-x-auto">
               <table
                 className="min-w-full table-fixed border-collapse text-left text-sm"
-                style={{ width: `${promotionTableWidth + (isSystemAdmin ? 64 : 0)}px` }}
+                style={{ width: `${promotionTableWidth + 64}px` }}
               >
                 <colgroup>
-                  {isSystemAdmin && <col style={{ width: "64px" }} />}
+                  <col style={{ width: "64px" }} />
                   {shownPromotionColumns.map((column) => (
                     <col key={column.id} style={{ width: `${column.width}px` }} />
                   ))}
                 </colgroup>
                 <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
                   <tr>
-                    {isSystemAdmin && <th scope="col" className="whitespace-nowrap px-5 py-3">STT</th>}
+                    <th scope="col" className="whitespace-nowrap px-5 py-3">{localizedText("STT", "No.")}</th>
                     {shownPromotionColumns.map((column) => (
                       <th
                         key={column.id}
@@ -1112,7 +1131,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     const editDisabledReason = expired ? label("editDisabledExpired") : label("editDisabledUsed");
                     return (
                       <tr key={promotion.id} className="text-slate-700 transition hover:bg-slate-50/70">
-                      {isSystemAdmin && <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>}
+                      <td className="px-5 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                       {visiblePromotionColumns.program && <td className="max-w-80 px-5 py-3">
                           <p className="truncate font-semibold text-slate-900" title={promotion.name}>{promotion.name}</p>
                           {promotion.description && <p className="mt-1 truncate text-xs text-slate-500" title={promotion.description}>{promotion.description}</p>}

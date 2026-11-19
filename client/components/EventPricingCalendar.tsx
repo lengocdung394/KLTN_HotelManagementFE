@@ -788,9 +788,10 @@ export default function EventPricingCalendar() {
         </div></FilterResultStatus>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[1100px] text-left text-xs">
+          <table className="w-full min-w-[1160px] text-left text-xs">
             <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
               <tr>
+                <th scope="col" className="whitespace-nowrap px-4 py-3">{t("common.serialNumber")}</th>
                 <th scope="col" className="whitespace-nowrap px-4 py-3">{t("eventPricing.eventColumn")}</th>
                 <th scope="col" className="whitespace-nowrap px-4 py-3">{t("eventPricing.statusColumn")}</th>
                 <th scope="col" className="whitespace-nowrap px-4 py-3">{t("eventPricing.dateRange")}</th>
@@ -801,7 +802,7 @@ export default function EventPricingCalendar() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedEvents.map((evt) => {
+              {paginatedEvents.map((evt, index) => {
                 const status = getEventStatus(evt);
                 const statusClass = status === "ACTIVE"
                   ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
@@ -811,6 +812,7 @@ export default function EventPricingCalendar() {
 
                 return (
                   <tr key={evt.id} className="transition-colors hover:bg-slate-50/70">
+                    <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-500">{safeCurrentPage * pageSize + index + 1}</td>
                     <th scope="row" className="max-w-56 px-4 py-3 font-bold text-slate-800">
                       {evt.name === defaultEventName ? t("eventPricing.seasonalPricing") : evt.name}
                     </th>

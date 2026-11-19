@@ -50,6 +50,15 @@ export type PromotionSummary = {
   expiringSoonPromotions: number;
 };
 
+export type PromotionUsageReport = {
+  promotionId: string;
+  promotionName: string;
+  promotionCode: string;
+  usageCount: number;
+  userCount: number;
+  savings: number;
+};
+
 export type CreatePromotionRequest = {
   name: string;
   description?: string;
@@ -169,6 +178,15 @@ export const promotionApi = baseApi.injectEndpoints({
       transformResponse: (response: ApiResponse<PromotionSummary>) => response.result,
       providesTags: ["Promotion"],
     }),
+    getPromotionUsageReport: builder.query<PromotionUsageReport[], { hotelId?: number; month: string }>({
+      query: (params) => ({
+        url: "/promotions/usage-report",
+        method: "GET",
+        params,
+      }),
+      transformResponse: (response: ApiResponse<PromotionUsageReport[]>) => response?.result ?? [],
+      providesTags: ["Promotion"],
+    }),
     getPromotions: builder.query<Promotion[], { hotelId?: number; activeOnly?: boolean; status?: string; page?: number; size?: number } | void>({
       query: (params) => ({
         url: "/promotions",
@@ -206,6 +224,7 @@ export const promotionApi = baseApi.injectEndpoints({
 
 export const {
   useGetPromotionSummaryQuery,
+  useGetPromotionUsageReportQuery,
   useGetPromotionsQuery,
   useCreatePromotionMutation,
   useUpdatePromotionMutation,

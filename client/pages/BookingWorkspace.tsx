@@ -20,10 +20,13 @@ import { useGetCustomerByIdQuery } from "../services/customerApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import ListPagination from "../components/ListPagination";
-import { getServicePriceBreakdown, sumRoomPriceForRange } from "../lib/bookingPricing";
+import { getServicePriceBreakdown, getServiceQuantityForRoom, sumRoomPriceForRange } from "../lib/bookingPricing";
 import { promotionEligibilityMessage } from "../lib/promotionPricing";
 import { calculatePromotionDiscount } from "../lib/promotionPricing";
 import { localizedText } from "../i18n";
+import { localizeBedDescription, localizeRoomNamePrefix } from "../lib/roomLocalization";
+import { describeBookingModification } from "../lib/bookingModificationSummary";
+import { formatVnd } from "../lib/currency";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 
@@ -40,7 +43,7 @@ const booked: Record<string, { start: string; end: string; guest: string }[]> = 
 
 
 const timeline = ["06/09", "07/09", "08/09", "09/09", "10/09", "11/09", "12/09"];
-const money = (value: number) => value.toLocaleString("vi-VN") + "đ";
+const money = (value: number) => formatVnd(value);
 const serviceDetailIdOf = (service: Record<string, unknown>) => String(service.bookingServiceDetailId ?? service.serviceDetailId ?? service.bookingServiceDetailID ?? service.serviceDetailID ?? service.id ?? "");
 const isCancelledBookingDetail = (detail: Record<string, unknown>) => String(detail.bookingStatusType ?? "").toUpperCase() === "CANCELLED";
 const bookingDetailIdOf = (detail: Record<string, unknown>) => String(detail.bookingDetailId ?? detail.bookingDetailsId ?? detail.bookingDetailID ?? detail.detailId ?? detail.detailID ?? detail.id ?? "");
@@ -104,6 +107,10 @@ const allFloorsLabel = "Tất cả các tầng";
 const allBuildingsLabel = "Tất cả các tòa";
 const allRoomTypesLabel = "Tất cả loại phòng";
 const roomTypeLabel = (value: string) => ({ STANDARD: "Standard Room", SUPERIOR: "Superior Room", DELUXE: "Deluxe Room", SUITE: "Suite Room", FAMILY: "Family Room" }[value] ?? value);
+const localizeBuildingOption = (value: string) =>
+  localizeRoomNamePrefix(value, "toa", localizedText("Tòa", "Building"));
+const localizeFloorOption = (value: string) =>
+  localizeRoomNamePrefix(value, "tang", localizedText("Tầng", "Floor"));
 const roomFloor = (room: BookingRoom) => room.floor ?? `Tầng ${room.id.split("-")[1] ?? ""}`;
 const todayLocal = () => {
   const date = new Date();
@@ -485,20 +492,6 @@ function DesktopCalendar({
     });
   }, [timelineStart]);
   const timelineEnd = stableTimeline[stableTimeline.length - 1]?.value ?? timelineStart;
-  const timelineStartDate = new Date(`${timelineStart}T00:00:00`);
-  const timelineEndDate = new Date(`${timelineEnd}T00:00:00`);
-  const { data: startMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
-    { hotelId, month: timelineStartDate.getMonth() + 1, year: timelineStartDate.getFullYear() },
-    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
-  );
-  const { data: endMonthEvents } = useGetRoomSeasonalRatesByMonthQuery(
-    { hotelId, month: timelineEndDate.getMonth() + 1, year: timelineEndDate.getFullYear() },
-    { skip: !hotelId || Number.isNaN(Number(hotelId)) },
-  );
-  const seasonalEventDates = useMemo(
-    () => new Set(getSeasonalEventDates([...(startMonthEvents?.content ?? []), ...(endMonthEvents?.content ?? [])])),
-    [startMonthEvents?.content, endMonthEvents?.content],
-  );
   const { data: dailyRoomPrices = {} } = useGetBranchRoomDailyPricesQuery(
     { hotelId, startDate: timelineStart, endDate: timelineEnd },
     { skip: !hotelId || Number.isNaN(Number(hotelId)) },
@@ -745,19 +738,19 @@ function DesktopCalendar({
         <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 shadow-2xs" />
-            Đang chọn đặt
+            {t("booking.calendarLegend.selecting")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-2xs" />
-            Đã đặt / Giữ chỗ
+            {t("booking.calendarLegend.reserved")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-700">
             <span className="h-2.5 w-2.5 rounded-full bg-sky-200 border border-sky-400 shadow-2xs" />
-            Phòng trống
+            {t("booking.calendarLegend.available")}
           </span>
           <span className="flex items-center gap-1.5 text-slate-400">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-            Đã qua
+            {t("booking.calendarLegend.past")}
           </span>
         </div>
 
@@ -902,7 +895,6 @@ function DesktopCalendar({
             {stableTimeline.map((date) => {
               const isWeekend = date.day === "T7" || date.day === "CN";
               const isToday = date.value === todayValue;
-              const hasEvent = seasonalEventDates.has(date.value);
 
               return (
                 <div
@@ -921,7 +913,6 @@ function DesktopCalendar({
                   <p className={`mt-0.5 text-xs font-extrabold ${isPastDate(date.value) ? "text-slate-400" : isToday ? "text-blue-900" : "text-slate-800"}`}>
                     {date.label}
                   </p>
-                  {hasEvent && <span title="Ngày có sự kiện giá" className="mt-0.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold leading-none text-amber-800">Sự kiện</span>}
                 </div>
               );
             })}
@@ -990,7 +981,7 @@ function DesktopCalendar({
                   </span>
                   <span className="min-w-0 flex-1 text-left">
                     <strong className="block truncate text-xs font-bold text-slate-800">{room.type}</strong>
-                    <small className="mt-0.5 block truncate text-[10px] text-slate-500">{room.beds} · {room.size}</small>
+                    <small className="mt-0.5 block truncate text-[10px] text-slate-500">{localizeBedDescription(room.beds, (key) => t(key))} · {room.size}</small>
                   </span>
                 </button>
                 <div className="my-auto mr-2 flex shrink-0 items-center gap-1">
@@ -1081,7 +1072,7 @@ function DesktopCalendar({
                       <span className="whitespace-nowrap text-center text-[10px] font-extrabold">
                         {reservation || matrixReserved
                           ? bookedGuestName ?? "Đã đặt"
-                          : money(roomPriceForDay(room, day)).replace("đ", "Đ")}
+                          : money(roomPriceForDay(room, day))}
                       </span>
                     </div>
                   </div>
@@ -1154,7 +1145,7 @@ export default function BookingWorkspace() {
         if (detail.counts) setRoomGuestCounts((current) => ({ ...current, [detail.roomId as string]: detail.counts as RoomGuestCounts }));
         if (detail.counts) {
           const selectedGuestCount = detail.counts.adults + detail.counts.children + detail.counts.infants;
-          setRoomServices((current) => ({ ...current, [detail.roomId as string]: (current[detail.roomId as string] ?? []).map((selection) => selection.applyToRoom !== false ? { ...selection, quantity: selectedGuestCount } : selection) }));
+          setRoomServices((current) => ({ ...current, [detail.roomId as string]: (current[detail.roomId as string] ?? []).map((selection) => selection.applyToRoom === true ? { ...selection, quantity: selectedGuestCount } : selection) }));
         }
         setRoomGuestSurcharges((current) => ({ ...current, [detail.roomId as string]: detail.surcharge ?? 0 }));
         setRoomGuestSurchargeDetails((current) => ({ ...current, [detail.roomId as string]: { adult: detail.adultSurcharge ?? 0, child: detail.childSurcharge ?? 0 } }));
@@ -1623,8 +1614,10 @@ export default function BookingWorkspace() {
       ?? (room.databaseId ? roomGuestCounts[String(room.databaseId)] : undefined);
     const adults = selectedGuestCount?.adults ?? Number(detail.numAdults ?? detail.adults ?? 0);
     const children = selectedGuestCount?.children ?? Number(detail.numChildren ?? detail.children ?? 0);
+    const infants = selectedGuestCount?.infants ?? Number(detail.numInfants ?? detail.infants ?? 0);
     const guestCountChanged = adults !== Number(detail.numAdults ?? detail.adults ?? 0)
-      || children !== Number(detail.numChildren ?? detail.children ?? 0);
+      || children !== Number(detail.numChildren ?? detail.children ?? 0)
+      || infants !== Number(detail.numInfants ?? detail.infants ?? 0);
     let roomBaseTotal = 0;
     let surchargeTotal = 0;
 
@@ -1682,10 +1675,8 @@ export default function BookingWorkspace() {
   const getRoomRangeTotal = (room: BookingRoom, range: RoomDateRange = selectedRanges[room.id] ?? { checkIn, checkOut }) =>
     getRoomBaseRangeTotal(room, range) + getRoomSurchargeRangeTotal(room, range);
 
-  const calculatedRoomTotal = selectedRooms.reduce((sum, room) => sum + getRoomRangeTotal(room), 0);
-  const roomTotal = initialBooking && selectedRooms.length === 0 && Number.isFinite(persistedRoomTotal) ? persistedRoomTotal : calculatedRoomTotal;
   const getServiceTotal = (selections: ServiceSelection[], room?: BookingRoom) => selections.reduce((sum, selection) => {
-    const qty = selection.applyToRoom !== false && room ? selectedGuestsForRoom(room) : selection.quantity;
+    const qty = room ? getServiceQuantityForRoom(selection, selectedGuestsForRoom(room)) : selection.quantity;
     const currentPrice = services.find((service) => String(service.id) === selection.serviceId)?.price
       ?? selection.price
       ?? 0;
@@ -1695,14 +1686,26 @@ export default function BookingWorkspace() {
   const selectedGuestsForRoom = (room: BookingRoom) => roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
   const getRoomServiceTotal = (room: BookingRoom, selections: ServiceSelection[]) => getServiceTotal(selections, room);
   const formatRoomServices = (room: BookingRoom, selections: ServiceSelection[]) => selections.map((selection) => {
-    const qty = selection.applyToRoom !== false ? selectedGuestsForRoom(room) : selection.quantity;
+    const qty = getServiceQuantityForRoom(selection, selectedGuestsForRoom(room));
     return `${services.find((service) => String(service.id) === selection.serviceId)?.name ?? "Dịch vụ"} x${qty}`;
   }).join(", ");
-  const calculatedServiceTotal = selectedRooms.reduce((sum, room) => {
+  const roomEstimates = selectedRooms.map((room) => {
+    const range = selectedRanges[room.id]
+      ?? (room.databaseId ? selectedRanges[String(room.databaseId)] : undefined)
+      ?? { checkIn, checkOut };
     const roomSelections = getRoomServiceSelections(room);
     const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
-    return sum + getServiceTotal(selections, room);
-  }, 0);
+    return {
+      room,
+      range,
+      roomBaseTotal: getRoomBaseRangeTotal(room, range),
+      roomSurchargeTotal: getRoomSurchargeRangeTotal(room, range),
+      roomServiceTotal: getRoomServiceTotal(room, selections),
+    };
+  });
+  const calculatedRoomTotal = roomEstimates.reduce((sum, estimate) => sum + estimate.roomBaseTotal + estimate.roomSurchargeTotal, 0);
+  const calculatedServiceTotal = roomEstimates.reduce((sum, estimate) => sum + estimate.roomServiceTotal, 0);
+  const roomTotal = initialBooking && selectedRooms.length === 0 && Number.isFinite(persistedRoomTotal) ? persistedRoomTotal : calculatedRoomTotal;
   const serviceTotal = calculatedServiceTotal;
   const subtotal = roomTotal + serviceTotal;
   const discountAmount = appliedPromotion
@@ -2032,10 +2035,11 @@ export default function BookingWorkspace() {
       try {
         const res = await modifyBooking({ bookingId: id, request: modificationRequest }).unwrap();
         console.log("===> [BOOKING WORKSPACE MODIFY SUCCESS]:", res);
+        const changeDescription = describeBookingModification(id, modificationRequest);
         toast({
           variant: "default",
-          title: "Cập nhật booking thành công!",
-          description: `Đã cập nhật các thay đổi cho booking #${id}.`,
+          title: localizedText("Cập nhật booking thành công!", "Booking updated successfully!"),
+          description: localizedText(changeDescription.vi, changeDescription.en),
         });
         dispatch(baseApi.util.invalidateTags(["Customer"]));
         clearRoomGuestCache();
@@ -2126,7 +2130,13 @@ export default function BookingWorkspace() {
     }
   }, [step, hasGuestDetails]);
   useEffect(() => () => clearRoomGuestCache(), []);
-  const summaryRanges = selectedRooms.map((room) => ({ room, range: selectedRanges[room.id] ?? { checkIn, checkOut } }));
+  const summaryRanges = roomEstimates;
+  const guestCountLockedRoomIds = initialBooking
+    ? selectedRooms.filter((room) => {
+      const detail = findBookingDetailForRoom(room);
+      return Boolean(detail && !canChangeBookingRoom(detail));
+    }).map((room) => room.id)
+    : [];
   const hasDifferentStayPeriods = summaryRanges.some(({ range }) => range.checkIn !== summaryRanges[0]?.range.checkIn || range.checkOut !== summaryRanges[0]?.range.checkOut);
   const canContinue = selected.length > 0 && selectedRooms.every((room) => {
     const range = selectedRanges[room.id] ?? (hasDates ? { checkIn, checkOut } : undefined);
@@ -2200,8 +2210,8 @@ export default function BookingWorkspace() {
               <ClearSearchButton value={query} onClear={() => setQuery("")} label={t("common.clearSearch")} className="h-6 w-6" />
               </div>
               <SearchableFilter value={roomType} options={roomTypeOptions.map((item) => ({ value: item, label: item === allRoomTypesLabel ? localizedText("Tất cả loại phòng", "All room types") : item }))} onChange={setRoomType} searchPlaceholder={localizedText("Tìm loại phòng...", "Search room types...")} emptyMessage={localizedText("Không tìm thấy loại phòng.", "No room types found.")} ariaLabel={localizedText("Lọc theo loại phòng", "Filter by room type")} />
-              <SearchableFilter value={floor} options={floorOptions.map((item) => ({ value: item, label: item === allFloorsLabel ? localizedText("Tất cả các tầng", "All floors") : item }))} onChange={setFloor} searchPlaceholder={localizedText("Tìm tầng...", "Search floors...")} emptyMessage={localizedText("Không tìm thấy tầng.", "No floors found.")} ariaLabel={localizedText("Lọc theo tầng", "Filter by floor")} />
-              <SearchableFilter value={building} options={buildingOptions.map((item) => ({ value: item, label: item === allBuildingsLabel ? localizedText("Tất cả các tòa", "All buildings") : item }))} onChange={(value) => { setBuilding(value); setFloor(allFloorsLabel); }} searchPlaceholder={localizedText("Tìm tòa nhà...", "Search buildings...")} emptyMessage={localizedText("Không tìm thấy tòa nhà.", "No buildings found.")} ariaLabel={localizedText("Lọc theo tòa nhà", "Filter by building")} />
+              <SearchableFilter value={floor} options={floorOptions.map((item) => ({ value: item, label: item === allFloorsLabel ? localizedText("Tất cả các tầng", "All floors") : localizeFloorOption(item) }))} onChange={setFloor} searchPlaceholder={localizedText("Tìm tầng...", "Search floors...")} emptyMessage={localizedText("Không tìm thấy tầng.", "No floors found.")} ariaLabel={localizedText("Lọc theo tầng", "Filter by floor")} />
+              <SearchableFilter value={building} options={buildingOptions.map((item) => ({ value: item, label: item === allBuildingsLabel ? localizedText("Tất cả các tòa", "All buildings") : localizeBuildingOption(item) }))} onChange={(value) => { setBuilding(value); setFloor(allFloorsLabel); }} searchPlaceholder={localizedText("Tìm tòa nhà...", "Search buildings...")} emptyMessage={localizedText("Không tìm thấy tòa nhà.", "No buildings found.")} ariaLabel={localizedText("Lọc theo tòa nhà", "Filter by building")} />
               {hasRoomFilter && <div className="flex items-center xl:justify-center"><FilterResetButton onClick={() => { setQuery(""); setRoomType(allRoomTypesLabel); setBuilding(allBuildingsLabel); setFloor(allFloorsLabel); }} label={localizedText("Xóa tất cả bộ lọc", "Clear all filters")} /></div>}
             </div>
             <div className="flex w-full flex-wrap items-center gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
@@ -2333,7 +2343,7 @@ export default function BookingWorkspace() {
             {services.map((service) => {
               const selection = allRoomServices.find((item) => item.serviceId === service.id);
               return <div key={service.id} className={`rounded-xl border p-4 ${selection ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}>
-                <label className="flex items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setAllRoomServices((current) => event.target.checked ? [...current, { serviceId: service.id, quantity: 1 }] : current.filter((item) => item.serviceId !== service.id))} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span><strong className="block text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{service.price.toLocaleString("vi-VN")}đ / người</small></span></label>
+                <label className="flex items-start gap-3"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setAllRoomServices((current) => event.target.checked ? [...current, { serviceId: service.id, quantity: 1 }] : current.filter((item) => item.serviceId !== service.id))} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" /><span><strong className="block text-sm text-slate-800">{service.name}</strong><small className="mt-1 block text-xs text-slate-500">{money(service.price)}{localizedText(" / người", " / person")}</small></span></label>
               </div>;
             })}
           </div> : <div className="mt-4 space-y-2">
@@ -2346,7 +2356,7 @@ export default function BookingWorkspace() {
                   <span className="flex shrink-0 items-center gap-3"><strong className="text-xs text-blue-700">{money(getServiceTotal(selections))}</strong><ChevronRight size={16} className={`text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} /></span>
                 </button>
                 {isExpanded && <div className="border-t border-slate-100 bg-slate-50 p-3"><p className="mb-2 text-xs font-semibold text-slate-500">Chọn dịch vụ và số lượng</p><div className="grid gap-2 sm:grid-cols-2">
-                  {services.map((service) => { const selection = selections.find((item) => item.serviceId === String(service.id)); return <div key={service.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: event.target.checked ? [...(current[room.id] ?? []), { serviceId: String(service.id), quantity: room.guests }] : (current[room.id] ?? []).filter((item) => item.serviceId !== String(service.id)) }))} className="h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="truncate text-xs font-semibold text-slate-700">{service.name} · {service.price.toLocaleString("vi-VN")}đ/người</span></label>{selection && <input type="number" min="1" value={selection.quantity} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: (current[room.id] ?? []).map((item) => item.serviceId === String(service.id) ? { ...item, quantity: Math.max(1, Number(event.target.value) || 1) } : item) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" />}</div>; })}
+                  {services.map((service) => { const selection = selections.find((item) => item.serviceId === String(service.id)); return <div key={service.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2"><label className="flex min-w-0 items-center gap-2"><input type="checkbox" checked={Boolean(selection)} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: event.target.checked ? [...(current[room.id] ?? []), { serviceId: String(service.id), quantity: room.guests }] : (current[room.id] ?? []).filter((item) => item.serviceId !== String(service.id)) }))} className="h-4 w-4 rounded border-slate-300 text-blue-600" /><span className="truncate text-xs font-semibold text-slate-700">{service.name} · {money(service.price)}{localizedText("/người", "/person")}</span></label>{selection && <input type="number" min="1" value={selection.quantity} onChange={(event) => setRoomServices((current) => ({ ...current, [room.id]: (current[room.id] ?? []).map((item) => item.serviceId === String(service.id) ? { ...item, quantity: Math.max(1, Number(event.target.value) || 1) } : item) }))} className="h-8 w-16 rounded-md border border-slate-200 bg-white px-2 text-center text-xs" />}</div>; })}
                 </div></div>}
               </div>;
             })}
@@ -2371,7 +2381,68 @@ export default function BookingWorkspace() {
           {step === "promotion" && <PromotionSelector customerId={bookingGuest.customerId} initialPromotionId={initialBooking?.promotionId} initialCustomerPromotionId={initialBooking?.customerPromotionId} initialPromotionApplyAt={bookingPromotionApplyAt(initialBooking)} orderTotal={subtotal} roomTotal={roomTotal} serviceTotal={serviceTotal} onApply={setAppliedPromotion} onEligibilityChange={setPromotionBlocked} />}
           <div className={step === "promotion" ? "hidden" : "payment-column"}>
             {false && <div className="payment-heading flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3"><CreditCard size={16} className="text-blue-600" /><div><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-0.5 text-xs text-slate-500">{t("booking.paymentRequired")}</p></div></div>}
-            {step === "guest" ? <><div className="mb-4 grid gap-2 sm:grid-cols-2">{selectedRooms.map((room) => <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600"><strong className="text-blue-700">Phòng {room.roomNumber}</strong><span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span></div>)}</div><GuestRoomForms rooms={selectedRooms} guest={bookingGuest} onGuestChange={setBookingGuest} customerLocked={Boolean(initialBooking)} /></> : <div className="rounded-xl border border-slate-200 bg-white p-5"><p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p><p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p><div className="mt-4 grid gap-3"><button type="button" onClick={() => setPaymentMethod("cash")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Banknote size={20} className="text-emerald-600" /><span><strong className="block text-sm text-slate-800">{t("booking.cash")}</strong><small className="text-xs text-slate-500">{t("booking.cashDescription")}</small></span>{paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("bank")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><QrCode size={20} className="text-blue-600" /><span><strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong><small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small></span>{paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}</button><button type="button" onClick={() => setPaymentMethod("wallet")} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}><Wallet size={20} className="text-orange-500" /><span><strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong><small className="text-xs text-slate-500">{t("booking.walletDescription")}</small></span>{paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}</button></div></div>}
+            {step === "guest" ? (
+              <>
+                <div className="mb-4 grid gap-2 sm:grid-cols-2">
+                  {selectedRooms.map((room) => (
+                    <div key={room.id} className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600">
+                      <strong className="text-blue-700">Phòng {room.roomNumber}</strong>
+                      <span className="ml-2">Tối đa {room.maxAdults} người lớn · {room.maxChildren} trẻ em · {room.maxInfants} em bé</span>
+                    </div>
+                  ))}
+                </div>
+                <GuestRoomForms
+                  rooms={selectedRooms}
+                  guest={bookingGuest}
+                  onGuestChange={setBookingGuest}
+                  lockedRoomIds={guestCountLockedRoomIds}
+                  customerLocked={Boolean(initialBooking)}
+                />
+              </>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white p-5">
+                <p className="text-sm font-bold text-slate-900">{t("booking.paymentMethod")}</p>
+                <p className="mt-1 text-xs text-slate-500">{t("booking.paymentRequired")}</p>
+                <div className="mt-4 grid gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("cash")}
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "cash" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}
+                  >
+                    <Banknote size={20} className="text-emerald-600" />
+                    <span>
+                      <strong className="block text-sm text-slate-800">{t("booking.cash")}</strong>
+                      <small className="text-xs text-slate-500">{t("booking.cashDescription")}</small>
+                    </span>
+                    {paymentMethod === "cash" && <Check size={17} className="ml-auto text-violet-600" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("bank")}
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "bank" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}
+                  >
+                    <QrCode size={20} className="text-blue-600" />
+                    <span>
+                      <strong className="block text-sm text-slate-800">{t("booking.bankQr")}</strong>
+                      <small className="text-xs text-slate-500">{t("booking.bankQrDescription")}</small>
+                    </span>
+                    {paymentMethod === "bank" && <Check size={17} className="ml-auto text-violet-600" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("wallet")}
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${paymentMethod === "wallet" ? "border-violet-500 bg-violet-50 ring-2 ring-violet-100" : "border-slate-200 hover:border-violet-300"}`}
+                  >
+                    <Wallet size={20} className="text-orange-500" />
+                    <span>
+                      <strong className="block text-sm text-slate-800">{t("booking.wallet")}</strong>
+                      <small className="text-xs text-slate-500">{t("booking.walletDescription")}</small>
+                    </span>
+                    {paymentMethod === "wallet" && <Check size={17} className="ml-auto text-violet-600" />}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="h-fit rounded-xl bg-slate-50 p-4">
             <p className="text-center text-xs font-bold uppercase tracking-wider text-blue-600">{t("booking.bookingSummary")}</p>
@@ -2387,14 +2458,8 @@ export default function BookingWorkspace() {
               <span className="text-xs font-semibold text-slate-500">{hasDifferentStayPeriods ? t("booking.multipleSchedules") : t("booking.selected")}</span>
             </div>
             <div className="mt-3 space-y-3">
-              {summaryRanges.map(({ room, range }) => {
-                const roomSelections = getRoomServiceSelections(room);
-                const selections = roomSelections.length > 0 ? roomSelections : allRoomServices;
+              {summaryRanges.map(({ room, range, roomBaseTotal, roomSurchargeTotal, roomServiceTotal }) => {
                 const roomBookingDetail = findBookingDetailForRoom(room);
-                const roomServiceTotal = getServiceTotal(selections) * (roomSelections.length > 0 || serviceMode !== "all" ? 1 : selectedGuestsForRoom(room));
-                const roomRange = selectedRanges[room.id] ?? { checkIn, checkOut };
-                const roomBaseTotal = getRoomBaseRangeTotal(room, roomRange);
-                const roomSurchargeTotal = getRoomSurchargeRangeTotal(room, roomRange);
                 const roomSubtotal = roomBaseTotal + roomSurchargeTotal + roomServiceTotal;
                 const selectedGuestCount = roomGuestCounts[room.id] ? roomGuestCounts[room.id].adults + roomGuestCounts[room.id].children + roomGuestCounts[room.id].infants : room.guests;
                 const isSummaryRoomCollapsed = collapsedSummaryRooms.includes(room.id);
