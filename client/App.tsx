@@ -22,7 +22,6 @@ import { useGetCurrentUserPermissionsQuery } from "./services/authApi";
 import { canAccessModule, getModulePermissionForRoute } from "./lib/modulePermissions";
 import { localizedText } from "./i18n";
 import ChatWidget from "./components/ChatWidget";
-import UserGuideButton from "./components/UserGuideButton";
 import BranchPhotoLoginSplash from "./components/BranchPhotoLoginSplash";
 
 type AppRoutesProps = {
@@ -208,7 +207,6 @@ const App = () => {
           />
           {authenticated && (
             <>
-              <UserGuideButton />
               <ChatWidget />
             </>
           )}

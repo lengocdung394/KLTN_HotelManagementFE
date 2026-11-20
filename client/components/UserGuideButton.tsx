@@ -250,10 +250,10 @@ export default function UserGuideButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={text("Mở hướng dẫn sử dụng", "Open user guide")}
-        title={text("Hướng dẫn chi tiết", "Detailed user guide")}
-        className="fixed bottom-6 right-24 z-40 grid h-14 w-14 place-items-center rounded-full border border-blue-200 bg-white text-blue-700 shadow-xl transition hover:scale-105 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        title={text("Hỗ trợ", "Support")}
+        className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       >
-        <HelpCircle className="h-6 w-6" />
+        <HelpCircle className="h-[19px] w-[19px]" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
