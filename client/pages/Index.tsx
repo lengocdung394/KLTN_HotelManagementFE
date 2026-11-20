@@ -25,6 +25,8 @@ import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import { useGetHotelReportQuery } from "../services/reportApi";
 import { isEmployeePortalUser } from "../lib/employeeRoles";
+import { useGetCurrentUserPermissionsQuery } from "../services/authApi";
+import { canAccessModule } from "../lib/modulePermissions";
 
 const getLocalDateParam = () => {
   const today = new Date();
@@ -101,6 +103,8 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
   const dispatch = useAppDispatch();
   const { fullName, email, position, hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
   const isEmployee = isEmployeePortalUser(roles);
+  const { data: currentUserPermissions = [] } = useGetCurrentUserPermissionsQuery();
+  const canViewReports = canAccessModule(currentUserPermissions, "reports") || roles.includes("ROLE_SUPER_ADMIN");
   const { data: rooms = [], isLoading: roomsLoading, isError: roomsError } = useGetRoomsByCurrentHotelQuery(undefined, {
     skip: !hotelId,
     pollingInterval: 30000,
@@ -112,7 +116,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
     isError: reportError,
   } = useGetHotelReportQuery(
     { startDate: today, endDate: today },
-    { skip: !hotelId, pollingInterval: 30000 },
+    { skip: !hotelId || !canViewReports, pollingInterval: 30000 },
   );
   const {
     data: todaySummary,
@@ -265,10 +269,12 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
               </h2>
             </div>
             <div className="flex gap-2">
-              <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-600">
-                <Download size={16} />
-                {t("common.exportReport")}
-              </button>
+              {canViewReports && (
+                <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-600">
+                  <Download size={16} />
+                  {t("common.exportReport")}
+                </button>
+              )}
               <Link
                 to="/bookings"
                 className="flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white"
@@ -278,7 +284,8 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
               </Link>
             </div>
           </div>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <section className={`grid gap-4 sm:grid-cols-2 ${canViewReports ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+            {canViewReports && (
             <div className="rounded-2xl bg-blue-950 p-5 text-white">
               <p className="text-sm font-medium text-blue-100">
                 {t("dashboard.todayRevenue")}
@@ -294,6 +301,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                 {reportError ? t("dashboard.revenueLoadError") : t("dashboard.netRevenueDescription")}
               </p>
             </div>
+            )}
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5">
               <p className="text-sm font-medium text-slate-500">
                 {t("dashboard.roomOccupancy")}
