@@ -7,7 +7,7 @@ import { createServer } from "./server";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8080,
+    port: 8082,
     fs: {
       allow: ["./client", "./shared", "index.html"],
       deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
@@ -19,6 +19,10 @@ export default defineConfig(({ mode }) => ({
       },
       "/api/admin-ai": {
         target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/live-chat": {
+        target: "http://127.0.0.1:8081",
         changeOrigin: true,
       },
     },
@@ -45,8 +49,19 @@ function expressPlugin(): Plugin {
     configureServer(server) {
       const app = createServer();
 
-      // Add Express app as middleware to Vite dev server
-      server.middlewares.use(app);
+      // Skip Express middleware for proxied routes (/ai, /api/admin-ai, etc.)
+      // to avoid express.json() consuming the body stream before Vite proxy forwards it
+      server.middlewares.use((req, res, next) => {
+        if (
+          req.url &&
+          (req.url.startsWith("/ai") ||
+            req.url.startsWith("/api/admin-ai") ||
+            req.url.startsWith("/live-chat"))
+        ) {
+          return next();
+        }
+        app(req as any, res as any, next as any);
+      });
     },
   };
 }

@@ -119,11 +119,11 @@ export default function BatchStayCard({ mode, title, description, bookingCode, i
         {onViewBooking && <button type="button" onClick={onViewBooking} aria-label={localizedText("Xem chi tiết booking nhóm", "View group booking details")} title={localizedText("Xem chi tiết booking", "View booking details")} className="inline-flex h-10 w-36 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"><Eye size={16} />{localizedText("Xem chi tiết", "View details")}</button>}
         {onAddService && <button type="button" onClick={onAddService} className="inline-flex h-10 w-36 shrink-0 items-center justify-center rounded-lg border border-blue-200 px-3 text-xs font-bold text-blue-700 hover:bg-blue-50">{localizedText("Thêm dịch vụ", "Add service")}</button>}
         {showAction && (
-          <button type="button" disabled={actionDisabled ?? availableIds.length === 0} onClick={toggleSelectAll} className={`flex h-10 w-36 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}>
+          <button type="button" disabled={actionDisabled ?? pendingItemIds.length === 0} onClick={toggleSelectAll} className={`flex h-10 w-36 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold text-white ${colors.button} disabled:cursor-not-allowed disabled:opacity-50`}>
             <Check size={14} />
             {isCheckIn
               ? localizedText("Check-in", "Check in")
-              : localizedText("Check-out", "Check out")} ({actionCount ?? availableIds.length})
+              : localizedText("Check-out", "Check out")} ({actionCount ?? pendingItemIds.length})
           </button>
         )}
       </div>

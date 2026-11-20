@@ -25,12 +25,13 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/dateTime";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useSendChatMessageMutation, useLazyGetChatHistoryQuery, type ChatMessage as ChatMessageType } from "@/services/chatApi";
 import { useAppSelector } from "@/store/hooks";
-import { emitStaffSendCustomerChat } from "@/lib/socket";
+import { emitStaffSendCustomerChat, sendStaffMarkCustomerRead } from "@/lib/socket";
 import { formatVnd as formatVndAmount } from "@/lib/currency";
 
 export interface CustomerLiveMessage {
@@ -137,6 +138,9 @@ function getSlugFromHotelName(name?: string): string {
   if (lower.includes("an nhơn") || lower.includes("an nhon")) {
     return "sen-viet-an-nhon";
   }
+  if (lower.includes("quy nhơn") || lower.includes("quy nhon")) {
+    return "sen-viet-quy-nhon";
+  }
   return "sen-viet-an-nhon";
 }
 
@@ -239,12 +243,60 @@ export function openAdminChatWidget() {
   window.dispatchEvent(new Event(CHAT_OPEN_EVENT));
 }
 
-function formatReply(text: string): string {
+function escapeHtml(text: string): string {
   return text
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/^\s*[-•]\s+(.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul class="my-1 space-y-0.5">$&</ul>')
-    .replace(/\n/g, "<br/>");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatReply(text: string): string {
+  if (!text) return "";
+  const safe = escapeHtml(text.trim());
+  const formatted = safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  const lines = formatted.split("\n");
+  const processed: string[] = [];
+  let inList = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const listMatch = trimmed.match(/^[-•*]\s+(.+)$/);
+    if (listMatch) {
+      if (!inList) {
+        processed.push('<ul class="my-1.5 space-y-1 list-disc pl-5">');
+        inList = true;
+      }
+      processed.push(`<li>${listMatch[1]}</li>`);
+    } else {
+      if (inList) {
+        processed.push("</ul>");
+        inList = false;
+      }
+      processed.push(trimmed);
+    }
+  }
+  if (inList) {
+    processed.push("</ul>");
+  }
+
+  const res: string[] = [];
+  for (const item of processed) {
+    if (item.startsWith("<ul") || item.endsWith("</ul>") || item.startsWith("<li>")) {
+      res.push(item);
+    } else if (!item) {
+      res.push("<br/>");
+    } else {
+      res.push(`<span>${item}</span><br/>`);
+    }
+  }
+
+  let output = res.join("");
+  while (output.endsWith("<br/>")) {
+    output = output.slice(0, -5);
+  }
+  return output;
 }
 
 /**
@@ -324,7 +376,8 @@ function getInitialCachedMessages(cacheKey: string, greeting: string): Message[]
 }
 
 export default function ChatWidget() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language === "en";
   const defaultGreeting = t(
     "ai.widgetAdminGreeting",
     "Kính chào Quý Quản lý / Admin Sen Việt! 👋\nEm là Trợ lý AI Quản trị & Vận hành (Staff & Admin Copilot). Em sẵn sàng hỗ trợ Anh/Chị:\n• 🛎️ Tra cứu ca trực hôm nay & thời khóa biểu tuần\n• 🏨 Tra cứu phòng trống thời gian thực & phòng chờ dọn\n• 🔍 Tra cứu chi tiết booking, trạng thái thanh toán\n• 📊 Báo cáo doanh thu, công suất phòng & phân tích đánh giá khách\n• 📝 Hướng dẫn quy trình chuẩn SOP (hoàn tiền, check-in sớm, bồi thường)\n• ✍️ Soạn thảo nhanh email xin lỗi, phản hồi đánh giá 5 sao."
@@ -337,6 +390,26 @@ export default function ChatWidget() {
 
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [customWidth, setCustomWidth] = useState<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const handleStartResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const rightOffset = 24;
+      const newWidth = Math.max(460, Math.min(window.innerWidth * 0.65, window.innerWidth - moveEvent.clientX - rightOffset));
+      setCustomWidth(Math.round(newWidth));
+    };
+    const onMouseUp = () => {
+      setIsResizing(false);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, []);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>(() =>
     getInitialCachedMessages(cacheKey, defaultGreeting)
@@ -349,37 +422,103 @@ export default function ChatWidget() {
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const wantsListeningRef = useRef(false);
+  const voiceBaseInputRef = useRef("");
+  const finalTranscriptRef = useRef("");
+  const voiceTargetRef = useRef<"ai" | "customer">("ai");
+  const customerReplyInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.lang = "vi-VN";
+    if (typeof window === "undefined") return;
+    if (!("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = isEn ? "en-US" : "vi-VN";
 
-      recognitionRef.current.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput((prev) => (prev ? prev + " " + transcript : transcript));
-      };
+    rec.onresult = (event: any) => {
+      let interim = "";
+      let addedFinal = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        const txt = res[0]?.transcript || "";
+        if (res.isFinal) {
+          addedFinal += txt + " ";
+        } else {
+          interim += txt;
+        }
+      }
+      if (addedFinal) {
+        finalTranscriptRef.current = (finalTranscriptRef.current + " " + addedFinal).trim();
+      }
+      const combined = [voiceBaseInputRef.current, finalTranscriptRef.current, interim.trim()]
+        .filter(Boolean)
+        .join(" ");
+      if (voiceTargetRef.current === "customer") {
+        setCustomerReplyInput(combined);
+      } else {
+        setInput(combined);
+      }
+    };
 
-      recognitionRef.current.onend = () => {
+    rec.onend = () => {
+      if (wantsListeningRef.current) {
+        voiceBaseInputRef.current = (
+          (voiceTargetRef.current === "customer"
+            ? customerReplyInputRef.current?.value
+            : inputRef.current?.value) || ""
+        ).trim();
+        finalTranscriptRef.current = "";
+        setTimeout(() => {
+          if (!wantsListeningRef.current) return;
+          try {
+            rec.start();
+          } catch {
+            wantsListeningRef.current = false;
+            setIsListening(false);
+          }
+        }, 150);
+      } else {
         setIsListening(false);
-      };
+      }
+    };
 
-      recognitionRef.current.onerror = (event: any) => {
-        console.error("Speech recognition error", event.error);
-        setIsListening(false);
-      };
-    }
-  }, []);
+    rec.onerror = (event: any) => {
+      if (event.error === "no-speech" || event.error === "aborted") {
+        return;
+      }
+      console.error("Speech recognition error", event.error);
+      wantsListeningRef.current = false;
+      setIsListening(false);
+    };
 
-  const toggleListening = () => {
+    recognitionRef.current = rec;
+    return () => {
+      wantsListeningRef.current = false;
+      try { rec.abort(); } catch {}
+    };
+  }, [isEn]);
+
+  const toggleListening = (target: "ai" | "customer" = "ai") => {
+    if (!recognitionRef.current) return;
     if (isListening) {
-      recognitionRef.current?.stop();
+      wantsListeningRef.current = false;
+      try { recognitionRef.current.stop(); } catch {}
       setIsListening(false);
     } else {
-      recognitionRef.current?.start();
-      setIsListening(true);
+      voiceTargetRef.current = target;
+      voiceBaseInputRef.current = (target === "customer" ? customerReplyInput : input).trim();
+      finalTranscriptRef.current = "";
+      wantsListeningRef.current = true;
+      try {
+        recognitionRef.current.lang = isEn ? "en-US" : "vi-VN";
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch {
+        wantsListeningRef.current = false;
+        setIsListening(false);
+      }
     }
   };
 
@@ -466,6 +605,13 @@ export default function ChatWidget() {
   const send = useCallback(
     async (text: string) => {
       if (!text.trim() || isTyping) return;
+      if (wantsListeningRef.current) {
+        wantsListeningRef.current = false;
+        try { recognitionRef.current?.stop(); } catch {}
+        setIsListening(false);
+      }
+      voiceBaseInputRef.current = "";
+      finalTranscriptRef.current = "";
 
       const userMsg: Message = { id: Date.now(), from: "user", text };
       setMessages((prev) => [...prev, userMsg]);
@@ -478,10 +624,28 @@ export default function ChatWidget() {
       ].slice(-10);
 
       try {
+        const HOTEL_NAMES: Record<string, string> = {
+          "1": "Sen Việt Sài Gòn",
+          "2": "Sen Việt Hà Nội",
+          "3": "Sen Việt Đà Nẵng",
+          "4": "Sen Việt Nha Trang",
+          "5": "Sen Việt Đà Lạt",
+          "6": "Sen Việt Gò Công",
+          "7": "Sen Việt An Nhơn",
+          "8": "Sen Việt Quy Nhơn",
+        };
+        const isSuperAdminUser = (auth?.roles || []).includes("ROLE_SUPER_ADMIN") || (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+        const currentHotelId = isSuperAdminUser ? undefined : auth?.hotelId;
+        const currentHotelName = isSuperAdminUser ? "Toàn hệ thống Sen Việt" : (auth?.hotelName || (currentHotelId ? HOTEL_NAMES[String(currentHotelId)] : null) || "Sen Việt Đà Nẵng");
+
         const result = await sendChatMessage({
           message: text,
           sessionId: sessionIdRef.current,
           history: historyRef.current.slice(0, -1),
+          hotelId: currentHotelId,
+          hotelName: currentHotelName,
+          roles: auth?.roles || [],
+          userRole: auth?.position || (auth?.roles || [])[0] || 'Nhân viên',
         });
 
         const reply = result.result?.reply || "Dạ em đã nhận được yêu cầu của Anh/Chị.";
@@ -519,21 +683,44 @@ export default function ChatWidget() {
     [isTyping, sendChatMessage, sessionKey]
   );
 
-  const quickReplies = [
-    "🛎️ Hôm nay ai trực lễ tân Sài Gòn?",
-    "🏨 Hôm nay CN Sài Gòn còn phòng trống không?",
-    "📊 Báo cáo doanh thu & công suất phòng",
-    "📋 Danh sách khách check-in & phòng chờ dọn",
-    "🔍 Kiểm tra đặt phòng BKG_601",
-    "⭐ Phân tích đánh giá của khách hàng",
-    "📝 Quy trình xử lý khách đòi hoàn tiền (SOP)",
-    "🤖 Xếp lịch ca trực tuần mới bằng AI",
-  ];
+  const BRANCH_SHORT_NAMES: Record<string, string> = {
+    "1": "Sài Gòn",
+    "2": "Hà Nội",
+    "3": "Đà Nẵng",
+    "4": "Nha Trang",
+    "5": "Đà Lạt",
+    "6": "Gò Công",
+    "7": "An Nhơn",
+    "8": "Quy Nhơn",
+  };
+  const branchShortName = auth?.hotelName?.replace("Sen Việt ", "") || (auth?.hotelId ? BRANCH_SHORT_NAMES[String(auth.hotelId)] : "Đà Nẵng") || "Đà Nẵng";
 
-  const [activeTab, setActiveTab] = useState<"ai" | "customer">("customer");
+  const isSuperAdmin = (auth?.roles || []).includes("ROLE_SUPER_ADMIN") || (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+  const quickReplies = isSuperAdmin
+    ? [
+        "📊 Báo cáo doanh thu & công suất toàn hệ thống",
+        "🏨 So sánh phòng trống các chi nhánh hôm nay",
+        "🛎️ Danh sách ca trực lễ tân toàn chuỗi hôm nay",
+        "📋 Tổng hợp booking & khách lưu trú toàn hệ thống",
+        "⭐ Phân tích đánh giá khách hàng các chi nhánh",
+        "📝 Hướng dẫn quy trình chuẩn SOP hệ thống",
+      ]
+    : [
+        `🛎️ Hôm nay ai trực lễ tân ${branchShortName}?`,
+        `🏨 Hôm nay CN ${branchShortName} còn phòng trống không?`,
+        "📊 Báo cáo doanh thu & công suất phòng",
+        "📋 Danh sách khách check-in & phòng chờ dọn",
+        "⭐ Phân tích đánh giá của khách hàng",
+        "🤖 Xếp lịch ca trực tuần mới bằng AI",
+      ];
+
+  const [activeTab, setActiveTab] = useState<"ai" | "customer">(isSuperAdmin ? "ai" : "customer");
+  const staffHotelId = auth?.hotelId;
+  const staffStorageKey = `senviet_staff_customer_sessions_${staffHotelId || (isSuperAdmin ? "all" : "default")}`;
+
   const [customerSessions, setCustomerSessions] = useState<Record<string, CustomerLiveSession>>(() => {
     try {
-      const saved = localStorage.getItem("senviet_staff_customer_sessions");
+      const saved = localStorage.getItem(staffStorageKey);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -541,7 +728,44 @@ export default function ChatWidget() {
   });
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerReplyInput, setCustomerReplyInput] = useState("");
-  const [unreadTotal, setUnreadTotal] = useState(0);
+  const [unreadTotal, setUnreadTotal] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(staffStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return Object.values(parsed as Record<string, CustomerLiveSession>).reduce(
+            (sum, item) => sum + (item.unreadCount || 0),
+            0
+          );
+        }
+      }
+    } catch {}
+    return 0;
+  });
+
+  const markSessionAsRead = useCallback((cId: string) => {
+    if (!cId) return;
+    setCustomerSessions((prev) => {
+      const current = prev[cId];
+      if (!current || !current.unreadCount) return prev;
+      const updated = {
+        ...prev,
+        [cId]: { ...current, unreadCount: 0 },
+      };
+      try {
+        localStorage.setItem(staffStorageKey, JSON.stringify(updated));
+      } catch {}
+      const newTotal = Object.values(updated).reduce((sum, s) => sum + (s.unreadCount || 0), 0);
+      setUnreadTotal(newTotal);
+      return updated;
+    });
+
+    sendStaffMarkCustomerRead({ customerId: cId, hotelId: staffHotelId });
+    fetch(`/live-chat/sessions/mark-read?customerId=${encodeURIComponent(cId)}${staffHotelId ? `&hotelId=${staffHotelId}` : ""}`, {
+      method: "PATCH",
+    }).catch(() => {});
+  }, [staffStorageKey, staffHotelId]);
   const customerScrollRef = useRef<HTMLDivElement>(null);
   const processedMsgIdsRef = useRef<Set<string>>(new Set());
 
@@ -558,6 +782,27 @@ export default function ChatWidget() {
       const hId = payload.hotelId;
       const msg = payload.message;
       const time = payload.timestamp || new Date().toISOString();
+
+      let resolvedHId = hId;
+      if (!resolvedHId && bName) {
+        const lower = bName.toLowerCase();
+        if (lower.includes("sài gòn") || lower.includes("sai gon")) resolvedHId = 1;
+        else if (lower.includes("hà nội") || lower.includes("ha noi")) resolvedHId = 2;
+        else if (lower.includes("đà nẵng") || lower.includes("da nang")) resolvedHId = 3;
+        else if (lower.includes("nha trang")) resolvedHId = 4;
+        else if (lower.includes("đà lạt") || lower.includes("da lat")) resolvedHId = 5;
+        else if (lower.includes("gò công") || lower.includes("go cong")) resolvedHId = 6;
+        else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
+        else if (lower.includes("quy nhơn") || lower.includes("quy nhon")) resolvedHId = 8;
+      }
+
+      // Chỉ nhân viên thuộc đúng chi nhánh mới tiếp nhận tin nhắn này (Super Admin không nhận chat chi nhánh)
+      if (isSuperAdmin || !staffHotelId) {
+        return;
+      }
+      if (resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
+        return;
+      }
 
       const msgId = String(payload.msgId || `${cId}_${time}_${msg}`);
 
@@ -620,11 +865,15 @@ export default function ChatWidget() {
         };
 
         try {
-          localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updatedSessions));
+          localStorage.setItem(staffStorageKey, JSON.stringify(updatedSessions));
         } catch {}
 
         if (!isCurrentActive) {
           setUnreadTotal((u) => u + 1);
+        } else {
+          fetch(`/live-chat/sessions/mark-read?customerId=${encodeURIComponent(cId)}${staffHotelId ? `&hotelId=${staffHotelId}` : ""}`, {
+            method: "PATCH",
+          }).catch(() => {});
         }
 
         return updatedSessions;
@@ -666,12 +915,32 @@ export default function ChatWidget() {
       const cId = String(payload.customerId || "");
       if (!cId) return;
 
+      let resolvedHId = payload.hotelId;
+      if (!resolvedHId && payload.branchName) {
+        const lower = payload.branchName.toLowerCase();
+        if (lower.includes("sài gòn") || lower.includes("sai gon")) resolvedHId = 1;
+        else if (lower.includes("hà nội") || lower.includes("ha noi")) resolvedHId = 2;
+        else if (lower.includes("đà nẵng") || lower.includes("da nang")) resolvedHId = 3;
+        else if (lower.includes("nha trang")) resolvedHId = 4;
+        else if (lower.includes("đà lạt") || lower.includes("da lat")) resolvedHId = 5;
+        else if (lower.includes("gò công") || lower.includes("go cong")) resolvedHId = 6;
+        else if (lower.includes("an nhơn") || lower.includes("an nhon")) resolvedHId = 7;
+        else if (lower.includes("quy nhơn") || lower.includes("quy nhon")) resolvedHId = 8;
+      }
+
+      if (isSuperAdmin || !staffHotelId) {
+        return;
+      }
+      if (resolvedHId && String(staffHotelId) !== String(resolvedHId)) {
+        return;
+      }
+
       setCustomerSessions((prev) => {
         const session = prev[cId];
         if (!session) return prev;
         const exists = session.messages.some((m) => {
           if (payload.msgId && String(m.id) === String(payload.msgId)) return true;
-          return m.sender === "staff" && m.message === payload.message;
+          return false;
         });
         if (exists) return prev;
 
@@ -694,7 +963,7 @@ export default function ChatWidget() {
           },
         };
         try {
-          localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updated));
+          localStorage.setItem(staffStorageKey, JSON.stringify(updated));
         } catch {}
         return updated;
       });
@@ -706,30 +975,47 @@ export default function ChatWidget() {
       window.removeEventListener("customer_staff_chat_message", handleCustomerMessage);
       window.removeEventListener("staff_customer_chat_reply", handleStaffReplyBroadcast);
     };
-  }, [activeTab, selectedCustomerId, open]);
+  }, [activeTab, selectedCustomerId, open, isSuperAdmin, staffHotelId, staffStorageKey]);
 
   // Tự động tải tất cả phiên chat và lịch sử từ PostgreSQL vào giao diện Nhân viên
   useEffect(() => {
     const fetchSessionsFromDb = async () => {
+      if (!staffHotelId && !isSuperAdmin) return;
       try {
-        const hotelQuery = auth?.hotelId ? `?hotelId=${auth.hotelId}` : "";
+        const hotelQuery = staffHotelId ? `?hotelId=${staffHotelId}` : "";
         const res = await fetch(`/live-chat/sessions${hotelQuery}`);
         if (!res.ok) return;
         const data = await res.json();
         const serverSessions = data.result;
-        if (Array.isArray(serverSessions) && serverSessions.length > 0) {
+        if (Array.isArray(serverSessions)) {
           setCustomerSessions((prev) => {
-            const merged = { ...prev };
+            const merged: Record<string, CustomerLiveSession> = {};
+            if (isSuperAdmin) {
+              Object.assign(merged, prev);
+            } else if (staffHotelId) {
+              Object.entries(prev).forEach(([key, s]) => {
+                if (!s.hotelId || String(s.hotelId) === String(staffHotelId)) {
+                  merged[key] = s;
+                }
+              });
+            }
             serverSessions.forEach((s: any) => {
+              if (!isSuperAdmin && staffHotelId && s.hotelId && String(s.hotelId) !== String(staffHotelId)) {
+                return;
+              }
               const cId = s.customerId;
               const msgs: CustomerLiveMessage[] = (s.messages || []).map((m: any) => ({
-                id: m.id || m.msgId,
+                id: m.msgId || m.id,
                 sender: m.senderType === "CUSTOMER" ? "customer" : "staff",
                 senderName: m.senderName,
                 message: m.message,
                 timestamp: m.createdAt,
                 branchName: s.branchName,
               }));
+
+              const dbUnread = s.unreadCount != null
+                ? s.unreadCount
+                : (s.messages || []).filter((m: any) => (m.senderType === "CUSTOMER" || m.sender === "customer") && !m.isRead).length;
 
               if (!merged[cId]) {
                 merged[cId] = {
@@ -740,7 +1026,7 @@ export default function ChatWidget() {
                   hotelId: s.hotelId,
                   lastMessage: s.lastMessage || "",
                   lastTimestamp: s.lastMessageAt || s.createdAt,
-                  unreadCount: 0,
+                  unreadCount: dbUnread,
                   messages: msgs,
                 };
               } else {
@@ -752,8 +1038,15 @@ export default function ChatWidget() {
                 });
                 merged[cId].customerName = s.customerName || merged[cId].customerName;
                 merged[cId].customerPhone = s.customerPhone || merged[cId].customerPhone;
+                merged[cId].unreadCount = dbUnread;
               }
             });
+            try {
+              localStorage.setItem(staffStorageKey, JSON.stringify(merged));
+            } catch {}
+
+            const totalUnread = Object.values(merged).reduce((sum, item) => sum + (item.unreadCount || 0), 0);
+            setUnreadTotal(totalUnread);
             return merged;
           });
         }
@@ -762,7 +1055,22 @@ export default function ChatWidget() {
       }
     };
     fetchSessionsFromDb();
-  }, [auth?.hotelId]);
+  }, [auth?.hotelId, staffStorageKey, isSuperAdmin, staffHotelId]);
+
+  // Đồng bộ lại tin nhắn từ local storage khi staffStorageKey (chi nhánh) thay đổi
+  useEffect(() => {
+    if (staffStorageKey) {
+      try {
+        const saved = localStorage.getItem(staffStorageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+            setCustomerSessions((prev) => ({ ...parsed, ...prev }));
+          }
+        }
+      } catch {}
+    }
+  }, [staffStorageKey]);
 
   useEffect(() => {
     const keys = Object.keys(customerSessions);
@@ -785,10 +1093,22 @@ export default function ChatWidget() {
     if (!trimmed || !selectedCustomerId) return;
 
     const currentSession = customerSessions[selectedCustomerId];
-    const staffName = auth?.fullName || "Trần Minh Tuấn (Lễ tân)";
+    const staffHotelId = auth?.hotelId;
+    const HOTEL_NAMES_MAP: Record<string, string> = {
+      "1": "Sen Việt Sài Gòn",
+      "2": "Sen Việt Hà Nội",
+      "3": "Sen Việt Đà Nẵng",
+      "4": "Sen Việt Nha Trang",
+      "5": "Sen Việt Đà Lạt",
+      "6": "Sen Việt Gò Công",
+      "7": "Sen Việt An Nhơn",
+      "8": "Sen Việt Quy Nhơn",
+    };
+    const staffHotelName = auth?.hotelName || (staffHotelId ? HOTEL_NAMES_MAP[String(staffHotelId)] : null);
+    const staffName = auth?.fullName || (staffHotelName ? `Lễ tân (${staffHotelName})` : "Lễ tân Sen Việt");
     const staffId = auth?.employeeId ? String(auth.employeeId) : "staff_1";
-    const hotelId = auth?.hotelId || currentSession?.hotelId || null;
-    const branchName = auth?.hotelName || currentSession?.branchName || "Chi nhánh Sen Việt";
+    const hotelId = staffHotelId || currentSession?.hotelId || null;
+    const branchName = staffHotelName || (currentSession?.branchName && currentSession.branchName !== "Tổng đài CSKH Toàn hệ thống Sen Việt" ? currentSession.branchName : "Sen Việt Đà Nẵng");
     const timestamp = new Date().toISOString();
     const msgId = "staff_msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
 
@@ -834,7 +1154,7 @@ export default function ChatWidget() {
         },
       };
       try {
-        localStorage.setItem("senviet_staff_customer_sessions", JSON.stringify(updated));
+        localStorage.setItem(staffStorageKey, JSON.stringify(updated));
       } catch {}
       return updated;
     });
@@ -849,11 +1169,16 @@ export default function ChatWidget() {
       {/* Floating toggle button */}
       <button
         onClick={() => {
-          setOpen((o) => !o);
-          if (!open && unreadTotal > 0) {
-            setActiveTab("customer");
-            setUnreadTotal(0);
-          }
+          setOpen((o) => {
+            const nextOpen = !o;
+            if (nextOpen && unreadTotal > 0) {
+              setActiveTab("customer");
+              if (selectedCustomerId) {
+                markSessionAsRead(selectedCustomerId);
+              }
+            }
+            return nextOpen;
+          });
         }}
         aria-label="Staff Assistant & Customer Chat"
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 transition-all duration-200 hover:scale-105 hover:from-blue-700 hover:to-indigo-700 active:scale-95"
@@ -874,12 +1199,21 @@ export default function ChatWidget() {
       {/* Chat window */}
       {open && (
         <div
-          className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all duration-300 ease-in-out ${
+          style={customWidth ? { width: `${customWidth}px`, maxWidth: "calc(100vw - 1.5rem)" } : undefined}
+          className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${isResizing ? "" : "transition-all duration-300 ease-in-out"} ${
             isExpanded
-              ? "bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[48rem] md:w-[56rem] h-[92vh] max-h-[58rem]"
-              : "bottom-24 right-6 w-[26rem] max-w-[calc(100vw-2rem)] sm:w-[28rem] h-[36rem] max-h-[82vh]"
+              ? "bottom-3 right-3 sm:bottom-6 sm:right-6 w-[calc(100vw-1.5rem)] sm:w-[48rem] md:w-[50vw] max-w-[60rem] h-[93vh] max-h-[58rem]"
+              : "bottom-20 right-4 sm:bottom-24 sm:right-6 w-[calc(100vw-2rem)] sm:w-[30rem] h-[37rem] max-h-[85vh]"
           }`}
         >
+          {/* Thanh kéo tinh chỉnh chiều rộng ở cạnh trái */}
+          <div
+            onMouseDown={handleStartResize}
+            title={isEn ? "Drag left edge to adjust chat width" : "Kéo cạnh trái để tinh chỉnh độ rộng khung chat"}
+            className="hidden sm:flex absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-50 items-center justify-center group hover:bg-blue-500/20 transition-colors"
+          >
+            <div className="h-10 w-0.5 rounded-full bg-slate-300 group-hover:bg-blue-500 transition-colors" />
+          </div>
           {/* Header */}
           <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 text-white shadow-sm">
             <div className="flex items-center gap-2.5">
@@ -887,10 +1221,10 @@ export default function ChatWidget() {
                 {activeTab === "ai" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
               </span>
               <div>
-                <div className="text-base font-semibold leading-tight flex items-center gap-2">
-                  <span>{activeTab === "ai" ? "Trợ lý AI Quản trị" : "Tư vấn Khách hàng (Live)"}</span>
-                  <span className="rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
-                    {auth?.hotelName || "Chi nhánh Sen Việt"}
+                <div className="text-sm font-semibold leading-tight flex items-center gap-1.5 min-w-0">
+                  <span className="truncate whitespace-nowrap">{activeTab === "ai" ? (isEn ? "AI Admin Copilot" : "Trợ lý AI Quản trị") : (isEn ? "Customer Live Chat" : "Tư vấn Khách hàng (Live)")}</span>
+                  <span className="rounded-full bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-medium text-emerald-200 truncate max-w-[140px] shrink-0">
+                    {isSuperAdmin ? "Toàn hệ thống Sen Việt" : (auth?.hotelName || "Chi nhánh Sen Việt")}
                   </span>
                 </div>
                 <div className="text-[11px] text-blue-100/80">
@@ -909,7 +1243,7 @@ export default function ChatWidget() {
                 </button>
               )}
               <button
-                onClick={() => setIsExpanded((prev) => !prev)}
+                onClick={() => { setCustomWidth(null); setIsExpanded((prev) => !prev); }}
                 className="rounded-full p-1.5 text-white/80 transition hover:bg-white/15 hover:text-white"
                 title={isExpanded ? "Thu nhỏ" : "Phóng to cửa sổ"}
               >
@@ -943,12 +1277,8 @@ export default function ChatWidget() {
               type="button"
               onClick={() => {
                 setActiveTab("customer");
-                setUnreadTotal(0);
-                if (selectedCustomerId && customerSessions[selectedCustomerId]) {
-                  setCustomerSessions((prev) => ({
-                    ...prev,
-                    [selectedCustomerId]: { ...prev[selectedCustomerId], unreadCount: 0 },
-                  }));
+                if (selectedCustomerId) {
+                  markSessionAsRead(selectedCustomerId);
                 }
               }}
               className={`relative flex flex-1 items-center justify-center gap-1.5 py-2.5 transition ${
@@ -980,13 +1310,14 @@ export default function ChatWidget() {
             {messages.map((m) => {
               if (m.from === "user") {
                 return (
-                  <div
-                    key={m.id}
-                    className={`ml-auto rounded-2xl bg-blue-600 px-4 py-2.5 text-white shadow-sm ${
-                      isExpanded ? "max-w-[70%]" : "max-w-[85%]"
-                    }`}
-                  >
-                    {m.text}
+                  <div key={m.id} className="flex justify-end">
+                    <div
+                      className={`w-fit rounded-2xl rounded-tr-xs bg-blue-600 px-4 py-2.5 text-white shadow-sm break-words ${
+                        isExpanded ? "max-w-[70%]" : "max-w-[85%]"
+                      }`}
+                    >
+                      {m.text}
+                    </div>
                   </div>
                 );
               }
@@ -1025,13 +1356,13 @@ export default function ChatWidget() {
                           {bookingCard.checkInDate && (
                             <div className="flex items-center gap-1.5">
                               <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Nhận: {bookingCard.checkInDate}</span>
+                              <span>{isEn ? "Check-in:" : "Nhận:"} {formatDisplayDate(bookingCard.checkInDate, i18n.language)}</span>
                             </div>
                           )}
                           {bookingCard.checkOutDate && (
                             <div className="flex items-center gap-1.5">
                               <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Trả: {bookingCard.checkOutDate}</span>
+                              <span>{isEn ? "Check-out:" : "Trả:"} {formatDisplayDate(bookingCard.checkOutDate, i18n.language)}</span>
                             </div>
                           )}
                           <div className="flex items-center gap-1.5">
@@ -1150,7 +1481,7 @@ export default function ChatWidget() {
             {recognitionRef.current && (
               <button
                 type="button"
-                onClick={toggleListening}
+                onClick={() => toggleListening("ai")}
                 className={`rounded-xl p-2 transition ${
                   isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
@@ -1185,18 +1516,15 @@ export default function ChatWidget() {
                   onChange={(e) => {
                     const id = e.target.value;
                     setSelectedCustomerId(id);
-                    if (id && customerSessions[id]) {
-                      setCustomerSessions((prev) => ({
-                        ...prev,
-                        [id]: { ...prev[id], unreadCount: 0 },
-                      }));
+                    if (id) {
+                      markSessionAsRead(id);
                     }
                   }}
                   className="truncate flex-1 max-w-[280px] rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500"
                 >
                   {Object.values(customerSessions).map((s) => (
                     <option key={s.customerId} value={s.customerId}>
-                      👤 {s.customerName} {s.customerPhone ? `(${s.customerPhone})` : ""} - {s.branchName}
+                      {s.unreadCount && s.unreadCount > 0 ? `🔴 [${s.unreadCount} tin mới] ` : ""}👤 {s.customerName} {s.customerPhone ? `(${s.customerPhone})` : ""} - {s.branchName}
                     </option>
                   ))}
                 </select>
@@ -1206,7 +1534,7 @@ export default function ChatWidget() {
             </div>
             {selectedSession && (
               <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                {selectedSession.branchName || "Chi nhánh"}
+                {selectedSession.branchName && selectedSession.branchName !== "Tổng đài CSKH Toàn hệ thống Sen Việt" ? selectedSession.branchName : (auth?.hotelName || "Sen Việt Đà Nẵng")}
               </span>
             )}
           </div>
@@ -1236,12 +1564,14 @@ export default function ChatWidget() {
                       <div className="text-right text-[11px] text-slate-400 font-medium">
                         {m.senderName} (Bạn) · {new Date(m.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
                       </div>
-                      <div
-                        className={`ml-auto rounded-2xl bg-indigo-600 px-4 py-2.5 text-white shadow-sm ${
-                          isExpanded ? "max-w-[70%]" : "max-w-[85%]"
-                        }`}
-                      >
-                        {m.message}
+                      <div className="flex justify-end">
+                        <div
+                          className={`w-fit rounded-2xl bg-indigo-600 px-4 py-2.5 text-white shadow-sm ${
+                            isExpanded ? "max-w-[70%]" : "max-w-[85%]"
+                          }`}
+                        >
+                          {m.message}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1254,7 +1584,7 @@ export default function ChatWidget() {
                       <span className="text-slate-400">{new Date(m.timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
                     <div
-                      className={`mr-auto rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-800 shadow-sm ${
+                      className={`w-fit mr-auto rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-slate-800 shadow-sm ${
                         isExpanded ? "max-w-[70%]" : "max-w-[85%]"
                       }`}
                     >
@@ -1278,6 +1608,7 @@ export default function ChatWidget() {
               ].map((q, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => setCustomerReplyInput(q)}
                   className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition"
                 >
@@ -1296,6 +1627,7 @@ export default function ChatWidget() {
             className="flex items-center gap-2 border-t border-slate-200 bg-white p-3"
           >
             <input
+              ref={customerReplyInputRef}
               type="text"
               value={customerReplyInput}
               onChange={(e) => setCustomerReplyInput(e.target.value)}
@@ -1307,6 +1639,21 @@ export default function ChatWidget() {
               disabled={!selectedCustomerId}
               className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
             />
+            {recognitionRef.current && (
+              <button
+                type="button"
+                onClick={() => toggleListening("customer")}
+                disabled={!selectedCustomerId}
+                className={`rounded-xl p-2 transition disabled:opacity-40 ${
+                  isListening && voiceTargetRef.current === "customer"
+                    ? "bg-red-500 text-white animate-pulse"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+                title="Nhập bằng giọng nói"
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            )}
             <button
               type="submit"
               disabled={!customerReplyInput.trim() || !selectedCustomerId}

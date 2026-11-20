@@ -1,164 +1,57 @@
-# Fusion Starter
+# SEN VIỆT HOTEL - STAFF MANAGEMENT FRONTEND GUIDELINES
+<!-- Quy chuẩn lập trình Tối giản & Kỷ luật cao (Karpathy + Ponytail Standard) -->
 
-A production-ready full-stack React application template with integrated Express server, featuring React Router 6 SPA mode, TypeScript, Vitest, Zod and modern tooling.
+This file defines the strict behavioral rules and coding guidelines for AI agents working on the Sen Việt Staff & Admin Portal repository.
 
-While the starter comes with a express server, only create endpoint when strictly neccesary, for example to encapsulate logic that must leave in the server, such as private keys handling, or certain DB operations, db...
+---
 
-## Tech Stack
+## 1. COMMUNICATION & LANGUAGE (GIAO TIẾP VỚI LẬP TRÌNH VIÊN)
+- **Developer Communication**: Always reply to the developer in Vietnamese (Tiếng Việt) clearly, honestly, and concisely.
+- **End of Response**: End every reply with 1-2 lines summarizing: (1) exact files/lines modified, (2) what was skipped or untouched, (3) any edge-case risks.
+- **Multilingual Context**: Maintain proper i18n keys and support both Vietnamese (default) and English/multilingual data where required.
 
-- **PNPM**: Prefer pnpm
-- **Frontend**: React 18 + React Router 6 (spa) + TypeScript + Vite + TailwindCSS 3
-- **Backend**: Express server integrated with Vite dev server
-- **Testing**: Vitest
-- **UI**: Radix UI + TailwindCSS 3 + Lucide React icons
+---
 
-## Project Structure
+## 2. ANDREJ KARPATHY 4 GOLDEN RULES (4 NGUYÊN TẮC VÀNG KARPATHY)
 
-```
-client/                   # React SPA frontend
-├── pages/                # Route components (Index.tsx = home)
-├── components/ui/        # Pre-built UI component library
-├── App.tsx                # App entry point and with SPA routing setup
-└── global.css            # TailwindCSS 3 theming and global styles
+### Rule 1: Think Before Coding (Suy nghĩ trước khi gõ phím)
+- Never assume user requirements or guess blindly. If unclear, stop and ask.
+- When multiple architectural or UI approaches exist, state the tradeoffs explicitly before implementing.
+- If a simpler approach exists, propose it before coding.
 
-server/                   # Express API backend
-├── index.ts              # Main server setup (express config + routes)
-└── routes/               # API handlers
+### Rule 2: Simplicity First (Tối giản là trên hết)
+- Minimum code that solves the problem. Nothing speculative.
+- No unused abstractions, helper wrappers, or extra configuration for single-use logic.
+- Do NOT install new npm packages when native browser APIs or existing packages already do the job.
+- If you write 150 lines and it can be done cleanly in 40 lines, rewrite it.
 
-shared/                   # Types used by both client & server
-└── api.ts                # Example of how to share api interfaces
-```
+### Rule 3: Surgical Changes (Can thiệp chuẩn xác như phẫu thuật)
+- Touch ONLY what is necessary to solve the issue. Keep blast radius minimal.
+- Do NOT "improve" or reformat adjacent code, untouched components, or existing comments.
+- Match existing table, form, modal, and state management patterns.
+- Clean up only your own orphans (unused imports/variables that your edit created).
 
-## Key Features
+### Rule 4: Goal-Driven Execution (Làm việc theo mục tiêu kiểm chứng được)
+- Transform tasks into verifiable criteria before declaring completion.
+- Verify changes directly against the running development server (Port 8082).
 
-## SPA Routing System
+---
 
-The routing system is powered by React Router 6:
+## 3. PONYTAIL SENIOR DEV PRINCIPLES (TƯ DUY SENIOR LƯỜI)
+- *"The best code is the code never written."* (Dòng code tốt nhất là dòng code không bao giờ phải viết).
+- Deletion beats addition.
+- Decision hierarchy before writing new code:
+  1. Does this feature/code actually need to exist? Skip unrequested options.
+  2. Already in this codebase? Reuse existing UI components (`components/ui/*`), table layouts, and hooks.
+  3. Standard browser/React feature? Use native React APIs.
+  4. Installed npm dependency? Use existing icons (`lucide-react`), utilities (`clsx`, `tailwind-merge`).
 
-- `client/pages/Index.tsx` represents the home page.
-- Routes are defined in `client/App.tsx` using the `react-router-dom` import
-- Route files are located in the `client/pages/` directory
+---
 
-For example, routes can be defined with:
-
-```typescript
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-
-<Routes>
-  <Route path="/" element={<Index />} />
-  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-  <Route path="*" element={<NotFound />} />
-</Routes>;
-```
-
-### Styling System
-
-- **Primary**: TailwindCSS 3 utility classes
-- **Theme and design tokens**: Configure in `client/global.css` 
-- **UI components**: Pre-built library in `client/components/ui/`
-- **Utility**: `cn()` function combines `clsx` + `tailwind-merge` for conditional classes
-
-```typescript
-// cn utility usage
-className={cn(
-  "base-classes",
-  { "conditional-class": condition },
-  props.className  // User overrides
-)}
-```
-
-### Express Server Integration
-
-- **Development**: Single port (8080) for both frontend/backend
-- **Hot reload**: Both client and server code
-- **API endpoints**: Prefixed with `/api/`
-
-#### Example API Routes
-- `GET /api/ping` - Simple ping api
-- `GET /api/demo` - Demo endpoint  
-
-### Shared Types
-Import consistent types in both client and server:
-```typescript
-import { DemoResponse } from '@shared/api';
-```
-
-Path aliases:
-- `@shared/*` - Shared folder
-- `@/*` - Client folder
-
-## Development Commands
-
-```bash
-pnpm dev        # Start dev server (client + server)
-pnpm build      # Production build
-pnpm start      # Start production server
-pnpm typecheck  # TypeScript validation
-pnpm test          # Run Vitest tests
-```
-
-## Adding Features
-
-### Add new colors to the theme
-
-Open `client/global.css` and `tailwind.config.ts` and add new tailwind colors.
-
-### New API Route
-1. **Optional**: Create a shared interface in `shared/api.ts`:
-```typescript
-export interface MyRouteResponse {
-  message: string;
-  // Add other response properties here
-}
-```
-
-2. Create a new route handler in `server/routes/my-route.ts`:
-```typescript
-import { RequestHandler } from "express";
-import { MyRouteResponse } from "@shared/api"; // Optional: for type safety
-
-export const handleMyRoute: RequestHandler = (req, res) => {
-  const response: MyRouteResponse = {
-    message: 'Hello from my endpoint!'
-  };
-  res.json(response);
-};
-```
-
-3. Register the route in `server/index.ts`:
-```typescript
-import { handleMyRoute } from "./routes/my-route";
-
-// Add to the createServer function:
-app.get("/api/my-endpoint", handleMyRoute);
-```
-
-4. Use in React components with type safety:
-```typescript
-import { MyRouteResponse } from '@shared/api'; // Optional: for type safety
-
-const response = await fetch('/api/my-endpoint');
-const data: MyRouteResponse = await response.json();
-```
-
-### New Page Route
-1. Create component in `client/pages/MyPage.tsx`
-2. Add route in `client/App.tsx`:
-```typescript
-<Route path="/my-page" element={<MyPage />} />
-```
-
-## Production Deployment
-
-- **Standard**: `pnpm build`
-- **Binary**: Self-contained executables (Linux, macOS, Windows)
-- **Cloud Deployment**: Use either Netlify or Vercel via their MCP integrations for easy deployment. Both providers work well with this starter template.
-
-## Architecture Notes
-
-- Single-port development with Vite + Express integration
-- TypeScript throughout (client, server, shared)
-- Full hot reload for rapid development
-- Production-ready with multiple deployment options
-- Comprehensive UI component library included
-- Type-safe API communication via shared interfaces
+## 4. PROJECT ARCHITECTURE & RUNTIME
+- **Tech Stack**: React 18, Vite, TypeScript, TailwindCSS, Lucide React, WebSocket (Socket.IO client).
+- **Dev Server Port**: `8082` (`npm run dev`)
+- **Key Modules**:
+  - `client/pages/LiveChat.tsx` & `client/components/LiveChatWidget.tsx`: Real-time staff-customer chat and unread message management.
+  - `client/pages/Bookings.tsx`: Booking lifecycle management (Pending, Confirmed, Checked In, Checked Out, Cancelled).
+  - `client/pages/AdminAIChat.tsx`: Internal Admin/Staff AI assistant for scheduling and metrics.

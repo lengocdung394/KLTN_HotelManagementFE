@@ -742,14 +742,14 @@ export default function BookingListWorkspace() {
     bookingUpdateInFlight.current = true;
     try {
       await updateBookingApi({ id, request: updatePayload }).unwrap();
-      setEditSuccess(updateDescription);
+      setEditSuccess(localizedText("Cập nhật thông tin booking thành công!", "Booking information updated successfully!"));
     } catch (requestError) {
       console.error("Could not update booking", requestError);
       const responseError = requestError as { data?: { message?: string; error?: string }; error?: string };
       const errorMessage = responseError.data?.message
         ?? responseError.data?.error
         ?? responseError.error
-        ?? localizedText("Không thể cập nhật booking. Vui lòng thử lại.", "Could not update booking. Please try again.");
+        ?? localizedText("Không thể lưu thay đổi lên hệ thống. Vui lòng thử lại.", "Unable to save booking changes. Please try again.");
       setEditError(errorMessage);
       toast({
         variant: "destructive",

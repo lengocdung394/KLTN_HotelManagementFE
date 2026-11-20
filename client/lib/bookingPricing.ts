@@ -52,7 +52,11 @@ export function getBookingTotalFromBreakdown({
 }
 
 export function getBookingSurchargeBreakdown(details: readonly Record<string, unknown>[]) {
-  return details.reduce((totals, detail) => {
+  return details.reduce<{
+    earlyCheckinFeeTotal: number;
+    lateCheckoutFeeTotal: number;
+    otherSurchargesTotal: number;
+  }>((totals, detail) => {
     const status = String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").trim().toUpperCase();
     const isCancelled = status === "CANCELLED";
     const earlyFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);

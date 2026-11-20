@@ -442,6 +442,9 @@ export default function BookingEditWorkspace() {
       roomsToChange: roomsToChangeFormatted,
       servicesToAddForExistingRooms: servicesToAddForExistingRoomsFormatted,
       serviceQuantityUpdates: serviceQuantityUpdatesFormatted,
+      promotionRequest: null,
+      customerPromotionRequest: null,
+      removePromotion: null,
     };
   }, [
     employeeId,
