@@ -31,6 +31,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { useSendChatMessageMutation, useLazyGetChatHistoryQuery, type ChatMessage as ChatMessageType } from "@/services/chatApi";
 import { useAppSelector } from "@/store/hooks";
 import { emitStaffSendCustomerChat } from "@/lib/socket";
+import { formatVnd as formatVndAmount } from "@/lib/currency";
 
 export interface CustomerLiveMessage {
   id: string | number;
@@ -109,7 +110,7 @@ export interface HotelReservationData {
 
 function formatVnd(amount: number | string): string {
   const num = typeof amount === "number" ? amount : Number(String(amount).replace(/[^\d]/g, "")) || 0;
-  return `${num.toLocaleString("vi-VN")} đ`;
+  return formatVndAmount(num);
 }
 
 function getSlugFromHotelName(name?: string): string {

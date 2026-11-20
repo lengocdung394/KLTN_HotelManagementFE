@@ -309,17 +309,19 @@ export default function CheckoutRefundApprovalsPanel({
           ) : (
             <>
               <div className="max-w-full overflow-x-auto">
-                <table className="table-fixed text-left text-sm" style={{ width: `max(100%, ${shownColumns.reduce((width, column) => width + column.width, 0)}px)` }}>
+                <table className="table-fixed text-left text-sm" style={{ width: `max(100%, ${shownColumns.reduce((width, column) => width + column.width, 64)}px)` }}>
                 <colgroup>
+                  <col style={{ width: "64px" }} />
                   {shownColumns.map((column) => <col key={column.id} style={{ width: `${column.width}px` }} />)}
                 </colgroup>
                 <thead className="bg-blue-50 text-[11px] uppercase tracking-wide text-blue-800">
                   <tr>
+                    <th scope="col" className="whitespace-nowrap px-3 py-3">{localizedText("STT", "No.")}</th>
                     {shownColumns.map((column) => <th key={column.id} className="px-3 py-3">{localizedText(column.label[0], column.label[1])}</th>)}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paginatedRefunds.map((refund) => <CheckoutRefundRow key={refund.id} refund={refund} visibleColumns={visibleColumns} />)}
+                  {paginatedRefunds.map((refund, index) => <CheckoutRefundRow key={refund.id} refund={refund} visibleColumns={visibleColumns} serialNumber={(safePage - 1) * pageSize + index + 1} />)}
                 </tbody>
                 </table>
               </div>
@@ -335,9 +337,11 @@ export default function CheckoutRefundApprovalsPanel({
 function CheckoutRefundRow({
   refund,
   visibleColumns,
+  serialNumber,
 }: {
   refund: CheckoutRefund;
   visibleColumns: Record<CheckoutRefundColumnId, boolean>;
+  serialNumber: number;
 }) {
   const roles = useAppSelector((state) => state.auth.roles);
   const canApproveRefund = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN") || roles.includes("ROLE_ADMIN");
@@ -498,6 +502,7 @@ function CheckoutRefundRow({
   return (
     <>
     <tr className="align-top hover:bg-slate-50/70">
+      <td className="whitespace-nowrap px-3 py-4 tabular-nums text-slate-500">{serialNumber}</td>
       {visibleColumns.booking && <td className="px-3 py-4">
         <p className="whitespace-nowrap font-semibold text-blue-700">{refund.bookingId}</p>
       </td>}

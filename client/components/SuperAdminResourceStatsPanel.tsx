@@ -234,10 +234,14 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   });
   const hasReportErrors = visibleBranches.some((branch) => branchReports[branch.id]?.hasError);
   const isStatsLoading = isLoading || isLoadingReports
-    || (hasValidDateRange && visibleBranches.length > 0 && reports.length === 0 && !hasReportErrors);
-  const allReportsLoaded = visibleBranches.length > 0
-    && reports.length === visibleBranches.length
-    && !hasReportErrors;
+    || (hasValidDateRange && visibleBranches.some((branch) => !branchReports[branch.id]));
+  const allReportsLoaded = !isLoading
+    && !isError
+    && hasValidDateRange
+    && visibleBranches.every((branch) => {
+      const branchReport = branchReports[branch.id];
+      return branchReport !== undefined && !branchReport.hasError;
+    });
 
   useEffect(() => {
     const reportElements = document.querySelectorAll<HTMLElement>("[data-super-admin-report-section]");
@@ -1136,7 +1140,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                   const hasBranchReportError = branchReport?.hasError;
                   const isBranchLoading = !branchReport && (isLoadingReports || isStatsLoading);
                   const value = (count: number | undefined) =>
-                    hasBranchReportError || isBranchLoading || !report ? "—" : formatCount(count ?? 0);
+                    hasBranchReportError || isBranchLoading ? "—" : formatCount(count ?? 0);
                   return (
                     <tr key={branch.id} className="transition hover:bg-slate-50/70">
                       <td className="whitespace-nowrap px-5 py-4 tabular-nums text-slate-500">{(safeBranchPage - 1) * branchPageSize + index + 1}</td>
@@ -1155,15 +1159,15 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
                       <td className="px-5 py-4 text-right text-sm font-semibold tabular-nums text-slate-700">{value(report?.totalBookingCount)}</td>
                       <td className="px-5 py-4 text-right text-sm font-semibold tabular-nums text-rose-700">{value(report?.cancelledBookingCount)}</td>
                       <td className="whitespace-nowrap px-5 py-4 text-right">
-                        {hasBranchReportError || isBranchLoading || !report ? (
+                        {hasBranchReportError || isBranchLoading ? (
                           <span className="text-sm font-semibold text-slate-800">—</span>
                         ) : (
                           <div>
-                            <p className="text-sm font-semibold tabular-nums text-slate-800">{formatMoney(Number(report.cashReceived ?? 0))}</p>
+                            <p className="text-sm font-semibold tabular-nums text-slate-800">{formatMoney(Number(report?.cashReceived ?? 0))}</p>
                             <p className="mt-1 text-[11px] tabular-nums text-slate-500">
-                              <span className="text-green-700">{localizedText("Tiền mặt", "Cash")} {formatMoney(Number(report.cashReceivedCash ?? 0))}</span>
+                              <span className="text-green-700">{localizedText("Tiền mặt", "Cash")} {formatMoney(Number(report?.cashReceivedCash ?? 0))}</span>
                               <span className="mx-1.5 text-slate-300">·</span>
-                              <span className="text-sky-700">{localizedText("Chuyển khoản", "Bank transfer")} {formatMoney(Number(report.cashReceivedBank ?? 0))}</span>
+                              <span className="text-sky-700">{localizedText("Chuyển khoản", "Bank transfer")} {formatMoney(Number(report?.cashReceivedBank ?? 0))}</span>
                             </p>
                           </div>
                         )}

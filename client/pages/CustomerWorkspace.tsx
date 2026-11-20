@@ -20,7 +20,12 @@ type Tier = Customer["tier"];
 type Form = Pick<Customer, "name" | "phone" | "email" | "identityNumber">;
 
 const blankForm: Form = { name: "", phone: "", email: "", identityNumber: "" };
-const tierStyle: Record<Tier, string> = { loyal: "bg-amber-50 text-amber-700", potential: "bg-blue-50 text-blue-700", new: "bg-emerald-50 text-emerald-700" };
+const tierStyle: Record<Tier, string> = {
+  bronze: "bg-orange-50 text-orange-700",
+  silver: "bg-slate-100 text-slate-700",
+  gold: "bg-amber-50 text-amber-700",
+  platinum: "bg-violet-50 text-violet-700",
+};
 
 export default function CustomerWorkspace() {
   const { t, i18n } = useTranslation();
@@ -246,7 +251,7 @@ export default function CustomerWorkspace() {
           value={tier}
           options={[
             { value: "all", label: t("customer.allTiers") },
-            ...(["loyal", "potential", "new"] as Tier[]).map((value) => ({
+            ...(["bronze", "silver", "gold", "platinum"] as Tier[]).map((value) => ({
               value,
               label: tierLabel(value),
             })),

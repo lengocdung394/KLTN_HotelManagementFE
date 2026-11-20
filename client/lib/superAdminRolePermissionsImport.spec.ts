@@ -36,6 +36,27 @@ describe("parseSuperAdminRolePermissionsRows", () => {
     ]);
   });
 
+  it("honors the Có/Không grant column from the full-system workbook", () => {
+    const parsed = parseSuperAdminRolePermissionsRows([
+      ["Role", "Mã quyền", "Tên quyền", "Danh mục", "Mô tả quyền", "Cấp quyền (Có/Không)"],
+      ["ROLE_MANAGER", "VIEW_BOOKINGS", "Xem đặt phòng", "Đặt phòng", "Cho phép xem đặt phòng", "Có"],
+      ["ROLE_MANAGER", "DELETE_BOOKING", "Xóa đặt phòng", "Đặt phòng", "Cho phép xóa đặt phòng", "Không"],
+    ], roles);
+
+    expect(parsed.importedRowCount).toBe(2);
+    expect(parsed.rolePermissions[0].permissions.map(({ code, granted }) => ({ code, granted }))).toEqual([
+      { code: "VIEW_BOOKINGS", granted: true },
+      { code: "DELETE_BOOKING", granted: false },
+    ]);
+  });
+
+  it("rejects unknown values in the Có/Không grant column", () => {
+    expect(() => parseSuperAdminRolePermissionsRows([
+      ["Role", "Mã quyền", "Tên quyền", "Mô tả quyền", "Danh mục", "Cấp quyền (Có/Không)"],
+      ["ROLE_MANAGER", "VIEW_BOOKINGS", "Xem đặt phòng", "", "Đặt phòng", "Maybe"],
+    ], roles)).toThrow(/chỉ nhận Có hoặc Không/);
+  });
+
   it("rejects rows with roles that were not created", () => {
     expect(() => parseSuperAdminRolePermissionsRows([
       headers,

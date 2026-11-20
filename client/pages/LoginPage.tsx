@@ -305,8 +305,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 </div>
                 {fieldError?.field === "password" && <p role="alert" className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{fieldError.message}</p>}
               </label>
-              <div className="flex items-center justify-between text-xs">
-                <label className="flex items-center gap-2 text-slate-500"><input type="checkbox" defaultChecked className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />Ghi nhớ đăng nhập</label>
+              <div className="flex items-center justify-end text-xs">
                 <button type="button" onClick={() => { setView("requestOtp"); setFieldError(null); setNotice(""); }} className="font-semibold text-blue-700 hover:text-blue-900">Quên mật khẩu?</button>
               </div>
               {notice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">{notice}</p>}
@@ -384,7 +383,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 <button type="button" disabled={isRequestingOtp} onClick={() => void sendPasswordResetOtp()} className="w-full text-center text-xs font-semibold text-blue-700 hover:text-blue-900 disabled:opacity-50">{isRequestingOtp ? "Đang gửi lại mã..." : "Gửi lại mã OTP"}</button>
               </form>
             </>}
-            <p className="mt-8 text-center text-xs text-slate-400">Cần hỗ trợ? <button type="button" className="font-semibold text-slate-600 hover:text-blue-700">Liên hệ quản trị viên</button></p>
             <p className="mt-10 text-center text-[10px] font-medium tracking-wide text-slate-300">© SEN VIET · HOTEL MANAGEMENT</p>
           </div>
         </section>

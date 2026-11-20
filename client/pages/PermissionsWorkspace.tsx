@@ -2,6 +2,11 @@ import { useMemo, useState } from "react";
 import { AlertCircle, Check, ChevronDown, ChevronRight, KeyRound, Layers3, LoaderCircle, LockKeyhole, RefreshCw, Search, ShieldCheck, UsersRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { localizedText } from "../i18n";
+import {
+  translateDisplayText,
+  translateRoleDescription,
+  translateRoleName,
+} from "../lib/permissionLocalization";
 import ClearSearchButton from "../components/ClearSearchButton";
 import FilterResultStatus from "../components/FilterResultStatus";
 import {
@@ -140,10 +145,10 @@ export default function PermissionsWorkspace() {
                   }`}
                 >
                   <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-bold ${isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
-                    {role.name.trim().charAt(0).toLocaleUpperCase()}
+                    {translateRoleName(role.code, role.name).trim().charAt(0).toLocaleUpperCase()}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-bold">{role.name}</span>
+                    <span className="block truncate text-sm font-bold">{translateRoleName(role.code, role.name)}</span>
                     <span className="mt-0.5 block truncate text-[10px] opacity-70">{role.code}</span>
                   </span>
                   {isSelected && <Check size={16} className="ml-auto shrink-0 text-blue-600" />}
@@ -213,8 +218,8 @@ export default function PermissionsWorkspace() {
                   </span>
                   <div className="min-w-0">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600">{localizedText("Đang xem quyền của", "Viewing permissions for")}</p>
-                    <h4 className="mt-0.5 truncate text-lg font-bold text-slate-900">{selectedRole.name}</h4>
-                    {selectedRole.description && <p className="mt-0.5 text-sm text-slate-500">{selectedRole.description}</p>}
+                    <h4 className="mt-0.5 truncate text-lg font-bold text-slate-900">{translateRoleName(selectedRole.code, selectedRole.name)}</h4>
+                    {selectedRole.description && <p className="mt-0.5 text-sm text-slate-500">{translateRoleDescription(selectedRole.code, selectedRole.description)}</p>}
                   </div>
                 </div>
                 <span className="w-fit rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">{selectedRole.code}</span>
@@ -253,7 +258,7 @@ export default function PermissionsWorkspace() {
                             <Layers3 size={17} />
                           </span>
                           <span className="min-w-0">
-                            <span className="block truncate text-sm font-bold text-slate-800">{category}</span>
+                            <span className="block truncate text-sm font-bold text-slate-800">{translateDisplayText(category)}</span>
                             <span className="mt-0.5 block text-xs text-slate-500">{permissions.length} {localizedText("quyền đã cấp", "assigned permissions")}</span>
                           </span>
                         </span>
@@ -264,13 +269,13 @@ export default function PermissionsWorkspace() {
                       {isExpanded && (
                         <div id={contentId} className="grid gap-2 border-t border-slate-100 p-3 sm:grid-cols-2">
                           {permissions.map((permission) => (
-                            <div key={permission.code} title={permission.description || permission.code} className="flex min-w-0 items-start gap-2.5 rounded-xl border border-emerald-100/80 bg-gradient-to-br from-emerald-50/70 to-white p-3">
+                            <div key={permission.code} title={translateDisplayText(permission.description) || permission.code} className="flex min-w-0 items-start gap-2.5 rounded-xl border border-emerald-100/80 bg-gradient-to-br from-emerald-50/70 to-white p-3">
                               <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700">
                                 <Check size={12} />
                               </span>
                               <span className="min-w-0">
-                                <span className="block text-xs font-semibold leading-5 text-slate-700">{permission.name}</span>
-                                {permission.description && <span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-slate-500">{permission.description}</span>}
+                                <span className="block text-xs font-semibold leading-5 text-slate-700">{translateDisplayText(permission.name)}</span>
+                                {permission.description && <span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-slate-500">{translateDisplayText(permission.description)}</span>}
                               </span>
                             </div>
                           ))}
@@ -327,6 +332,14 @@ function SummaryCard({
 }
 
 function matchesPermission(permission: SuperAdminPermissionAssignment, query: string) {
-  return [permission.code, permission.name, permission.category, permission.description]
+  return [
+    permission.code,
+    permission.name,
+    permission.category,
+    permission.description,
+    translateDisplayText(permission.name),
+    translateDisplayText(permission.category),
+    translateDisplayText(permission.description),
+  ]
     .some((value) => value?.toLocaleLowerCase().includes(query));
 }

@@ -5,6 +5,7 @@ import { emitCustomerCreated } from "../lib/socket";
 import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazyGetCustomerByIdQuery, type CustomerResponse } from "../services/customerApi";
 import { useAppSelector } from "../store/hooks";
 import { toast } from "@/components/ui/use-toast";
+import { formatVnd } from "../lib/currency";
 
 type GuestRoom = {
   id: string;
@@ -75,7 +76,7 @@ export const setRoomGuestCache = (values: Record<string, RoomGuestCounts>) => {
   });
 };
 
-export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange, customerLocked = false }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void; customerLocked?: boolean }) {
+export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGuestsChange, roomGuestValues, onRoomGuestChange, lockedRoomIds = [], customerLocked = false }: { rooms: GuestRoom[]; guest: BookingGuest; onGuestChange: (guest: BookingGuest) => void; onRoomGuestsChange?: (roomId: string, surcharge: number) => void; roomGuestValues?: Record<string, RoomGuestCounts>; onRoomGuestChange?: (roomId: string, counts: RoomGuestCounts) => void; lockedRoomIds?: string[]; customerLocked?: boolean }) {
   const { t } = useTranslation();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
   const {
@@ -244,6 +245,7 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     return roomGuestValues?.[room.id] ?? localRoomGuests[room.id] ?? roomGuestCache[room.id] ?? { adults: Math.min(standardAdults, limits.adults), children: 0, infants: 0 };
   };
   const updateRoomGuest = (room: GuestRoom, field: "adults" | "children" | "infants", value: number) => {
+    if (lockedRoomIds.includes(room.id)) return;
     const totalCapacity = totalCapacityFor(room);
     const currentGuests = getRoomGuests(room);
     const nextValue = field === "infants" ? Math.max(0, Math.min(value, getRoomLimits(room).infants)) : Math.max(0, Math.min(value, totalCapacity));
@@ -394,6 +396,7 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     {rooms.map((room, index) => {
       const selected = getRoomGuests(room);
       const roomLimits = getRoomLimits(room);
+      const guestCountsLocked = lockedRoomIds.includes(room.id);
       const limits = {
         ...roomLimits,
         adults: Math.max(0, totalCapacityFor(room) - selected.children),
@@ -414,24 +417,25 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <p className="text-slate-600">{t("booking.standardCapacity")} <strong className="text-slate-800">{room.guests} {t("booking.people")}</strong></p>
               <p className="text-slate-600">{t("booking.maxAdditionalGuests")} <strong className="text-slate-800">{room.maxExtraGuests ?? 0} {t("booking.people")}</strong></p>
-              <p className="text-slate-600">{t("booking.adultAgeRange")}: <strong className="text-amber-800">{(room.extraAdultFee ?? 0).toLocaleString("vi-VN")}{t("booking.currencyPerPerson")}</strong></p>
-              <p className="text-slate-600">{t("booking.childAgeRange")}: <strong className="text-amber-800">{(room.extraChildFee ?? 0).toLocaleString("vi-VN")}{t("booking.currencyPerPerson")}</strong></p>
+              <p className="text-slate-600">{t("booking.adultAgeRange")}: <strong className="text-amber-800">{formatVnd(room.extraAdultFee ?? 0)}{t("booking.currencyPerPerson")}</strong></p>
+              <p className="text-slate-600">{t("booking.childAgeRange")}: <strong className="text-amber-800">{formatVnd(room.extraChildFee ?? 0)}{t("booking.currencyPerPerson")}</strong></p>
             </div>
             <p className="mt-2 border-t border-blue-100 pt-2 text-slate-500">{t("booking.infantAgeRange")}: <strong className="text-emerald-700">{t("booking.infantFree")}</strong></p>
           </div>
+          {guestCountsLocked && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{t("booking.guestCountsLockedAfterCheckIn")}</p>}
           <div className="grid gap-4 sm:grid-cols-3">
             <label className="text-sm font-semibold text-slate-700">{t("booking.adultAgeRange")}
-              <select value={selected.adults} onChange={(event) => updateRoomGuest(room, "adults", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">
+              <select value={selected.adults} disabled={guestCountsLocked} onChange={(event) => updateRoomGuest(room, "adults", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
                 {countOptions(limits.adults, selected.adults).map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
             <label className="text-sm font-semibold text-slate-700">{t("booking.childAgeRange")}
-              <select value={selected.children} onChange={(event) => updateRoomGuest(room, "children", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">
+              <select value={selected.children} disabled={guestCountsLocked} onChange={(event) => updateRoomGuest(room, "children", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
                 {countOptions(limits.children, selected.children).map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
             <label className="text-sm font-semibold text-slate-700">{t("booking.infantAgeRange")}
-              <select value={selected.infants} onChange={(event) => updateRoomGuest(room, "infants", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400">
+              <select value={selected.infants} disabled={guestCountsLocked} onChange={(event) => updateRoomGuest(room, "infants", Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
                 {countOptions(limits.infants, selected.infants).map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>

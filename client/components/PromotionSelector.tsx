@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 
 export type SelectedPromotion = Promotion;
 
@@ -38,9 +39,9 @@ type PromotionRailProps = {
 
 const promotionValueLabel = (promotion: SelectedPromotion) =>
   String(promotion.valueType ?? "PERCENTAGE").toUpperCase().includes("FIXED")
-    ? `${Number(promotion.value).toLocaleString("vi-VN")}đ`
+    ? formatVnd(Number(promotion.value))
     : `${promotion.value}%`;
-const moneyAmount = (amount: number) => `${Math.round(amount).toLocaleString("vi-VN")}đ`;
+const moneyAmount = (amount: number) => formatVnd(Math.round(amount));
 
 function PromotionRail({ promotions, source, title, loading, error, emptyMessage, appliedPromotion, appliedSource, onApply, onDetails }: PromotionRailProps) {
   const { t } = useTranslation();

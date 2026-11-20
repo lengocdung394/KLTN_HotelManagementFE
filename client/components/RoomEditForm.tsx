@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { formatVnd } from "../lib/currency";
 
 export type RoomEditDraft = {
   roomNumber: string;
@@ -249,7 +250,7 @@ export default function RoomEditForm({
                 {amenities.map((amenity) => (
                   <label key={amenity.id} className="flex items-start gap-2 rounded-lg border border-slate-200 p-2.5 text-sm text-slate-700">
                     <input type="checkbox" checked={draft.amenityIds.includes(amenity.id)} onChange={(event) => toggleAmenity(amenity.id, event.target.checked)} className="mt-0.5" />
-                    <span>{amenity.name}{amenity.price != null ? <span className="ml-1 text-xs text-slate-500">({amenity.price.toLocaleString("vi-VN")}đ)</span> : null}</span>
+                    <span>{amenity.name}{amenity.price != null ? <span className="ml-1 text-xs text-slate-500">({formatVnd(amenity.price)})</span> : null}</span>
                   </label>
                 ))}
                 {amenities.length === 0 && <p className="text-sm text-amber-700">{t("room.editForm.noAmenities")}</p>}

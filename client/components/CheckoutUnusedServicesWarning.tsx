@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 
 export type CheckoutUnusedService = {
   room: string;
@@ -36,7 +37,7 @@ export default function CheckoutUnusedServicesWarning({
             <span>
               {localizedText("Phòng", "Room")} {service.room} · {service.name} x{service.quantity}
             </span>
-            <strong className="shrink-0">{service.amount.toLocaleString("vi-VN")}đ</strong>
+            <strong className="shrink-0">{formatVnd(service.amount)}</strong>
           </li>
         ))}
       </ul>

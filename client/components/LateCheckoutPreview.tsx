@@ -99,9 +99,10 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-250 border-collapse text-left text-xs">
+            <table className="w-full min-w-[900px] border-collapse text-left text-xs">
             <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
               <tr>
+                <th className="whitespace-nowrap px-3 py-2.5">{localizedText("STT", "No.")}</th>
                 <th className="px-3 py-2.5">{localizedText("Phòng", "Room")}</th>
                 <th className="px-3 py-2.5">{localizedText("Khách hàng", "Guest")}</th>
                 <th className="px-3 py-2.5">{localizedText("Mã booking", "Booking ID")}</th>
@@ -114,8 +115,9 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {paginatedRecords.map((record) => (
+              {paginatedRecords.map((record, index) => (
                 <tr key={record.recordId} className="text-slate-700 hover:bg-slate-50/70">
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-900">{record.room}</td>
                   <td className="whitespace-nowrap px-3 py-2.5">{record.guest}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 font-medium">{record.bookingId}</td>

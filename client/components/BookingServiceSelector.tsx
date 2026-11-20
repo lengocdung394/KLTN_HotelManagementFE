@@ -4,6 +4,7 @@ import { Ban, Check, ChevronRight, CreditCard, DoorOpen, ListChecks, ReceiptText
 import type { HotelService } from "../services/serviceApi";
 import { getServicePriceBreakdown } from "../lib/bookingPricing";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 
@@ -39,7 +40,7 @@ export type BookingServiceSelectorProps = {
 };
 
 const formatDate = (value: string, language: string) => new Date(`${value}T00:00:00`).toLocaleDateString(language.startsWith("en") ? "en-US" : "vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
-const money = (value: number) => `${value.toLocaleString("vi-VN")}đ`;
+const money = (value: number) => formatVnd(value);
 const shiftDay = (dateStr: string, delta: number) => {
   const date = new Date(`${dateStr}T00:00:00`);
   date.setDate(date.getDate() + delta);

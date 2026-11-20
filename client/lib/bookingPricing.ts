@@ -12,6 +12,72 @@ export type ServicePriceLine = {
   isAdditional: boolean;
 };
 
+export function roundVndAmount(amount: number) {
+  return Math.round(amount);
+}
+
+export function allocateDiscountByAmount(discountTotal: number, amounts: number[]) {
+  const validAmounts = amounts.map((amount) => Number.isFinite(amount) ? Math.max(0, amount) : 0);
+  const totalAmount = validAmounts.reduce((total, amount) => total + amount, 0);
+  if (totalAmount === 0) return validAmounts.map(() => 0);
+
+  const discount = Math.min(
+    totalAmount,
+    Math.max(0, roundVndAmount(Number.isFinite(discountTotal) ? discountTotal : 0)),
+  );
+  let remainingDiscount = discount;
+  return validAmounts.map((amount, index) => {
+    if (index === validAmounts.length - 1) return remainingDiscount;
+    const share = Math.min(amount, remainingDiscount, roundVndAmount(discount * amount / totalAmount));
+    remainingDiscount -= share;
+    return share;
+  });
+}
+
+export function getBookingTotalFromBreakdown({
+  storedTotal,
+  roomTotal,
+  serviceTotal,
+  surchargeTotal,
+  discountTotal,
+}: {
+  storedTotal: number;
+  roomTotal: number;
+  serviceTotal: number;
+  surchargeTotal: number;
+  discountTotal: number;
+}) {
+  const expectedTotal = Math.max(0, roomTotal + serviceTotal + surchargeTotal - discountTotal);
+  return roundVndAmount(Math.max(storedTotal, expectedTotal));
+}
+
+export function getBookingSurchargeBreakdown(details: readonly Record<string, unknown>[]) {
+  return details.reduce((totals, detail) => {
+    const status = String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").trim().toUpperCase();
+    const isCancelled = status === "CANCELLED";
+    const earlyFee = Number(detail.earlyCheckInFee ?? detail.earlyCheckinFee ?? 0);
+    const lateFee = Number(detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee ?? 0);
+    const otherSurcharges = Number(detail.otherSurcharges ?? 0);
+
+    return {
+      earlyCheckinFeeTotal: totals.earlyCheckinFeeTotal + (!isCancelled && Number.isFinite(earlyFee) ? earlyFee : 0),
+      lateCheckoutFeeTotal: totals.lateCheckoutFeeTotal + (!isCancelled && Number.isFinite(lateFee) ? lateFee : 0),
+      otherSurchargesTotal: totals.otherSurchargesTotal + (Number.isFinite(otherSurcharges) ? otherSurcharges : 0),
+    };
+  }, {
+    earlyCheckinFeeTotal: 0,
+    lateCheckoutFeeTotal: 0,
+    otherSurchargesTotal: 0,
+  });
+}
+
+export function getServiceQuantityForRoom(
+  selection: { quantity: number; applyToRoom?: boolean },
+  guestCount: number,
+) {
+  return selection.applyToRoom === true ? guestCount : selection.quantity;
+}
+
 export function getServicePriceBreakdown(
   selection: ServicePriceSelection,
   currentPrice: number,

@@ -29,6 +29,7 @@ import {
 } from "../services/checkInOutApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import { allocateDiscountByAmount } from "../lib/bookingPricing";
 import { useGetBookingsByHotelQuery, useGetRoomMatrixQuery, type BookingListItem } from "../services/bookingApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
 import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
@@ -298,6 +299,12 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
   const lateFeeIncludedInRemainingAmount = lateFee !== undefined && remainingAmount !== undefined;
   const roomAmount = Number(detail.roomSubTotal ?? detail.roomSubtotal ?? detail.roomAmount ?? detail.roomTotal ?? detail.baseRoomPricePerNight ?? detail.roomPrice ?? detail.totalPrice ?? 0);
   const serviceTotal = services.reduce((total, service) => total + service.amount, 0);
+  const roomDiscount = toFiniteAmount(detail.discountRoomAmount ?? detail.roomDiscountAmount) ?? 0;
+  const serviceDiscount = toFiniteAmount(detail.discountServiceAmount ?? detail.serviceDiscountAmount) ?? 0;
+  const discountAmount = Math.max(
+    toFiniteAmount(detail.discountAmountTotal ?? detail.discountTotal ?? detail.totalDiscountAmount) ?? 0,
+    roomDiscount + serviceDiscount,
+  );
   const totalAmount = Number(detail.totalPrice ?? roomAmount + serviceTotal)
     + earlyCheckInFee
     + (lateFee ?? 0)
@@ -337,6 +344,7 @@ const mapCheckInOutRecord = (detail: CheckInOutBookingDetail, flow: DailyRecord[
     guests: Number(detail.numAdults ?? 0) + Number(detail.numChildren ?? 0) + Number(detail.numInfants ?? 0),
     roomAmount,
     totalAmount,
+    discountAmount,
     earlyCheckInFee,
     otherSurcharges,
     estimatedEarlyCheckInFee,
@@ -435,8 +443,43 @@ export default function CheckInOutWorkspace() {
     skip: !hotelId || Number.isNaN(Number(hotelId)),
   });
   const checkoutFeesByDetailId = useMemo(() => {
-    const fees = new Map<string, { earlyCheckInFee?: number; lateFee?: number; otherSurcharges?: number; lateFeeIncludedInRemainingAmount?: boolean; remainingAmount?: number; paidAmount?: number; surplusAmount?: number }>();
+    const fees = new Map<string, { earlyCheckInFee?: number; lateFee?: number; otherSurcharges?: number; discountAmount?: number; lateFeeIncludedInRemainingAmount?: boolean; remainingAmount?: number; paidAmount?: number; surplusAmount?: number }>();
     hotelBookings.forEach((booking) => {
+      const bookingDetails = booking.bookingDetails ?? [];
+      const activeDetails = bookingDetails.filter((detail) => {
+        const status = String(detail.bookingStatusType ?? detail.bookingDetailStatus ?? detail.status ?? "").toUpperCase();
+        return !status.includes("CANCEL") && !status.includes("HUY") && !status.includes("HỦY");
+      });
+      const detailDiscounts = activeDetails.map((detail) => {
+        const roomDiscount = toFiniteAmount(detail.discountRoomAmount ?? detail.roomDiscountAmount) ?? 0;
+        const serviceDiscount = toFiniteAmount(detail.discountServiceAmount ?? detail.serviceDiscountAmount) ?? 0;
+        return Math.max(
+          toFiniteAmount(detail.discountAmountTotal ?? detail.discountTotal ?? detail.totalDiscountAmount) ?? 0,
+          roomDiscount + serviceDiscount,
+        );
+      });
+      const bookingRoomDiscount = toFiniteAmount(booking.discountRoomAmount) ?? 0;
+      const bookingServiceDiscount = toFiniteAmount(booking.discountServiceAmount) ?? 0;
+      const bookingDiscount = Math.max(
+        toFiniteAmount(booking.discountAmountTotal ?? booking.discountTotal ?? booking.totalDiscountAmount) ?? 0,
+        bookingRoomDiscount + bookingServiceDiscount,
+        detailDiscounts.reduce((total, discount) => total + discount, 0),
+      );
+      const detailDiscountTotal = detailDiscounts.reduce((total, discount) => total + discount, 0);
+      const discountAmounts = detailDiscountTotal === bookingDiscount
+        ? detailDiscounts
+        : allocateDiscountByAmount(bookingDiscount, activeDetails.map((detail) => {
+          const record = mapCheckInOutRecord({
+            ...booking,
+            ...detail,
+            bookingId: booking.bookingId ?? booking.id,
+          }, "check-in");
+          return record.roomAmount + (record.services ?? []).reduce((total, service) => total + service.amount, 0);
+        }));
+      const discountByDetailId = new Map(activeDetails.flatMap((detail, index) => {
+        const detailId = String(detail.bookingDetailId ?? detail.bookingDetailID ?? detail.bookingDetailsId ?? "");
+        return detailId ? [[detailId, discountAmounts[index] ?? 0] as const] : [];
+      }));
       const rawRemainingAmount = booking.remainingAmount as unknown;
       const parsedRemainingAmount = rawRemainingAmount === undefined || rawRemainingAmount === null || rawRemainingAmount === ""
         ? undefined
@@ -449,7 +492,7 @@ export default function CheckInOutWorkspace() {
       const surplusAmount = paidAmount !== undefined && finalAmount !== undefined
         ? Math.max(0, paidAmount - finalAmount)
         : undefined;
-      (booking.bookingDetails ?? []).forEach((detail) => {
+      bookingDetails.forEach((detail) => {
         const detailId = String(detail.bookingDetailId ?? detail.bookingDetailID ?? detail.bookingDetailsId ?? "");
         const rawEarlyFee = detail.earlyCheckInFee ?? detail.earlyCheckinFee;
         const rawLateFee = detail.lateCheckOutFee ?? detail.lateCheckoutFee ?? detail.lateFee;
@@ -463,6 +506,7 @@ export default function CheckInOutWorkspace() {
             earlyCheckInFee: Number.isFinite(earlyFee) ? earlyFee : undefined,
             lateFee: Number.isFinite(lateFee) ? lateFee : undefined,
             otherSurcharges: Number.isFinite(otherSurcharges) ? otherSurcharges : undefined,
+            discountAmount: discountByDetailId.get(detailId),
             lateFeeIncludedInRemainingAmount: hasLateFee && remainingAmount !== undefined,
             remainingAmount,
             paidAmount,
@@ -482,6 +526,7 @@ export default function CheckInOutWorkspace() {
       earlyCheckInFee: fees?.earlyCheckInFee ?? record.earlyCheckInFee,
       lateFee: fees?.lateFee ?? record.lateFee,
       otherSurcharges: fees?.otherSurcharges ?? record.otherSurcharges,
+      discountAmount: fees?.discountAmount ?? record.discountAmount,
       lateFeeIncludedInRemainingAmount: fees?.lateFeeIncludedInRemainingAmount ?? record.lateFeeIncludedInRemainingAmount,
       remainingAmount,
       paidAmount: record.paidAmount ?? fees?.paidAmount,
@@ -609,6 +654,7 @@ export default function CheckInOutWorkspace() {
         return {
           ...record,
           lateFee: fees?.lateFee ?? record.lateFee,
+          discountAmount: fees?.discountAmount ?? record.discountAmount,
           remainingAmount,
           roomPaid: remainingAmount !== undefined ? remainingAmount <= 0 : record.roomPaid,
         };
@@ -713,6 +759,7 @@ export default function CheckInOutWorkspace() {
           const record = mapCheckInOutRecord(commonDetail, "check-in");
           checkIns.push({
             ...record,
+            discountAmount: checkoutFeesByDetailId.get(record.id)?.discountAmount ?? record.discountAmount,
             time: new Date(actualCheckInTime).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
             status: detailStatus === "CHECKED_OUT" ? "Đã trả phòng" : "Đã check-in",
             checkInAt: actualCheckInTime,
@@ -728,6 +775,7 @@ export default function CheckInOutWorkspace() {
           const remainingAmount = booking.remainingAmount === undefined ? undefined : Number(booking.remainingAmount);
           checkOuts.push({
             ...record,
+            discountAmount: checkoutFeesByDetailId.get(record.id)?.discountAmount ?? record.discountAmount,
             time: new Date(actualCheckOutTime).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
             status: "Đã trả phòng",
             checkOutAt: actualCheckOutTime,
@@ -748,7 +796,7 @@ export default function CheckInOutWorkspace() {
     });
 
     return { checkIns, checkOuts };
-  }, [date, hotelBookings]);
+  }, [date, hotelBookings, checkoutFeesByDetailId]);
   useEffect(() => {
     if (!hotelId) return;
     return bindHotelSocketEvents({

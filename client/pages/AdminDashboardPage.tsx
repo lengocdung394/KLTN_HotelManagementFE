@@ -45,6 +45,8 @@ import {
   isCheckoutCompletionUpdate,
   isHousekeepingCompletionUpdate,
   formatRoomUpdateNotification,
+  localizeNotificationDescription,
+  localizeNotificationTitle,
 } from "../lib/roomUpdateNotification";
 import {
   useGetNotificationsQuery,
@@ -88,6 +90,7 @@ import {
   type BedTypeRequest,
 } from "../services/roomApi";
 import { downloadBedTypeTemplate, parseBedTypeFile } from "../lib/bedTypeImport";
+import { getStandardBedTypeEnglishValue } from "../lib/roomLocalization";
 import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } from "../lib/superAdminRoomPolicyImport";
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
@@ -177,16 +180,22 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 const notifyBuildingFloorChange = (entity: "building" | "floor", payload: unknown) => {
   const event = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {};
-  const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
   const name = entity === "building"
     ? String(data.name ?? "Tòa nhà")
     : `Tầng ${String(data.floorNumber ?? "")}`.trim();
+  const title = entity === "building"
+    ? event.action === "UPDATED"
+      ? localizedText("Tòa nhà được chỉnh sửa", "Building updated")
+      : localizedText("Tòa nhà mới", "New building")
+    : event.action === "UPDATED"
+      ? localizedText("Tầng được chỉnh sửa", "Floor updated")
+      : localizedText("Tầng mới", "New floor");
   const description = formatEntityUpdateNotification(
     event,
     name || (entity === "building" ? "Tòa nhà" : "Tầng"),
   );
   toast({
-    title: `${entity === "building" ? "Tòa nhà" : "Tầng"} ${action}`,
+    title,
     description,
   });
 };
@@ -535,10 +544,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         const event = getSocketPayload(payload);
         const description = formatRoomUpdateNotification(event);
         const title = isHousekeepingCompletionUpdate(event)
-          ? "Phòng đã dọn xong"
+          ? localizedText("Phòng đã dọn xong", "Room cleaned")
           : isCheckoutCompletionUpdate(event)
             ? localizedText("Phòng vừa check-out", "Room checked out")
-            : "Phòng được cập nhật";
+            : localizedText("Phòng được cập nhật", "Room updated");
         addNotification(title, description, { category: "room", hotelId: getHotelId(event) });
         if (!isHousekeepingCompletionUpdate(event)) {
           toast({ title, description });
@@ -548,18 +557,20 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       onRoomPolicyUpdated: (payload) => {
         const event = getSocketPayload(payload);
         const data = getSocketPayload(event.data);
-        const action = event.action === "CREATED" ? "được thêm mới" : "được cập nhật";
+        const title = event.action === "CREATED"
+          ? localizedText("Chính sách phòng mới", "New room policy")
+          : localizedText("Chính sách phòng được cập nhật", "Room policy updated");
         const description = formatEntityUpdateNotification(
           event,
           `Cấu hình ${getSocketText(data, "roomType", "loại phòng")}`,
         );
         addNotification(
-          `Cấu hình giá ${action}`,
+          title,
           description,
           { category: "room", hotelId: getHotelId(event) },
         );
         toast({
-          title: `Cấu hình giá ${action}`,
+          title,
           description,
         });
         dispatch(baseApi.util.invalidateTags(["Notification", "BranchRoomPolicy", "SuperAdminBranch"]));
@@ -567,13 +578,15 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       onBuildingChanged: (payload) => {
         const event = getSocketPayload(payload);
         const data = getSocketPayload(event.data);
-        const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
+        const title = event.action === "UPDATED"
+          ? localizedText("Tòa nhà được chỉnh sửa", "Building updated")
+          : localizedText("Tòa nhà mới", "New building");
         const description = formatEntityUpdateNotification(
           event,
           getSocketText(data, "name", "Tòa nhà"),
         );
         addNotification(
-          `Tòa nhà ${action}`,
+          title,
           description,
           { category: "room", hotelId: getHotelId(event) },
         );
@@ -585,14 +598,16 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         const data = getSocketPayload(event.data);
         const building = getSocketPayload(data.building);
         const buildingLabel = building.name ? ` thuộc ${building.name}` : "";
-        const action = event.action === "UPDATED" ? "được chỉnh sửa" : "được thêm mới";
+        const title = event.action === "UPDATED"
+          ? localizedText("Tầng được chỉnh sửa", "Floor updated")
+          : localizedText("Tầng mới", "New floor");
         const floorNumber = getSocketText(data, "floorNumber", "");
         const description = formatEntityUpdateNotification(
           event,
           `Tầng ${floorNumber}${buildingLabel}`,
         );
         addNotification(
-          `Tầng ${action}`,
+          title,
           description,
           { category: "room", hotelId: getHotelId(event) },
         );
@@ -1059,9 +1074,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       : branches.find((branch) => branch.id === notification.hotelId);
   const getNotificationDescription = (notification: AdminNotification) => {
     const branch = getNotificationBranch(notification);
-    return branch
+    const description = branch
       ? notification.description.split(`khách sạn #${notification.hotelId}`).join(`khách sạn ${branch.name}`)
       : notification.description;
+    return localizeNotificationDescription(notification.type, description);
   };
 
   const handleSectionSelect = (id: AdminSection) => {
@@ -1675,25 +1691,25 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       </span>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className={`break-words text-sm text-slate-900 ${notification.read ? "font-medium" : "font-bold"}`}>{notification.title}</h3>
+                          <h3 className={`break-words text-sm text-slate-900 ${notification.read ? "font-medium" : "font-bold"}`}>{localizeNotificationTitle(notification.type, notification.title)}</h3>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${notificationCategoryStyles[notification.category].badge}`}>
                             {notificationCategoryLabels[notification.category]}
                           </span>
-                          {!notification.read && <span className="h-2 w-2 rounded-full bg-blue-600" aria-label="Chưa đọc" />}
+                          {!notification.read && <span className="h-2 w-2 rounded-full bg-blue-600" aria-label={localizedText("Chưa đọc", "Unread")} />}
                         </div>
                         <p className="mt-1 break-words text-sm leading-6 text-slate-700">{getNotificationDescription(notification)}</p>
                         {notification.hotelId !== null && getNotificationDetailCategory(notification) !== null && (
                           <p className="mt-2 text-xs text-slate-500">
-                            Chi nhánh: <span className="font-semibold text-slate-700">{getNotificationBranch(notification)?.name ?? `#${notification.hotelId}`}</span>
+                            {localizedText("Chi nhánh:", "Branch:")} <span className="font-semibold text-slate-700">{getNotificationBranch(notification)?.name ?? `#${notification.hotelId}`}</span>
                           </p>
                         )}
                         <time className="mt-2 block text-xs text-slate-500 sm:hidden" dateTime={notification.occurredAt.toISOString()}>
-                          {notification.occurredAt.toLocaleString("vi-VN")}
+                          {notification.occurredAt.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}
                         </time>
                       </div>
                       <div className="col-start-2 flex flex-wrap items-center gap-2 sm:col-start-auto sm:flex-col sm:items-end sm:justify-between">
                         <time className="hidden text-xs text-slate-500 sm:block" dateTime={notification.occurredAt.toISOString()}>
-                          {notification.occurredAt.toLocaleString("vi-VN")}
+                          {notification.occurredAt.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}
                         </time>
                         {notification.hotelId !== null && (
                           <button
@@ -1702,7 +1718,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-200 hover:bg-blue-50"
                           >
                             <Eye size={14} />
-                            Chi tiết
+                            {localizedText("Chi tiết", "Details")}
                           </button>
                         )}
                         {!notification.read && (
@@ -1711,7 +1727,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                             onClick={() => handleMarkNotificationRead(notification.id)}
                             className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50"
                           >
-                            Đánh dấu đã đọc
+                            {localizedText("Đánh dấu đã đọc", "Mark as read")}
                           </button>
                         )}
                       </div>
@@ -1855,8 +1871,12 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                             {bedTypes.map((bedType, index) => (
                               <tr key={bedType.id} className="text-slate-700 transition hover:bg-slate-50/70">
                                 <td className="px-4 py-3.5 tabular-nums text-slate-500">{index + 1}</td>
-                                <td className="px-4 py-3.5 font-semibold text-slate-900">{bedType.name}</td>
-                                <td className="px-4 py-3.5 text-slate-500">{bedType.description || localizedText("Không có mô tả", "No description")}</td>
+                                <td className="px-4 py-3.5 font-semibold text-slate-900">
+                                  {localizedText(bedType.name, getStandardBedTypeEnglishValue(bedType.name) ?? bedType.name)}
+                                </td>
+                                <td className="px-4 py-3.5 text-slate-500">{bedType.description
+                                  ? localizedText(bedType.description, getStandardBedTypeEnglishValue(bedType.description) ?? bedType.description)
+                                  : localizedText("Không có mô tả", "No description")}</td>
                                 <td className="px-4 py-3.5">
                                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bedType.isExtraBed ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}>
                                     {bedType.isExtraBed ? localizedText("Giường phụ", "Extra bed") : localizedText("Giường thường", "Standard bed")}
@@ -1865,7 +1885,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                                 <td className="px-4 py-3 text-right">
                                   <button
                                     type="button"
-                                    aria-label={localizedText(`Chỉnh sửa ${bedType.name}`, `Edit ${bedType.name}`)}
+                                    aria-label={localizedText(
+                                      `Chỉnh sửa ${bedType.name}`,
+                                      `Edit ${getStandardBedTypeEnglishValue(bedType.name) ?? bedType.name}`,
+                                    )}
                                     disabled={bedType.id == null}
                                     onClick={() => {
                                       if (bedType.id == null) return;
@@ -3198,7 +3221,7 @@ function RoomPolicyEditor({
         <table className="w-full min-w-[1250px] text-left text-xs">
           <thead className="bg-slate-50 font-semibold text-slate-500">
             <tr>
-              <th scope="col" className="px-3 py-3">STT</th>
+              <th scope="col" className="w-14 min-w-14 whitespace-nowrap px-3 py-3">STT</th>
               <th scope="col" className="px-3 py-3">{localizedText("Loại phòng", "Room type")}</th>
               <th scope="col" className="px-3 py-3">{localizedText("Trạng thái", "Status")}</th>
               <th scope="col" className="px-3 py-3">{localizedText("Giá cơ bản", "Base price")}</th>
@@ -3220,7 +3243,7 @@ function RoomPolicyEditor({
                   id={highlightedRoomType === roomType ? "highlighted-branch-detail-row" : undefined}
                   className={`align-middle text-slate-700 ${highlightedRoomType === roomType ? "bg-amber-100 outline outline-2 outline-amber-400" : ""}`}
                 >
-                  <td className="px-3 py-3 tabular-nums text-slate-500">{index + 1}</td>
+                  <td className="w-14 min-w-14 whitespace-nowrap px-3 py-3 tabular-nums text-slate-500">{index + 1}</td>
                   <td className="whitespace-nowrap px-3 py-3 font-semibold text-slate-900">{roomTypeName(roomType)}</td>
                   <td className="px-3 py-3">
                     <span className={`whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${exists ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
@@ -3377,6 +3400,13 @@ function DetailList({
                 </label>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setVisibleColumns(columns.map(() => true))}
+              className="mt-1 w-full rounded-md border-t border-slate-100 px-2 pt-2 text-left text-xs font-semibold text-blue-700 hover:text-blue-800"
+            >
+              {localizedText("Hiện tất cả cột", "Show all columns")}
+            </button>
           </PopoverContent>
         </Popover>
         <span className="ml-auto text-xs text-slate-500">

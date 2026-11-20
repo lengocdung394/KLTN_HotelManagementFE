@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { getRoomAmenityTranslationKey } from "@/lib/roomLocalization";
+import { getRoomAmenityTranslationKey, localizeBedDescription } from "@/lib/roomLocalization";
 
 export type RoomDetailsData = {
   id: string;
@@ -58,21 +58,7 @@ export default function RoomDetailModal({ room, onClose }: { room: RoomDetailsDa
     if (normalized.includes("bao tri") || normalized === "maintenance") return t("room.maintenance");
     return value;
   };
-  const bedName = (value: string) => value.split(" · ").map((item) => {
-    const quantity = item.match(/\s*[×x]\s*(\d+)$/i)?.[1];
-    const name = quantity ? item.replace(/\s*[×x]\s*\d+$/i, "") : item;
-    const normalized = name.toLowerCase();
-    const translated = normalized.includes("2 giường đơn") || normalized.includes("2 single beds")
-      ? t("room.doubleSingleBeds")
-      : normalized.includes("giường đơn") || normalized.includes("single bed")
-        ? t("room.singleBed")
-        : normalized.includes("giường king") || normalized.includes("king-size") || normalized.includes("king size")
-          ? t("room.kingBed")
-          : normalized.includes("chưa cập nhật loại giường")
-            ? t("room.bedNotUpdated")
-            : name;
-    return `${translated}${quantity ? ` × ${quantity}` : ""}`;
-  }).join(" · ");
+  const bedName = (value: string) => localizeBedDescription(value, (key) => t(key));
   const amenityName = (value: string) => {
     const translationKey = getRoomAmenityTranslationKey(value);
     return translationKey ? t(translationKey) : value;

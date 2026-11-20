@@ -23,6 +23,9 @@ import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
 import { isEmployeePortalUser } from "../lib/employeeRoles";
 import { localizedText } from "../i18n";
+import { canAccessModule, getModulePermissionForRoute } from "../lib/modulePermissions";
+import type { AppModulePermissionKey } from "../lib/modulePermissions";
+import { useGetCurrentUserPermissionsQuery } from "../services/authApi";
 import { useGetHotelHousekeepingTasksQuery } from "../services/shiftApi";
 import { useGetCheckInOutSummaryQuery } from "../services/checkInOutApi";
 import {
@@ -81,6 +84,10 @@ export default function AppSidebar({
 }: AppSidebarProps) {
   const { t } = useTranslation();
   const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
+  const { data: currentUserPermissions = [] } = useGetCurrentUserPermissionsQuery(undefined, {
+    refetchOnFocus: true,
+  });
+  const canAccess = (module: AppModulePermissionKey) => canAccessModule(currentUserPermissions, module);
   const isEmployee = isEmployeePortalUser(roles);
   const canManageHousekeepingTasks = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_ADMIN");
   const canViewHousekeepingTasks = canManageHousekeepingTasks || isEmployee;
@@ -88,12 +95,12 @@ export default function AppSidebar({
   const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const { data: checkInOutSummary } = useGetCheckInOutSummaryQuery(
     { date: todayDate },
-    { skip: !hotelId, pollingInterval: 30000 },
+    { skip: !hotelId || !canAccess("checkInOut"), pollingInterval: 30000 },
   );
   const pendingCheckInOutCount =
     (checkInOutSummary?.waitingCheckIn ?? 0) + (checkInOutSummary?.waitingCheckOut ?? 0);
   const { data: housekeepingTasks = [] } = useGetHotelHousekeepingTasksQuery(undefined, {
-    skip: !canViewHousekeepingTasks,
+    skip: !canViewHousekeepingTasks || !canAccess("staffTasks"),
     pollingInterval: 30000,
   });
   const pendingHousekeepingTaskCount = housekeepingTasks.filter((task) => task.status === "NEEDS_ASSIGNMENT").length;
@@ -101,11 +108,11 @@ export default function AppSidebar({
     || roles.includes("ROLE_SUPER_ADMIN")
     || roles.includes("ROLE_ADMIN");
   const { data: bookingCancellations = [] } = useGetBookingCancellationsQuery(undefined, {
-    skip: !canApproveRefunds,
+    skip: !canApproveRefunds || !canAccess("refundApprovals"),
     pollingInterval: 30000,
   });
   const { data: checkoutRefunds = [] } = useGetCheckoutRefundsQuery(undefined, {
-    skip: !canApproveRefunds,
+    skip: !canApproveRefunds || !canAccess("refundApprovals"),
     pollingInterval: 30000,
   });
   const pendingRefundApprovalCount =
@@ -133,10 +140,19 @@ export default function AppSidebar({
   const roomsActive = location.pathname === "/rooms";
   const servicesActive = location.pathname.startsWith("/services");
   const staffActive = location.pathname === "/staff";
-  const canManageServices = roles.includes("ROLE_MANAGER");
-  const canViewServiceCatalog = canManageServices
-    || roles.includes("ROLE_ADMIN")
-    || isEmployee;
+  const canViewServiceCatalog = canAccess("serviceCatalog");
+  const canViewServiceUsage = canAccess("serviceUsage");
+  const canViewAnyService = canViewServiceUsage || canViewServiceCatalog;
+  const canViewAnyStaffMenu = (["staffToday", "staffEmployees", "staffShifts", "staffTasks"] as const)
+    .some(canAccess);
+  const staffLandingPath = canAccess("staffToday")
+    ? "/staff?tab=today"
+    : canAccess("staffEmployees")
+      ? "/staff?tab=employees"
+      : canAccess("staffTasks")
+        ? "/staff?tab=tasks"
+        : "/staff?tab=shifts";
+  const canViewAdminMenu = canAccess("permissions") || canAccess("settings");
   const currentRoomTab = new URLSearchParams(location.search).get("tab");
   const currentStaffTab =
     new URLSearchParams(location.search).get("tab") ?? "today";
@@ -185,7 +201,12 @@ export default function AppSidebar({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
         <nav className="mt-8 flex flex-col gap-1">
-          {items.slice(0, 2).map(([href, label, Icon]) => (
+          {items.slice(0, 2)
+            .filter(([href]) => {
+              const module = getModulePermissionForRoute(href, "");
+              return module !== null && canAccess(module);
+            })
+            .map(([href, label, Icon]) => (
             <Link
               key={href}
               to={href}
@@ -203,7 +224,7 @@ export default function AppSidebar({
               )}
             </Link>
           ))}
-          <div
+          {canAccess("bookings") && <div
             className={`order-2 rounded-xl ${bookingActive ? "bg-blue-900/50" : ""}`}
           >
             <div
@@ -247,8 +268,8 @@ export default function AppSidebar({
                 </Link>
               </div>
             )}
-          </div>
-          <Link
+          </div>}
+          {canAccess("refundApprovals") && <Link
             to="/refund-approvals"
             onClick={onCloseMobile}
             className={`order-8 flex items-center justify-between gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/refund-approvals" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
@@ -262,16 +283,16 @@ export default function AppSidebar({
                 {pendingRefundApprovalCount}
               </span>
             )}
-          </Link>
-          <Link
+          </Link>}
+          {canAccess("hotelRules") && <Link
             to="/hotel-rules"
             onClick={onCloseMobile}
             className={`order-10 flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/hotel-rules" ? "bg-blue-600 text-white shadow-lg shadow-violet-950/30" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
           >
             <ClipboardList size={17} />
             {t("navigation.hotelRules", "Nội quy khách sạn")}
-          </Link>
-          <div className={`order-4 rounded-xl ${roomsActive ? "bg-blue-900/50" : ""}`}>
+          </Link>}
+          {canAccess("rooms") && <div className={`order-4 rounded-xl ${roomsActive ? "bg-blue-900/50" : ""}`}>
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${roomsActive ? "text-white" : "text-slate-400"}`}
             >
@@ -304,7 +325,7 @@ export default function AppSidebar({
                 >
                   {t("navigation.roomList", "Quản lý danh sách phòng")}
                 </Link>
-                {!isEmployee && (
+                {canAccess("roomPricing") && (
                   <Link
                     to="/rooms?tab=pricing"
                     onClick={onCloseMobile}
@@ -315,15 +336,14 @@ export default function AppSidebar({
                 )}
               </div>
             )}
-          </div>
+          </div>}
           {items
             .slice(2)
-            .filter(
-              ([href]) =>
-                href !== "/rooms"
-                && href !== "/services"
-                && !(isEmployee && href === "/reports"),
-            )
+            .filter(([href]) => {
+              if (href === "/rooms" || href === "/services") return false;
+              const module = getModulePermissionForRoute(href, "");
+              return module !== null && canAccess(module);
+            })
             .map(([href, label, Icon]) => (
               <Link
                 key={href}
@@ -337,14 +357,14 @@ export default function AppSidebar({
                 </span>
               </Link>
             ))}
-          <div
+          {canViewAnyService && <div
             className={`order-5 rounded-xl ${servicesActive ? "bg-blue-900/50" : ""}`}
           >
             <div
               className={`flex items-center rounded-xl text-sm font-medium ${servicesActive ? "text-white" : "text-slate-400"}`}
             >
               <Link
-                to="/services/usage"
+                to={canViewServiceUsage ? "/services/usage" : "/services/catalog"}
                 onClick={onCloseMobile}
                 className="flex min-w-0 flex-1 items-center gap-3 whitespace-nowrap px-3 py-2.5 hover:text-white"
               >
@@ -364,19 +384,19 @@ export default function AppSidebar({
               </button>
             </div>
             {servicesMenuOpen && (
-              <div className="space-y-1 pb-2 pl-6 pr-2">
-                <Link
+              <div className="space-y-1 pb-2 pl-4 pr-1">
+                {canViewServiceUsage && <Link
                   to="/services/usage"
                   onClick={onCloseMobile}
-                  className={`block whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-4 ${location.pathname === "/services/usage" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                  className={`block whitespace-nowrap rounded-lg px-2 py-2 text-left text-sm ${location.pathname === "/services/usage" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                 >
                   {t("navigation.serviceUsage", "Thao tác dịch vụ khách hàng")}
-                </Link>
+                </Link>}
                 {canViewServiceCatalog && (
                   <Link
                     to="/services/catalog"
                     onClick={onCloseMobile}
-                    className={`block whitespace-normal break-words rounded-lg px-3 py-2 text-left text-sm leading-4 ${location.pathname === "/services/catalog" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                    className={`block whitespace-nowrap rounded-lg px-2 py-2 text-left text-sm ${location.pathname === "/services/catalog" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                   >
                     {isEmployee
                       ? localizedText("Danh sách dịch vụ", "Service list")
@@ -385,63 +405,32 @@ export default function AppSidebar({
                 )}
               </div>
             )}
-          </div>
+          </div>}
         </nav>
-        <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">
-          {t("common.administration")}
-        </p>
+        {(canViewAnyStaffMenu || canViewAdminMenu) && (
+          <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-500">
+            {t("common.administration")}
+          </p>
+        )}
         <nav className="space-y-1">
-          {isEmployee ? (
-            <>
+          {adminItems
+            .filter(([href]) => href !== "/staff")
+            .filter(([href]) => {
+              const module = getModulePermissionForRoute(href, "");
+              return module !== null && canAccess(module);
+            })
+            .map(([href, label, Icon]) => (
               <Link
-                to="/staff?tab=today"
+                key={href}
+                to={href}
                 onClick={onCloseMobile}
-                className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/staff" && currentStaffTab === "today" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
+                className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
               >
-                <CalendarDays size={17} />
-                {t("staff.todayShifts")}
+                <Icon size={17} />
+                {t(`navigation.${label}`)}
               </Link>
-              <Link
-                to="/staff?tab=tasks"
-                onClick={onCloseMobile}
-                className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/staff" && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
-              >
-                <ClipboardList size={17} />
-                {t("staff.housekeepingAssignment")}
-                {pendingHousekeepingTaskCount > 0 && (
-                  <span
-                    className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold leading-4 text-white"
-                    aria-label={`${pendingHousekeepingTaskCount} ${t("staff.housekeepingAssignment")}`}
-                  >
-                    {pendingHousekeepingTaskCount}
-                  </span>
-                )}
-              </Link>
-              <Link
-                to="/settings"
-                onClick={onCloseMobile}
-                className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === "/settings" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
-              >
-                <Settings size={17} />
-                {t("navigation.settings")}
-              </Link>
-            </>
-          ) : (
-            adminItems
-              .filter(([href]) => href !== "/staff")
-              .map(([href, label, Icon]) => (
-                <Link
-                  key={href}
-                  to={href}
-                  onClick={onCloseMobile}
-                  className={`flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${location.pathname === href ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
-                >
-                  <Icon size={17} />
-                  {t(`navigation.${label}`)}
-                </Link>
-              ))
-          )}
-          {!isEmployee && (
+            ))}
+          {canViewAnyStaffMenu && (
             <div
               className={`rounded-xl ${staffActive ? "bg-blue-900/50" : ""}`}
             >
@@ -449,7 +438,7 @@ export default function AppSidebar({
                 className={`flex items-center rounded-xl text-sm font-medium ${staffActive ? "text-white" : "text-slate-400"}`}
               >
                 <Link
-                  to="/staff?tab=today"
+                  to={staffLandingPath}
                   onClick={onCloseMobile}
                   className="flex min-w-0 flex-1 items-center gap-3 whitespace-nowrap px-3 py-2.5 hover:text-white"
                 >
@@ -470,32 +459,28 @@ export default function AppSidebar({
               </div>
               {staffMenuOpen && (
                 <div className="space-y-1 pb-2 pl-9 pr-2">
-                  <Link
+                  {canAccess("staffToday") && <Link
                     to="/staff?tab=today"
                     onClick={onCloseMobile}
                     className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "today" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                   >
                     {t("staff.todayShifts")}
-                  </Link>
-                  <Link
+                  </Link>}
+                  {canAccess("staffEmployees") && <Link
                     to="/staff?tab=employees"
                     onClick={onCloseMobile}
                     className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "employees" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                   >
                     {t("staff.employeeList")}
-                  </Link>
-                  {roles.includes("ROLE_MANAGER") && (
-                    <Link
+                  </Link>}
+                  {canAccess("staffShifts") && <Link
                       to="/staff?tab=shifts"
                       onClick={onCloseMobile}
                       className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "shifts" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                     >
                       {t("staff.assignShifts")}
-                    </Link>
-                  )}
-                  {(roles.includes("ROLE_MANAGER") ||
-                    roles.includes("ROLE_ADMIN")) && (
-                    <Link
+                    </Link>}
+                  {canAccess("staffTasks") && <Link
                       to="/staff?tab=tasks"
                       onClick={onCloseMobile}
                       className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "tasks" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
@@ -513,8 +498,7 @@ export default function AppSidebar({
                           {pendingHousekeepingTaskCount}
                         </span>
                       )}
-                    </Link>
-                  )}
+                    </Link>}
                 </div>
               )}
             </div>
