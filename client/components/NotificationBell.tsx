@@ -179,7 +179,8 @@ export default function NotificationBell() {
             dispatch(baseApi.util.invalidateTags(["Booking", "Room", "RefundCancellation", "CheckoutRefund"]));
           }
           if (
-            notification.type === "BOOKING_UPDATED"
+            notification.type === "BOOKING_CREATED"
+            || notification.type === "BOOKING_UPDATED"
             || notification.type === "PAYMENT_RECEIVED"
             || notification.type === "BOOKING_CANCELLED"
             || notification.type === "BOOKING_REFUND_REQUESTED"
@@ -202,6 +203,8 @@ export default function NotificationBell() {
       },
       onNewBookingNotification: () => {
         dispatch(baseApi.util.invalidateTags(["Notification", "Booking", "Room"]));
+        void refetchNotifications();
+        void refetchSummary();
       },
       onRoomUpdated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["Room", "Notification"]));

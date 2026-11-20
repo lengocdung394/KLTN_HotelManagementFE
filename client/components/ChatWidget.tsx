@@ -33,6 +33,7 @@ import { useSendChatMessageMutation, useLazyGetChatHistoryQuery, type ChatMessag
 import { useAppSelector } from "@/store/hooks";
 import { emitStaffSendCustomerChat, sendStaffMarkCustomerRead } from "@/lib/socket";
 import { formatVnd as formatVndAmount } from "@/lib/currency";
+import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 
 export interface CustomerLiveMessage {
   id: string | number;
@@ -1164,11 +1165,25 @@ export default function ChatWidget() {
 
   const selectedSession = selectedCustomerId ? customerSessions[selectedCustomerId] : null;
 
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const windowRef = useRef<HTMLDivElement | null>(null);
+  const launcherDrag = useDraggablePosition(launcherRef, {
+    storageKey: "senviet_admin_chat_launcher_pos",
+    allowInteractiveChildren: true,
+  });
+  const windowDrag = useDraggablePosition(windowRef, {
+    storageKey: "senviet_admin_chat_window_pos",
+  });
+
   return (
     <>
       {/* Floating toggle button */}
       <button
+        ref={launcherRef}
+        onPointerDown={launcherDrag.onPointerDown}
+        style={launcherDrag.dragStyle}
         onClick={() => {
+          if (launcherDrag.wasDraggedRef.current) return;
           setOpen((o) => {
             const nextOpen = !o;
             if (nextOpen && unreadTotal > 0) {
@@ -1181,7 +1196,10 @@ export default function ChatWidget() {
           });
         }}
         aria-label="Staff Assistant & Customer Chat"
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 transition-all duration-200 hover:scale-105 hover:from-blue-700 hover:to-indigo-700 active:scale-95"
+        title={isEn ? "Click to open chat · Drag to move" : "Bấm để mở chat · Kéo để di chuyển"}
+        className={`fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl shadow-blue-600/30 hover:scale-105 hover:from-blue-700 hover:to-indigo-700 active:scale-95 ${
+          launcherDrag.isDragging ? "cursor-grabbing scale-105" : "transition-all duration-200 cursor-pointer"
+        }`}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
         {!open && unreadTotal > 0 ? (
@@ -1199,8 +1217,14 @@ export default function ChatWidget() {
       {/* Chat window */}
       {open && (
         <div
-          style={customWidth ? { width: `${customWidth}px`, maxWidth: "calc(100vw - 1.5rem)" } : undefined}
-          className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${isResizing ? "" : "transition-all duration-300 ease-in-out"} ${
+          ref={windowRef}
+          style={{
+            ...windowDrag.dragStyle,
+            ...(customWidth ? { width: `${customWidth}px`, maxWidth: "calc(100vw - 1.5rem)" } : {}),
+          }}
+          className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${
+            isResizing || windowDrag.isDragging ? "" : "transition-all duration-300 ease-in-out"
+          } ${
             isExpanded
               ? "bottom-3 right-3 sm:bottom-6 sm:right-6 w-[calc(100vw-1.5rem)] sm:w-[48rem] md:w-[50vw] max-w-[60rem] h-[93vh] max-h-[58rem]"
               : "bottom-20 right-4 sm:bottom-24 sm:right-6 w-[calc(100vw-2rem)] sm:w-[30rem] h-[37rem] max-h-[85vh]"
@@ -1214,8 +1238,14 @@ export default function ChatWidget() {
           >
             <div className="h-10 w-0.5 rounded-full bg-slate-300 group-hover:bg-blue-500 transition-colors" />
           </div>
-          {/* Header */}
-          <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 text-white shadow-sm">
+          {/* Header (kéo thả di chuyển cửa sổ) */}
+          <div
+            onPointerDown={windowDrag.onPointerDown}
+            title={isEn ? "Drag header to move chat window" : "Kéo thanh tiêu đề để di chuyển khung chat"}
+            className={`flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 text-white shadow-sm select-none ${
+              windowDrag.isDragging ? "cursor-grabbing" : "cursor-grab"
+            }`}
+          >
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm border border-white/20">
                 {activeTab === "ai" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
