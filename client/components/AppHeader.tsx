@@ -2,6 +2,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
 import NotificationBell from "./NotificationBell";
+import UserGuideButton from "./UserGuideButton";
 
 type AppHeaderProps = {
   onMenuClick?: () => void;
@@ -86,6 +87,7 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
         </div>
 
         <NotificationBell />
+        <UserGuideButton />
       </div>
     </header>
   );
