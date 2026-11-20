@@ -2196,7 +2196,7 @@ export default function BookingWorkspace() {
             <span>Đang đổi phòng {roomChangeTargetRoom?.id ?? String(roomChangeTargetDetail?.roomNumber ?? "")} · dịch vụ sẽ được giữ lại.</span>
             <button type="button" onClick={cancelRoomReplacement} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">{t("booking.cancelRoomChange")}</button>
           </div>}
-          <div className="relative z-50 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
+          <div className="relative z-0 grid gap-3 rounded-xl bg-violet-50/70 p-4 sm:grid-cols-[1fr_1fr_auto]">
             <DatePicker label={t("booking.checkInDate")} value={displayedCheckIn} onChange={(value) => updateStayDate("checkIn", value)} hotelId={hotelId} />
             <DatePicker label={t("booking.checkOutDate")} value={displayedCheckOut} min={displayedCheckIn || undefined} onChange={(value) => updateStayDate("checkOut", value)} hotelId={hotelId} />
             <div className="flex items-end pb-2 text-xs font-semibold text-violet-700">{displayedCheckIn && displayedCheckOut ? `${displayedNights} ${t("booking.nights")}` : t("booking.noDateSelected")}</div>
