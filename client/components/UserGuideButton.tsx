@@ -29,7 +29,7 @@ export default function UserGuideButton() {
         <HelpCircle className="h-[19px] w-[19px]" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex h-[94vh] max-h-[94vh] w-[96vw] max-w-[96vw] flex-col overflow-hidden p-4 sm:max-w-[96vw]">
+        <DialogContent className="fixed inset-0 left-0 top-0 z-50 flex h-auto max-h-none w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-3 overflow-hidden rounded-none border-0 p-4 shadow-none sm:rounded-none">
           <DialogHeader className="pr-8 text-left">
             <DialogTitle className="text-xl">
               {isEn ? "Detailed system user guide" : "Hướng dẫn chi tiết sử dụng hệ thống"}
@@ -61,7 +61,7 @@ export default function UserGuideButton() {
           <iframe
             title={isEn ? "English user guide" : "Hướng dẫn sử dụng tiếng Việt"}
             src={guidePdf}
-            className="min-h-0 w-full flex-1 rounded-lg border border-slate-200 bg-white"
+            className="min-h-0 w-full flex-1 bg-white"
           />
         </DialogContent>
       </Dialog>
