@@ -155,7 +155,7 @@ Hủy đặt phòng làm thay đổi trạng thái đặt phòng và có thể p
 1. Mở **Check-in / Check-out**, chọn đúng ngày và tab nhận phòng hoặc trả phòng, sau đó tìm đặt phòng.
 2. Mở đặt phòng và xác nhận mã, khách, phòng, thời gian lưu trú, số người, tình trạng thanh toán và khoản phụ thu đến sớm/trả muộn nếu có.
 3. Khi nhận phòng, thông báo khoản phí đến sớm nếu có; kiểm tra phòng và thông tin thanh toán trước khi hoàn tất.
-4. Khi trả phòng, kiểm tra từng phòng và dịch vụ theo thực tế. Không xác nhận dịch vụ chưa dùng. Kiểm tra khoản trả muộn và số tiền cuối cùng.
+4. Khi trả phòng, kiểm tra từng phòng, hóa đơn và khoản phát sinh. Xác nhận dịch vụ khách thực tế đã dùng tại **Quản lý dịch vụ → Thao tác dịch vụ khách hàng**; không thực hiện xác nhận lượng dịch vụ trong màn hình Check-out. Kiểm tra khoản trả muộn và số tiền cuối cùng.
 5. Nếu cần hoàn khoản thu dư, chọn **Tiền mặt** hoặc **Chuyển khoản** trong phần phương thức hoàn:
    - Với tiền mặt, giao lại tiền cho khách tại quầy và xác nhận đã giao.
    - Với chuyển khoản, chọn ngân hàng và nhập tên chủ tài khoản, số tài khoản. Các trường này bắt buộc trong luồng hoàn dư khi check-out; xác minh với khách trước khi tiếp tục.

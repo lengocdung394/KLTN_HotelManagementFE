@@ -1,0 +1,402 @@
+<!doctype html><html><head><meta charset="utf-8"><title>USER_GUIDE_EN</title><style>
+@page { size: A4; margin: 14mm 12mm 16mm; }
+body { font-family: "Segoe UI", Arial, sans-serif; color: #1e293b; font-size: 10.5pt; line-height: 1.45; }
+h1 { font-size: 22pt; color: #0f172a; margin: 0 0 8mm; }
+h2 { font-size: 16pt; color: #1d4ed8; margin: 8mm 0 3mm; border-bottom: 1px solid #dbeafe; padding-bottom: 2mm; break-after: avoid; }
+h3 { font-size: 13pt; color: #334155; margin: 5mm 0 2mm; break-after: avoid; }
+p, li { text-align: justify; }
+a { color: #1d4ed8; text-decoration: underline; }
+table { width: 100%; border-collapse: collapse; margin: 4mm 0 6mm; }
+th, td { border: 1px solid #cbd5e1; padding: 2mm; text-align: left; }
+th { background: #eff6ff; }
+img { display: block; width: 100%; height: auto; object-fit: contain; }
+figure { break-inside: avoid; }
+figure img { border: 1px solid #cbd5e1; border-radius: 4px; }
+figcaption { margin-top: 1mm; color: #475569; font-size: 9pt; }
+blockquote { margin: 3mm 0; border-left: 3px solid #f59e0b; background: #fffbeb; padding: 2mm 4mm; }
+</style></head><body><h1 id="hotel-management-system-staff-and-branch-manager-guide">Hotel Management System — Staff and Branch Manager Guide</h1>
+<p>This guide explains the staff and branch-manager interface. Menus and actions depend on the signed-in role and branch. Use only actions available to your account. The screenshots in this guide are from the <strong>English interface</strong> and are kept separate from the Vietnamese screenshots in <a href="./USER_GUIDE_VI.md">USER_GUIDE_VI.md</a>.</p>
+<p>Each section names the <strong>screen to open</strong> and the actions performed there. Bold menu names match the navigation labels; screenshots below each section show the referenced pages or dialogs.</p>
+<blockquote>
+<p><strong>Before sharing:</strong> screenshots may show sample guest, employee, booking, or payment information. Review and redact personal or financial details before publishing this guide outside the hotel team.</p>
+</blockquote>
+<h2 id="contents">Contents</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">No.</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td><a href="#1-sign-in-language-and-navigation">Sign in, language, and navigation</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td><a href="#2-overview-and-reports">Overview and reports</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td><a href="#3-create-and-find-bookings">Create and find bookings</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td><a href="#4-edit-a-booking-and-add-services">Edit a booking and add services</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">5</td>
+<td><a href="#5-cancel-a-booking-and-refund-the-guest">Cancel a booking and refund the guest</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">6</td>
+<td><a href="#6-check-in-check-out-and-surplus-refunds">Check-in, check-out, and surplus refunds</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">7</td>
+<td><a href="#7-rooms-rates-buildings-floors-and-hotel-rules">Rooms, rates, buildings, floors, and hotel rules</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">8</td>
+<td><a href="#8-service-catalog-and-guest-service-usage">Service catalog and guest service usage</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">9</td>
+<td><a href="#9-customers-orders-and-invoices">Customers, orders, and invoices</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">10</td>
+<td><a href="#10-promotion-management">Promotion management</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">11</td>
+<td><a href="#11-staff-shifts-and-tasks">Staff, shifts, and tasks</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">12</td>
+<td><a href="#12-refund-approvals">Refund approvals</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">13</td>
+<td><a href="#13-settings-roles-and-permissions">Settings, roles, and permissions</a></td>
+</tr>
+<tr>
+<td style="text-align: right;">14</td>
+<td><a href="#14-troubleshooting-and-safe-operation">Troubleshooting and safe operation</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="1-sign-in-language-and-navigation">1. Sign in, language, and navigation</h2>
+<p><strong>Screen and actions:</strong> Use the <strong>Sign in</strong> screen to enter the system. After signing in, use the left navigation to open a page, the top bar to switch language, and the account card at the bottom of the sidebar to sign out.</p>
+<ol>
+<li>Sign in with the staff or manager account provided to you. Verify the branch shown in the sidebar before changing records.</li>
+<li>Use the left navigation to open a module. Expand a menu item with a chevron to see its pages; use the menu button on smaller screens.</li>
+<li>Select <strong>English</strong> in the top bar to use the English interface. The language switch changes interface labels, not names, notes, or other text entered by users.</li>
+<li>A missing menu may mean that your role does not have access. Ask a manager to confirm your role instead of using another person's account.</li>
+<li>Sign out after work, especially on a shared device.</li>
+</ol>
+<h2 id="2-overview-and-reports">2. Overview and reports</h2>
+<h3 id="overview">Overview</h3>
+<p>The Overview page is for monitoring, not a substitute for checking a booking's full record.</p>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Overview</strong>. The summary cards, arrival/departure schedule, and services-awaiting-confirmation list are on this page; open the relevant module to complete a transaction.</p>
+<ol>
+<li>Open <strong>Overview</strong> and review the summary cards for current branch activity.</li>
+<li>Check the selected date, then use the date controls to move to another day or return to today.</li>
+<li>Select the arrival, departure, or early check-in list to find the relevant booking.</li>
+<li>Open a row only after checking the guest and room. Continue the transaction in Check-in / Check-out or Booking management.</li>
+<li>In services awaiting confirmation, verify the booked service and quantity against actual use before confirming it.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/overview/01.jpg" alt="Branch overview" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Branch overview</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/overview/02.jpg" alt="Arrival, departure, and schedule" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Arrival, departure, and schedule</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/overview/03.jpg" alt="Services awaiting confirmation" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Services awaiting confirmation</figcaption></figure>
+</div>
+
+<h3 id="revenue-reports">Revenue reports</h3>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Revenue reports</strong>. Choose the reporting period in the top filter, then review the report tabs/tables.</p>
+<ol>
+<li>Open <strong>Revenue reports</strong> and choose the reporting period before interpreting totals.</li>
+<li>Review the available summary, room, service, promotion, booking-status, and cancellation breakdowns.</li>
+<li>Use the report tabs/filters to compare categories. If the range is wrong or data is still loading, correct the filter or reload before exporting or sharing results.</li>
+<li>Reconcile a discrepancy against the underlying bookings and invoices; do not treat a blank or failed report as zero.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/reports/01.jpg" alt="Revenue, operations, and payment overview" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Revenue and operations overview</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/reports/02.jpg" alt="Daily booking and service revenue" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Booking and service revenue</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/reports/03.jpg" alt="Promotion performance and bookings by room type" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Promotions and bookings by room type</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/reports/04.jpg" alt="Cancelled bookings and refund tracking" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Cancelled bookings and refund tracking</figcaption></figure>
+</div>
+
+<h2 id="3-create-and-find-bookings">3. Create and find bookings</h2>
+<h3 id="create-a-booking">Create a booking</h3>
+<p><strong>Screen and actions:</strong> <strong>Booking management → Bookings</strong> → <strong>New booking</strong>. The form proceeds through <strong>Dates &amp; rooms → Booking information → Services → Promotion/summary</strong>.</p>
+<ol>
+<li>Open <strong>Booking management → Bookings</strong> and choose <strong>New booking</strong>.</li>
+<li>In the date-and-room step, select check-in and then check-out. Confirm the night count and use the calendar legend to distinguish available rooms from unavailable ones.</li>
+<li>Search or filter by room type, floor, or building. Select the required available room cells; click a selected cell again to remove it. For multiple rooms, check every room and date before continuing.</li>
+<li>Find an existing customer or enter the guest information requested by the form. Verify the selected profile, contact details, guest counts per room, capacity, and any displayed surcharge.</li>
+<li>Choose services for all rooms or configure them room by room. Check the unit, quantity, room assignment, and estimated charge. Leave unrequested services unselected.</li>
+<li>Search for a promotion or enter a code. Open its details to check its scope, minimum spend, validity, and status before applying it.</li>
+<li>Review the final guest, rooms, dates, services, promotion, and total. Submit once and wait for confirmation; record the booking reference.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-create/01.jpg" alt="Select the stay dates and rooms to book" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Select dates and rooms</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-create/02.jpg" alt="Search for and select a guest profile" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Find and select a guest</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-create/03.jpg" alt="Enter guest details and guest counts for the selected room" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Enter guest information</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-create/04.jpg" alt="Review guest details and room occupancy before continuing" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Review guest and room details</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-create/05.jpg" alt="Choose services for the rooms in the booking" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Select services</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-create/06.jpg" alt="Apply a promotion and review the booking total" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 06 - Select a promotion and confirm the booking</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-create/07.jpg" alt="Confirmation that the booking was created successfully" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 07 - Booking created successfully</figcaption></figure>
+</div>
+
+<h3 id="find-and-review-an-existing-booking">Find and review an existing booking</h3>
+<p><strong>Screen and actions:</strong> <strong>Booking management → Booking list</strong>. Search the table, then select the row/details action to open the booking record and payment history.</p>
+<ol>
+<li>Open <strong>Booking management → Booking list</strong>. Search and filter by the available booking, guest, date, and status fields.</li>
+<li>Verify the booking reference, guest, dates, rooms, payment status, and total before opening or editing it.</li>
+<li>Use the booking details and payment history to reconcile amounts. Use edit actions only while the booking is in a state that permits the requested change.</li>
+<li>After saving, reopen or refresh the record and verify the resulting status and values.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-list/01.jpg" alt="Booking list with reservations and current statuses" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Booking list and statuses</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-list/02.jpg" alt="Booking details with guest, room, and payment totals" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Booking details and payment</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-list/03.jpg" alt="Select a payment method and record booking payment" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Record a booking payment</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-list/04.jpg" alt="Confirmation that booking payment was received" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Booking payment received</figcaption></figure>
+</div>
+
+<h2 id="4-edit-a-booking-and-add-services">4. Edit a booking and add services</h2>
+<p>Use this workflow when a guest asks to add a service to an existing booking. It is separate from adding a service to the general service catalog.</p>
+<p><strong>Screen and actions:</strong> <strong>Booking management → Booking list</strong> → select the booking → <strong>Edit</strong>. In the edit form, use <strong>Add services to selected rooms</strong>; <strong>Update</strong> saves the booking changes.</p>
+<ol>
+<li>In <strong>Booking list</strong>, find the correct booking and open its edit action. Confirm the booking reference and guest before changing anything.</li>
+<li>Review the rooms and existing services. The service editor applies additions to active rooms; cancelled or inactive rooms cannot be used for new service selections.</li>
+<li>In <strong>Add services to selected rooms</strong>, open the relevant room and select the requested service. Set the quantity for that room and check the displayed unit and price.</li>
+<li>Repeat for each applicable room. Do not select the same service for every room unless the guest requested it for every room.</li>
+<li>Review the existing quantities and new selections. Remove accidental selections and confirm the affected room and quantity.</li>
+<li>Select <strong>Update</strong> once, wait for the save result, then reopen the booking to verify the service and quantity were recorded.</li>
+<li>Explain any resulting charge to the guest and check the updated invoice/payment balance through the normal branch process.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-add-services/01.jpg" alt="Booking list before editing" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Booking list before editing</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-add-services/02.jpg" alt="Select additional services by room" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Select additional services by room</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-add-services/03.jpg" alt="Review service totals" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Review service totals</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-add-services/04.jpg" alt="Booking updated successfully" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Booking updated successfully</figcaption></figure>
+</div>
+
+<h2 id="5-cancel-a-booking-and-refund-the-guest">5. Cancel a booking and refund the guest</h2>
+<p>Cancellation changes a booking and may create a refund. Check the hotel's policy and the guest's payment before confirming.</p>
+<p><strong>Screen and actions:</strong> <strong>Booking management → Booking list</strong> → <strong>Cancel booking</strong> opens the cancellation dialog. Review the <strong>Preview</strong>, choose cash/bank under <strong>Refund method</strong>, then enter any reason/email and confirm in the same dialog. Bank details can also be added later in <strong>Refund approvals</strong>.</p>
+<ol>
+<li>In <strong>Booking list</strong>, find and verify the booking. The staff cancellation action is available only for bookings in <strong>Pending</strong> or <strong>Confirmed</strong> status.</li>
+<li>Choose <strong>Cancel booking</strong>. Wait for the refund preview; it is calculated from the payment and cancellation policy.</li>
+<li>Review the amount paid, room amount, room penalty, room refund, service refund, total refund, policy tier, and time remaining until check-in. If the preview fails or is missing, retry; do not confirm cancellation without a valid preview.</li>
+<li>The preview applies these room-penalty tiers: cancellation at least 72 hours before check-in has no room penalty; 24 to under 72 hours has a 50% penalty on the allocated room payment; under 24 hours or no-show has a 100% penalty on the allocated room payment. The service refund is calculated from its allocated payment; the room penalty is deducted from the room portion.</li>
+<li>Select the refund method:</li>
+<li><strong>Cash at hotel:</strong> hand the displayed amount to the guest, then check the confirmation that it was actually handed over. A cash refund is recorded immediately when cancellation is confirmed.</li>
+<li><strong>Refund to bank account:</strong> select the bank and enter the account holder and account number if available. Bank details are optional at cancellation and can be added later in Refund approvals. If entered here, provide all required account fields; the account number must contain 6–50 digits. A bank refund waits for manager approval and transfer.</li>
+<li>Optionally enter a cancellation reason and guest notification email. Check the email spelling if provided.</li>
+<li>Confirm cancellation once. Verify the success message and the new booking/refund status. For bank refunds, cancellation does not mean the transfer has already been sent; follow the approval workflow in section 12.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-cancel/01.jpg" alt="Refund preview and payment breakdown" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Refund preview and payment breakdown</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-cancel/02.jpg" alt="Choose cash or bank refund" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Choose cash or bank refund</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-cancel/03.jpg" alt="Review cancellation conditions" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Review cancellation conditions</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-cancel/04.jpg" alt="Enter bank account details" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Enter bank account details</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-cancel/05.jpg" alt="Review cancellation details" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Review cancellation details</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-cancel/06.jpg" alt="Cancellation result" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 06 - Cancellation result</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/booking-cancel/07.jpg" alt="Additional cancellation/refund screen" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 07 - Additional cancellation/refund screen</figcaption></figure>
+</div>
+
+<h2 id="6-check-in-check-out-and-surplus-refunds">6. Check-in, check-out, and surplus refunds</h2>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Check-in / Check-out</strong>. Select the check-in or check-out tab and open a booking to review each room; choose the surplus-refund method in the checkout confirmation form. For batch actions, use the checkboxes in the list.</p>
+<ol>
+<li>Open <strong>Check-in / Check-out</strong>, select the correct date and the check-in or check-out view, then search for the booking.</li>
+<li>Open the booking and verify its reference, guest, room, stay dates, guest count, payment state, and any early/late-stay charges.</li>
+<li>For check-in, explain any applicable early-arrival charge and confirm the room and payment details before completing the action.</li>
+<li>For check-out, review each room, invoice, and extra charge. Confirm services actually used in <strong>Service management → Guest service usage</strong>; do not confirm service quantities in the Check-out screen. Review late check-out charges and the final amount.</li>
+<li>If a surplus payment must be refunded, choose <strong>Cash</strong> or <strong>Bank transfer</strong> in the refund-choice section:</li>
+<li>For cash, return the amount to the guest at the desk and confirm the actual handover.</li>
+<li>For bank transfer, select the bank and enter the account holder and account number. These fields are required for this checkout bank-refund flow; verify them with the guest before continuing.</li>
+<li>Recheck the refund amount and booking/room selection, then complete check-out once. A bank refund remains subject to manager approval and transfer in Refund approvals.</li>
+<li>For group or batch check-out, review the selected rooms individually. A bulk action applies to the selected records, so remove any unintended selection before confirming.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/01.jpg" alt="Check-in queue with one booking awaiting processing" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Bookings waiting for check-in</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/02.jpg" alt="Early check-in confirmation with room and surcharge charges" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Confirm early check-in and surcharge</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/03.jpg" alt="Bookings checked in today" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Bookings checked in today</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/04.jpg" alt="Check-out queue with an outstanding payment invoice" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Check-out queue and invoice</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/05.jpg" alt="Check-out confirmation when the guest has a 600 VND balance due" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Check-out with a balance due</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/06.jpg" alt="Check-out confirmation when the booking is fully paid" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 06 - Check-out with no balance due</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/07.jpg" alt="Completed check-out list with invoice viewing action" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 07 - Completed check-out and invoice</figcaption></figure>
+</div>
+
+<h2 id="7-rooms-rates-buildings-floors-and-hotel-rules">7. Rooms, rates, buildings, floors, and hotel rules</h2>
+<h3 id="room-list-and-room-details">Room list and room details</h3>
+<p><strong>Screen and actions:</strong> <strong>Room management → Room list management</strong>. Use the table and filters to find a room; select its row or the add/edit action to open room details.</p>
+<ol>
+<li>Open <strong>Room management → Room list</strong>. Search/filter by room, type, floor, building, and status.</li>
+<li>Open the correct room to review its details, capacity, amenities, images, and current status.</li>
+<li>Add or edit a room only if authorized. Check room number, type, building/floor, and capacity before saving.</li>
+<li>Use the room status that reflects the real situation. Do not mark a room ready until cleaning or inspection is complete.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-list/01.jpg" alt="Room list and room status overview" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Room list and status</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-list/02.jpg" alt="Bulk import rooms from Excel or ZIP" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Bulk import rooms from Excel/ZIP</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-list/03.jpg" alt="Create a new room form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Create a room</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-list/04.jpg" alt="Room details dialog" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Room details</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-list/05.jpg" alt="Room image gallery" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Room image gallery</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-list/06.jpg" alt="Edit room details form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 06 - Edit room details</figcaption></figure>
+</div>
+
+<h3 id="base-room-rates">Base room rates</h3>
+<p><strong>Screen and actions:</strong> <strong>Room management → Pricing configuration → Pricing by room type</strong>. Select a room-type card to review or edit the base rate.</p>
+<ol>
+<li>Open <strong>Room management → Pricing configuration → Pricing by room type</strong>.</li>
+<li>Select the correct room type and check the nightly rate, standard capacity, extra-guest limit, and adult/child surcharges.</li>
+<li>Update a rate only after confirming the approved pricing. Save once and recheck the room-type card.</li>
+</ol>
+<h3 id="event-based-pricing">Event-based pricing</h3>
+<p><strong>Screen and actions:</strong> On <strong>Pricing configuration</strong>, switch to the <strong>Pricing by event</strong> tab to filter event rules or select <strong>Create pricing event</strong> to open its form.</p>
+<ol>
+<li>Select the <strong>Pricing by event</strong> tab to review pricing rules. Use search, date, status, or room-type filters to find an event.</li>
+<li>Select <strong>Create pricing event</strong>. Enter the event name and the exact start and end dates.</li>
+<li>In each pricing group, select the room types it covers and enter the <strong>applicable room price (VND)</strong> for that group. Verify that every intended room type is assigned to the correct group.</li>
+<li>Save only after reviewing the name, date range, room types, and prices in every group. Find the event in the table to verify its status, validity period, and prices.</li>
+</ol>
+<h3 id="buildings-and-floors">Buildings and floors</h3>
+<p><strong>Screen and actions:</strong> <strong>Room management → Room list</strong> → <strong>Buildings</strong> or <strong>Floors</strong> tab. Add/edit opens the corresponding form; Excel/CSV import is in the floors tab.</p>
+<ol>
+<li>In <strong>Room list management</strong>, open the <strong>Buildings</strong> tab to search, add, or edit a building. When adding, enter its name; the building code is generated after saving.</li>
+<li>Open <strong>Floors</strong>, select the correct building, and add each floor as a positive whole number.</li>
+<li>For Excel/CSV import, download the template and provide the building (it may be blank to use the selected building) and floor numbers. Existing duplicate floors are skipped; review the floor list after import.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-pricing/01.jpg" alt="Base prices by room type" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Base prices by room type</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-pricing/02.jpg" alt="Edit a room-type price" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Edit a room-type price</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-pricing/03.jpg" alt="Event pricing list" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Event pricing list</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-pricing/04.jpg" alt="Filter events by date" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Filter events by date</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/room-pricing/05.jpg" alt="Create an event-pricing rule" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Create an event-pricing rule</figcaption></figure>
+</div>
+
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/floor-building/01.jpg" alt="Building list" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Building list</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/floor-building/02.jpg" alt="Create or edit a building" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Create or edit a building</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/floor-building/03.jpg" alt="Building setup" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Building setup</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/floor-building/04.jpg" alt="Floors for the selected building" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Floors for the selected building</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/floor-building/05.jpg" alt="Import floors from a spreadsheet" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Import floors from a spreadsheet</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/floor-building/06.jpg" alt="Add or edit a floor" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 06 - Add or edit a floor</figcaption></figure>
+</div>
+
+<h3 id="hotel-rules">Hotel rules</h3>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Hotel rules</strong>. Read check-in/check-out times, cancellation, and service policies here; this is a policy reference page, not the booking-cancellation screen.</p>
+<p>Open <strong>Hotel rules</strong> to check the branch's check-in/check-out times, cancellation terms, and service policies before advising a guest. Follow the published rule and refer unclear exceptions to a manager.</p>
+<h2 id="8-service-catalog-and-guest-service-usage">8. Service catalog and guest service usage</h2>
+<h3 id="service-catalog">Service catalog</h3>
+<p><strong>Screen and actions:</strong> <strong>Service management → Service catalog management</strong> (employees may see <strong>Service list</strong>). Search the service table; add/edit opens the service form, and bulk import is in the same module.</p>
+<ol>
+<li>Open <strong>Service management → Service catalog</strong>. Search/filter the list and review the service name, category, price, unit, image, and active state.</li>
+<li>Open details to inspect the description. Managers with permission can add or edit a service; employees may have read-only access.</li>
+<li>When adding a service, complete the required name, price, unit, category, image, and description. Review the preview and save once.</li>
+<li>Use bulk import only with the supplied ZIP/Excel structure. Match each image filename to the spreadsheet row and review validation errors before sending the import.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/service-catalog/01.jpg" alt="Service list with add and file import actions" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Service list</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/service-catalog/02.jpg" alt="Bulk service import dialog for ZIP and Excel files" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Import services from Excel/ZIP</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/service-catalog/03.jpg" alt="Hotel service creation form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Add a service</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/service-catalog/04.jpg" alt="Hotel service editing form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Edit a service</figcaption></figure>
+</div>
+
+<h3 id="confirm-services-used-by-a-guest">Confirm services used by a guest</h3>
+<p><strong>Screen and actions:</strong> <strong>Service management → Customer service operations</strong>. Open a pending booking/service, enter the actual usage quantity, and confirm on this screen.</p>
+<ol>
+<li>Open <strong>Service management → Guest service usage</strong> and find the booking/service waiting for confirmation.</li>
+<li>Verify the guest, booking, room, service, unit, and remaining quantity.</li>
+<li>Enter only the amount actually used and confirm. Do not confirm an unused service; ask the guest or manager if usage is unclear.</li>
+<li>Check the usage history after saving.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/service-usage/01.jpg" alt="Services waiting for usage confirmation" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Services awaiting confirmation</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/service-usage/02.jpg" alt="Booking and service details pending confirmation" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Review service usage details</figcaption></figure>
+</div>
+
+<h2 id="9-customers-orders-and-invoices">9. Customers, orders, and invoices</h2>
+<h3 id="customers">Customers</h3>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Customer management</strong>. Search the list and open a customer profile to view its details and booking history.</p>
+<p>Search by the available name, phone, or email fields and verify the profile before opening it. Review booking history as needed. Add or edit customer details only when authorized, and keep personal information private.</p>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/customer-management/01.jpg" alt="Customer profile list" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Customer list</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/customer-management/02.jpg" alt="Add customer form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Add a customer</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/customer-management/03.jpg" alt="Customer booking history" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - View a customer's booking history</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/customer-management/04.jpg" alt="Verify customer identity before editing profile" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Verify identity to edit a profile</figcaption></figure>
+</div>
+
+<h3 id="orders-and-invoices">Orders and invoices</h3>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Invoice management</strong>. Find the invoice/order record here and open its details to reconcile the booking, charges, and payments.</p>
+<p>Use <strong>Order management</strong> to review the order list and its status/details. Use <strong>Invoice management</strong> to find the correct invoice, inspect its booking, charges, payments, and balance, and reconcile it with the original booking. Do not change a financial record outside your permission.</p>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/order-management/01.jpg" alt="Order list and booking references" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Order list</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/order-management/02.jpg" alt="Order details and related payment information" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Order details</figcaption></figure>
+</div>
+
+<h2 id="10-promotion-management">10. Promotion management</h2>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Promotion management</strong>. Date/status filters and summary cards are on the list page; select a promotion or the create/edit action to open its details/form.</p>
+<ol>
+<li>Open <strong>Promotion management</strong> and choose the relevant date/month. Use search and status/scope filters to locate an offer.</li>
+<li>Review summary cards and the promotion list. The summary describes the selected reporting period; check the date range before interpreting it.</li>
+<li>Open a promotion's details to inspect discount type/value, scope, minimum amounts, validity, usage limits, and status.</li>
+<li>Authorized managers can create or edit a promotion. Enter the required dates, scope, discount, limits, and status; validate the fields and review the saved record.</li>
+<li>Before applying a code to a booking, confirm that it is active, within its validity dates, and meets the booking's scope and minimum-value requirements.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/promotion-management/01.jpg" alt="Promotion summary cards and program list" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Promotion program overview</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/promotion-management/02.jpg" alt="Promotion code list and filters" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Promotion code list</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/promotion-management/03.jpg" alt="Create promotion form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Create a promotion</figcaption></figure>
+</div>
+
+<h2 id="11-staff-shifts-and-tasks">11. Staff, shifts, and tasks</h2>
+<h3 id="staff-directory">Staff directory</h3>
+<p><strong>Screen and actions:</strong> <strong>Staff &amp; shifts → Employee directory</strong>. Search the table and select an employee or add/edit action to open the employee record.</p>
+<p>Search for the correct employee and check branch, role, and active status. Only authorized managers should add or edit employee records or role assignments.</p>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-directory/01.jpg" alt="Employee directory and profile management" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Employee directory</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-directory/02.jpg" alt="Add employees from an Excel file" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Add employees from Excel</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-directory/03.jpg" alt="New employee form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Add an employee</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-directory/04.jpg" alt="Edit employee profile and account" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Edit employee profile and account</figcaption></figure>
+</div>
+
+<h3 id="shifts">Shifts</h3>
+<p><strong>Screen and actions:</strong> <strong>Staff &amp; shifts → Shifts</strong> to view the schedule; use <strong>Assign shifts</strong> to create or assign them. Employees view their own shifts in the staff page.</p>
+<ol>
+<li>Open the shift schedule and select the week/date to review.</li>
+<li>For a new shift, select the employee, date, and shift/time slot. Check for duplicate or overlapping shifts and verify the employee belongs to the correct branch.</li>
+<li>Save/publish once and confirm that the shift appears on the schedule. Staff should check their own assigned shifts before starting work.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-weekly-shifts/01.jpg" alt="Today's staff shift roster" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Today's shift roster</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-weekly-shifts/02.jpg" alt="Staff shifts by day for the selected week" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Weekly staff schedule</figcaption></figure>
+</div>
+
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-assign-shifts/01.jpg" alt="Weekly shift planning and publication controls" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Set up the weekly shift schedule</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-assign-shifts/02.jpg" alt="Weekly shifts assigned by employee and day" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Weekly schedule by employee</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-assign-shifts/03.jpg" alt="Required staffing coverage for each shift and day" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Check staffing coverage by shift</figcaption></figure>
+</div>
+
+<h3 id="tasks">Tasks</h3>
+<p><strong>Screen and actions:</strong> Managers: <strong>Staff &amp; shifts → Assign tasks</strong>. Employees: <strong>Housekeeping assignments</strong> in the staff page. Assignment and status updates are performed in the screen available to each role.</p>
+<p>Managers open <strong>Task assignment</strong>, select the room/task and the eligible on-duty employee, then review the assignment before saving. Staff open their task list, check the room and instructions, and update the status only when the work has actually progressed or finished.</p>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-tasks/01.jpg" alt="Manager assigns checkout-room cleaning to on-duty staff" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Manager assigns room-cleaning tasks</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/staff-tasks/02.jpg" alt="Employee receives and confirms a room-cleaning task" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Staff task list and cleaning confirmation</figcaption></figure>
+</div>
+
+<h2 id="12-refund-approvals">12. Refund approvals</h2>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Refund approvals</strong>. Select a request in the queue to open its details; add bank details, approve/reject, and verify status on this screen.</p>
+<ol>
+<li>Open <strong>Refund approvals</strong> and review the pending queue. Open a request and verify its booking, guest, amount, refund method, reason, and bank details.</li>
+<li>For bank refunds, confirm the account details with the guest before approving. If details are missing or incorrect, use the available action to request or enter the correct details; do not approve an unverified destination.</li>
+<li>Approve or reject only if your role allows it and the request matches policy. Record/perform the transfer through the hotel's authorized process.</li>
+<li>Verify the resulting status. A bank refund is complete only after the approval/transfer process is recorded; do not tell a guest the funds have arrived before confirmation.</li>
+<li>Cash-refund requests should be reconciled with the actual handover and the system's recorded status.</li>
+</ol>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/refund-approvals/01.jpg" alt="Surplus refunds waiting for checkout reconciliation" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Checkout surplus refunds</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/refund-approvals/02.jpg" alt="Refund requests from booking cancellations" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Booking cancellation refunds</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/refund-approvals/03.jpg" alt="Checkout refund approval and recipient account form" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Approve a checkout refund</figcaption></figure>
+</div>
+
+<h2 id="13-settings-roles-and-permissions">13. Settings, roles, and permissions</h2>
+<h3 id="settings">Settings</h3>
+<p><strong>Screen and actions:</strong> Sidebar → <strong>Settings</strong>. Change only account/branch fields available to your role and verify them after saving.</p>
+<p>Open <strong>Settings</strong> to review the account and branch details available to you. Change only fields assigned to your role. Verify any updated branch details or images after saving.</p>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/settings/01.jpg" alt="Account details and branch settings" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Account and branch information</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/settings/02.jpg" alt="Password verification before editing settings" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Verify password to edit settings</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/settings/03.jpg" alt="Manage branch image gallery" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Manage branch images</figcaption></figure>
+</div>
+
+<h3 id="roles-and-permissions">Roles and permissions</h3>
+<p><strong>Screen and actions:</strong> Use <strong>Role management</strong> to review/edit roles and <strong>Permissions</strong> to inspect access by role. These are separate screens in the administration area.</p>
+<p>Use <strong>Role management</strong> to review or maintain roles only if authorized. In <strong>Permissions</strong>, inspect the role and its available access. Ask an administrator to change access when a menu or action is unavailable; never bypass access controls.</p>
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/roles/01.jpg" alt="Screen 01 - roles" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - roles</figcaption></figure>
+</div>
+
+<div align="center">
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/permissions/01.jpg" alt="Screen 01 - permissions" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - permissions</figcaption></figure>
+</div>
+
+<h2 id="14-troubleshooting-and-safe-operation">14. Troubleshooting and safe operation</h2>
+<p><strong>Screen and actions:</strong> Check the page where the issue occurred (Booking list, Check-in / Check-out, Refund approvals, or Service catalog). If a menu/action is missing, review access in <strong>Permissions</strong> with a manager.</p>
+<ul>
+<li><strong>A booking or room is missing:</strong> check the selected branch, date, tab, search terms, and filters; clear filters and reload before assuming the record does not exist.</li>
+<li><strong>A refund preview or amount is unavailable:</strong> retry the preview. Do not cancel or check out with an unverified amount.</li>
+<li><strong>A bank refund cannot continue:</strong> verify the bank, account holder, and account number with the guest. Cancellation can be completed with bank details added later where the screen allows it; checkout requires its displayed bank details before submission.</li>
+<li><strong>A service is missing or has the wrong quantity:</strong> verify the active room and service catalog, then reopen the booking. Do not confirm more usage than the guest received.</li>
+<li><strong>A save appears to be taking a long time:</strong> wait for the result and check the record before submitting again, to avoid duplicate actions.</li>
+<li><strong>A menu or button is unavailable:</strong> ask a manager to confirm permissions.</li>
+<li>Before any action affecting money, bookings, rooms, or employee schedules, verify the record and values one final time.</li>
+</ul></body></html>

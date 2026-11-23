@@ -152,7 +152,7 @@ Cancellation changes a booking and may create a refund. Check the hotel's policy
 1. Open **Check-in / Check-out**, select the correct date and the check-in or check-out view, then search for the booking.
 2. Open the booking and verify its reference, guest, room, stay dates, guest count, payment state, and any early/late-stay charges.
 3. For check-in, explain any applicable early-arrival charge and confirm the room and payment details before completing the action.
-4. For check-out, check each room and service against actual use. Do not mark an unused service as consumed. Review late check-out charges and the final amount.
+4. For check-out, review each room, invoice, and extra charge. Confirm services actually used in **Service management → Guest service usage**; do not confirm service quantities in the Check-out screen. Review late check-out charges and the final amount.
 5. If a surplus payment must be refunded, choose **Cash** or **Bank transfer** in the refund-choice section:
    - For cash, return the amount to the guest at the desk and confirm the actual handover.
    - For bank transfer, select the bank and enter the account holder and account number. These fields are required for this checkout bank-refund flow; verify them with the guest before continuing.
