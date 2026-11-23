@@ -8,20 +8,22 @@ Mỗi phần dưới đây ghi rõ **giao diện cần mở** và thao tác th�
 
 ## Mục lục
 
-1. [Đăng nhập, ngôn ngữ và điều hướng](#1-đăng-nhập-ngôn-ngữ-và-điều-hướng)
-2. [Tổng quan và báo cáo](#2-tổng-quan-và-báo-cáo)
-3. [Tạo và tra cứu đặt phòng](#3-tạo-và-tra-cứu-đặt-phòng)
-4. [Chỉnh sửa đặt phòng và thêm dịch vụ](#4-chỉnh-sửa-đặt-phòng-và-thêm-dịch-vụ)
-5. [Hủy đặt phòng và hoàn tiền cho khách](#5-hủy-đặt-phòng-và-hoàn-tiền-cho-khách)
-6. [Check-in, check-out và hoàn tiền dư](#6-check-in-check-out-và-hoàn-tiền-dư)
-7. [Phòng, giá, tòa nhà, tầng và nội quy](#7-phong-gia-toa-nha-tang-va-noi-quy)
-8. [Danh mục dịch vụ và xác nhận dịch vụ khách dùng](#8-danh-mục-dịch-vụ-và-xác-nhận-dịch-vụ-khách-dùng)
-9. [Khách hàng, đơn hàng và hóa đơn](#9-khách-hàng-đơn-hàng-và-hóa-đơn)
-10. [Quản lý khuyến mãi](#10-quản-lý-khuyến-mãi)
-11. [Nhân viên, ca làm và công việc](#11-nhân-viên-ca-làm-và-công-việc)
-12. [Phê duyệt hoàn tiền](#12-phê-duyệt-hoàn-tiền)
-13. [Cài đặt, vai trò và phân quyền](#13-cài-đặt-vai-trò-và-phân-quyền)
-14. [Xử lý sự cố và thao tác an toàn](#14-xử-lý-sự-cố-và-thao-tác-an-toàn)
+| STT | Nội dung |
+| ---: | --- |
+| 1 | [Đăng nhập, ngôn ngữ và điều hướng](#1-đăng-nhập-ngôn-ngữ-và-điều-hướng) |
+| 2 | [Tổng quan và báo cáo](#2-tổng-quan-và-báo-cáo) |
+| 3 | [Tạo và tra cứu đặt phòng](#3-tạo-và-tra-cứu-đặt-phòng) |
+| 4 | [Chỉnh sửa đặt phòng và thêm dịch vụ](#4-chỉnh-sửa-đặt-phòng-và-thêm-dịch-vụ) |
+| 5 | [Hủy đặt phòng và hoàn tiền cho khách](#5-hủy-đặt-phòng-và-hoàn-tiền-cho-khách) |
+| 6 | [Check-in, check-out và hoàn tiền dư](#6-check-in-check-out-và-hoàn-tiền-dư) |
+| 7 | [Phòng, giá, tòa nhà, tầng và nội quy](#7-phong-gia-toa-nha-tang-va-noi-quy) |
+| 8 | [Danh mục dịch vụ và xác nhận dịch vụ khách dùng](#8-danh-mục-dịch-vụ-và-xác-nhận-dịch-vụ-khách-dùng) |
+| 9 | [Khách hàng, đơn hàng và hóa đơn](#9-khách-hàng-đơn-hàng-và-hóa-đơn) |
+| 10 | [Quản lý khuyến mãi](#10-quản-lý-khuyến-mãi) |
+| 11 | [Nhân viên, ca làm và công việc](#11-nhân-viên-ca-làm-và-công-việc) |
+| 12 | [Phê duyệt hoàn tiền](#12-phê-duyệt-hoàn-tiền) |
+| 13 | [Cài đặt, vai trò và phân quyền](#13-cài-đặt-vai-trò-và-phân-quyền) |
+| 14 | [Xử lý sự cố và thao tác an toàn](#14-xử-lý-sự-cố-và-thao-tác-an-toàn) |
 
 ## 1. Đăng nhập, ngôn ngữ và điều hướng
 
@@ -48,8 +50,8 @@ Trang Tổng quan để theo dõi nhanh; khi cần xử lý, hãy mở hồ sơ 
 5. Ở danh sách dịch vụ chờ xác nhận, so sánh dịch vụ và số lượng đã đặt với lượng khách thực tế sử dụng trước khi xác nhận.
 
 <div align="center">
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/overview/01.jpg" alt="Tong quan chi nhanh" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 01 – Tổng quan chi nhánh</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/overview/02.jpg" alt="Lich nhan phong, tra phong" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 02 – Lịch nhận phòng, trả phòng</figcaption></figure>
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/overview/03.jpg" alt="Dich vu cho xac nhan" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 03 – Dịch vụ chờ xác nhận</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/overview/01.jpg" alt="Tong quan chi nhanh" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 01 – Tổng quan chi nhánh</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/overview/03.jpg" alt="Dich vu cho xac nhan" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 02 – Dịch vụ chờ xác nhận</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/overview/02.jpg" alt="Lich nhan phong, tra phong" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 03 – Lịch nhận phòng, trả phòng</figcaption></figure>
 </div>
 
 ### Báo cáo doanh thu
@@ -161,10 +163,10 @@ Hủy đặt phòng làm thay đổi trạng thái đặt phòng và có thể p
 7. Với check-out nhóm/hàng loạt, kiểm tra từng phòng được chọn. Thao tác hàng loạt tác động lên các dòng đã chọn; bỏ các lựa chọn không liên quan trước khi xác nhận.
 
 <div align="center">
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/01.jpg" alt="Danh sách khách chờ nhận phòng và trả phòng" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 01 – Danh sách check-in và check-out</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/02.jpg" alt="Xác nhận nhận phòng sớm và phụ thu phát sinh" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 02 – Xác nhận check-in sớm và phụ thu</figcaption></figure>
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/03.jpg" alt="Danh sách khách đã nhận phòng trong ngày" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 03 – Khách đã check-in trong ngày</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/04.jpg" alt="Danh sách khách chờ check-out và hóa đơn chờ lập" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 04 – Danh sách chờ check-out</figcaption></figure>
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/05.jpg" alt="Đối soát check-out khi khách còn phải thanh toán" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 05 – Đối soát check-out còn khoản phải thu</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/06.jpg" alt="Xác nhận check-out khi khách không còn khoản phải trả" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 06 – Đối soát check-out đủ tiền</figcaption></figure>
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/07.jpg" alt="Danh sách check-out hoàn tất và hóa đơn thanh toán" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 07 – Check-out hoàn tất và xem hóa đơn</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/01.jpg" alt="Hàng đợi check-in với một booking chờ xử lý" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 01 – Danh sách booking chờ check-in</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/02.jpg" alt="Hộp thoại xác nhận check-in sớm, phí phòng và phụ thu" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 02 – Xác nhận check-in sớm và phụ thu</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/03.jpg" alt="Danh sách booking đã check-in trong ngày" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 03 – Booking đã check-in trong ngày</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/04.jpg" alt="Danh sách booking chờ check-out và phần hóa đơn thanh toán" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 04 – Hàng đợi check-out và hóa đơn</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/05.jpg" alt="Hộp thoại check-out khi khách còn khoản 600 đồng phải thanh toán" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 05 – Check-out còn khoản phải thu</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/06.jpg" alt="Hộp thoại check-out khi booking đã thanh toán đủ và không còn tiền phải thu" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 06 – Check-out không còn khoản phải thu</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/vi/checkinout/07.jpg" alt="Danh sách booking đã check-out hoàn tất và nút xem hóa đơn" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Màn hình 07 – Check-out hoàn tất và xem hóa đơn</figcaption></figure>
 </div>
 
 ## 7. Phòng, giá, tòa nhà, tầng và nội quy

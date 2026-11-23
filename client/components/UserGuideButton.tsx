@@ -26,9 +26,10 @@ const guideSections: GuideSection[] = [
     title: ["1. Tổng quan chi nhánh", "1. Branch overview"],
     imageVi: "/user-guide/screenshots/vi/overview/01.jpg",
     imageEn: "/user-guide/screenshots/en/overview/01.jpg",
-    imageAlt: ["Ảnh chụp giao diện Tổng quan thực tế; thông tin nhận diện đã được làm mờ", "Actual Overview screen; identifying details have been blurred"],
+    imageAlt: ["Các thẻ số liệu hoạt động, lịch nhận/trả phòng và dịch vụ cần xác nhận", "Activity summary cards, arrival/departure schedule, and services awaiting confirmation"],
     relatedScreenshots: [
-      { srcVi: "/user-guide/screenshots/vi/overview/02.jpg", srcEn: "/user-guide/screenshots/en/overview/02.jpg", alt: ["Ảnh chụp lịch check-in/check-out và dịch vụ cần xác nhận", "Check-in/check-out schedule and services awaiting confirmation"] },
+      { srcVi: "/user-guide/screenshots/vi/overview/02.jpg", srcEn: "/user-guide/screenshots/en/overview/02.jpg", alt: ["Lịch nhận phòng, trả phòng và các tab khách cần xử lý", "Check-in/check-out schedule and guest queues"] },
+      { srcVi: "/user-guide/screenshots/vi/overview/03.jpg", srcEn: "/user-guide/screenshots/en/overview/03.jpg", alt: ["Dịch vụ chờ xác nhận và lịch khối lượng công việc", "Services awaiting confirmation and room-work schedule"] },
     ],
     route: "/overview",
     steps: [
@@ -47,9 +48,9 @@ const guideSections: GuideSection[] = [
     title: ["2. Tạo và tra cứu booking", "2. Create and find bookings"],
     imageVi: "/user-guide/screenshots/vi/booking-create/01.jpg",
     imageEn: "/user-guide/screenshots/en/booking-create/01.jpg",
-    imageAlt: ["Ảnh chụp trang Đặt phòng thực tế", "Actual Bookings screen"],
+    imageAlt: ["Lịch đặt phòng và nút tạo booking mới", "Booking schedule and New booking action"],
     relatedScreenshots: [
-      { srcVi: "/user-guide/screenshots/vi/booking-list/01.jpg", srcEn: "/user-guide/screenshots/en/booking-list/01.jpg", alt: ["Ảnh chụp trang Danh sách booking thực tế", "Actual Booking list screen"] },
+      { srcVi: "/user-guide/screenshots/vi/booking-list/01.jpg", srcEn: "/user-guide/screenshots/en/booking-list/01.jpg", alt: ["Danh sách booking, trạng thái và thao tác tra cứu", "Booking directory, statuses, and search actions"] },
       { srcVi: "/user-guide/screenshots/vi/booking-create/02.jpg", srcEn: "/user-guide/screenshots/en/booking-create/02.jpg", alt: ["Ảnh chụp bước chọn ngày và phòng", "Dates-and-rooms step"] },
       { srcVi: "/user-guide/screenshots/vi/booking-create/03.jpg", srcEn: "/user-guide/screenshots/en/booking-create/03.jpg", alt: ["Ảnh chụp bước chọn phòng", "Room-selection step"] },
       { srcVi: "/user-guide/screenshots/vi/booking-create/04.jpg", srcEn: "/user-guide/screenshots/en/booking-create/04.jpg", alt: ["Ảnh chụp bước nhập thông tin khách", "Guest-information step"] },
@@ -105,7 +106,7 @@ const guideSections: GuideSection[] = [
     title: ["3. Check-in / Check-out tại quầy", "3. Front-desk check-in / check-out"],
     imageVi: "/user-guide/screenshots/vi/checkinout/01.jpg",
     imageEn: "/user-guide/screenshots/en/checkinout/01.jpg",
-    imageAlt: ["Ảnh chụp trang Check-in / Check-out thực tế", "Actual Check-in / Check-out screen"],
+    imageAlt: ["Danh sách booking chờ check-in và các thẻ số liệu check-in/check-out", "Check-in queue and check-in/check-out summary cards"],
     route: "/check-in-out",
     steps: [
       ["Mở Check-in / Check-out từ menu bên trái hoặc chọn Mở quầy lễ tân trên Tổng quan.", "Open Check-in / Check-out from the left menu or select Open front desk on Overview."],
@@ -127,7 +128,7 @@ const guideSections: GuideSection[] = [
     title: ["4. Thay đổi đặt phòng: thêm dịch vụ và hủy", "4. Booking changes: add services and cancel"],
     imageVi: "/user-guide/screenshots/vi/booking-add-services/02.jpg",
     imageEn: "/user-guide/screenshots/en/booking-add-services/02.jpg",
-    imageAlt: ["Chọn dịch vụ bổ sung cho booking hiện có", "Selecting an additional service for an existing booking"],
+    imageAlt: ["Bổ sung dịch vụ cho booking và cập nhật tổng chi phí", "Adding services to an existing booking and updating the total"],
     relatedScreenshots: [
       { srcVi: "/user-guide/screenshots/vi/booking-add-services/01.jpg", srcEn: "/user-guide/screenshots/en/booking-add-services/01.jpg", alt: ["Danh sách booking trước khi thêm dịch vụ", "Booking list before adding a service"] },
       { srcVi: "/user-guide/screenshots/vi/booking-add-services/03.jpg", srcEn: "/user-guide/screenshots/en/booking-add-services/03.jpg", alt: ["Tóm tắt booking sau khi thêm dịch vụ", "Booking summary after adding a service"] },
@@ -156,14 +157,19 @@ const guideSections: GuideSection[] = [
     title: ["5. Quản lý phòng", "5. Room management"],
     imageVi: "/user-guide/screenshots/vi/room-list/01.jpg",
     imageEn: "/user-guide/screenshots/en/room-list/01.jpg",
-    imageAlt: ["Ảnh chụp trang Quản lý phòng thực tế", "Actual Room management screen"],
+    imageAlt: ["Danh sách phòng, trạng thái dọn dẹp và tình trạng sử dụng", "Room list, housekeeping status, and occupancy state"],
     relatedScreenshots: [
-      { srcVi: "/user-guide/screenshots/vi/room-pricing/01.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/01.jpg", alt: ["Cấu hình giá cơ bản theo loại phòng", "Base rates by room type"] },
-      { srcVi: "/user-guide/screenshots/vi/room-pricing/03.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/03.jpg", alt: ["Danh sách giá áp dụng theo sự kiện", "Event-based pricing list"] },
-      { srcVi: "/user-guide/screenshots/vi/room-pricing/05.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/05.jpg", alt: ["Biểu mẫu tạo cấu hình giá sự kiện", "Create event pricing form"] },
+      { srcVi: "/user-guide/screenshots/vi/room-list/02.jpg", srcEn: "/user-guide/screenshots/en/room-list/02.jpg", alt: ["Chi tiết phòng, sức chứa, tiện nghi và hình ảnh", "Room details, capacity, amenities, and images"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/01.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/01.jpg", alt: ["Cấu hình giá cơ bản theo loại phòng", "Base room-rate configuration"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/02.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/02.jpg", alt: ["Chỉnh sửa giá cơ bản, sức chứa và phụ thu theo loại phòng", "Edit base rates, capacity, and surcharges"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/03.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/03.jpg", alt: ["Danh sách cấu hình giá theo sự kiện", "Event-pricing configuration list"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/04.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/04.jpg", alt: ["Lọc giá theo sự kiện theo ngày", "Filter event pricing by date"] },
+      { srcVi: "/user-guide/screenshots/vi/room-pricing/05.jpg", srcEn: "/user-guide/screenshots/en/room-pricing/05.jpg", alt: ["Tạo quy tắc giá sự kiện theo loại phòng", "Create event-pricing rules by room type"] },
       { srcVi: "/user-guide/screenshots/vi/floor-building/01.jpg", srcEn: "/user-guide/screenshots/en/floor-building/01.jpg", alt: ["Danh sách tòa nhà", "Building list"] },
+      { srcVi: "/user-guide/screenshots/vi/floor-building/02.jpg", srcEn: "/user-guide/screenshots/en/floor-building/02.jpg", alt: ["Thêm hoặc sửa tòa nhà", "Create or edit a building"] },
       { srcVi: "/user-guide/screenshots/vi/floor-building/04.jpg", srcEn: "/user-guide/screenshots/en/floor-building/04.jpg", alt: ["Danh sách tầng của tòa nhà", "Floors for a selected building"] },
-      { srcVi: "/user-guide/screenshots/vi/hotel-rules/01.jpg", alt: ["Ảnh chụp trang Nội quy khách sạn", "Hotel rules screen"] },
+      { srcVi: "/user-guide/screenshots/vi/floor-building/06.jpg", srcEn: "/user-guide/screenshots/en/floor-building/06.jpg", alt: ["Thêm hoặc sửa tầng cho tòa nhà", "Create or edit floors"] },
+      { srcVi: "/user-guide/screenshots/vi/hotel-rules/01.jpg", alt: ["Nội quy check-in, check-out và chính sách hủy của khách sạn", "Hotel check-in, check-out, and cancellation policies"] },
     ],
     route: "/rooms",
     steps: [
@@ -185,13 +191,13 @@ const guideSections: GuideSection[] = [
     title: ["6. Khách hàng, dịch vụ, hóa đơn và hoàn tiền", "6. Customers, services, invoices, and refunds"],
     imageVi: "/user-guide/screenshots/vi/customer-management/01.jpg",
     imageEn: "/user-guide/screenshots/en/customer-management/01.jpg",
-    imageAlt: ["Ảnh chụp trang Quản lý khách hàng", "Customer management screen"],
+    imageAlt: ["Danh sách khách hàng, lượt lưu trú và hồ sơ liên hệ", "Customer directory, stay history, and contact profile"],
     relatedScreenshots: [
-      { srcVi: "/user-guide/screenshots/vi/service-usage/01.jpg", srcEn: "/user-guide/screenshots/en/service-usage/01.jpg", alt: ["Ảnh chụp trang thao tác dịch vụ khách hàng", "Guest service usage screen"] },
-      { srcVi: "/user-guide/screenshots/vi/service-catalog/01.jpg", srcEn: "/user-guide/screenshots/en/service-catalog/01.jpg", alt: ["Ảnh chụp danh mục dịch vụ", "Service catalog screen"] },
-      { srcVi: "/user-guide/screenshots/vi/invoice-management/01.jpg", srcEn: "/user-guide/screenshots/en/order-management/01.jpg", alt: ["Ảnh chụp trang Hóa đơn", "Order management screen"] },
-      { srcVi: "/user-guide/screenshots/vi/refund-approvals/01.jpg", srcEn: "/user-guide/screenshots/en/refund-approvals/01.jpg", alt: ["Ảnh chụp trang Phê duyệt hoàn tiền", "Refund approvals screen"] },
-      { srcVi: "/user-guide/screenshots/vi/promotion-management/01.jpg", srcEn: "/user-guide/screenshots/en/promotion-management/01.jpg", alt: ["Ảnh chụp trang Khuyến mãi", "Promotions screen"] },
+      { srcVi: "/user-guide/screenshots/vi/service-usage/01.jpg", srcEn: "/user-guide/screenshots/en/service-usage/01.jpg", alt: ["Tìm và xác nhận dịch vụ khách đã sử dụng theo booking", "Find and confirm services used under a booking"] },
+      { srcVi: "/user-guide/screenshots/vi/service-catalog/01.jpg", srcEn: "/user-guide/screenshots/en/service-catalog/01.jpg", alt: ["Danh mục dịch vụ, đơn giá, đơn vị và trạng thái", "Service catalog, pricing, units, and status"] },
+      { srcVi: "/user-guide/screenshots/vi/invoice-management/01.jpg", srcEn: "/user-guide/screenshots/en/order-management/01.jpg", alt: ["Danh sách hóa đơn và thao tác xem hoặc in", "Invoice list and view/print actions"] },
+      { srcVi: "/user-guide/screenshots/vi/refund-approvals/01.jpg", srcEn: "/user-guide/screenshots/en/refund-approvals/01.jpg", alt: ["Danh sách yêu cầu hoàn tiền chờ duyệt và chi tiết xử lý", "Refund requests pending approval and processing details"] },
+      { srcVi: "/user-guide/screenshots/vi/promotion-management/01.jpg", srcEn: "/user-guide/screenshots/en/promotion-management/01.jpg", alt: ["Danh sách khuyến mãi, thời hạn áp dụng và trạng thái", "Promotion list, validity period, and status"] },
     ],
     route: "/customers",
     steps: [
@@ -213,7 +219,7 @@ const guideSections: GuideSection[] = [
     title: ["7. Nhân viên, ca làm và báo cáo", "7. Staff, shifts, and reports"],
     imageVi: "/user-guide/screenshots/vi/staff-weekly-shifts/01.jpg",
     imageEn: "/user-guide/screenshots/en/staff-weekly-shifts/01.jpg",
-    imageAlt: ["Ảnh chụp trang Nhân viên & ca làm thực tế; thông tin nhân viên đã được làm mờ", "Actual Staff & shifts screen; staff details have been blurred"],
+    imageAlt: ["Bảng nhân viên, ca làm, phân công công việc và báo cáo liên quan", "Employee directory, shifts, task assignments, and related reports"],
     relatedScreenshots: [
       { srcVi: "/user-guide/screenshots/vi/staff-directory/01.jpg", srcEn: "/user-guide/screenshots/en/staff-directory/01.jpg", alt: ["Ảnh chụp danh sách nhân viên", "Employee directory"] },
       { srcVi: "/user-guide/screenshots/vi/staff-assign-shifts/01.jpg", srcEn: "/user-guide/screenshots/en/staff-assign-shifts/01.jpg", alt: ["Ảnh chụp màn hình phân ca làm việc", "Shift assignment screen"] },
@@ -300,38 +306,46 @@ export default function UserGuideButton() {
                   </span>
                 </summary>
                 <div className="space-y-4 border-t border-slate-100 p-4">
-                  {(isEn ? section.imageEn : section.imageVi) && section.imageAlt && (
-                    <figure>
-                      <img
-                        src={isEn ? section.imageEn : section.imageVi}
-                        alt={text(section.imageAlt[0], section.imageAlt[1])}
-                        className="w-full rounded-lg border border-slate-200 bg-slate-50"
-                      />
-                      <figcaption className="mt-1 text-center text-xs text-slate-500">
-                        {text("Ảnh giao diện thực tế bằng ngôn ngữ đang chọn. Hãy che thông tin cá nhân trước khi chia sẻ.", "Actual screenshot in the selected interface language. Redact personal details before sharing.")}
-                      </figcaption>
-                    </figure>
-                  )}
-                  {section.relatedScreenshots?.map((screenshot) => {
-                    const src = isEn ? screenshot.srcEn : screenshot.srcVi;
-                    if (!src) return null;
-                    return (
-                      <figure key={src}>
-                        <img
-                          src={src}
-                          alt={text(screenshot.alt[0], screenshot.alt[1])}
-                          className="w-full rounded-lg border border-slate-200 bg-slate-50"
-                        />
-                        <figcaption className="mt-1 text-center text-xs text-slate-500">
-                          {text("Ảnh giao diện thực tế bằng ngôn ngữ đang chọn. Hãy che thông tin cá nhân trước khi chia sẻ.", "Actual screenshot in the selected interface language. Redact personal details before sharing.")}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {(isEn ? section.imageEn : section.imageVi) && section.imageAlt && (
+                      <figure className="min-w-0">
+                        <div className="aspect-video overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                          <img
+                            src={isEn ? section.imageEn : section.imageVi}
+                            alt={text(section.imageAlt[0], section.imageAlt[1])}
+                            className="h-full w-full object-contain"
+                          />
+                        </div>
+                        <figcaption className="mt-1.5 min-h-10 text-left text-sm leading-5 text-slate-600">
+                          {text(section.imageAlt[0], section.imageAlt[1])}
                         </figcaption>
                       </figure>
-                    );
-                  })}
-                  <ol className="space-y-3">
+                    )}
+                    {section.relatedScreenshots && section.relatedScreenshots.length > 0 && (
+                      section.relatedScreenshots.map((screenshot) => {
+                        const src = isEn ? screenshot.srcEn : screenshot.srcVi;
+                        if (!src) return null;
+                        return (
+                          <figure key={src} className="min-w-0">
+                            <div className="aspect-video overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                              <img
+                                src={src}
+                                alt={text(screenshot.alt[0], screenshot.alt[1])}
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                            <figcaption className="mt-1.5 min-h-10 text-left text-sm leading-5 text-slate-600">
+                              {text(screenshot.alt[0], screenshot.alt[1])}
+                            </figcaption>
+                          </figure>
+                        );
+                      })
+                    )}
+                  </div>
+                  <ol className="space-y-2">
                     {section.steps.map(([vi, en], stepIndex) => (
-                      <li key={vi} className="flex items-start gap-3 text-sm leading-6 text-slate-700">
-                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">{stepIndex + 1}</span>
+                      <li key={vi} className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-2 text-sm leading-6 text-slate-700">
+                        <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-100 text-[11px] font-bold leading-none text-blue-700">{stepIndex + 1}</span>
                         <span className="text-justify">{text(vi, en)}</span>
                       </li>
                     ))}

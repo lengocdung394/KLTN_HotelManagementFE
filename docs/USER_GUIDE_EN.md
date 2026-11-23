@@ -8,20 +8,22 @@ Each section names the **screen to open** and the actions performed there. Bold 
 
 ## Contents
 
-1. [Sign in, language, and navigation](#1-sign-in-language-and-navigation)
-2. [Overview and reports](#2-overview-and-reports)
-3. [Create and find bookings](#3-create-and-find-bookings)
-4. [Edit a booking and add services](#4-edit-a-booking-and-add-services)
-5. [Cancel a booking and refund the guest](#5-cancel-a-booking-and-refund-the-guest)
-6. [Check-in, check-out, and surplus refunds](#6-check-in-check-out-and-surplus-refunds)
-7. [Rooms, rates, buildings, floors, and hotel rules](#7-rooms-rates-buildings-floors-and-hotel-rules)
-8. [Service catalog and guest service usage](#8-service-catalog-and-guest-service-usage)
-9. [Customers, orders, and invoices](#9-customers-orders-and-invoices)
-10. [Promotion management](#10-promotion-management)
-11. [Staff, shifts, and tasks](#11-staff-shifts-and-tasks)
-12. [Refund approvals](#12-refund-approvals)
-13. [Settings, roles, and permissions](#13-settings-roles-and-permissions)
-14. [Troubleshooting and safe operation](#14-troubleshooting-and-safe-operation)
+| No. | Section |
+| ---: | --- |
+| 1 | [Sign in, language, and navigation](#1-sign-in-language-and-navigation) |
+| 2 | [Overview and reports](#2-overview-and-reports) |
+| 3 | [Create and find bookings](#3-create-and-find-bookings) |
+| 4 | [Edit a booking and add services](#4-edit-a-booking-and-add-services) |
+| 5 | [Cancel a booking and refund the guest](#5-cancel-a-booking-and-refund-the-guest) |
+| 6 | [Check-in, check-out, and surplus refunds](#6-check-in-check-out-and-surplus-refunds) |
+| 7 | [Rooms, rates, buildings, floors, and hotel rules](#7-rooms-rates-buildings-floors-and-hotel-rules) |
+| 8 | [Service catalog and guest service usage](#8-service-catalog-and-guest-service-usage) |
+| 9 | [Customers, orders, and invoices](#9-customers-orders-and-invoices) |
+| 10 | [Promotion management](#10-promotion-management) |
+| 11 | [Staff, shifts, and tasks](#11-staff-shifts-and-tasks) |
+| 12 | [Refund approvals](#12-refund-approvals) |
+| 13 | [Settings, roles, and permissions](#13-settings-roles-and-permissions) |
+| 14 | [Troubleshooting and safe operation](#14-troubleshooting-and-safe-operation) |
 
 ## 1. Sign in, language, and navigation
 
@@ -158,10 +160,10 @@ Cancellation changes a booking and may create a refund. Check the hotel's policy
 7. For group or batch check-out, review the selected rooms individually. A bulk action applies to the selected records, so remove any unintended selection before confirming.
 
 <div align="center">
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/01.jpg" alt="Guest check-in and check-out queues" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Check-in and check-out queues</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/02.jpg" alt="Confirm an early check-in and its additional charge" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Confirm early check-in and surcharge</figcaption></figure>
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/03.jpg" alt="List of guests checked in today" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Guests checked in today</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/04.jpg" alt="Guests awaiting check-out and invoices not yet issued" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Check-out queue</figcaption></figure>
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/05.jpg" alt="Reconcile check-out when a guest has an outstanding balance" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Check-out with an outstanding balance</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/06.jpg" alt="Confirm check-out when no balance is due" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 06 - Check-out with no balance due</figcaption></figure>
-<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/07.jpg" alt="Completed check-outs and payment invoice list" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 07 - Completed check-out and invoice</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/01.jpg" alt="Check-in queue with one booking awaiting processing" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 01 - Bookings waiting for check-in</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/02.jpg" alt="Early check-in confirmation with room and surcharge charges" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 02 - Confirm early check-in and surcharge</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/03.jpg" alt="Bookings checked in today" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 03 - Bookings checked in today</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/04.jpg" alt="Check-out queue with an outstanding payment invoice" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 04 - Check-out queue and invoice</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/05.jpg" alt="Check-out confirmation when the guest has a 600 VND balance due" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 05 - Check-out with a balance due</figcaption></figure> <figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/06.jpg" alt="Check-out confirmation when the booking is fully paid" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 06 - Check-out with no balance due</figcaption></figure>
+<figure style="display:inline-block;vertical-align:top;width:49%;margin:0 0 12px"><img src="../public/user-guide/screenshots/en/checkinout/07.jpg" alt="Completed check-out list with invoice viewing action" style="display:block;width:100%;height:auto"/><figcaption style="margin-top:4px;font-size:0.82em">Screen 07 - Completed check-out and invoice</figcaption></figure>
 </div>
 
 ## 7. Rooms, rates, buildings, floors, and hotel rules
