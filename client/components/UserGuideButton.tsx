@@ -18,11 +18,14 @@ export default function UserGuideButton() {
   const appIsEn = i18n.language.startsWith("en");
   const otherLanguage = guideLanguage === "en" ? "VI" : "EN";
   const guideHtml = (guideLanguage === "en" ? guideEnHtml : guideViHtml)
-    .replace("<head>", '<head><base href="about:srcdoc">')
     .replace(/\.\.\/public\/user-guide\//g, "/user-guide/")
     .replace(
       `href="./USER_GUIDE_${otherLanguage}.md"`,
       `href="/user-guide/USER_GUIDE_${otherLanguage}.pdf?v=20261123-2"`,
+    )
+    .replace(
+      "</body>",
+      '<script>document.addEventListener("click",event=>{const link=event.target instanceof Element?event.target.closest(\'a[href^="#"]\'):null;if(!link)return;const target=document.getElementById(link.hash.slice(1));if(target){event.preventDefault();target.scrollIntoView();}});</script></body>',
     )
     .replace(
       "</style>",
