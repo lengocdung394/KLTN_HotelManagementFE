@@ -280,7 +280,7 @@ export default function UserGuideButton() {
           </DialogHeader>
           <div className="flex flex-wrap gap-2">
             <a
-              href="/user-guide/USER_GUIDE_VI.pdf"
+              href="/user-guide/USER_GUIDE_VI.pdf?v=20261123"
               download="Sen-Viet-User-Guide-VI.pdf"
               className="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
