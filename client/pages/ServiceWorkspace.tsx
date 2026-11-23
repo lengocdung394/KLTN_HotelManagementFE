@@ -28,6 +28,7 @@ import FilterResultStatus from "../components/FilterResultStatus";
 import { FilterResetButton } from "../components/SearchableFilter";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { formatVnd } from "../lib/currency";
+import { addActionButtonClassName, editActionButtonClassName } from "../lib/actionButtonStyles";
 
 const SERVICE_TABLE_COLUMNS = [
   { id: "name", labelKey: "serviceWorkspace.serviceName", width: 240 },
@@ -157,7 +158,7 @@ const formatUsageDateTime = (value: string | null | undefined, locale: string) =
 
 const formatServicePrice = (price: number | null, locale: string) => {
   if (price === null) return "—";
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(price)}${locale.startsWith("en") ? " VND" : "đ"}`;
+  return formatVnd(price, locale);
 };
 
 const toLocalDateInputValue = (date: Date) => {
@@ -1045,7 +1046,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
         </div>
         {canManageServices && (
           <div className="flex shrink-0 flex-nowrap gap-2">
-            <button type="button" onClick={openCreateForm} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"><Plus size={16} />{t("serviceWorkspace.addService")}</button>
+            <button type="button" onClick={openCreateForm} className={addActionButtonClassName}><Plus size={16} />{t("serviceWorkspace.addService")}</button>
           </div>
         )}
       </div>
@@ -1241,8 +1242,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                       <p className="truncate" title={service.detail}>{service.detail || "—"}</p>
                     </td>}
                     {visibleServiceColumns.price && <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-slate-800">
-                      {service.price.toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}
-                      {i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}
+                      {formatVnd(service.price, i18n.resolvedLanguage ?? i18n.language)}
                       <span className="font-normal text-slate-400"> / {service.unit}</span>
                     </td>}
                     {visibleServiceColumns.status && <td className="whitespace-nowrap px-5 py-3">
@@ -1277,7 +1277,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
                           <button
                             type="button"
                             onClick={() => openEditForm(service)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+                            className={editActionButtonClassName}
                           >
                             <Pencil size={14} />
                             {t("serviceWorkspace.edit")}
@@ -1622,7 +1622,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
               <button
                 type="submit"
                 disabled={isSaving}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className={addActionButtonClassName}
               >
                 {editingService ? <Pencil size={16} /> : <Plus size={16} />}
                 {isSaving ? t("serviceWorkspace.saving") : editingService ? t("serviceWorkspace.saveChanges") : t("serviceWorkspace.addService")}

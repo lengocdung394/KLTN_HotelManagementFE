@@ -5,6 +5,7 @@ import ListPagination from "./ListPagination";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterSelect from "./FilterSelect";
 import FilterResultStatus from "./FilterResultStatus";
+import { editActionButtonClassName } from "../lib/actionButtonStyles";
 
 type FloorManagementPanelProps = {
   floors: string[];
@@ -63,7 +64,7 @@ export default function FloorManagementPanel({ floors, rooms, buildings, selecte
             <td className="px-4 py-3 font-semibold text-slate-800">{t("room.floorLabel", { floor })}</td>
             <td className="px-4 py-3 text-slate-600">{rooms.filter((room) => room.floor === floor).length} {t("room.rooms")}</td>
             {canManage && <td className="px-4 py-2 text-right">
-              <button type="button" onClick={() => onEdit(floor)} aria-label={`${t("room.editFloor")} ${floor}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+              <button type="button" onClick={() => onEdit(floor)} aria-label={`${t("room.editFloor")} ${floor}`} className={editActionButtonClassName}>
                 <Pencil size={13} />{t("common.edit")}
               </button>
             </td>}

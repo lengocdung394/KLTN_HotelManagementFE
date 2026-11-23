@@ -41,6 +41,8 @@ import { getBookingSurchargeBreakdown, getBookingTotalFromBreakdown, roundVndAmo
 import { baseApi } from "../services/baseApi";
 import i18n, { localizedText } from "../i18n";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { formatVnd } from "../lib/currency";
+import { editActionButtonClassName } from "../lib/actionButtonStyles";
 
 const BOOKING_TABLE_COLUMNS = [
   { id: "booking", label: ["Booking", "Booking"] },
@@ -98,13 +100,13 @@ const bookingAmount = (item: BookingListItem, keys: string[], fallback = 0) => {
 const money = (value: unknown) => {
   const numericValue = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
   if (!Number.isFinite(numericValue)) return "-";
-  return `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(numericValue)}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
+  return formatVnd(numericValue, i18n.language);
 };
 
 const refundMoney = (value: unknown) => {
   const numericValue = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
   if (!Number.isFinite(numericValue)) return "-";
-  return `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(numericValue)}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
+  return formatVnd(numericValue, i18n.language);
 };
 
 const bookingId = (booking: BookingListItem) => textOf(booking, ["bookingId", "orderId", "id"]);
@@ -1276,11 +1278,7 @@ export default function BookingListWorkspace() {
                             disabled={isCancelled || isCheckedOut}
                             title={isCancelled ? "Booking đã hủy nên không thể chỉnh sửa" : isCheckedOut ? "Booking đã checkout hoàn tất nên không thể chỉnh sửa" : "Chỉnh sửa booking"}
                             onClick={() => handleOpenEdit(booking)}
-                            className={`flex items-center gap-1 whitespace-nowrap rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors ${
-                              isCancelled || isCheckedOut
-                                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                                : "border-amber-200 text-amber-700 hover:bg-amber-50"
-                            }`}
+                            className={editActionButtonClassName}
                           >
                             <Pencil size={14} />
                             Chỉnh sửa

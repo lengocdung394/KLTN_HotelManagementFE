@@ -1,6 +1,7 @@
 import { Printer, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import type { BookingListItem } from "../services/bookingApi";
 
 type InvoiceRoom = {
@@ -36,7 +37,7 @@ const readText = (source: Record<string, unknown>, keys: string[], fallback = ""
   return fallback;
 };
 
-const formatMoney = (amount: number, language: string) => `${Math.round(amount).toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
+const formatMoney = (amount: number, language: string) => formatVnd(Math.round(amount), language);
 const formatDateTime = (value: string, language: string) => {
   if (!value) return "—";
   const parsed = new Date(value);

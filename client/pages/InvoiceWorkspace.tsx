@@ -8,12 +8,13 @@ import FilterResultStatus from "../components/FilterResultStatus";
 import { FilterResetButton } from "../components/SearchableFilter";
 import ListPagination from "../components/ListPagination";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import { useGetBookingsByHotelQuery, type BookingListItem } from "../services/bookingApi";
 import { useAppSelector } from "../store/hooks";
 
 const formatMoney = (value: unknown, language: string) => {
   const amount = Number(value);
-  return `${(Number.isFinite(amount) ? amount : 0).toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
+  return formatVnd(Number.isFinite(amount) ? amount : 0, language);
 };
 
 const getTodayDateInputValue = () => {

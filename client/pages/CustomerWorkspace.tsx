@@ -13,6 +13,8 @@ import { useGetCustomerPromotionsQuery, useGetPromotionsQuery } from "../service
 import { useGetOrderByBookingIdQuery } from "../services/orderApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
+import { addActionButtonClassName, editActionButtonClassName, editIconButtonClassName } from "../lib/actionButtonStyles";
 import { toast } from "@/components/ui/use-toast";
 
 type Customer = CustomerResponse;
@@ -138,10 +140,7 @@ export default function CustomerWorkspace() {
   }, [page, totalPages]);
 
   const tierLabel = (value: Tier) => t(`customer.tiers.${value}`);
-  const formatMoney = (amount: number) => `${new Intl.NumberFormat(
-    i18n.language.startsWith("en") ? "en-US" : "vi-VN",
-    { maximumFractionDigits: 0 },
-  ).format(amount)}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
+  const formatMoney = (amount: number) => formatVnd(amount, i18n.language);
   const formatBookingDate = (value: string | null) => {
     if (!value) return t("customer.noBooking");
     const date = new Date(value);
@@ -234,7 +233,7 @@ export default function CustomerWorkspace() {
     }
   };
   return <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-    <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="font-bold text-slate-900">{t("customer.listTitle")}</h3><p className="mt-1 text-sm text-slate-500">{t("customer.listDescription")}</p></div>{canManageCustomers && <button type="button" onClick={openCreate} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"><Plus size={16} />{t("customer.add")}</button>}</div>
+    <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="font-bold text-slate-900">{t("customer.listTitle")}</h3><p className="mt-1 text-sm text-slate-500">{t("customer.listDescription")}</p></div>{canManageCustomers && <button type="button" onClick={openCreate} className={addActionButtonClassName}><Plus size={16} />{t("customer.add")}</button>}</div>
     <div className={`flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:flex-wrap ${hasActiveFilters ? "sm:items-center" : ""}`}>
       <div className="relative flex-1">
         <Search size={16} className="absolute left-3 top-3 text-slate-400" />
@@ -301,7 +300,7 @@ export default function CustomerWorkspace() {
                       {isExpanded ? t("customer.hideBookings") : t("customer.viewBookings")}
                       <ChevronDown size={15} className={`transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                     </button>
-                    {canManageCustomers && <button type="button" onClick={() => openEdit(customer)} aria-label={t("customer.edit")} title={t("customer.edit")} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-amber-200 text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"><Pencil size={16} /></button>}
+                    {canManageCustomers && <button type="button" onClick={() => openEdit(customer)} aria-label={t("customer.edit")} title={t("customer.edit")} className={editIconButtonClassName}><Pencil size={16} /></button>}
                   </div>
                 </div>
                 {isExpanded && <div className="border-t border-slate-200 p-4">
@@ -455,7 +454,7 @@ export default function CustomerWorkspace() {
           </div>
         </div>
       );
-    })}</div>}</article>; })}</div>}</section>{canManageCustomers && <button type="button" onClick={() => openEdit(selected)} className="mt-6 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white"><Pencil size={15} />{t("customer.edit")}</button>}</div></div>}
+    })}</div>}</article>; })}</div>}</section>{canManageCustomers && <button type="button" onClick={() => openEdit(selected)} className={`mt-6 ${editActionButtonClassName}`}><Pencil size={15} />{t("customer.edit")}</button>}</div></div>}
     {customerToVerify && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}><form noValidate onSubmit={(event) => { event.preventDefault(); verifyIdentity(); }} onMouseDown={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">{t("customer.edit")}</p><h3 className="mt-1 text-xl font-bold text-slate-900">{localizedText("Xác thực CCCD", "Verify citizen ID")}</h3><p className="mt-2 text-sm text-slate-500">{localizedText(`Nhập đúng số CCCD của ${customerToVerify.name} để tiếp tục chỉnh sửa.`, `Enter ${customerToVerify.name}'s correct citizen ID number to continue editing.`)}</p></div><button type="button" onClick={closeModal} aria-label={t("common.close")}><X size={18} /></button></div><label className="mt-5 block text-sm font-semibold text-slate-700">{t("customer.identityNumber")}<input autoFocus value={identityCheck} onChange={(event) => { setIdentityCheck(event.target.value); setIdentityError(false); }} aria-invalid={identityError} aria-describedby={identityError ? "customer-identity-check-error" : undefined} className={`mt-1.5 h-11 w-full rounded-lg border px-3 text-sm font-normal ${identityError ? "border-rose-400" : "border-slate-200"}`} />{identityError && <span id="customer-identity-check-error" role="alert" className="mt-2 block text-xs font-normal text-rose-600">{identityCheck.trim() ? localizedText("CCCD không đúng, vui lòng kiểm tra lại.", "The ID number is incorrect. Please check it and try again.") : localizedText("Vui lòng nhập số CCCD.", "Enter the citizen ID number.")}</span>}</label><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={closeModal} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600">{t("common.cancel")}</button><button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">{localizedText("Tiếp tục", "Continue")}</button></div></form></div>}
     {modal && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onMouseDown={closeModal}>
       <form
@@ -518,10 +517,7 @@ function BookingPaymentHistory({ bookingId }: { bookingId: string }) {
       const secondDate = new Date(String(second.transactionDate ?? second.createdAt ?? "")).getTime();
       return (Number.isFinite(secondDate) ? secondDate : 0) - (Number.isFinite(firstDate) ? firstDate : 0);
     });
-  const formatMoney = (amount: number) => `${new Intl.NumberFormat(
-    i18n.language.startsWith("en") ? "en-US" : "vi-VN",
-    { maximumFractionDigits: 0 },
-  ).format(amount)}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
+  const formatMoney = (amount: number) => formatVnd(amount, i18n.language);
   const formatDate = (value?: string) => {
     if (!value) return "—";
     const date = new Date(value);

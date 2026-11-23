@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { createXlsxWorkbook, downloadFile } from "../lib/bulkImportFiles";
+import { addActionButtonClassName, editActionButtonClassName } from "../lib/actionButtonStyles";
 import { parseSuperAdminPermissionCatalogFile } from "../lib/superAdminPermissionCatalogImport";
 import { parseSuperAdminRolePermissionsFile } from "../lib/superAdminRolePermissionsImport";
 import { parseSuperAdminRolesFile } from "../lib/superAdminRolesImport";
@@ -946,7 +947,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       setAddRoleMode("single");
                       setIsAddRoleDialogOpen(true);
                     }}
-                    className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+                    className={addActionButtonClassName}
                   >
                     <Plus size={16} />
                     {localizedText("Thêm vai trò", "Add role")}
@@ -1096,7 +1097,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                                   setAddRoleMode("single");
                                   setIsAddRoleDialogOpen(true);
                                 }}
-                                className="inline-flex items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                                className={editActionButtonClassName}
                               >
                                 <Pencil size={12} />
                                 {localizedText("Sửa", "Edit")}
@@ -1221,7 +1222,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       setCatalogFileError("");
                       setIsAddPermissionDialogOpen(true);
                     }}
-                    className="flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+                    className={addActionButtonClassName}
                   >
                     <Plus size={16} />
                     {localizedText("Thêm quyền", "Add permission")}
@@ -1322,7 +1323,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                               <div className="grid grid-cols-3 gap-2">
                                 <button
                                   type="button"
-                                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                  className={editActionButtonClassName}
                                   onClick={() => {
                                     setPermissionCode(permission.code);
                                     setPermissionName(permission.name);
@@ -1506,7 +1507,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 <button
                   type="submit"
                   disabled={isCreatingPermission || isUpdatingPermission || isPermissionCatalogLoading || isPermissionCatalogError}
-                  className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  className={`mt-4 ${addActionButtonClassName}`}
                 >
                   <Plus size={16} />
                   {isCreatingPermission || isUpdatingPermission
@@ -1717,7 +1718,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                 <button
                   type="submit"
                   disabled={isCreatingRole || isUpdatingRole || isRolesLoading || isRolesError}
-                  className="mt-4 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  className={`mt-4 ${addActionButtonClassName}`}
                 >
                   <Plus size={16} />
                   {isCreatingRole || isUpdatingRole

@@ -19,6 +19,8 @@ import ScrollControls from "../components/ScrollControls";
 import { useAppSelector } from "../store/hooks";
 import { useAppDispatch } from "../store/hooks";
 import { useSidebar } from "../hooks/useSidebar";
+import { formatVnd } from "../lib/currency";
+import { addActionButtonClassName } from "../lib/actionButtonStyles";
 import { useGetRoomsByCurrentHotelQuery } from "../services/roomApi";
 import { useGetHotelHousekeepingTasksQuery, useGetMyHousekeepingTasksQuery } from "../services/shiftApi";
 import { bindHotelSocketEvents } from "../lib/socket";
@@ -277,7 +279,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
               )}
               <Link
                 to="/bookings"
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white"
+                className={addActionButtonClassName}
               >
                 <Plus size={17} />
                 {t("common.newBookingEyebrow")}
@@ -295,7 +297,7 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
                   ? "—"
                   : reportError
                     ? "—"
-                    : `${new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(dailyReport?.netCashReceived ?? 0))}${i18n.language.startsWith("en") ? " VND" : "đ"}`}
+                    : formatVnd(Number(dailyReport?.netCashReceived ?? 0), i18n.language)}
               </p>
               <p className="mt-1 text-xs text-blue-100">
                 {reportError ? t("dashboard.revenueLoadError") : t("dashboard.netRevenueDescription")}

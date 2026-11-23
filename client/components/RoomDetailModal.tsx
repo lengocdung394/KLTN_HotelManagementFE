@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { formatVnd } from "../lib/currency";
 import { getRoomAmenityTranslationKey, localizeBedDescription } from "@/lib/roomLocalization";
 
 export type RoomDetailsData = {
@@ -40,8 +41,7 @@ export default function RoomDetailModal({ room, onClose }: { room: RoomDetailsDa
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [showGallery, setShowGallery] = useState(false);
   const galleryImages = room.images.length > 0 ? room.images : ["https://images.pexels.com/photos/6876834/pexels-photo-6876834.jpeg"];
-  const money = (value: number) =>
-    `${value.toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
+  const money = (value: number) => formatVnd(value, i18n.resolvedLanguage ?? i18n.language);
   const roomTypeName = (value: string) => {
     const normalized = value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     if (normalized.includes("standard") || normalized.includes("phong tieu chuan")) return t("calendar.standardRoom");

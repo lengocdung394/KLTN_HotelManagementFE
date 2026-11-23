@@ -1,4 +1,4 @@
-import { Download, HelpCircle, ShieldAlert } from "lucide-react";
+import { ChevronDown, Download, HelpCircle, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -124,7 +124,7 @@ const guideSections: GuideSection[] = [
     tip: ["Không tự xác nhận tiền mặt đã hoàn nếu chưa giao/hoàn thực tế. Yêu cầu hoàn qua ngân hàng có thể cần xử lý tại Phê duyệt hoàn tiền.", "Do not mark a cash refund complete until it has actually been returned. Bank refunds may need to be handled in Refund approvals."],
   },
   {
-    title: ["Thay đổi booking: thêm dịch vụ và hủy", "Booking changes: add services and cancel"],
+    title: ["4. Thay đổi đặt phòng: thêm dịch vụ và hủy", "4. Booking changes: add services and cancel"],
     imageVi: "/user-guide/screenshots/vi/booking-add-services/02.jpg",
     imageEn: "/user-guide/screenshots/en/booking-add-services/02.jpg",
     imageAlt: ["Chọn dịch vụ bổ sung cho booking hiện có", "Selecting an additional service for an existing booking"],
@@ -242,7 +242,11 @@ export default function UserGuideButton() {
   const [open, setOpen] = useState(false);
   const { i18n } = useTranslation();
   const isEn = i18n.language.startsWith("en");
-  const text = (vi: string, en: string) => isEn ? en : vi;
+  const text = (vi: string, en: string) => isEn
+    ? en
+    : vi
+      .replace(/booking nhiều phòng/gi, (match) => match[0] === "B" ? "Đặt nhiều phòng" : "đặt nhiều phòng")
+      .replace(/\bbooking\b/gi, (match) => match[0] === "B" ? "Đặt phòng" : "đặt phòng");
 
   return (
     <>
@@ -261,7 +265,7 @@ export default function UserGuideButton() {
             <DialogTitle className="text-xl">
               {text("Hướng dẫn chi tiết sử dụng hệ thống", "Detailed system user guide")}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-justify">
               {text(
                 "Hướng dẫn dành cho nhân viên và quản lý chi nhánh. Mở từng mục để xem ảnh chụp thực tế và từng thao tác theo thứ tự; một số chức năng chỉ hiển thị khi tài khoản có quyền.",
                 "For hotel staff and branch managers. Expand a section for real screenshots and ordered, individual actions; some features appear only for authorized accounts.",
@@ -290,8 +294,10 @@ export default function UserGuideButton() {
             {guideSections.map((section, index) => (
               <details key={section.title[0]} open={index === 0} className="group rounded-xl border border-slate-200 bg-white">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 font-semibold text-slate-900 marker:hidden">
-                <span>{text(section.title[0], section.title[1])}</span>
-                  <span className="text-sm text-blue-600 transition group-open:rotate-180">⌄</span>
+                  <span>{text(section.title[0], section.title[1])}</span>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 transition group-open:bg-blue-100 group-open:rotate-180">
+                    <ChevronDown size={16} />
+                  </span>
                 </summary>
                 <div className="space-y-4 border-t border-slate-100 p-4">
                   {(isEn ? section.imageEn : section.imageVi) && section.imageAlt && (
@@ -326,14 +332,14 @@ export default function UserGuideButton() {
                     {section.steps.map(([vi, en], stepIndex) => (
                       <li key={vi} className="flex items-start gap-3 text-sm leading-6 text-slate-700">
                         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">{stepIndex + 1}</span>
-                        <span>{text(vi, en)}</span>
+                        <span className="text-justify">{text(vi, en)}</span>
                       </li>
                     ))}
                   </ol>
                   {section.tip && (
                     <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-5 text-amber-900">
                       <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span><strong>{text("Lưu ý: ", "Tip: ")}</strong>{text(section.tip[0], section.tip[1])}</span>
+                      <span className="text-justify"><strong>{text("Lưu ý: ", "Tip: ")}</strong>{text(section.tip[0], section.tip[1])}</span>
                     </p>
                   )}
                   {section.route && (

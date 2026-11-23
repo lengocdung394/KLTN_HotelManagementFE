@@ -6,6 +6,8 @@ import SearchableFilter from "./SearchableFilter";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
+import { editActionButtonClassName } from "../lib/actionButtonStyles";
 import { localizeBedDescription, localizeRoomNamePrefix } from "../lib/roomLocalization";
 
 export type RoomListItem = {
@@ -139,8 +141,7 @@ export default function RoomListTab({
       setIsManuallyRefreshing(false);
     }
   };
-  const money = (value: number) =>
-    `${value.toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
+  const money = (value: number) => formatVnd(value, i18n.resolvedLanguage ?? i18n.language);
   const translateBed = (bed: string) => localizeBedDescription(bed, (key) => t(key));
   const localizeStatus = (value: string) => {
     if (value === "Sẵn sàng") return t("room.ready");
@@ -237,7 +238,7 @@ export default function RoomListTab({
               <div className="flex items-start justify-between gap-2"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[room.status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{room.status === "Sẵn sàng" ? t("room.ready") : room.status === "Đang dọn" ? t("room.cleaning") : room.status === "Đang ở" ? t("room.staying") : t("room.maintenance")}</span><p className="text-sm font-bold text-slate-900">{money(room.price)}<span className="text-xs font-normal text-slate-400"> {t("room.perNight")}</span></p></div>
               <div className="mt-4 grid grid-cols-2 gap-2 border-y border-slate-100 py-3"><p className="flex min-w-0 items-center gap-2 text-xs text-slate-600"><BedDouble size={15} className="shrink-0 text-slate-400" /><span className="truncate">{translateBed(room.beds)}</span></p><p className="flex min-w-0 items-center justify-end gap-2 text-right text-xs text-slate-600"><Users size={15} className="shrink-0 text-slate-400" /><span className="truncate">{t("room.standardCapacitySummary", { count: room.standardCapacity })}</span></p></div>
               <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2.5"><div className="grid grid-cols-2 gap-2 text-[11px]"><p className="text-slate-600">{t("room.adultSurcharge")}: <strong className="text-amber-800">{money(room.extraAdultFee)}{t("room.perPersonSuffix")}</strong></p><p className="text-slate-600">{t("room.childSurcharge")}: <strong className="text-amber-800">{money(room.extraChildFee)}{t("room.perPersonSuffix")}</strong></p></div><p className="mt-1 text-[10px] text-slate-500">{t("room.infantFreeNotice")}</p></div>
-              <div className="mt-4 border-t border-slate-100 pt-3"><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0">{room.cleaner && <p className="truncate text-[11px] text-slate-500"><Sparkles size={13} className="mr-1 inline text-amber-500" />{room.cleaner}</p>}</div><div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => onShowDetails(room)} className="flex items-center gap-1 rounded-md border border-blue-200 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"><Eye size={13} />{t("room.details")}</button>{canManageRooms && <button type="button" onClick={() => onEditRoom(room)} className="flex items-center gap-1 rounded-md border border-amber-200 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"><Pencil size={12} />{t("room.edit")}</button>}</div></div></div>
+              <div className="mt-4 border-t border-slate-100 pt-3"><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0">{room.cleaner && <p className="truncate text-[11px] text-slate-500"><Sparkles size={13} className="mr-1 inline text-amber-500" />{room.cleaner}</p>}</div><div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => onShowDetails(room)} className="flex items-center gap-1 rounded-md border border-blue-200 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"><Eye size={13} />{t("room.details")}</button>{canManageRooms && <button type="button" onClick={() => onEditRoom(room)} className={editActionButtonClassName}><Pencil size={12} />{t("room.edit")}</button>}</div></div></div>
             </div>
           </article>
         ))}

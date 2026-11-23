@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { formatVnd } from "../lib/currency";
 import BankSelectionField from "../components/BankSelectionField";
 import CheckoutRefundApprovalsPanel from "../components/CheckoutRefundApprovalsPanel";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -93,8 +94,7 @@ const payoutStateLabels: Record<PayOSPayoutState, [string, string]> = {
 };
 
 const money = (value: number | undefined) => {
-  const isEnglish = localStorage.getItem("language") === "en";
-  return `${new Intl.NumberFormat(isEnglish ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(value ?? 0))}${isEnglish ? " VND" : "đ"}`;
+  return formatVnd(Number(value ?? 0));
 };
 
 const dateTime = (value: string | null | undefined) => {

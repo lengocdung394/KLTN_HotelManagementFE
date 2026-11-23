@@ -29,6 +29,7 @@ import {
 } from "../services/checkInOutApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import { allocateDiscountByAmount } from "../lib/bookingPricing";
 import { useGetBookingsByHotelQuery, useGetRoomMatrixQuery, type BookingListItem } from "../services/bookingApi";
 import { useModifyBookingMutation, type ManagementBookingModificationRequest } from "../services/managementBookingApi";
@@ -1102,7 +1103,7 @@ export default function CheckInOutWorkspace() {
       toast({
         variant: "destructive",
         title: localizedText("Chưa thể check-out", "Cannot check out yet"),
-        description: localizedText(`Khách cần thanh toán đủ ${outstandingAmount.toLocaleString("vi-VN")}đ còn nợ trước khi check-out.`, `The guest must pay the outstanding ${outstandingAmount.toLocaleString("en-US")} VND before check-out.`),
+        description: localizedText(`Khách cần thanh toán đủ ${formatVnd(outstandingAmount, "vi")} còn nợ trước khi check-out.`, `The guest must pay the outstanding ${formatVnd(outstandingAmount, "en")} before check-out.`),
       });
       return false;
     }
@@ -2442,7 +2443,7 @@ export default function CheckInOutWorkspace() {
             : null;
           const totalDue = singleCheckoutOutstandingAmount;
           const formatMoney = (amount: number) =>
-            `${amount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}${i18n.language.startsWith("en") ? " VND" : "đ"}`;
+            formatVnd(amount, i18n.language);
           return (
             <div
               className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/40 p-4"
@@ -2634,7 +2635,7 @@ export default function CheckInOutWorkspace() {
             {groupCheckoutOutstandingAmount > 0 && (
               <div className="mt-3 rounded-lg bg-rose-50 p-3">
                 <p className="text-xs font-medium text-rose-700">
-                  {localizedText(`Khách còn phải thanh toán đủ ${groupCheckoutOutstandingAmount.toLocaleString("vi-VN")}đ trước khi được check-out.`, `The guest must pay the outstanding ${groupCheckoutOutstandingAmount.toLocaleString("en-US")} VND before check-out.`)}
+                  {localizedText(`Khách còn phải thanh toán đủ ${formatVnd(groupCheckoutOutstandingAmount, "vi")} trước khi được check-out.`, `The guest must pay the outstanding ${formatVnd(groupCheckoutOutstandingAmount, "en")} before check-out.`)}
                 </p>
                 <button
                   type="button"

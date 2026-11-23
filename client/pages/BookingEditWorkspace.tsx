@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, RefreshCw, Save, Trash2, UserPlus, X } from "lucid
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import { describeBookingModification } from "../lib/bookingModificationSummary";
 import BookingServiceSelector, { type ServiceSelection } from "../components/BookingServiceSelector";
 import { useGetAllServicesQuery } from "../services/serviceApi";
@@ -621,15 +622,15 @@ export default function BookingEditWorkspace() {
           </div>
           <div>
             <p className="text-xs text-slate-500">{localizedText("Tổng giảm giá phòng", "Total room discount")}</p>
-            <p className="mt-0.5 font-semibold text-rose-700">{discountRoomAmount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"}</p>
+            <p className="mt-0.5 font-semibold text-rose-700">{formatVnd(discountRoomAmount, i18n.language)}</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">{localizedText("Tổng giảm giá dịch vụ", "Total service discount")}</p>
-            <p className="mt-0.5 font-semibold text-rose-700">{discountServiceAmount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"}</p>
+            <p className="mt-0.5 font-semibold text-rose-700">{formatVnd(discountServiceAmount, i18n.language)}</p>
           </div>
           <div className="sm:col-span-2 lg:col-span-4">
             <p className="text-xs text-slate-500">{localizedText("Tổng tiền giảm giá", "Total discount")}</p>
-            <p className="mt-0.5 text-base font-bold text-rose-700">{discountTotal.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"}</p>
+            <p className="mt-0.5 text-base font-bold text-rose-700">{formatVnd(discountTotal, i18n.language)}</p>
           </div>
         </div>
       </div>
@@ -743,7 +744,7 @@ export default function BookingEditWorkspace() {
                             const hrId = String(hr.id ?? hr.roomId ?? "");
                             return (
                               <option key={hrId} value={hrId}>
-                                {localizedText("Phòng", "Room")} #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? localizedText("Phòng", "Room"))} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"})
+                                {localizedText("Phòng", "Room")} #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? localizedText("Phòng", "Room"))} ({formatVnd(Number(hr.basePrice ?? hr.price ?? 0), i18n.language)})
                               </option>
                             );
                           })}
@@ -767,8 +768,6 @@ export default function BookingEditWorkspace() {
                             const serviceUnitPrice = Number(srv.price ?? srv.unitPrice ?? 0);
                             const serviceSubtotal = serviceQuantity * serviceUnitPrice;
                             const isFullyCancelled = isSrvCancelled && usedQuantity === 0;
-                            const currencyLocale = i18n.language.startsWith("en") ? "en-US" : "vi-VN";
-
                             return (
                               <div
                                 key={sDetailId || sIdx}
@@ -787,10 +786,10 @@ export default function BookingEditWorkspace() {
                                   <span className="mt-0.5 block text-[11px] text-slate-500">
                                     {localizedText("SL", "Qty")}: {serviceQuantity}
                                     {" · "}
-                                    {localizedText("Đơn giá", "Unit price")}: {serviceUnitPrice.toLocaleString(currencyLocale)}{i18n.language.startsWith("en") ? " VND" : "đ"}
+                                    {localizedText("Đơn giá", "Unit price")}: {formatVnd(serviceUnitPrice, i18n.language)}
                                   </span>
                                   <span className="mt-0.5 block text-[11px] text-slate-500">
-                                    {localizedText("Thành tiền", "Subtotal")}: {serviceSubtotal.toLocaleString(currencyLocale)}{i18n.language.startsWith("en") ? " VND" : "đ"}
+                                    {localizedText("Thành tiền", "Subtotal")}: {formatVnd(serviceSubtotal, i18n.language)}
                                     {usedQuantity > 0 && ` · ${localizedText(`Đã dùng ${usedQuantity}`, `Used ${usedQuantity}`)}`}
                                     {isSrvCancelled && usedQuantity > 0 && ` · ${localizedText("đã bỏ phần chưa dùng", "unused portion removed")}`}
                                   </span>
@@ -852,7 +851,7 @@ export default function BookingEditWorkspace() {
                     const hrId = String(hr.id ?? hr.roomId ?? "");
                     return (
                       <option key={hrId} value={hrId}>
-                        {localizedText("Phòng", "Room")} #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? localizedText("Phòng", "Room"))} ({Number(hr.basePrice ?? hr.price ?? 0).toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"})
+                        {localizedText("Phòng", "Room")} #{hr.roomNumber ?? hrId} - {String(hr.roomType ?? hr.type ?? localizedText("Phòng", "Room"))} ({formatVnd(Number(hr.basePrice ?? hr.price ?? 0), i18n.language)})
                       </option>
                     );
                   })}

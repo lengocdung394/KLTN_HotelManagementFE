@@ -30,6 +30,7 @@ import {
   localizeRoomNamePrefix,
 } from "../lib/roomLocalization";
 import { formatVnd } from "../lib/currency";
+import { addActionButtonClassName, editIconButtonClassName } from "../lib/actionButtonStyles";
 import { getRoomImportErrorMessage, getRoomImportStatus, isRoomImportFinished, startRoomImport } from "../services/roomImportApi";
 import { uploadRoomImagesToCloudinary } from "../services/cloudinaryUploadApi";
 
@@ -331,7 +332,7 @@ const emptyFloorForm = { name: "" };
 export default function RoomWorkspace() {
   const { t, i18n } = useTranslation();
   const formatPricingMoney = (value: number) =>
-    `${Number(value).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
+    formatVnd(Number(value), i18n.resolvedLanguage ?? i18n.language);
   const location = useLocation();
   const dispatch = useAppDispatch();
   const { hotelId, hotelName, roles } = useAppSelector((state) => state.auth);
@@ -1741,7 +1742,7 @@ export default function RoomWorkspace() {
               else openCreateFloorModal();
             }}
             disabled={importingRooms}
-            className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-50"
+            className={addActionButtonClassName}
           >
             <Plus size={16} />{activeTab === "rooms" ? t("room.addRoom") : activeTab === "buildings" ? t("room.addBuilding") : t("room.addFloor")}
           </button>
@@ -2097,7 +2098,7 @@ export default function RoomWorkspace() {
                           <button
                             type="button"
                             onClick={() => setEditingPricingType(entry.roomType)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 transition hover:border-amber-300 hover:bg-amber-100 hover:text-amber-800"
+                            className={editIconButtonClassName}
                             title={t("room.pricingConfig.edit")}
                           >
                             <Pencil size={14} />
