@@ -1,4 +1,4 @@
-import { Download, HelpCircle } from "lucide-react";
+import { Download, HelpCircle, ZoomIn, ZoomOut } from "lucide-react";
 import { useState } from "react";
 import {
   Dialog,
@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 
 export default function UserGuideButton() {
   const [open, setOpen] = useState(false);
+  const [zoom, setZoom] = useState(100);
   const { i18n } = useTranslation();
   const isEn = i18n.language.startsWith("en");
   const guidePdf = isEn
@@ -58,9 +59,35 @@ export default function UserGuideButton() {
               {isEn ? "Download English guide (PDF)" : "Tải hướng dẫn tiếng Anh (PDF)"}
             </a>
           </div>
+          <div className="flex items-center justify-end gap-2">
+            <span className="mr-1 text-sm text-slate-600">
+              {isEn ? "Zoom" : "Thu phóng"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoom((value) => Math.max(50, value - 25))}
+              disabled={zoom <= 50}
+              aria-label={isEn ? "Zoom out" : "Thu nhỏ"}
+              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+            <span className="min-w-12 text-center text-sm tabular-nums text-slate-700">
+              {zoom}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoom((value) => Math.min(200, value + 25))}
+              disabled={zoom >= 200}
+              aria-label={isEn ? "Zoom in" : "Phóng to"}
+              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+          </div>
           <iframe
             title={isEn ? "English user guide" : "Hướng dẫn sử dụng tiếng Việt"}
-            src={guidePdf}
+            src={`${guidePdf}#zoom=${zoom}`}
             className="h-[68vh] min-h-[360px] w-full rounded-lg border border-slate-200 bg-white"
           />
         </DialogContent>
