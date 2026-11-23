@@ -18,6 +18,7 @@ export default function UserGuideButton() {
   const appIsEn = i18n.language.startsWith("en");
   const otherLanguage = guideLanguage === "en" ? "VI" : "EN";
   const guideHtml = (guideLanguage === "en" ? guideEnHtml : guideViHtml)
+    .replace("<head>", '<head><base href="about:srcdoc">')
     .replace(/\.\.\/public\/user-guide\//g, "/user-guide/")
     .replace(
       `href="./USER_GUIDE_${otherLanguage}.md"`,
