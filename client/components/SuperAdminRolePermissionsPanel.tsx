@@ -332,7 +332,6 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [editingRoleCode, setEditingRoleCode] = useState<string | null>(null);
-  const isEditingSystemRole = roles.some((role) => role.code === editingRoleCode && role.system);
   const [roleError, setRoleError] = useState("");
   const [roleFieldErrors, setRoleFieldErrors] = useState<Record<string, string>>({});
   const [addRoleMode, setAddRoleMode] = useState<"single" | "excel">("single");
@@ -449,7 +448,6 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
       fieldErrors.code = localizedText(`Role ${code} đã tồn tại.`, `Role ${code} already exists.`);
     }
     if (!roleName.trim()) fieldErrors.name = localizedText("Vui lòng nhập tên role.", "Enter a role name.");
-    if (!roleDescription.trim()) fieldErrors.description = localizedText("Vui lòng nhập mô tả role.", "Enter a role description.");
     setRoleFieldErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) {
       return;
@@ -570,7 +568,6 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
     }
     if (!permissionName.trim()) fieldErrors.name = localizedText("Vui lòng nhập tên quyền.", "Enter a permission name.");
     if (!permissionCategory.trim()) fieldErrors.category = localizedText("Vui lòng nhập danh mục quyền.", "Enter a permission category.");
-    if (!permissionDescription.trim()) fieldErrors.description = localizedText("Vui lòng nhập mô tả quyền.", "Enter a permission description.");
     setPermissionFieldErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) {
       return;
@@ -859,6 +856,33 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
             {isPermissionCatalogError && <button type="button" onClick={() => void refetchPermissionCatalog()}>{localizedText("Tải danh mục quyền", "Reload permission catalog")}</button>}
           </div>
         </div>
+      )}
+
+      {view === "permissions" && (
+        <nav
+          aria-label={localizedText("Các mục quản lý quyền", "Permission management sections")}
+          className="mx-4 mt-4 flex overflow-x-auto border-b border-slate-200 sm:mx-5"
+        >
+          {([
+            ["catalog", localizedText("Danh mục quyền", "Permission catalog")],
+            ["permissions", localizedText("Gán quyền", "Assign permissions")],
+            ["overview", localizedText("Tổng quan", "Overview")],
+          ] as const).map(([step, label]) => (
+            <button
+              key={step}
+              type="button"
+              aria-current={activeStep === step ? "page" : undefined}
+              onClick={() => navigateToStep(step)}
+              className={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+                activeStep === step
+                  ? "border-blue-600 text-blue-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
       )}
 
       {view === "roles" && (
@@ -1440,6 +1464,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                     {localizedText("Mã quyền", "Permission code")} <span aria-hidden="true" className="text-rose-600">*</span>
                     <input
                       value={permissionCode}
+                      disabled={Boolean(editingPermissionCode)}
                       aria-invalid={Boolean(permissionFieldErrors.code)}
                       aria-describedby={permissionFieldErrors.code ? "permission-code-error" : undefined}
                       onChange={(event) => {
@@ -1449,7 +1474,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                       }}
                       placeholder="VIEW_SPECIAL_REPORT"
                       autoComplete="off"
-                      className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 ${permissionFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
+                      className={`mt-1.5 h-10 w-full rounded-lg border px-3 font-mono text-sm font-normal outline-none focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 ${permissionFieldErrors.code ? "border-rose-400" : "border-slate-200"}`}
                     />
                     {permissionFieldErrors.code && <span id="permission-code-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.code}</span>}
                   </label>
@@ -1487,7 +1512,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   {permissionFieldErrors.category && <span id="permission-category-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{permissionFieldErrors.category}</span>}
                 </label>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  {localizedText("Mô tả", "Description")} <span aria-hidden="true" className="text-rose-600">*</span>
+                  {localizedText("Mô tả (không bắt buộc)", "Description (optional)")}
                   <textarea
                     value={permissionDescription}
                     aria-invalid={Boolean(permissionFieldErrors.description)}
@@ -1667,7 +1692,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   {localizedText("Mã role", "Role code")} <span aria-hidden="true" className="text-rose-600">*</span>
                   <input
                     value={roleCode}
-                    disabled={isEditingSystemRole}
+                    disabled={Boolean(editingRoleCode)}
                     aria-invalid={Boolean(roleFieldErrors.code)}
                     aria-describedby={roleFieldErrors.code ? "role-code-error" : undefined}
                     onChange={(event) => {
@@ -1698,7 +1723,7 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
                   {roleFieldErrors.name && <span id="role-name-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{roleFieldErrors.name}</span>}
                 </label>
                 <label className="mt-3 block text-sm font-semibold text-slate-700">
-                  {localizedText("Mô tả", "Description")} <span aria-hidden="true" className="text-rose-600">*</span>
+                  {localizedText("Mô tả (không bắt buộc)", "Description (optional)")}
                   <textarea
                     value={roleDescription}
                     aria-invalid={Boolean(roleFieldErrors.description)}
@@ -2010,13 +2035,6 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
 
       {view === "permissions" && activeStep === "permissions" && (
         <div className="space-y-5 p-4 sm:p-5">
-          <button
-            type="button"
-            onClick={() => navigateToStep("catalog")}
-            className="text-sm font-semibold text-blue-700 hover:underline"
-          >
-            ← Quay lại danh sách quyền
-          </button>
           <section className="mb-5 rounded-xl border border-slate-200 p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2291,13 +2309,6 @@ export default function SuperAdminRolePermissionsPanel({ view }: Props) {
 
       {view === "permissions" && activeStep === "overview" && (
         <div className="p-4 sm:p-5">
-          <button
-            type="button"
-            onClick={() => navigateToStep("catalog")}
-            className="mb-4 text-sm font-semibold text-blue-700 hover:underline"
-          >
-            ← Quay lại danh sách quyền
-          </button>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-bold text-slate-900">Bản tổng quan role và quyền</h3>
