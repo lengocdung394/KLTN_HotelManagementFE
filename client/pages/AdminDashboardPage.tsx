@@ -126,6 +126,7 @@ type AdminSection =
   | "amenities"
   | "bed-types"
   | "permissions"
+  | "permission-assignments"
   | "roles"
   | "resource-stats"
   | "promotions"
@@ -864,13 +865,14 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "notifications", label: localizedText("Thông báo", "Notifications"), icon: Bell },
     { id: "refund-approvals", label: localizedText("Phê duyệt hoàn tiền", "Refund approvals"), icon: ClipboardCheck },
     { id: "branches", label: localizedText("Quản lý chi nhánh", "Branch management"), icon: Building2 },
-    { id: "permissions", label: localizedText("Quản lý Role và quyền", "Roles and permissions"), icon: ShieldCheck },
+    { id: "permissions", label: localizedText("Quản lý vai trò và quyền", "Roles and permissions"), icon: ShieldCheck },
     { id: "resource-stats", label: localizedText("Thống kê", "Statistics"), icon: BarChart3 },
     { id: "profile", label: localizedText("Cá nhân", "Profile"), icon: CircleUserRound },
   ];
   const isAccountSection =
     section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
-  const isRoleSection = section === "roles" || section === "permissions";
+  const isRoleSection =
+    section === "roles" || section === "permissions" || section === "permission-assignments";
   const isCatalogSection = section === "amenities" || section === "bed-types";
   const isSalesSection = section === "promotions" || section === "services";
 
@@ -1098,7 +1100,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     } else {
       setIsAccountMenuOpen(false);
     }
-    if (id === "roles" || id === "permissions") {
+    if (id === "roles" || id === "permissions" || id === "permission-assignments") {
       setIsRoleMenuOpen(true);
     } else {
       setIsRoleMenuOpen(false);
@@ -1203,7 +1205,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
                     >
                       <ShieldCheck size={18} />
-                      <span className="flex-1 whitespace-nowrap">{localizedText("Quản lý Role và quyền", "Roles and permissions")}</span>
+                      <span className="flex-1 whitespace-nowrap">{localizedText("Quản lý vai trò và quyền", "Roles and permissions")}</span>
                     </button>
                     <button
                       type="button"
@@ -1220,6 +1222,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       {([
                         { id: "roles", label: localizedText("Quản lý vai trò", "Manage roles") },
                         { id: "permissions", label: localizedText("Quản lý quyền", "Manage permissions") },
+                        { id: "permission-assignments", label: localizedText("Gán quyền", "Assign permissions") },
                       ] as const).map(({ id: childId, label: childLabel }) => (
                         <button
                           key={childId}
@@ -1387,7 +1390,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             }`}>
               <button type="button" onClick={handleRoleMenuSelect} className="flex items-center gap-2 py-2 pl-3">
                 <Icon size={15} />
-                {localizedText("Quản lý Role và quyền", "Roles and permissions")}
+                {localizedText("Quản lý vai trò và quyền", "Roles and permissions")}
               </button>
               <button
                 type="button"
@@ -1489,10 +1492,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           </nav>
         )}
         {isRoleMenuOpen && (
-          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label={localizedText("Quản lý Role và quyền", "Roles and permissions")}>
+          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label={localizedText("Quản lý vai trò và quyền", "Roles and permissions")}>
             {([
               { id: "roles", label: localizedText("Quản lý vai trò", "Manage roles") },
               { id: "permissions", label: localizedText("Quản lý quyền", "Manage permissions") },
+              { id: "permission-assignments", label: localizedText("Gán quyền", "Assign permissions") },
             ] as const).map(({ id, label }) => (
               <button
                 key={id}
@@ -1734,6 +1738,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             section !== "bed-types" &&
             section !== "roles" &&
             section !== "permissions" &&
+            section !== "permission-assignments" &&
             section !== "resource-stats" &&
             section !== "notifications" &&
             section !== "refund-approvals" &&
@@ -2007,10 +2012,16 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             />
           )}
 
-          {(section === "roles" || section === "permissions") && (
+          {(section === "roles" || section === "permissions" || section === "permission-assignments") && (
             <SuperAdminRolePermissionsPanel
               key={section}
-              view={section === "roles" ? "roles" : "permissions"}
+              view={
+                section === "roles"
+                  ? "roles"
+                  : section === "permission-assignments"
+                    ? "assignments"
+                    : "permissions"
+              }
             />
           )}
 
