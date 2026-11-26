@@ -1,5 +1,5 @@
 import { CalendarClock, Clock3 } from "lucide-react";
-import { useGetMyHousekeepingTasksQuery, useGetTodayShiftAssignmentsQuery } from "../services/shiftApi";
+import { useGetTodayShiftAssignmentsQuery } from "../services/shiftApi";
 import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
 
@@ -13,13 +13,6 @@ const localDate = () => {
 
 export default function EmployeeShiftSchedule() {
   const { data: shifts = [], isLoading, isError } = useGetTodayShiftAssignmentsQuery();
-  const {
-    data: housekeepingTasks = [],
-    isLoading: isTasksLoading,
-    isError: isTasksError,
-  } = useGetMyHousekeepingTasksQuery(undefined, {
-    pollingInterval: 30000,
-  });
   const employeeId = useAppSelector((state) => state.auth.employeeId);
   const today = localDate();
   const myShifts = shifts.filter((shift) => shift.employeeId === employeeId && shift.workDate === today);
@@ -31,8 +24,8 @@ export default function EmployeeShiftSchedule() {
           <CalendarClock size={20} />
         </div>
         <div>
-          <h2 className="font-bold text-slate-900">{localizedText("Ca làm hôm nay và công việc được giao", "Today's shifts and assigned tasks")}</h2>
-          <p className="mt-1 text-sm text-slate-500">{localizedText("Lịch ca cá nhân và các việc cần hoàn thành trong ca.", "Your shift schedule and tasks to complete during the shift.")}</p>
+          <h2 className="font-bold text-slate-900">{localizedText("Ca làm hôm nay", "Today's shifts")}</h2>
+          <p className="mt-1 text-sm text-slate-500">{localizedText("Lịch ca cá nhân của bạn trong ngày.", "Your personal shift schedule for today.")}</p>
         </div>
       </div>
       {isLoading ? (
@@ -63,30 +56,6 @@ export default function EmployeeShiftSchedule() {
           ))}
         </div>
       )}
-      <section className="border-t border-slate-100 p-5">
-        <h3 className="text-sm font-bold text-slate-900">{localizedText("Phân công dọn phòng", "Housekeeping assignments")}</h3>
-        <p className="mt-1 text-xs text-slate-500">{localizedText("Các phòng được giao cho bạn dọn sau khi khách checkout.", "Rooms assigned to you for cleaning after guest checkout.")}</p>
-        {isTasksLoading ? (
-          <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">{localizedText("Đang tải phân công dọn phòng...", "Loading housekeeping assignments...")}</p>
-        ) : isTasksError ? (
-          <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{localizedText("Không thể tải phân công dọn phòng.", "Could not load housekeeping assignments.")}</p>
-        ) : housekeepingTasks.length === 0 ? (
-          <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">{localizedText("Hiện chưa có phòng nào được giao cho bạn dọn.", "No rooms have been assigned to you for cleaning yet.")}</p>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {housekeepingTasks.map((task) => (
-              <article key={task.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{localizedText("Phòng", "Room")} {task.roomNumber}</p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {task.status === "REASSIGNED" ? localizedText("Đã chuyển giao sau 1 giờ chưa xác nhận", "Reassigned after no confirmation for 1 hour") : localizedText("Được giao sau khi khách checkout", "Assigned after guest checkout")}
-                  </p>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
     </section>
   );
 }

@@ -133,6 +133,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const { hotelId, roles } = useAppSelector((state) => state.auth);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const canManagePromotions = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
+  const canViewPromotionUsage = roles.some((role) => ["ROLE_MANAGER", "ROLE_ADMIN", "ROLE_SUPER_ADMIN"].includes(role));
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [targetHotelId, setTargetHotelId] = useState("");
@@ -209,7 +210,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       : !isSystemAdmin && hasHotelId
         ? { hotelId: Number(hotelId) }
         : {}),
-  }, { skip: !hasHotelId && !isSystemAdmin });
+  }, { skip: (!hasHotelId && !isSystemAdmin) || !canViewPromotionUsage });
   const promotionSavingsById = new Map(
     (promotionUsageReport ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
   );
@@ -254,7 +255,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       .includes(normalizedSearchQuery);
     return matchesStatus && matchesScope && matchesSearch;
   });
-  const shownPromotionColumns = PROMOTION_TABLE_COLUMNS.filter((column) => visiblePromotionColumns[column.id]);
+  const availablePromotionColumns = PROMOTION_TABLE_COLUMNS.filter((column) => canViewPromotionUsage || column.id !== "value");
+  const shownPromotionColumns = availablePromotionColumns.filter((column) => visiblePromotionColumns[column.id]);
   const promotionTableWidth = shownPromotionColumns.reduce((total, column) => total + column.width, 0);
   const hasPromotionFilters = Boolean(
     searchQuery.trim() || scopeFilter !== "ALL" || statusFilter !== "ALL" || isDateFilterActive,
@@ -983,7 +985,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                 <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   {t("promotion.showColumns", "Hiển thị cột")}
                 </p>
-                {PROMOTION_TABLE_COLUMNS.map((column) => {
+                {availablePromotionColumns.map((column) => {
                   const isLastVisibleColumn = shownPromotionColumns.length === 1 && visiblePromotionColumns[column.id];
                   return (
                     <label
@@ -1155,7 +1157,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                         {visiblePromotionColumns.offer && <td className="whitespace-nowrap px-5 py-3 text-right font-bold text-slate-900">{formatValue(promotion)}</td>}
                         {visiblePromotionColumns.claimed && <td className="px-5 py-3 text-right tabular-nums">{(promotion.claimedCount ?? 0).toLocaleString(locale)}</td>}
                         {visiblePromotionColumns.used && <td className="px-5 py-3 text-right tabular-nums">{(promotion.usedCount ?? 0).toLocaleString(locale)}</td>}
-                        {visiblePromotionColumns.value && <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
+                        {canViewPromotionUsage && visiblePromotionColumns.value && <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
                           {isPromotionUsageLoading
                             ? "…"
                             : isPromotionUsageError
