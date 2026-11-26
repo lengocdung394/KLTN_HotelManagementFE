@@ -41,7 +41,7 @@ export interface ChatHistoryResponse {
 const AI_BASE_URL = "http://127.0.0.1:8000";
 
 export async function sendChatMessageApi(req: ChatRequest): Promise<{ code: number; message: string; result: ChatResponse }> {
-  const urls = [`${AI_BASE_URL}/admin-ai/chat`, `/api/admin-ai/chat`, `${AI_BASE_URL}/api/admin-ai/chat`];
+  const urls = [`${AI_BASE_URL}/api/admin-ai/chat`, `/api/admin-ai/chat`, `${AI_BASE_URL}/admin-ai/chat`];
   let lastError: any = null;
   for (const url of urls) {
     try {

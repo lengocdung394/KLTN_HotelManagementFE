@@ -3,14 +3,13 @@ const getSavedLanguage = () =>
 
 export function formatVnd(
   amount: number,
-  language = getSavedLanguage(),
+  _language = getSavedLanguage(),
 ) {
   if (!Number.isFinite(amount)) return "-";
 
-  const isEnglish = language.startsWith("en");
-  const formattedAmount = new Intl.NumberFormat(isEnglish ? "en-US" : "vi-VN", {
+  const formattedAmount = new Intl.NumberFormat("vi-VN", {
     maximumFractionDigits: 0,
   }).format(amount);
 
-  return isEnglish ? `${formattedAmount} VND` : `${formattedAmount}đ`;
+  return `${formattedAmount} VND`;
 }
