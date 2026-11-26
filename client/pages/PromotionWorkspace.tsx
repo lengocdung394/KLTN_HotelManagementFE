@@ -7,6 +7,7 @@ import { toast } from "@/components/ui/use-toast";
 import DatePickerPopover from "../components/DatePickerPopover";
 import { useCreatePromotionMutation, useGetPromotionSummaryQuery, useGetPromotionUsageReportQuery, useGetPromotionsQuery, useUpdatePromotionMutation, type CreatePromotionRequest, type Promotion, type PromotionDiscountType, type PromotionScope, type PromotionStatus } from "../services/promotionApi";
 import { formatVnd } from "../lib/currency";
+import { addActionButtonClassName, editActionButtonClassName } from "../lib/actionButtonStyles";
 import { bindHotelSocketEvents } from "../lib/socket";
 import { baseApi } from "../services/baseApi";
 import type { SuperAdminBranch } from "../services/superAdminApi";
@@ -132,6 +133,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
   const { hotelId, roles } = useAppSelector((state) => state.auth);
   const isSystemAdmin = roles.includes("ROLE_SUPER_ADMIN");
   const canManagePromotions = roles.includes("ROLE_MANAGER") || roles.includes("ROLE_SUPER_ADMIN");
+  const canViewPromotionUsage = roles.some((role) => ["ROLE_MANAGER", "ROLE_ADMIN", "ROLE_SUPER_ADMIN"].includes(role));
   const hasHotelId = Boolean(hotelId) && !Number.isNaN(Number(hotelId));
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [targetHotelId, setTargetHotelId] = useState("");
@@ -208,7 +210,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       : !isSystemAdmin && hasHotelId
         ? { hotelId: Number(hotelId) }
         : {}),
-  }, { skip: !hasHotelId && !isSystemAdmin });
+  }, { skip: (!hasHotelId && !isSystemAdmin) || !canViewPromotionUsage });
   const promotionSavingsById = new Map(
     (promotionUsageReport ?? []).map((promotion) => [promotion.promotionId, promotion.savings]),
   );
@@ -253,7 +255,8 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       .includes(normalizedSearchQuery);
     return matchesStatus && matchesScope && matchesSearch;
   });
-  const shownPromotionColumns = PROMOTION_TABLE_COLUMNS.filter((column) => visiblePromotionColumns[column.id]);
+  const availablePromotionColumns = PROMOTION_TABLE_COLUMNS.filter((column) => canViewPromotionUsage || column.id !== "value");
+  const shownPromotionColumns = availablePromotionColumns.filter((column) => visiblePromotionColumns[column.id]);
   const promotionTableWidth = shownPromotionColumns.reduce((total, column) => total + column.width, 0);
   const hasPromotionFilters = Boolean(
     searchQuery.trim() || scopeFilter !== "ALL" || statusFilter !== "ALL" || isDateFilterActive,
@@ -279,11 +282,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
     {
       label: t("promotion.guestSavings"),
       value: promotionSummary?.monthlySavingsAmount,
-      format: (value: number) => new Intl.NumberFormat(locale, {
-        style: "currency",
-        currency: "VND",
-        maximumFractionDigits: 0,
-      }).format(value),
+      format: (value: number) => formatVnd(value, locale),
       description: monthLabel,
     },
     {
@@ -866,7 +865,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
               <p className="mt-1 text-sm text-slate-500">{label("programsDescription")}</p>
             </div>
           </div>
-          {canManagePromotions && <button onClick={openCreatePromotion} className="flex w-fit items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white">
+          {canManagePromotions && <button onClick={openCreatePromotion} className={addActionButtonClassName}>
             <Plus size={16} />{label("create")}
           </button>}
         </div>
@@ -986,7 +985,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                 <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   {t("promotion.showColumns", "Hiển thị cột")}
                 </p>
-                {PROMOTION_TABLE_COLUMNS.map((column) => {
+                {availablePromotionColumns.map((column) => {
                   const isLastVisibleColumn = shownPromotionColumns.length === 1 && visiblePromotionColumns[column.id];
                   return (
                     <label
@@ -1158,12 +1157,12 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                         {visiblePromotionColumns.offer && <td className="whitespace-nowrap px-5 py-3 text-right font-bold text-slate-900">{formatValue(promotion)}</td>}
                         {visiblePromotionColumns.claimed && <td className="px-5 py-3 text-right tabular-nums">{(promotion.claimedCount ?? 0).toLocaleString(locale)}</td>}
                         {visiblePromotionColumns.used && <td className="px-5 py-3 text-right tabular-nums">{(promotion.usedCount ?? 0).toLocaleString(locale)}</td>}
-                        {visiblePromotionColumns.value && <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
+                        {canViewPromotionUsage && visiblePromotionColumns.value && <td className="whitespace-nowrap px-5 py-3 text-right font-semibold tabular-nums text-slate-700">
                           {isPromotionUsageLoading
                             ? "…"
                             : isPromotionUsageError
                               ? "—"
-                              : `${(promotionSavingsById.get(promotion.id) ?? 0).toLocaleString(locale)}${locale === "en-US" ? " VND" : "đ"}`}
+                              : formatVnd(promotionSavingsById.get(promotion.id) ?? 0, locale)}
                         </td>}
                         {visiblePromotionColumns.status && <td className="px-5 py-3">
                           <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(promotion)}`}>
@@ -1191,7 +1190,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                                   type="button"
                                   disabled={expired || used}
                                   onClick={() => openEditPromotion(promotion)}
-                                  className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-200 px-2 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-60 disabled:hover:border-slate-200 disabled:hover:bg-slate-100"
+                                  className={`${editActionButtonClassName} w-full`}
                                 >
                                   <Pencil size={16} className="shrink-0" aria-hidden="true" />
                                   {label("edit")}

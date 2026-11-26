@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Clock3, LogOut, Search } from "lucide-react";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import ListPagination from "./ListPagination";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
@@ -125,7 +126,7 @@ export default function LateCheckoutPreview({ records, isLoading = false, isErro
                   <td className="whitespace-nowrap px-3 py-2.5">{formatDateTime(record.currentTime, language)}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 font-semibold">{record.overdueDuration}</td>
                   <td className="whitespace-nowrap px-3 py-2.5"><span title={`${localizedText("Dự kiến", "Scheduled")}: ${formatDateTime(record.scheduledCheckout, language)} · ${localizedText("Hiện tại", "Current")}: ${formatDateTime(record.currentTime, language)}`} className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ring-1 ring-inset ${levelStyle(record.level)}`}>{record.level}</span></td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-semibold">{record.currentSurcharge == null ? "-" : `${record.currentSurcharge.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-semibold">{record.currentSurcharge == null ? "-" : formatVnd(record.currentSurcharge, language)}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right"><button type="button" onClick={() => onCheckout?.(record)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-amber-600 px-3 text-xs font-semibold text-white transition hover:bg-amber-700"><LogOut size={14} />Check-out</button></td>
                 </tr>
               ))}

@@ -8,6 +8,7 @@ describe("formatVnd", () => {
 
   it("uses the Vietnamese number format and đồng symbol", () => {
     expect(formatVnd(2000, "vi")).toBe("2.000đ");
+    expect(formatVnd(500, "vi")).toBe("500đ");
   });
 
   it("returns a placeholder for non-finite amounts", () => {

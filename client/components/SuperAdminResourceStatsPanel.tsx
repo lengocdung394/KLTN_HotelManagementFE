@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { formatVnd } from "../lib/currency";
 import { BarChart3, BedDouble, Building2, CalendarDays, Check, ChevronDown, ConciergeBell, PanelLeftClose, PanelLeftOpen, RefreshCw, RotateCcw, Tag, Wallet, XCircle } from "lucide-react";
 import {
   Command,
@@ -372,8 +373,7 @@ export default function SuperAdminResourceStatsPanel({ branches, isLoading, isEr
   }, [branchPage, branchTotalPages]);
   const locale = i18n.language.startsWith("en") ? "en-US" : "vi-VN";
   const formatCount = (value: number) => new Intl.NumberFormat(locale).format(value);
-  const formatMoney = (value: number) =>
-    `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)} ${i18n.language.startsWith("en") ? "VND" : "đ"}`;
+  const formatMoney = (value: number) => formatVnd(value, i18n.language);
   const displayCount = (value: number) => isStatsLoading || hasReportErrors || !allReportsLoaded ? "—" : formatCount(value);
   const selectedBranchName = visibleBranches.length === 1 ? visibleBranches[0].name : null;
   const reportScopeLabel = selectedBranchName

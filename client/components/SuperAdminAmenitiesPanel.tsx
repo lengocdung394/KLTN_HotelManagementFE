@@ -14,6 +14,7 @@ import {
   useUpdateAmenityMutation,
 } from "../services/amenityApi";
 import { localizedText } from "../i18n";
+import { addActionButtonClassName } from "../lib/actionButtonStyles";
 
 const errorMessage = (error: unknown) => {
   if (!error || typeof error !== "object") return localizedText("Đã xảy ra lỗi. Vui lòng thử lại.", "An error occurred. Please try again.");
@@ -125,7 +126,7 @@ export default function SuperAdminAmenitiesPanel() {
                 {localizedText("Quản lý danh mục tiện ích dùng chung cho các chi nhánh. Chỉ Super Admin được thêm, chỉnh sửa hoặc nhập dữ liệu.", "Manage the amenity catalog shared by all branches. Only Super Admins can add, edit, or import items.")}
               </p>
             </div>
-            <button type="button" onClick={() => { setEntryMode("manual"); setCreateError(""); setCreateFieldErrors({}); setIsEntryDialogOpen(true); }} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
+            <button type="button" onClick={() => { setEntryMode("manual"); setCreateError(""); setCreateFieldErrors({}); setIsEntryDialogOpen(true); }} className={addActionButtonClassName}>
               <Plus size={16} /> {localizedText("Thêm tiện ích", "Add amenity")}
             </button>
           </div>
@@ -168,7 +169,7 @@ export default function SuperAdminAmenitiesPanel() {
                   {createFieldErrors.price && <span id="amenity-price-error" role="alert" className="mt-1 block text-xs font-normal text-rose-600">{createFieldErrors.price}</span>}
                 </label>
               </div>
-              <button type="submit" disabled={isCreating} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={isCreating} className={addActionButtonClassName}>
                 <Plus size={15} /> {isCreating ? localizedText("Đang lưu...", "Saving...") : localizedText("Thêm tiện ích", "Add amenity")}
               </button>
             </form>

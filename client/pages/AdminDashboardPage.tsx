@@ -37,6 +37,8 @@ import {
 } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import i18n, { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
+import { addActionButtonClassName, editActionButtonClassName } from "../lib/actionButtonStyles";
 import { toast } from "@/components/ui/use-toast";
 import { baseApi } from "../services/baseApi";
 import { bindSuperAdminSocketEvents, joinSuperAdminAccountsRoom } from "../lib/socket";
@@ -75,6 +77,7 @@ import {
   useGetCheckoutRefundsQuery,
 } from "../services/managementBookingApi";
 import RoomEditForm, { type RoomEditDraft } from "../components/RoomEditForm";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 import {
   useLazyGetRoomByIdQuery,
   useGetRoomStatusesQuery,
@@ -123,6 +126,7 @@ type AdminSection =
   | "amenities"
   | "bed-types"
   | "permissions"
+  | "permission-assignments"
   | "roles"
   | "resource-stats"
   | "promotions"
@@ -147,7 +151,7 @@ type AdminNotification = {
 type NotificationCategoryFilter = "all" | AdminNotification["category"];
 
 const formatMoney = (amount: number) =>
-  `${amount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")} ${i18n.language.startsWith("en") ? "VND" : "đ"}`;
+  formatVnd(amount, i18n.language);
 
 const getNotificationCategory = (type: NotificationRecord["type"]): AdminNotification["category"] => {
   if (type.startsWith("BOOKING_") || type === "PAYMENT_RECEIVED") return "booking";
@@ -861,13 +865,14 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     { id: "notifications", label: localizedText("Thông báo", "Notifications"), icon: Bell },
     { id: "refund-approvals", label: localizedText("Phê duyệt hoàn tiền", "Refund approvals"), icon: ClipboardCheck },
     { id: "branches", label: localizedText("Quản lý chi nhánh", "Branch management"), icon: Building2 },
-    { id: "permissions", label: localizedText("Quản lý Role và quyền", "Roles and permissions"), icon: ShieldCheck },
+    { id: "permissions", label: localizedText("Quản lý vai trò và quyền", "Roles and permissions"), icon: ShieldCheck },
     { id: "resource-stats", label: localizedText("Thống kê", "Statistics"), icon: BarChart3 },
     { id: "profile", label: localizedText("Cá nhân", "Profile"), icon: CircleUserRound },
   ];
   const isAccountSection =
     section === "accounts-overview" || section === "staff-accounts" || section === "customer-accounts";
-  const isRoleSection = section === "roles" || section === "permissions";
+  const isRoleSection =
+    section === "roles" || section === "permissions" || section === "permission-assignments";
   const isCatalogSection = section === "amenities" || section === "bed-types";
   const isSalesSection = section === "promotions" || section === "services";
 
@@ -1095,7 +1100,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     } else {
       setIsAccountMenuOpen(false);
     }
-    if (id === "roles" || id === "permissions") {
+    if (id === "roles" || id === "permissions" || id === "permission-assignments") {
       setIsRoleMenuOpen(true);
     } else {
       setIsRoleMenuOpen(false);
@@ -1200,7 +1205,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
                     >
                       <ShieldCheck size={18} />
-                      <span className="flex-1 whitespace-nowrap">{localizedText("Quản lý Role và quyền", "Roles and permissions")}</span>
+                      <span className="flex-1 whitespace-nowrap">{localizedText("Quản lý vai trò và quyền", "Roles and permissions")}</span>
                     </button>
                     <button
                       type="button"
@@ -1217,6 +1222,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       {([
                         { id: "roles", label: localizedText("Quản lý vai trò", "Manage roles") },
                         { id: "permissions", label: localizedText("Quản lý quyền", "Manage permissions") },
+                        { id: "permission-assignments", label: localizedText("Gán quyền", "Assign permissions") },
                       ] as const).map(({ id: childId, label: childLabel }) => (
                         <button
                           key={childId}
@@ -1364,26 +1370,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             <p className="text-sm font-semibold text-slate-500">{localizedText("Cổng quản trị toàn hệ thống", "System administration portal")}</p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label={localizedText("Chọn ngôn ngữ", "Choose language")}>
-              {(["vi", "en"] as const).map((language) => (
-                <button
-                  key={language}
-                  type="button"
-                  aria-pressed={i18n.language.startsWith(language)}
-                  onClick={() => {
-                    void i18n.changeLanguage(language);
-                    localStorage.setItem("language", language);
-                  }}
-                  className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition ${
-                    i18n.language.startsWith(language)
-                      ? "bg-white text-blue-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-900"
-                  }`}
-                >
-                  {language === "vi" ? "VI" : "EN"}
-                </button>
-              ))}
-            </div>
+            <LanguageSwitcher />
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-800">{fullName || localizedText("Quản trị viên", "Administrator")}</p>
               <p className="text-xs text-slate-500">{email || "ROLE_SUPER_ADMIN"}</p>
@@ -1403,7 +1390,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             }`}>
               <button type="button" onClick={handleRoleMenuSelect} className="flex items-center gap-2 py-2 pl-3">
                 <Icon size={15} />
-                {localizedText("Quản lý Role và quyền", "Roles and permissions")}
+                {localizedText("Quản lý vai trò và quyền", "Roles and permissions")}
               </button>
               <button
                 type="button"
@@ -1505,10 +1492,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
           </nav>
         )}
         {isRoleMenuOpen && (
-          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label={localizedText("Quản lý Role và quyền", "Roles and permissions")}>
+          <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 py-2 lg:hidden" aria-label={localizedText("Quản lý vai trò và quyền", "Roles and permissions")}>
             {([
               { id: "roles", label: localizedText("Quản lý vai trò", "Manage roles") },
               { id: "permissions", label: localizedText("Quản lý quyền", "Manage permissions") },
+              { id: "permission-assignments", label: localizedText("Gán quyền", "Assign permissions") },
             ] as const).map(({ id, label }) => (
               <button
                 key={id}
@@ -1750,6 +1738,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             section !== "bed-types" &&
             section !== "roles" &&
             section !== "permissions" &&
+            section !== "permission-assignments" &&
             section !== "resource-stats" &&
             section !== "notifications" &&
             section !== "refund-approvals" &&
@@ -1824,7 +1813,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   <h2 className="text-lg font-bold text-slate-900">{localizedText("Danh sách chi nhánh", "Branch list")}</h2>
                   <p className="mt-1 text-sm text-slate-500">{localizedText("Xem doanh thu, nhân viên, booking hoặc tạo chi nhánh mới.", "View revenue, staff, bookings, or create a new branch.")}</p>
                 </div>
-                <button type="button" onClick={() => { setBranchFormError(""); setBranchFieldErrors({}); setIsBranchFormOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                <button type="button" onClick={() => { setBranchFormError(""); setBranchFieldErrors({}); setIsBranchFormOpen(true); }} className={addActionButtonClassName}>
                   <Plus size={16} /> {localizedText("Thêm chi nhánh", "Add branch")}
                 </button>
               </div>
@@ -1848,7 +1837,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{bedTypes.length} {localizedText("loại", "types")}</span>
-                    <button type="button" onClick={() => { setBedTypeDialogMode("manual"); setBedTypeError(""); setBedTypeNameError(""); setBedTypeMessage(""); setIsBedTypeDialogOpen(true); }} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                    <button type="button" onClick={() => { setBedTypeDialogMode("manual"); setBedTypeError(""); setBedTypeNameError(""); setBedTypeMessage(""); setIsBedTypeDialogOpen(true); }} className={addActionButtonClassName}>
                       <Plus size={16} /> {localizedText("Thêm loại giường", "Add bed type")}
                     </button>
                   </div>
@@ -1905,7 +1894,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                                       setBedTypeDialogMode("manual");
                                       setIsBedTypeDialogOpen(true);
                                     }}
-                                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                                    className={editActionButtonClassName}
                                   >
                                     <Pencil size={14} /> {localizedText("Chỉnh sửa", "Edit")}
                                   </button>
@@ -1953,7 +1942,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                       </label>
                       {bedTypeError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{bedTypeError}</p>}
                       {bedTypeMessage && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{bedTypeMessage}</p>}
-                      <button type="submit" disabled={isCreatingBedType || isUpdatingBedType} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                      <button type="submit" disabled={isCreatingBedType || isUpdatingBedType} className={addActionButtonClassName}>
                         <Plus size={15} /> {isCreatingBedType || isUpdatingBedType ? localizedText("Đang lưu...", "Saving...") : editingBedTypeId !== null ? localizedText("Lưu thay đổi", "Save changes") : localizedText("Thêm loại giường", "Add bed type")}
                       </button>
                     </form>
@@ -2023,10 +2012,16 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             />
           )}
 
-          {(section === "roles" || section === "permissions") && (
+          {(section === "roles" || section === "permissions" || section === "permission-assignments") && (
             <SuperAdminRolePermissionsPanel
               key={section}
-              view={section === "roles" ? "roles" : "permissions"}
+              view={
+                section === "roles"
+                  ? "roles"
+                  : section === "permission-assignments"
+                    ? "assignments"
+                    : "permissions"
+              }
             />
           )}
 
@@ -2271,7 +2266,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
             {branchFormError && <p role="alert" className="mt-3 text-sm text-rose-600">{branchFormError}</p>}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setIsBranchFormOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">{localizedText("Hủy", "Cancel")}</button>
-              <button type="submit" disabled={isCreatingBranch || isParsingBranchPolicy} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isParsingBranchPolicy ? localizedText("Đang đọc file...", "Reading file...") : isCreatingBranch ? localizedText("Đang tạo...", "Creating...") : localizedText("Tạo chi nhánh", "Create branch")}</button>
+              <button type="submit" disabled={isCreatingBranch || isParsingBranchPolicy} className={addActionButtonClassName}>{isParsingBranchPolicy ? localizedText("Đang đọc file...", "Reading file...") : isCreatingBranch ? localizedText("Đang tạo...", "Creating...") : localizedText("Tạo chi nhánh", "Create branch")}</button>
             </div>
           </form>
         </div>
@@ -3524,11 +3519,7 @@ function DetailRow({
             ? localizedText("Chỉnh sửa", "Edit")
             : localizedText("Chưa kết nối API chỉnh sửa", "Edit API is not connected")}
           onClick={onEdit}
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${
-            onEdit
-              ? "border-amber-200 bg-white text-amber-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
-              : "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400"
-          }`}
+          className={editActionButtonClassName}
         >
           <Pencil size={14} />
           {editLoading

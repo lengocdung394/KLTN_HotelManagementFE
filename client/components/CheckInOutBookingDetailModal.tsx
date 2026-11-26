@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CalendarDays, Check, CreditCard, Pencil, UserRound, X } from "lucide-react";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
+import { editActionButtonClassName } from "../lib/actionButtonStyles";
 import type { DailyRecord, ServiceCharge } from "./CheckInOutRecordList";
 
 export type BookingServiceQuantityEdit = {
@@ -16,7 +18,7 @@ type CheckInOutBookingDetailModalProps = {
   isSavingServices?: boolean;
 };
 
-const money = (value: number, language: string) => `${value.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
+const money = (value: number, language: string) => formatVnd(value, language);
 const formatDateTime = (value: string | undefined, language: string) => value
   ? new Date(value).toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN", { dateStyle: "short", timeStyle: "short" })
   : localizedText("Chưa cập nhật", "Not provided");
@@ -106,7 +108,7 @@ export default function CheckInOutBookingDetailModal({ records, onClose, onSaveS
             <p className="mt-1 text-xs text-slate-500">{records.length} {localizedText("phòng", "rooms")} · {firstRecord.flow === "check-in" ? "Check-in" : "Check-out"}</p>
           </div>
           <div className="flex items-center gap-2">
-            {canEditServices && !isEditingServices && <button type="button" onClick={beginServiceEdit} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Pencil size={14} />{localizedText("Chỉnh sửa dịch vụ", "Edit services")}</button>}
+            {canEditServices && !isEditingServices && <button type="button" onClick={beginServiceEdit} className={editActionButtonClassName}><Pencil size={14} />{localizedText("Chỉnh sửa dịch vụ", "Edit services")}</button>}
             <button type="button" onClick={onClose} aria-label={localizedText("Đóng chi tiết booking", "Close booking details")} title={localizedText("Đóng", "Close")} className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-100">
               <X size={18} />
             </button>

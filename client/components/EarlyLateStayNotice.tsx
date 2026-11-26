@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 
 type EarlyLateStayNoticeProps = {
   action: "check-in" | "check-out";
@@ -10,7 +11,7 @@ type EarlyLateStayNoticeProps = {
   onConfirm: () => void;
 };
 
-const money = (value: number, language: string) => `${value.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
+const money = (value: number, language: string) => formatVnd(value, language);
 
 export default function EarlyLateStayNotice({ action, message, fee, roomFees = [], onCancel, onConfirm }: EarlyLateStayNoticeProps) {
   const { i18n } = useTranslation();

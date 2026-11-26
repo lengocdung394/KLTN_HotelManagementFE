@@ -19,6 +19,7 @@ import { useGetPromotionsQuery, type Promotion } from "../services/promotionApi"
 import { useGetSuperAdminBranchesQuery } from "../services/superAdminApi";
 import { useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import { toast } from "@/components/ui/use-toast";
 import ListPagination from "../components/ListPagination";
 import FilterSelect from "../components/FilterSelect";
@@ -47,11 +48,7 @@ const localDateString = (date: Date) =>
 const dateFromLocalDateString = (value: string) =>
   value ? new Date(`${value}T00:00:00`) : undefined;
 
-const formatMoney = (amount: number) =>
-  localizedText(
-    `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}đ`,
-    `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))} VND`,
-  );
+const formatMoney = (amount: number) => formatVnd(Number(amount ?? 0));
 
 const roomStatusLabel = (status: string) => {
   if (status === "READY") return localizedText("Sẵn sàng", "Ready");

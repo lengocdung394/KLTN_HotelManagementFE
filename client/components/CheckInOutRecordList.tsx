@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import { AlertTriangle, Clock3, Eye, LogIn, LogOut } from "lucide-react";
 import BatchStayCard from "./BatchStayCard";
 import ListPagination from "./ListPagination";
@@ -153,7 +154,7 @@ export default function CheckInOutRecordList({
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{localizedText("Tổng tiền", "Total")}</p>
-                <p className="mt-1 text-sm font-bold text-slate-900">{totalAmount.toLocaleString(i18n.language.startsWith("en") ? "en-US" : "vi-VN")}{i18n.language.startsWith("en") ? " VND" : "đ"}</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">{formatVnd(totalAmount, i18n.language)}</p>
               </div>
             </div>
           </div>

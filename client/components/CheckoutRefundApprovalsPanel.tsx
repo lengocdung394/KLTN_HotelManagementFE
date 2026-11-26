@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { subscribeHotelSocketEvents } from "../lib/socket";
+import { formatVnd } from "../lib/currency";
 import { baseApi } from "../services/baseApi";
 import {
   useApproveCheckoutRefundMutation,
@@ -23,8 +24,7 @@ import {
 } from "../services/managementBookingApi";
 
 const money = (amount: number) => {
-  const isEnglish = localStorage.getItem("language") === "en";
-  return `${new Intl.NumberFormat(isEnglish ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(amount ?? 0))}${isEnglish ? " VND" : "đ"}`;
+  return formatVnd(Number(amount ?? 0));
 };
 
 const dateTime = (value?: string | null) => {

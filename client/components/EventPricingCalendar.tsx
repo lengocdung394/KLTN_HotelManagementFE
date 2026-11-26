@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { formatVnd } from "../lib/currency";
+import { addActionButtonClassName, editActionButtonClassName } from "../lib/actionButtonStyles";
 import DatePickerPopover from "./DatePickerPopover";
 import ListPagination from "./ListPagination";
 import { toast } from "../hooks/use-toast";
@@ -260,7 +262,7 @@ export default function EventPricingCalendar() {
   const getEventStatusLabel = (status: "ACTIVE" | "UPCOMING" | "EXPIRED") =>
     t(status === "ACTIVE" ? "eventPricing.active" : status === "UPCOMING" ? "eventPricing.upcoming" : "eventPricing.expired");
   const formatMoney = (value: number) =>
-    `${Number(value).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")}${i18n.resolvedLanguage?.startsWith("en") ? " VND" : "đ"}`;
+    formatVnd(Number(value), i18n.resolvedLanguage ?? i18n.language);
   const today = getLocalDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date());
@@ -670,7 +672,7 @@ export default function EventPricingCalendar() {
         <button
           type="button"
           onClick={openCreateModal}
-          className="flex w-fit items-center gap-2 rounded-xl bg-linear-to-r from-blue-600 to-sky-500 px-4.5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-sky-600 transition duration-150 active:scale-95"
+          className={addActionButtonClassName}
         >
           <Plus size={16} className="stroke-[2.5]" />
           {t("eventPricing.create")}
@@ -781,7 +783,7 @@ export default function EventPricingCalendar() {
           <button
             type="button"
             onClick={openCreateModal}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition"
+            className={`mt-4 ${addActionButtonClassName}`}
           >
             <Plus size={15} /> {t("eventPricing.createNew")}
           </button>
@@ -849,7 +851,7 @@ export default function EventPricingCalendar() {
                           : status === "EXPIRED"
                             ? t("eventPricing.expiredEventEditError")
                             : undefined}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 transition enabled:hover:border-amber-300 enabled:hover:bg-amber-50 enabled:hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className={editActionButtonClassName}
                       >
                         <Pencil size={13} />
                         {t("eventPricing.edit")}

@@ -182,7 +182,7 @@ export default function RoomEditForm({
                 <ReadOnlyValue
                   label={t("room.editForm.basePrice")}
                   value={draft.basePrice != null && draft.basePrice !== "" && Number.isFinite(Number(draft.basePrice))
-                    ? `${Number(draft.basePrice).toLocaleString(i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN")} ${t("room.pricingConfig.currency")}`
+                    ? formatVnd(Number(draft.basePrice), i18n.resolvedLanguage ?? i18n.language)
                     : ""}
                 />
                 <ReadOnlyValue label={t("room.editForm.standardCapacity")} value={draft.standardCapacity} />
