@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import ListPagination from "./ListPagination";
 import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
+import { editActionButtonClassName } from "../lib/actionButtonStyles";
 
 export type BuildingItem = { id: string; name: string };
 
@@ -55,7 +56,7 @@ export default function BuildingManagementPanel({ query, filteredBuildings, onQu
             <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-500">{(safePage - 1) * pageSize + index + 1}</td>
             <td className="px-4 py-3 font-semibold text-slate-800">{building.name}</td>
             {canManage && <td className="px-4 py-2 text-right">
-              <button type="button" onClick={() => onEdit(building)} aria-label={`${t("room.editBuilding")} ${building.name}`} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+              <button type="button" onClick={() => onEdit(building)} aria-label={`${t("room.editBuilding")} ${building.name}`} className={editActionButtonClassName}>
                 <Pencil size={13} />{t("common.edit")}
               </button>
             </td>}

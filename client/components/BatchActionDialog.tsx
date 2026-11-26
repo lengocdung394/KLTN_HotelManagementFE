@@ -1,6 +1,7 @@
 import { CreditCard } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 import CheckoutSummary, { getCheckoutOutstandingAmount, type CheckoutSummaryRoom } from "./CheckoutSummary";
 import CheckoutSurplusRefundChoice from "./CheckoutSurplusRefundChoice";
 import CheckoutUnusedServicesWarning, { type CheckoutUnusedService } from "./CheckoutUnusedServicesWarning";
@@ -31,7 +32,7 @@ type BatchActionDialogProps = {
   onCancelUnusedServices?: () => void;
 };
 
-const formatMoney = (amount: number, language: string) => `${amount.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
+const formatMoney = (amount: number, language: string) => formatVnd(amount, language);
 
 export default function BatchActionDialog({
   open,

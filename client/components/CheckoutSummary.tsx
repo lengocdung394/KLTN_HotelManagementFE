@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
 
 export type CheckoutSummaryRoom = {
   id: string;
@@ -24,7 +25,7 @@ type CheckoutSummaryProps = {
   showTotal?: boolean;
 };
 
-const formatMoney = (amount: number, language: string) => `${amount.toLocaleString(language.startsWith("en") ? "en-US" : "vi-VN")}${language.startsWith("en") ? " VND" : "đ"}`;
+const formatMoney = (amount: number, language: string) => formatVnd(amount, language);
 
 export const getCheckoutOutstandingAmount = (rooms: CheckoutSummaryRoom[]) => {
   const countedBalances = new Set<string>();

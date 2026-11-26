@@ -15,8 +15,8 @@ import {
   UserRound,
   Users,
   WalletCards,
-  ChevronDown,
-  PanelLeftClose,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -143,15 +143,18 @@ export default function AppSidebar({
   const canViewServiceCatalog = canAccess("serviceCatalog");
   const canViewServiceUsage = canAccess("serviceUsage");
   const canViewAnyService = canViewServiceUsage || canViewServiceCatalog;
-  const canViewAnyStaffMenu = (["staffToday", "staffEmployees", "staffShifts", "staffTasks"] as const)
+  const canViewStaffEmployees = !isEmployee && canAccess("staffEmployees");
+  const canViewStaffShifts = !isEmployee && canAccess("staffShifts");
+  const canViewAnyStaffMenu = (["staffToday", "staffTasks"] as const)
     .some(canAccess);
+  const canViewStaffMenu = canViewAnyStaffMenu || canViewStaffEmployees || canViewStaffShifts;
   const staffLandingPath = canAccess("staffToday")
     ? "/staff?tab=today"
-    : canAccess("staffEmployees")
+    : canViewStaffEmployees
       ? "/staff?tab=employees"
       : canAccess("staffTasks")
         ? "/staff?tab=tasks"
-        : "/staff?tab=shifts";
+        : canViewStaffShifts ? "/staff?tab=shifts" : "/staff?tab=today";
   const canViewAdminMenu = canAccess("permissions") || canAccess("settings");
   const currentRoomTab = new URLSearchParams(location.search).get("tab");
   const currentStaffTab =
@@ -194,7 +197,9 @@ export default function AppSidebar({
               title={t("navigation.collapseMenu", "Thu gọn menu")}
               aria-label={t("navigation.collapseMenu", "Thu gọn menu")}
             >
-              <PanelLeftClose size={16} />
+              <span className="grid h-7 w-7 place-items-center rounded-full border border-blue-300/30 bg-blue-950/40 text-white shadow-sm">
+                <ChevronLeft size={14} />
+              </span>
             </button>
           )}
         </div>
@@ -244,10 +249,15 @@ export default function AppSidebar({
                 className="rounded-lg p-2.5 hover:bg-white/10"
                 aria-label={t("navigation.bookings", "Quản lý đặt phòng")}
               >
-                <ChevronDown
-                  size={15}
-                  className={`transition-transform ${bookingMenuOpen ? "rotate-180" : ""}`}
-                />
+                <span
+                  className="grid h-7 w-7 place-items-center rounded-lg bg-white/10 text-slate-300"
+                  aria-hidden="true"
+                >
+                  <ChevronRight
+                    size={14}
+                    className={`transition-transform ${bookingMenuOpen ? "rotate-90" : ""}`}
+                  />
+                </span>
               </button>
             </div>
             {bookingMenuOpen && (
@@ -310,10 +320,15 @@ export default function AppSidebar({
                 className="rounded-lg p-2.5 hover:bg-white/10"
                 aria-label={t("navigation.rooms", "Quản lý phòng")}
               >
-                <ChevronDown
-                  size={15}
-                  className={`transition-transform ${roomsMenuOpen ? "rotate-180" : ""}`}
-                />
+                <span
+                  className="grid h-7 w-7 place-items-center rounded-lg bg-white/10 text-slate-300"
+                  aria-hidden="true"
+                >
+                  <ChevronRight
+                    size={14}
+                    className={`transition-transform ${roomsMenuOpen ? "rotate-90" : ""}`}
+                  />
+                </span>
               </button>
             </div>
             {roomsMenuOpen && (
@@ -377,10 +392,15 @@ export default function AppSidebar({
                 className="rounded-lg p-2.5 hover:bg-white/10"
                 aria-label={t("navigation.services", "Dịch vụ")}
               >
-                <ChevronDown
-                  size={15}
-                  className={`transition-transform ${servicesMenuOpen ? "rotate-180" : ""}`}
-                />
+                <span
+                  className="grid h-7 w-7 place-items-center rounded-lg bg-white/10 text-slate-300"
+                  aria-hidden="true"
+                >
+                  <ChevronRight
+                    size={14}
+                    className={`transition-transform ${servicesMenuOpen ? "rotate-90" : ""}`}
+                  />
+                </span>
               </button>
             </div>
             {servicesMenuOpen && (
@@ -430,7 +450,7 @@ export default function AppSidebar({
                 {t(`navigation.${label}`)}
               </Link>
             ))}
-          {canViewAnyStaffMenu && (
+          {canViewStaffMenu && (
             <div
               className={`rounded-xl ${staffActive ? "bg-blue-900/50" : ""}`}
             >
@@ -451,10 +471,15 @@ export default function AppSidebar({
                   className="rounded-lg p-2.5 hover:bg-white/10"
                   aria-label={t("navigation.staff", "Nhân viên & ca làm")}
                 >
-                  <ChevronDown
-                    size={15}
-                    className={`transition-transform ${staffMenuOpen ? "rotate-180" : ""}`}
-                  />
+                  <span
+                    className="grid h-7 w-7 place-items-center rounded-lg bg-white/10 text-slate-300"
+                    aria-hidden="true"
+                  >
+                    <ChevronRight
+                      size={14}
+                      className={`transition-transform ${staffMenuOpen ? "rotate-90" : ""}`}
+                    />
+                  </span>
                 </button>
               </div>
               {staffMenuOpen && (
@@ -466,14 +491,14 @@ export default function AppSidebar({
                   >
                     {t("staff.todayShifts")}
                   </Link>}
-                  {canAccess("staffEmployees") && <Link
+                  {canViewStaffEmployees && <Link
                     to="/staff?tab=employees"
                     onClick={onCloseMobile}
                     className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "employees" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}
                   >
                     {t("staff.employeeList")}
                   </Link>}
-                  {canAccess("staffShifts") && <Link
+                  {canViewStaffShifts && <Link
                       to="/staff?tab=shifts"
                       onClick={onCloseMobile}
                       className={`block rounded-lg px-3 py-2 text-sm whitespace-nowrap ${staffActive && currentStaffTab === "shifts" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}

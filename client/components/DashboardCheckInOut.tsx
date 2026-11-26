@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, LogIn, LogOut, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { formatVnd } from "../lib/currency";
 import DatePickerPopover from "./DatePickerPopover";
 import {
   useGetTodayCheckInsQuery,
@@ -274,7 +275,7 @@ function EarlyCheckInList({
           <span className="shrink-0 text-right">
             <span className="block text-xs font-bold text-emerald-700">{t("dashboard.checkedInAt")} {formatTime(record.actualCheckInTime, i18n.language)}</span>
             <span className="mt-1 block text-[11px] text-slate-500">
-              {t("dashboard.surcharge")} {new Intl.NumberFormat(i18n.language.startsWith("en") ? "en-US" : "vi-VN", { maximumFractionDigits: 0 }).format(Number(record.earlyCheckInFee ?? 0))}{i18n.language.startsWith("en") ? " VND" : "đ"}
+              {t("dashboard.surcharge")} {formatVnd(Number(record.earlyCheckInFee ?? 0), i18n.language)}
             </span>
           </span>
         </article>

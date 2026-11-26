@@ -1,6 +1,7 @@
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAppSelector } from "../store/hooks";
+import LanguageSwitcher from "./LanguageSwitcher";
 import NotificationBell from "./NotificationBell";
 import UserGuideButton from "./UserGuideButton";
 
@@ -27,13 +28,6 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
     year: "numeric",
   });
 
-  const currentLanguage = i18n.language.startsWith("en") ? "en" : "vi";
-
-  const changeLanguage = (lang: "en" | "vi") => {
-    void i18n.changeLanguage(lang);
-    localStorage.setItem("language", lang);
-  };
-
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 sm:px-6 lg:px-8 backdrop-blur">
       <div className="flex min-w-0 items-center gap-3">
@@ -55,36 +49,7 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Global Language Switcher Pill Widget */}
-        <div className="flex items-center rounded-xl border border-slate-200/90 bg-slate-100/90 p-1 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => changeLanguage("vi")}
-            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition duration-150 ${
-              currentLanguage === "vi"
-                ? "bg-white text-blue-700 shadow-2xs"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <span className="text-xs">🇻🇳</span>
-            <span className="hidden sm:inline">Tiếng Việt</span>
-            <span className="sm:hidden">VIE</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => changeLanguage("en")}
-            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition duration-150 ${
-              currentLanguage === "en"
-                ? "bg-white text-blue-700 shadow-2xs"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <span className="text-xs font-bold">EN</span>
-            <span className="hidden sm:inline">English</span>
-            <span className="sm:hidden">EN</span>
-          </button>
-        </div>
+        <LanguageSwitcher />
 
         <NotificationBell />
         <UserGuideButton />

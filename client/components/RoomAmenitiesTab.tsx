@@ -6,6 +6,8 @@ import ClearSearchButton from "./ClearSearchButton";
 import FilterResultStatus from "./FilterResultStatus";
 import type { AmenityResponse } from "../services/amenityApi";
 import { localizedText } from "../i18n";
+import { formatVnd } from "../lib/currency";
+import { editActionButtonClassName } from "../lib/actionButtonStyles";
 
 type RoomAmenitiesTabProps = {
   amenities: AmenityResponse[];
@@ -33,9 +35,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
   const totalPages = Math.max(1, Math.ceil(filteredAmenities.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const paginatedAmenities = filteredAmenities.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const locale = i18n.language.startsWith("en") ? "en-US" : "vi-VN";
-  const money = (value: number) =>
-    `${value.toLocaleString(locale)} ${i18n.language.startsWith("en") ? "VND" : "đ"}`;
+  const money = (value: number) => formatVnd(value, i18n.language);
 
   useEffect(() => {
     setPage(1);
@@ -112,7 +112,7 @@ export default function RoomAmenitiesTab({ amenities, isLoading, isError, canMan
                   <td className="px-4 py-4 font-medium text-slate-800">{amenity.name}</td>
                   <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-800">{money(amenity.price)}</td>
                   {canManage && <td className="px-3 py-3 text-right">
-                    <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+                    <button type="button" onClick={() => { setEditingAmenity(amenity); setEditForm({ name: amenity.name, price: String(amenity.price) }); }} className={editActionButtonClassName}>
                       <Pencil size={13} />{localizedText("Chỉnh sửa", "Edit")}
                     </button>
                   </td>}
