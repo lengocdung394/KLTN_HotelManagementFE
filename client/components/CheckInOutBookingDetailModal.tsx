@@ -79,7 +79,8 @@ export default function CheckInOutBookingDetailModal({ records, onClose, onSaveS
   const earlyCheckInFeeTotal = records.reduce((total, record) => total + Number(record.earlyCheckInFee ?? 0), 0);
   const lateCheckOutFeeTotal = records.reduce((total, record) => total + Number(record.lateFee ?? 0), 0);
   const otherSurchargesTotal = records.reduce((total, record) => total + Number(record.otherSurcharges ?? 0), 0);
-  const totalAmount = roomTotal + serviceTotal + earlyCheckInFeeTotal + lateCheckOutFeeTotal + otherSurchargesTotal;
+  const discountTotal = records.reduce((total, record) => total + Math.max(0, Number(record.discountAmount ?? 0) || 0), 0);
+  const totalAmount = Math.max(0, roomTotal + serviceTotal + earlyCheckInFeeTotal + lateCheckOutFeeTotal + otherSurchargesTotal - discountTotal);
   const sumBookingAmounts = (selectAmount: (record: DailyRecord) => number | undefined) => {
     const amountsByBooking = new Map<string, number>();
     records.forEach((record, index) => {
@@ -189,7 +190,8 @@ export default function CheckInOutBookingDetailModal({ records, onClose, onSaveS
               {lateCheckOutFeeTotal > 0 && <div className="flex justify-between gap-3"><dt className="text-amber-700">{localizedText("Tổng phụ thu check-out trễ", "Total late check-out surcharge")}</dt><dd className="font-semibold text-amber-700">{money(lateCheckOutFeeTotal, language)}</dd></div>}
               {otherSurchargesTotal > 0 && <div className="flex justify-between gap-3"><dt className="text-amber-700">{localizedText("Tổng phụ thu khác", "Total other surcharges")}</dt><dd className="font-semibold text-amber-700">{money(otherSurchargesTotal, language)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Tổng tiền dịch vụ", "Service total")}</dt><dd className="font-semibold text-slate-900">{money(serviceTotal, language)}</dd></div>
-              <div className="flex justify-between gap-3 border-t border-blue-100 pt-2"><dt className="font-bold text-slate-800">{localizedText("Tổng tiền phòng và dịch vụ", "Rooms and services total")}</dt><dd className="font-bold text-blue-700">{money(totalAmount, language)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Khuyến mãi", "Promotion")}</dt><dd className={`font-semibold ${discountTotal > 0 ? "text-emerald-700" : "text-slate-900"}`}>{discountTotal > 0 ? `-${money(discountTotal, language)}` : localizedText("Không có", "None")}</dd></div>
+              <div className="flex justify-between gap-3 border-t border-blue-100 pt-2"><dt className="font-bold text-slate-800">{localizedText("Tổng tiền", "Total")}</dt><dd className="font-bold text-blue-700">{money(totalAmount, language)}</dd></div>
               {hasPaidAmount && <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Tổng đã thanh toán", "Total paid")}</dt><dd className="font-semibold text-emerald-700">{money(paidTotal, language)}</dd></div>}
               {hasRemainingAmount && <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Còn phải thanh toán", "Balance due")}</dt><dd className="font-semibold text-slate-900">{money(remainingTotal, language)}</dd></div>}
               {groupPaid !== undefined && <div className="flex justify-between gap-3"><dt className="text-slate-600">{localizedText("Trạng thái thanh toán", "Payment status")}</dt><dd className={`font-semibold ${groupPaid ? "text-emerald-700" : "text-rose-700"}`}>{groupPaid ? localizedText("Đã thanh toán đủ", "Paid in full") : localizedText("Chưa thanh toán đủ", "Payment incomplete")}</dd></div>}

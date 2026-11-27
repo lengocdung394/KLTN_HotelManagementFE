@@ -448,7 +448,9 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
         errors.maxDiscountAmount = label("invalidMaxDiscountAmount");
       }
     }
-    if (form.usageLimit.trim() && (!Number.isInteger(Number(form.usageLimit)) || Number(form.usageLimit) < 1)) {
+    if (!form.usageLimit.trim()) {
+      errors.usageLimit = label("fieldRequired", { field: label("usageLimit") });
+    } else if (!Number.isInteger(Number(form.usageLimit)) || Number(form.usageLimit) < 1) {
       errors.usageLimit = label("invalidUsageLimit");
     }
     setFormErrors(errors);
@@ -468,7 +470,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
       minServiceValue: optionalNumber(form.minServiceValue),
       startDate: `${form.startDate}:00`,
       endDate: `${form.endDate}:00`,
-      usageLimit: optionalNumber(form.usageLimit),
+      usageLimit: Number(form.usageLimit),
       status: form.status,
       isExclusive: editingPromotion ? form.isExclusive : false,
     };
@@ -602,7 +604,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                 <div className="grid gap-4 sm:grid-cols-2">
                   {isSystemAdmin && !editingPromotion && (
                     <label className="text-sm font-semibold text-slate-700 sm:col-span-2">
-                      {label("promotionTarget")}
+                      {label("promotionTarget")} <span className="text-xs font-normal text-slate-400">({label("optional")})</span>
                       <select
                         value={targetHotelId}
                         onChange={(event) => setTargetHotelId(event.target.value)}
@@ -680,7 +682,12 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     {label("discountType")} <span className="text-rose-500">*</span>
                     <select value={form.discountType} onChange={(event) => {
                       const discountType = event.target.value as PromotionDiscountType;
-                      setForm({ ...form, discountType, ...(discountType === "FIXED_AMOUNT" ? { maxDiscountAmount: "" } : {}) });
+                      setForm({
+                        ...form,
+                        discountType,
+                        ...(discountType === "FIXED_AMOUNT" ? { maxDiscountAmount: "" } : {}),
+                        ...(discountType === "PERCENTAGE" && Number(form.discountValue) > 100 ? { discountValue: "100" } : {}),
+                      });
                       setFormErrors((current) => ({ ...current, discountValue: undefined, maxDiscountAmount: undefined }));
                     }} className="mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-normal">
                       <option value="PERCENTAGE">{label("percentage")}</option>
@@ -690,7 +697,10 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                   <label className="text-sm font-semibold text-slate-700">
                     {label("discountValue")} <span className="text-rose-500">*</span>
                     <div className="relative mt-1.5">
-                    <input type="number" min="0.01" max={form.discountType === "PERCENTAGE" ? "100" : undefined} step="0.01" value={form.discountValue} onChange={(event) => updateFormField("discountValue", event.target.value)} aria-invalid={Boolean(formErrors.discountValue)} className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm font-normal ${formErrors.discountValue ? "border-rose-400" : "border-slate-200"}`} />
+                    <input type="number" min="0.01" max={form.discountType === "PERCENTAGE" ? "100" : undefined} step="0.01" value={form.discountValue} onChange={(event) => {
+                      const value = event.target.value;
+                      updateFormField("discountValue", form.discountType === "PERCENTAGE" && Number(value) > 100 ? "100" : value);
+                    }} aria-invalid={Boolean(formErrors.discountValue)} className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm font-normal ${formErrors.discountValue ? "border-rose-400" : "border-slate-200"}`} />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">{form.discountType === "PERCENTAGE" ? "%" : "đ"}</span>
                     </div>
                   {formErrors.discountValue && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.discountValue}</span>}
@@ -723,7 +733,7 @@ export default function PromotionWorkspace({ branches = [] }: { branches?: Super
                     </label>;
                   })}
                   <label className="text-sm font-semibold text-slate-700">
-                    {label("usageLimit")} <span className="text-xs font-normal text-slate-400">({label("optional")})</span>
+                    {label("usageLimit")} <span className="text-rose-500">*</span>
                     <input type="number" min="1" step="1" value={form.usageLimit} onChange={(event) => updateFormField("usageLimit", event.target.value)} aria-invalid={Boolean(formErrors.usageLimit)} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal ${formErrors.usageLimit ? "border-rose-400" : "border-slate-200"}`} />
                     {formErrors.usageLimit && <span className="mt-1 block text-xs font-normal text-rose-600">{formErrors.usageLimit}</span>}
                   </label>

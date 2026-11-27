@@ -128,6 +128,29 @@ const localizeBookingDescription = (description: string) =>
     .replace(/Số tiền thanh toán:/gi, "Payment amount:")
     .replace(/Phương thức:/gi, "Payment method:")
     .replace(/Nội dung cập nhật:/gi, "Update details:")
+    .replace(/Booking #([^\s]+) đã bị hủy/gi, "Booking #$1 was cancelled")
+    .replace(/Quá thời gian chờ thanh toán/gi, "Payment window expired")
+    .replace(/điều chỉnh (\d+) phòng\/khung ngày\/số khách/gi, (_, count: string) =>
+      `adjust ${count} ${Number(count) === 1 ? "room" : "rooms"}, stay dates, or guest count`,
+    )
+    .replace(/cập nhật số lượng dịch vụ cho (\d+) phòng/gi, (_, count: string) =>
+      `update service quantities for ${count} ${Number(count) === 1 ? "room" : "rooms"}`,
+    )
+    .replace(/hủy (\d+) phòng/gi, (_, count: string) =>
+      `cancel ${count} ${Number(count) === 1 ? "room" : "rooms"}`,
+    )
+    .replace(/thêm (\d+) phòng/gi, (_, count: string) =>
+      `add ${count} ${Number(count) === 1 ? "room" : "rooms"}`,
+    )
+    .replace(/thêm (\d+) dịch vụ/gi, (_, count: string) =>
+      `add ${count} ${Number(count) === 1 ? "service" : "services"}`,
+    )
+    .replace(/hủy (\d+) dịch vụ/gi, (_, count: string) =>
+      `cancel ${count} ${Number(count) === 1 ? "service" : "services"}`,
+    )
+    .replace(/gỡ khuyến mãi/gi, "remove promotion")
+    .replace(/cập nhật khuyến mãi/gi, "update promotion")
+    .replace(/cập nhật thông tin booking/gi, "update booking details")
     .replace(/Chênh lệch:/gi, "Difference:")
     .replace(/tại khách sạn/gi, "at hotel")
     .replace(/Tiền mặt/gi, "Cash")

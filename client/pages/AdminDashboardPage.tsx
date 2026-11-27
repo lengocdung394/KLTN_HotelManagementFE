@@ -299,7 +299,7 @@ type AdminDashboardPageProps = {
 export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps) {
   const { i18n } = useTranslation();
   const dispatch = useAppDispatch();
-  const { fullName, email } = useAppSelector((state) => state.auth);
+  const { fullName, email, hotelId: currentHotelId, hotelName: currentHotelName } = useAppSelector((state) => state.auth);
   const [section, setSection] = useState<AdminSection>("overview");
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isCatalogMenuOpen, setIsCatalogMenuOpen] = useState(false);
@@ -334,6 +334,8 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [notificationPageSize, setNotificationPageSize] = useState(10);
   const [isNotificationSoundEnabled, setIsNotificationSoundEnabled] = useState(false);
   const recentRoomCreateEventsRef = useRef(new Map<string, number>());
+  const branchesRef = useRef<SuperAdminBranch[]>([]);
+  const currentHotelRef = useRef<{ id: string | null; name: string | null }>({ id: null, name: null });
   const notificationSoundEnabledRef = useRef(false);
   const notificationAudioContextRef = useRef<AudioContext | null>(null);
   const playNotificationSoundRef = useRef<() => void>(() => undefined);
@@ -552,13 +554,27 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       },
       onRoomUpdated: (payload) => {
         const event = getSocketPayload(payload);
-        const description = formatRoomUpdateNotification(event);
+        const hotelId = getHotelId(event);
+        const branch = hotelId === null ? undefined : branchesRef.current.find((item) => item.id === hotelId);
+        const currentHotel = currentHotelRef.current;
+        const hotel = getSocketPayload(event.hotel);
+        const hotelName = getSocketText(
+          event,
+          "hotelName",
+          getSocketText(hotel, "name", hotelId !== null && String(hotelId) === currentHotel.id ? currentHotel.name ?? "" : branch?.name ?? ""),
+        );
+        const rawDescription = formatRoomUpdateNotification(event);
+        const hotelLabel = hotelId === null ? "" : localizedText(`khách sạn #${hotelId}`, `hotel #${hotelId}`);
+        const namedHotelLabel = hotelName ? localizedText(`khách sạn ${hotelName}`, hotelName) : "";
+        const description = hotelLabel && namedHotelLabel
+          ? rawDescription.replace(hotelLabel, namedHotelLabel)
+          : rawDescription;
         const title = isHousekeepingCompletionUpdate(event)
           ? localizedText("Phòng đã dọn xong", "Room cleaned")
           : isCheckoutCompletionUpdate(event)
             ? localizedText("Phòng vừa check-out", "Room checked out")
             : localizedText("Phòng được cập nhật", "Room updated");
-        addNotification(title, description, { category: "room", hotelId: getHotelId(event) });
+        addNotification(title, description, { category: "room", hotelId });
         if (!isHousekeepingCompletionUpdate(event)) {
           toast({ title, description });
         }
@@ -652,6 +668,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     isError: isBranchesError,
     refetch: refetchBranches,
   } = useGetSuperAdminBranchesQuery();
+  useLayoutEffect(() => {
+    branchesRef.current = branches;
+    currentHotelRef.current = { id: currentHotelId, name: currentHotelName };
+  }, [branches, currentHotelId, currentHotelName]);
   const {
     data: refundCancellations,
     isSuccess: hasLoadedRefundCancellations,
@@ -1140,10 +1160,13 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
     notification.hotelId === null
       ? undefined
       : branches.find((branch) => branch.id === notification.hotelId);
+  const getNotificationBranchName = (notification: AdminNotification) =>
+    getNotificationBranch(notification)?.name
+      ?? (notification.hotelId !== null && String(notification.hotelId) === currentHotelId ? currentHotelName ?? undefined : undefined);
   const getNotificationDescription = (notification: AdminNotification) => {
-    const branch = getNotificationBranch(notification);
-    const description = branch
-      ? notification.description.split(`khách sạn #${notification.hotelId}`).join(`khách sạn ${branch.name}`)
+    const branchName = getNotificationBranchName(notification);
+    const description = branchName && notification.hotelId !== null
+      ? notification.description.split(`khách sạn #${notification.hotelId}`).join(`khách sạn ${branchName}`)
       : notification.description;
     return localizeNotificationDescription(notification.type, description);
   };
@@ -1751,7 +1774,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                         <p className="mt-1 break-words text-sm leading-6 text-slate-700">{getNotificationDescription(notification)}</p>
                         {notification.hotelId !== null && getNotificationDetailCategory(notification) !== null && (
                           <p className="mt-2 text-xs text-slate-500">
-                            {localizedText("Chi nhánh:", "Branch:")} <span className="font-semibold text-slate-700">{getNotificationBranch(notification)?.name ?? `#${notification.hotelId}`}</span>
+                            {localizedText("Chi nhánh:", "Branch:")} <span className="font-semibold text-slate-700">{getNotificationBranchName(notification) ?? `#${notification.hotelId}`}</span>
                           </p>
                         )}
                         <time className="mt-2 block text-xs text-slate-500 sm:hidden" dateTime={notification.occurredAt.toISOString()}>

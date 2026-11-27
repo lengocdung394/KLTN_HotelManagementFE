@@ -71,7 +71,7 @@ export type CreatePromotionRequest = {
   minServiceValue?: number;
   startDate: string;
   endDate: string;
-  usageLimit?: number;
+  usageLimit: number;
   status: PromotionStatus;
   isExclusive: boolean;
 };

@@ -35,6 +35,20 @@ describe("localizeNotificationDescription", () => {
     )).toBe("Booking ID: #BK-1 | Guest: Lan | Phone: 0123 | Payment amount: 200.030đ | Payment method: Cash.");
   });
 
+  it("translates booking update details", () => {
+    expect(localizeNotificationDescription(
+      "BOOKING_UPDATED",
+      "Nội dung cập nhật: điều chỉnh 1 phòng/khung ngày/số khách, cập nhật khuyến mãi.",
+    )).toBe("Update details: adjust 1 room, stay dates, or guest count, update promotion.");
+  });
+
+  it("translates payment-timeout booking cancellation notifications", () => {
+    expect(localizeNotificationDescription(
+      "BOOKING_CANCELLED",
+      "Booking #BK202611274090 đã bị hủy: Quá thời gian chờ thanh toán",
+    )).toBe("Booking #BK202611274090 was cancelled: Payment window expired");
+  });
+
   it("translates service notification labels and status", () => {
     expect(localizeNotificationDescription(
       "SERVICE_CREATED",
