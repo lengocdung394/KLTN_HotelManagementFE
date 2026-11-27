@@ -14,6 +14,7 @@ import { useGetOrderByBookingIdQuery } from "../services/orderApi";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { localizedText } from "../i18n";
 import { formatVnd } from "../lib/currency";
+import { isValidGmailAddress, isValidVietnameseIdentityNumber, isValidVietnamesePhone } from "../lib/vietnamesePersonalData";
 import { addActionButtonClassName, editActionButtonClassName, editIconButtonClassName } from "../lib/actionButtonStyles";
 import { toast } from "@/components/ui/use-toast";
 
@@ -201,8 +202,14 @@ export default function CustomerWorkspace() {
     (Object.keys(values) as Array<keyof Form>).forEach((field) => {
       if (!values[field]) errors[field] = t("customer.fieldRequired");
     });
-    if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
-      errors.email = t("customer.invalidEmail");
+    if (values.email && (!editing || values.email.toLocaleLowerCase() !== editing.email.trim().toLocaleLowerCase()) && !isValidGmailAddress(values.email)) {
+      errors.email = localizedText("Email phải có đuôi @gmail.com.", "Email must end with @gmail.com.");
+    }
+    if (values.phone && (!editing || values.phone !== editing.phone.trim()) && !isValidVietnamesePhone(values.phone)) {
+      errors.phone = localizedText("Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng 0.", "The phone number must contain exactly 10 digits and start with 0.");
+    }
+    if (values.identityNumber && (!editing || values.identityNumber !== editing.identityNumber.trim()) && !isValidVietnameseIdentityNumber(values.identityNumber)) {
+      errors.identityNumber = localizedText("CCCD phải gồm đúng 12 chữ số.", "The ID number must contain exactly 12 digits.");
     }
     setFormErrors(errors);
     setFormError("");
@@ -481,6 +488,8 @@ export default function CustomerWorkspace() {
               <input
                 id={`customer-${field}`}
                 type={field === "email" ? "email" : "text"}
+                inputMode={field === "phone" || field === "identityNumber" ? "numeric" : undefined}
+                placeholder={field === "phone" ? "0901234567" : field === "email" ? "ten@gmail.com" : field === "identityNumber" ? "012345678901" : undefined}
                 value={form[field]}
                 aria-invalid={Boolean(formErrors[field])}
                 aria-describedby={formErrors[field] ? `customer-${field}-error` : undefined}

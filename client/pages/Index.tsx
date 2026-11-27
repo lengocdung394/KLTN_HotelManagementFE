@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   ConciergeBell,
-  Download,
   Plus,
   UserRound,
 } from "lucide-react";
@@ -271,12 +270,6 @@ export default function Index({ onLogout }: { onLogout: () => void }) {
               </h2>
             </div>
             <div className="flex gap-2">
-              {canViewReports && (
-                <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-600">
-                  <Download size={16} />
-                  {t("common.exportReport")}
-                </button>
-              )}
               <Link
                 to="/bookings"
                 className={addActionButtonClassName}

@@ -17,6 +17,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "@/components/ui/use-toast";
 import ClearSearchButton from "../components/ClearSearchButton";
 import DatePickerPopover from "../components/DatePickerPopover";
@@ -357,6 +358,7 @@ export default function BookingListWorkspace() {
   const [cashAmountPaid, setCashAmountPaid] = useState("");
   const [cashAmountTouched, setCashAmountTouched] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [paymentQrValue, setPaymentQrValue] = useState<string | null>(null);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(0);
   const [qrExpiresAt, setQrExpiresAt] = useState<number | null>(null);
   const [paymentReturn, setPaymentReturn] = useState<{ orderId: string; startedAt: number } | null>(null);
@@ -641,6 +643,7 @@ export default function BookingListWorkspace() {
     setCashAmountPaid("");
     setCashAmountTouched(false);
     setCheckoutUrl(null);
+    setPaymentQrValue(null);
     setQrSecondsLeft(0);
     setQrExpiresAt(null);
     setPaymentError("");
@@ -855,6 +858,7 @@ export default function BookingListWorkspace() {
       }
 
       let qrUrl = "";
+      let qrValue: string | null = null;
       let expirationTime: number | null = null;
 
       if (!orderId) {
@@ -865,6 +869,11 @@ export default function BookingListWorkspace() {
         const response = await createPaymentQr({ orderId }).unwrap();
         if (response && response.checkoutUrl) {
           qrUrl = response.checkoutUrl;
+          if (response.qrCode?.trim()) {
+            qrValue = response.qrCode.trim();
+          } else {
+            setPaymentError(localizedText("PayOS không trả về mã QR. Bạn vẫn có thể mở trang thanh toán.", "PayOS did not return a QR code. You can still open the payment page."));
+          }
           const expiresAtSeconds = Number(response.expiredAt);
           if (Number.isFinite(expiresAtSeconds) && expiresAtSeconds > 0) {
             expirationTime = expiresAtSeconds * 1000;
@@ -873,8 +882,12 @@ export default function BookingListWorkspace() {
       } catch (error: any) {
         const data = error?.data;
         const message = typeof data === "string" ? data : data?.message ?? data?.result?.message ?? error?.message;
-        setPaymentError(String(message ?? localizedText("Không thể tạo link thanh toán.", "Could not create a payment link.")));
-        return;
+        if (qrUrl) {
+          setPaymentError(localizedText("Không thể hiển thị mã QR. Bạn vẫn có thể mở trang thanh toán PayOS.", "Could not display the QR code. You can still open the PayOS payment page."));
+        } else {
+          setPaymentError(String(message ?? localizedText("Không thể tạo link thanh toán.", "Could not create a payment link.")));
+          return;
+        }
       }
 
       if (!qrUrl) {
@@ -883,6 +896,7 @@ export default function BookingListWorkspace() {
       }
 
       setCheckoutUrl(qrUrl);
+      setPaymentQrValue(qrValue);
       setQrExpiresAt(expirationTime);
       setQrSecondsLeft(expirationTime === null ? 0 : Math.max(0, Math.ceil((expirationTime - Date.now()) / 1000)));
       setShowQrModal(true);
@@ -2079,7 +2093,7 @@ export default function BookingListWorkspace() {
       {/* ========================================== */}
       {showQrModal && checkoutUrl && selectedBooking && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 p-4 backdrop-blur-md overflow-y-auto">
-          <div className="my-4 w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-150">
+          <div className="my-4 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-150">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 bg-white px-6 py-3.5">
               <div>
@@ -2102,7 +2116,6 @@ export default function BookingListWorkspace() {
               </button>
             </div>
 
-            {/* Launch PayOS as a top-level page so its redirect can return to this app. */}
             <div className="p-5">
             <div className="flex min-h-[360px] flex-col items-center justify-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
                 {isPaymentReceived ? (
@@ -2133,19 +2146,39 @@ export default function BookingListWorkspace() {
                   </div>
                 ) : (
                   <>
-                    <QrCode className="text-blue-600" size={40} />
-                    <p className="max-w-md text-sm text-slate-600">
-                      {localizedText(
-                        "Trang thanh toán PayOS sẽ mở tại đây trong cùng tab. Sau khi thanh toán hoặc hủy, PayOS sẽ đưa bạn về danh sách booking.",
-                        "PayOS checkout will open in this tab. After payment or cancellation, PayOS will return you to the booking list.",
-                      )}
-                    </p>
+                    {paymentQrValue ? (
+                      /^https?:\/\//i.test(paymentQrValue) || /^data:image\//i.test(paymentQrValue) ? (
+                        <img
+                          src={paymentQrValue}
+                          alt={localizedText("Mã QR thanh toán PayOS", "PayOS payment QR code")}
+                          onError={() => {
+                            setPaymentQrValue(null);
+                            setPaymentError(localizedText("Không thể tải mã QR. Bạn vẫn có thể mở trang thanh toán PayOS.", "Could not load the QR code. You can still open the PayOS payment page."));
+                          }}
+                          className="h-64 w-64 max-w-full rounded-xl bg-white p-2 object-contain shadow-sm"
+                        />
+                      ) : (
+                        <QRCodeSVG value={paymentQrValue} size={280} marginSize={2} level="M" className="max-w-full rounded-xl bg-white p-2 shadow-sm" />
+                      )
+                    ) : (
+                      <>
+                        <QrCode className="text-blue-600" size={40} />
+                        <p className="max-w-md text-sm text-slate-600">
+                          {paymentError || localizedText("Không thể hiển thị mã QR. Bạn vẫn có thể mở trang thanh toán PayOS.", "Could not display the QR code. You can still open the PayOS payment page.")}
+                        </p>
+                      </>
+                    )}
+                    {paymentQrValue && (
+                      <p className="max-w-md text-sm text-slate-600">
+                        {localizedText("Mở ứng dụng ngân hàng và quét mã QR để thanh toán.", "Open your banking app and scan the QR code to pay.")}
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={() => window.location.assign(checkoutUrl)}
                       className="rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
                     >
-                      {localizedText("Đi đến trang thanh toán PayOS", "Continue to PayOS checkout")}
+                      {localizedText("Mở trang thanh toán PayOS", "Open PayOS checkout")}
                     </button>
                   </>
                 )}

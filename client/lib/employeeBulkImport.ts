@@ -1,4 +1,5 @@
 import { createXlsxWorkbook, downloadFile, readZipFiles, readXlsxRows } from "./bulkImportFiles";
+import { isValidGmailAddress, isValidVietnameseIdentityNumber, isValidVietnamesePhone } from "./vietnamesePersonalData";
 import type { EmployeeRecord } from "../services/employeeApi";
 
 const WORKBOOK_NAME = "mau-nhap-nhan-vien.xlsx";
@@ -30,7 +31,7 @@ export const downloadEmployeeTemplate = () => {
       name: "Nhân viên",
       rows: [
         EMPLOYEE_HEADERS,
-        ["Nguyễn Văn An (Ví dụ)", "an.nguyen@example.com", "0901234567", "012345678901", "Quận 1, TP. Hồ Chí Minh", "Lễ tân", "nguyen-van-an.jpg"],
+        ["Nguyễn Văn An (Ví dụ)", "an.nguyen@gmail.com", "0901234567", "012345678901", "Quận 1, TP. Hồ Chí Minh", "Lễ tân", "nguyen-van-an.jpg"],
       ],
       validations: [
         { range: "F2:F1000", type: "list", formula1: "=EmployeeRoles" },
@@ -44,6 +45,8 @@ export const downloadEmployeeTemplate = () => {
         ["Bỏ ảnh JPG, JPEG, PNG hoặc WebP vào thư mục images, sau đó nén file Excel và thư mục images thành một file ZIP."],
         ["Tên file ảnh trong cột Tên file ảnh phải khớp tên ảnh bên trong images, ví dụ nguyen-van-an.jpg."],
         ["Không đổi tên các cột trong sheet Nhân viên. Tất cả cột đều bắt buộc; chức vụ chỉ gồm Lễ tân, Buồng phòng hoặc Bảo vệ."],
+        ["Email phải kết thúc bằng @gmail.com; số điện thoại phải có đúng 10 chữ số và bắt đầu bằng 0."],
+        ["CCCD phải gồm đúng 12 chữ số."],
         ["Email, số điện thoại và CCCD không được trùng với nhân viên đã có hoặc với dòng khác trong file."],
         ["Số điện thoại và CCCD nên nhập dưới dạng văn bản để giữ số 0 ở đầu."],
         ["Tài khoản mới sẽ được cấp mật khẩu mặc định 1111."],
@@ -112,6 +115,19 @@ const parseRows = (rows: string[][]): EmployeeImportRow[] => {
   });
 };
 
+export const validateEmployeeImportData = (email: string, phone: string, cccd: string) => {
+  if (!isValidGmailAddress(email)) {
+    return "Email phải đúng định dạng và có đuôi @gmail.com.";
+  }
+  if (!isValidVietnamesePhone(phone)) {
+    return "Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng 0.";
+  }
+  if (!isValidVietnameseIdentityNumber(cccd)) {
+    return "CCCD phải gồm đúng 12 chữ số.";
+  }
+  return undefined;
+};
+
 export const validateEmployeeImportArchive = async (file: File, existingEmployees: EmployeeRecord[]) => {
   const { rows, images } = await getArchiveContents(file);
   const employees = parseRows(rows);
@@ -131,12 +147,13 @@ export const validateEmployeeImportArchive = async (file: File, existingEmployee
   const results = employees.map((employee): EmployeeImportRowResult => {
     const emailKey = employee.email.toLocaleLowerCase();
     const imageCount = imageCounts.get(employee.imageFileName.toLocaleLowerCase()) ?? 0;
+    const dataError = validateEmployeeImportData(employee.email, employee.phone, employee.cccd);
     let message: string | undefined;
 
     if (!employee.fullName || !employee.email || !employee.phone || !employee.cccd || !employee.address || !employee.position || !employee.imageFileName) {
       message = "Thiếu thông tin bắt buộc.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(employee.email)) {
-      message = "Email không đúng định dạng.";
+    } else if (dataError) {
+      message = dataError;
     } else if (!EMPLOYEE_ROLES.includes(employee.position)) {
       message = "Chức vụ không hợp lệ. Chỉ chấp nhận Lễ tân, Buồng phòng hoặc Bảo vệ.";
     } else if (

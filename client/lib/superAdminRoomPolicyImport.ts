@@ -35,12 +35,7 @@ export const downloadSuperAdminRoomPolicyTemplate = () => {
   downloadFile("mau-chinh-sach-gia-phong.xlsx", workbook);
 };
 
-export const parseSuperAdminRoomPolicyFile = async (file: File): Promise<SuperAdminRoomPolicy[]> => {
-  if (!file.name.toLocaleLowerCase().endsWith(".xlsx")) {
-    throw new Error("Vui lòng chọn file Excel định dạng .xlsx.");
-  }
-
-  const rows = await readXlsxRows(await file.arrayBuffer());
+export const parseSuperAdminRoomPolicyRows = (rows: string[][]): SuperAdminRoomPolicy[] => {
   if (rows.length < 2) throw new Error("File Excel chưa có dữ liệu chính sách phòng.");
 
   const headerIndexes = new Map<string, number>();
@@ -108,4 +103,11 @@ export const parseSuperAdminRoomPolicyFile = async (file: File): Promise<SuperAd
     throw new Error(`File cần có đủ 4 loại phòng. Thiếu: ${missingTypes.join(", ")}.`);
   }
   return parsed;
+};
+
+export const parseSuperAdminRoomPolicyFile = async (file: File): Promise<SuperAdminRoomPolicy[]> => {
+  if (!file.name.toLocaleLowerCase().endsWith(".xlsx")) {
+    throw new Error("Vui lòng chọn file Excel định dạng .xlsx.");
+  }
+  return parseSuperAdminRoomPolicyRows(await readXlsxRows(await file.arrayBuffer()));
 };

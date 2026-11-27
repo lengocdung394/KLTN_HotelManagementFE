@@ -6,6 +6,8 @@ import { useCreateWalkInCustomerMutation, useGetCustomersByHotelIdQuery, useLazy
 import { useAppSelector } from "../store/hooks";
 import { toast } from "@/components/ui/use-toast";
 import { formatVnd } from "../lib/currency";
+import { localizedText } from "../i18n";
+import { isValidGmailAddress, isValidVietnameseIdentityNumber, isValidVietnamesePhone } from "../lib/vietnamesePersonalData";
 
 type GuestRoom = {
   id: string;
@@ -22,7 +24,6 @@ type GuestRoom = {
 };
 export type BookingGuest = { name: string; phone: string; identityNumber: string; email: string; emailOnFile?: boolean; customerId?: string };
 export type RoomGuestCounts = { adults: number; children: number; infants: number };
-const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 const normalizeSearchText = (value: string) => value
   .trim()
   .normalize("NFD")
@@ -32,9 +33,9 @@ const normalizeSearchText = (value: string) => value
   .replace(/\s+/g, " ");
 export const isBookingGuestValid = (guest: BookingGuest) => Boolean(
   guest.name.trim()
-  && /^\d{10}$/.test(guest.phone)
-  && /^\d{12}$/.test(guest.identityNumber)
-  && (!guest.email.trim() || guest.emailOnFile || isValidEmail(guest.email)),
+  && isValidVietnamesePhone(guest.phone)
+  && isValidVietnameseIdentityNumber(guest.identityNumber)
+  && (!guest.email.trim() || guest.emailOnFile || isValidGmailAddress(guest.email)),
 );
 type Customer = CustomerResponse;
 
@@ -94,6 +95,7 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   const [focusCustomerSearch, setFocusCustomerSearch] = useState(false);
   const [localRoomGuests, setLocalRoomGuests] = useState<Record<string, RoomGuestCounts>>({});
   const [createWalkInCustomer, { isLoading: isCreatingCustomer }] = useCreateWalkInCustomerMutation();
+  const [hasAttemptedCustomerCreate, setHasAttemptedCustomerCreate] = useState(false);
   const guestFieldsLocked = customerLocked || Boolean(guest.customerId);
 
   useEffect(() => {
@@ -150,9 +152,9 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   const updateGuest = (field: keyof BookingGuest, value: string) => {
     if (guestFieldsLocked) return;
     const normalizedValue = field === "phone"
-      ? value.replace(/\D/g, "").slice(0, 10)
+      ? value.replace(/\D/g, "")
       : field === "identityNumber"
-        ? value.replace(/\D/g, "").slice(0, 12)
+        ? value.replace(/\D/g, "")
         : value;
     onGuestChange({
       ...guest,
@@ -164,12 +166,14 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
   const chooseCustomer = (customer: Customer) => {
     if (customerLocked) return;
     const email = customer.email.trim();
+    setHasAttemptedCustomerCreate(false);
     onGuestChange({ name: customer.name, phone: customer.phone, identityNumber: customer.identityNumber, email, emailOnFile: Boolean(email), customerId: customer.id });
     setCustomerQuery("");
     setCustomerListOpen(false);
   };
   const resetCustomerSelection = () => {
     if (customerLocked || !guest.customerId) return;
+    setHasAttemptedCustomerCreate(false);
     cancelCustomerListClose();
     onGuestChange({ name: "", phone: "", identityNumber: "", email: "", emailOnFile: false, customerId: undefined });
     setCustomerQuery("");
@@ -190,7 +194,9 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     }
   };
   const createCustomer = async () => {
-    if (customerLocked || !isBookingGuestValid(guest) || guest.customerId || isCreatingCustomer) return;
+    if (customerLocked || guest.customerId || isCreatingCustomer) return;
+    setHasAttemptedCustomerCreate(true);
+    if (!isBookingGuestValid(guest)) return;
     try {
       const email = guest.email.trim();
       const customer = await createWalkInCustomer({
@@ -263,6 +269,10 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
     onRoomGuestsChange?.(room.id, surcharge);
     window.dispatchEvent(new CustomEvent("room-guest-surcharge", { detail: { roomId: room.id, counts: nextGuests, surcharge, adultSurcharge: extraAdults * (room.extraAdultFee ?? 0), childSurcharge: extraChildren * (room.extraChildFee ?? 0) } }));
   };
+  const invalidBookingName = hasAttemptedCustomerCreate && !guest.name.trim();
+  const invalidBookingPhone = hasAttemptedCustomerCreate && !isValidVietnamesePhone(guest.phone);
+  const invalidBookingIdentityNumber = hasAttemptedCustomerCreate && !isValidVietnameseIdentityNumber(guest.identityNumber);
+  const invalidBookingEmail = hasAttemptedCustomerCreate && Boolean(guest.email.trim() && !guest.emailOnFile && !isValidGmailAddress(guest.email));
 
   return <div className="space-y-4">
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -369,26 +379,31 @@ export default function GuestRoomForms({ rooms, guest, onGuestChange, onRoomGues
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.fullName")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.name} disabled={guestFieldsLocked} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestFieldClass}`} />
+          <input value={guest.name} disabled={guestFieldsLocked} onChange={(event) => updateGuest("name", event.target.value)} placeholder={t("common.guestNamePlaceholder")} aria-invalid={invalidBookingName} aria-describedby={invalidBookingName ? "booking-guest-name-error" : undefined} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${invalidBookingName ? "border-red-300 focus:border-red-400 focus:ring-red-100" : requiredGuestFieldClass}`} />
+          {invalidBookingName && <span id="booking-guest-name-error" role="alert" className="mt-1 block text-xs font-normal text-red-600">{localizedText("Vui lòng nhập họ và tên.", "Enter a full name.")}</span>}
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.phone")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.phone} disabled={guestFieldsLocked} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestFieldClass}`} />
+          <input inputMode="numeric" value={guest.phone} disabled={guestFieldsLocked} onChange={(event) => updateGuest("phone", event.target.value)} placeholder="0901234567" aria-invalid={invalidBookingPhone} aria-describedby={invalidBookingPhone ? "booking-guest-phone-error" : undefined} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${invalidBookingPhone ? "border-red-300 focus:border-red-400 focus:ring-red-100" : requiredGuestFieldClass}`} />
+          {invalidBookingPhone && <span id="booking-guest-phone-error" role="alert" className="mt-1 block text-xs font-normal text-red-600">{guest.phone ? localizedText("Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng 0.", "The phone number must contain exactly 10 digits and start with 0.") : localizedText("Vui lòng nhập số điện thoại.", "Enter a phone number.")}</span>}
         </label>
         <label className="text-sm font-semibold text-slate-700">
           {t("customer.identityNumber")}<span className="ml-1 text-red-500">*</span>
-          <input value={guest.identityNumber} disabled={guestFieldsLocked} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${requiredGuestFieldClass}`} />
+          <input inputMode="numeric" value={guest.identityNumber} disabled={guestFieldsLocked} onChange={(event) => updateGuest("identityNumber", event.target.value)} placeholder="012345678901" aria-invalid={invalidBookingIdentityNumber} aria-describedby={invalidBookingIdentityNumber ? "booking-guest-id-error" : undefined} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${invalidBookingIdentityNumber ? "border-red-300 focus:border-red-400 focus:ring-red-100" : requiredGuestFieldClass}`} />
+          {invalidBookingIdentityNumber && <span id="booking-guest-id-error" role="alert" className="mt-1 block text-xs font-normal text-red-600">{guest.identityNumber ? localizedText("CCCD phải gồm đúng 12 chữ số.", "The ID number must contain exactly 12 digits.") : localizedText("Vui lòng nhập CCCD.", "Enter an ID number.")}</span>}
         </label>
       </div>
       {!guest.emailOnFile && (
         <label className="mt-4 block text-sm font-semibold text-slate-700">
           {t("booking.emailConfirmation")}
-          <input type="email" autoComplete="email" value={guest.email} disabled={guestFieldsLocked} onChange={(event) => updateGuest("email", event.target.value)} placeholder="name@example.com" className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${guest.email.trim() && !isValidEmail(guest.email) ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-violet-400 focus:ring-violet-100"}`} />
-          <span className="mt-1 block text-xs font-normal text-slate-500">{t("booking.emailConfirmationHelp")}</span>
+          <input type="email" autoComplete="email" value={guest.email} disabled={guestFieldsLocked} onChange={(event) => updateGuest("email", event.target.value)} placeholder="name@gmail.com" aria-invalid={invalidBookingEmail} aria-describedby={invalidBookingEmail ? "booking-guest-email-error" : undefined} className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${invalidBookingEmail ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-violet-400 focus:ring-violet-100"}`} />
+          {invalidBookingEmail
+            ? <span id="booking-guest-email-error" role="alert" className="mt-1 block text-xs font-normal text-red-600">{localizedText("Email phải có đuôi @gmail.com.", "Email must end with @gmail.com.")}</span>
+            : <span className="mt-1 block text-xs font-normal text-slate-500">{t("booking.emailConfirmationHelp")}</span>}
         </label>
       )}
       <div className="mt-4 flex justify-end">
-        <button type="button" disabled={customerLocked || !isBookingGuestValid(guest) || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
+        <button type="button" disabled={customerLocked || Boolean(guest.customerId) || isCreatingCustomer} onClick={createCustomer} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
           {customerLocked || guest.customerId ? t("booking.customerCreated") : isCreatingCustomer ? t("booking.creatingCustomer") : t("booking.createCustomer")}
         </button>
       </div>

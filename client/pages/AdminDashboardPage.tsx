@@ -94,6 +94,7 @@ import {
 } from "../services/roomApi";
 import { downloadBedTypeTemplate, parseBedTypeFile } from "../lib/bedTypeImport";
 import { getStandardBedTypeEnglishValue } from "../lib/roomLocalization";
+import { downloadSuperAdminBranchTemplate, parseSuperAdminBranchFile } from "../lib/superAdminBranchImport";
 import { downloadSuperAdminRoomPolicyTemplate, parseSuperAdminRoomPolicyFile } from "../lib/superAdminRoomPolicyImport";
 import SuperAdminRolePermissionsPanel from "../components/SuperAdminRolePermissionsPanel";
 import SuperAdminAccountManagementPanel from "../components/SuperAdminAccountManagementPanel";
@@ -306,6 +307,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isBranchFormOpen, setIsBranchFormOpen] = useState(false);
+  const [branchEntryMode, setBranchEntryMode] = useState<"manual" | "file">("manual");
   const [branchForm, setBranchForm] = useState(initialBranchForm);
   const [branchFieldErrors, setBranchFieldErrors] = useState<Partial<Record<BranchFormField, string>>>({});
   const [branchFormError, setBranchFormError] = useState("");
@@ -322,6 +324,10 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
   const [branchPolicyFileName, setBranchPolicyFileName] = useState("");
   const [branchPolicyError, setBranchPolicyError] = useState("");
   const [isParsingBranchPolicy, setIsParsingBranchPolicy] = useState(false);
+  const [branchImportFileName, setBranchImportFileName] = useState("");
+  const [branchImportError, setBranchImportError] = useState("");
+  const [branchImportMessage, setBranchImportMessage] = useState("");
+  const [isImportingBranchFile, setIsImportingBranchFile] = useState(false);
   const [notificationCategoryFilter, setNotificationCategoryFilter] = useState<NotificationCategoryFilter>("all");
   const [notificationBranchFilter, setNotificationBranchFilter] = useState("all");
   const [notificationListPage, setNotificationListPage] = useState(1);
@@ -768,9 +774,63 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
         },
       ];
 
+  const importBranchFile = async (file?: File) => {
+    if (!file) return;
+    setBranchImportError("");
+    setBranchImportMessage("");
+    setBranchImportFileName("");
+    setBranchRoomPolicies([]);
+    setBranchPolicyFileName("");
+    setBranchPolicyError("");
+    setIsImportingBranchFile(true);
+    try {
+      const imported = await parseSuperAdminBranchFile(file);
+      setBranchForm((current) => ({
+        ...current,
+        ...imported.branch,
+        adminAccount: {
+          ...current.adminAccount,
+          username: imported.adminUsername,
+          password: imported.adminPassword,
+        },
+        managerAccount: { ...current.managerAccount, ...imported.managerAccount },
+      }));
+      setBranchFieldErrors((current) => ({
+        ...current,
+        name: undefined,
+        phone: undefined,
+        address: undefined,
+        provinceName: undefined,
+        adminUsername: undefined,
+        managerFullName: undefined,
+        managerEmail: undefined,
+        managerPhone: undefined,
+      }));
+      setBranchRoomPolicies(imported.roomPolicies);
+      setBranchPolicyFileName(file.name);
+      setBranchPolicyError("");
+      setBranchImportFileName(file.name);
+      setBranchFormError("");
+      setBranchImportMessage(localizedText(
+        "Đã nhập thông tin, chính sách phòng và mật khẩu. Mật khẩu được che trong ô Excel nhưng vẫn có thể xem trong file.",
+        "Branch details, room policies, and passwords loaded. Passwords are masked in Excel cells but can still be viewed in the file.",
+      ));
+    } catch (error) {
+      setBranchImportError(error instanceof Error
+        ? error.message
+        : localizedText("Không thể đọc file chi nhánh.", "Could not read the branch file."));
+    } finally {
+      setIsImportingBranchFile(false);
+    }
+  };
+
   const submitBranch = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBranchFormError("");
+    if (isImportingBranchFile) {
+      setBranchImportError(localizedText("Đang đọc file Excel, vui lòng đợi hoàn tất.", "Wait for the Excel file to finish importing."));
+      return;
+    }
     const errors: Partial<Record<BranchFormField, string>> = {};
     if (!branchForm.name.trim()) errors.name = localizedText("Vui lòng nhập tên chi nhánh.", "Enter a branch name.");
     if (!branchForm.phone.trim()) errors.phone = localizedText("Vui lòng nhập số điện thoại chi nhánh.", "Enter the branch phone number.");
@@ -810,6 +870,9 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
       setBranchRoomPolicies([]);
       setBranchPolicyFileName("");
       setBranchPolicyError("");
+      setBranchImportFileName("");
+      setBranchImportError("");
+      setBranchImportMessage("");
       setIsParsingBranchPolicy(false);
       setIsBranchFormOpen(false);
     } catch (error) {
@@ -1813,7 +1876,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   <h2 className="text-lg font-bold text-slate-900">{localizedText("Danh sách chi nhánh", "Branch list")}</h2>
                   <p className="mt-1 text-sm text-slate-500">{localizedText("Xem doanh thu, nhân viên, booking hoặc tạo chi nhánh mới.", "View revenue, staff, bookings, or create a new branch.")}</p>
                 </div>
-                <button type="button" onClick={() => { setBranchFormError(""); setBranchFieldErrors({}); setIsBranchFormOpen(true); }} className={addActionButtonClassName}>
+                <button type="button" onClick={() => { setBranchEntryMode("manual"); setBranchFormError(""); setBranchFieldErrors({}); setIsBranchFormOpen(true); }} className={addActionButtonClassName}>
                   <Plus size={16} /> {localizedText("Thêm chi nhánh", "Add branch")}
                 </button>
               </div>
@@ -2053,6 +2116,68 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
               <div>              <p className="text-xs font-bold uppercase tracking-wider text-blue-600">{localizedText("Quản lý chi nhánh", "Branch management")}</p><h2 className="mt-1 text-xl font-bold text-slate-900">{localizedText("Thêm chi nhánh mới", "Add a new branch")}</h2></div>
               <button type="button" onClick={() => setIsBranchFormOpen(false)} aria-label={localizedText("Đóng", "Close")} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </div>
+            <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setBranchEntryMode("manual");
+                  setBranchFormError("");
+                }}
+                aria-pressed={branchEntryMode === "manual"}
+                className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition ${branchEntryMode === "manual" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                <Plus size={15} /> {localizedText("Tạo thủ công", "Create manually")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBranchEntryMode("file");
+                  setBranchFormError("");
+                  setBranchFieldErrors({});
+                }}
+                aria-pressed={branchEntryMode === "file"}
+                className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition ${branchEntryMode === "file" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                <FileSpreadsheet size={15} /> {localizedText("Nhập từ Excel", "Import from Excel")}
+              </button>
+            </div>
+            {branchEntryMode === "file" && <section className="mt-5 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-slate-900">{localizedText("Điền nhanh từ file Excel", "Fill from an Excel file")}</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  {localizedText("File mẫu gồm thông tin chi nhánh, tài khoản, mật khẩu và chính sách 4 loại phòng. Chọn tỉnh/thành trong danh sách ở ô Excel. Mật khẩu hiển thị bằng ký hiệu che nhưng vẫn có thể xem trong file.", "The template contains branch, account, password, and four room policy details. Select the province/city from the Excel cell dropdown. Passwords are masked in cells but can still be viewed in the file.")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={downloadSuperAdminBranchTemplate}
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+              >
+                <FileSpreadsheet size={15} />
+                {localizedText("Tải file mẫu", "Download template")}
+              </button>
+              </div>
+              <label className={`mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-white px-3 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 ${(isImportingBranchFile || isParsingBranchPolicy) ? "pointer-events-none opacity-60" : ""}`}>
+              {isImportingBranchFile ? <LoaderCircle size={16} className="animate-spin" /> : <Upload size={16} />}
+              {branchImportFileName || localizedText("Chọn file chi nhánh (.xlsx)", "Choose a branch file (.xlsx)")}
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="sr-only"
+                disabled={isImportingBranchFile || isParsingBranchPolicy}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  void importBranchFile(file);
+                }}
+              />
+              </label>
+              {isImportingBranchFile && <p role="status" className="mt-2 text-xs font-medium text-blue-700">{localizedText("Đang đọc file Excel...", "Reading Excel file...")}</p>}
+              {branchImportMessage && <p role="status" className="mt-2 text-xs font-medium text-emerald-700">{branchImportMessage}</p>}
+              {branchImportError && <p role="alert" className="mt-2 text-xs text-rose-600">{branchImportError}</p>}
+            </section>}
+            {(branchEntryMode === "manual" || Boolean(branchImportFileName)) && <>
             <section className="mt-5 rounded-xl border border-slate-200 p-4">
               <h3 className="font-semibold text-slate-900">{localizedText("Thông tin chi nhánh", "Branch information")}</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -2147,7 +2272,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 </div>
               </div>
             </section>
-            <section className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+            {branchEntryMode === "manual" && <section className="mt-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-slate-900">{localizedText("Chính sách giá các loại phòng", "Room type pricing policies")}</h3>
@@ -2171,7 +2296,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="sr-only"
-                  disabled={isParsingBranchPolicy}
+                  disabled={isParsingBranchPolicy || isImportingBranchFile}
                   onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
                     event.currentTarget.value = "";
@@ -2200,7 +2325,7 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 </p>
               )}
               {branchPolicyError && <p role="alert" className="mt-2 text-xs text-rose-600">{branchPolicyError}</p>}
-            </section>
+            </section>}
             <section className="mt-4 rounded-xl border border-slate-200 p-4">
               <h3 className="font-semibold text-slate-900">{localizedText("Tài khoản admin chi nhánh", "Branch admin account")} <span className="font-mono text-xs font-medium text-slate-500">(ROLE_ADMIN)</span></h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -2263,10 +2388,11 @@ export default function AdminDashboardPage({ onLogout }: AdminDashboardPageProps
                 </div>
               </section>
             ))}
+            </>}
             {branchFormError && <p role="alert" className="mt-3 text-sm text-rose-600">{branchFormError}</p>}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setIsBranchFormOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">{localizedText("Hủy", "Cancel")}</button>
-              <button type="submit" disabled={isCreatingBranch || isParsingBranchPolicy} className={addActionButtonClassName}>{isParsingBranchPolicy ? localizedText("Đang đọc file...", "Reading file...") : isCreatingBranch ? localizedText("Đang tạo...", "Creating...") : localizedText("Tạo chi nhánh", "Create branch")}</button>
+              <button type="submit" disabled={isCreatingBranch || isParsingBranchPolicy || isImportingBranchFile || (branchEntryMode === "file" && !branchImportFileName)} className={addActionButtonClassName}>{isParsingBranchPolicy || isImportingBranchFile ? localizedText("Đang đọc file...", "Reading file...") : isCreatingBranch ? localizedText("Đang tạo...", "Creating...") : branchEntryMode === "file" && !branchImportFileName ? localizedText("Chọn file trước", "Choose a file first") : localizedText("Tạo chi nhánh", "Create branch")}</button>
             </div>
           </form>
         </div>

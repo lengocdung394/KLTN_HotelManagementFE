@@ -4,6 +4,7 @@ export type PaymentResponse = {
   error?: number;
   message?: string;
   checkoutUrl: string;
+  qrCode?: string;
   expiredAt?: number | null;
 };
 

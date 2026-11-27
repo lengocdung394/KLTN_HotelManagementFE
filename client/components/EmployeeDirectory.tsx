@@ -21,6 +21,7 @@ import {
 } from "../lib/employeeBulkImport";
 import { addActionButtonClassName, editActionButtonClassName } from "../lib/actionButtonStyles";
 import { localizedText } from "../i18n";
+import { isValidGmailAddress, isValidVietnameseIdentityNumber, isValidVietnamesePhone } from "../lib/vietnamesePersonalData";
 import ClearSearchButton from "./ClearSearchButton";
 import ListPagination from "./ListPagination";
 import SearchableFilter from "./SearchableFilter";
@@ -262,9 +263,11 @@ export default function EmployeeDirectory() {
     if (!name.trim()) errors.name = localizedText("Vui lòng nhập họ và tên.", "Enter a full name.");
     if (!role.trim()) errors.role = localizedText("Vui lòng chọn chức vụ.", "Select a position.");
     if (!email.trim()) errors.email = localizedText("Vui lòng nhập email.", "Enter an email address.");
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = localizedText("Email không hợp lệ.", "Enter a valid email address.");
+    else if (!isValidGmailAddress(email)) errors.email = localizedText("Email phải có đuôi @gmail.com.", "Email must end with @gmail.com.");
     if (!identityNumber.trim()) errors.identityNumber = localizedText("Vui lòng nhập số CCCD.", "Enter an ID number.");
+    else if (!isValidVietnameseIdentityNumber(identityNumber)) errors.identityNumber = localizedText("CCCD phải gồm đúng 12 chữ số.", "The ID number must contain exactly 12 digits.");
     if (!phone.trim()) errors.phone = localizedText("Vui lòng nhập số điện thoại.", "Enter a phone number.");
+    else if (!isValidVietnamesePhone(phone)) errors.phone = localizedText("Số điện thoại phải gồm đúng 10 chữ số và bắt đầu bằng 0.", "The phone number must contain exactly 10 digits and start with 0.");
     if (!address.trim()) errors.address = localizedText("Vui lòng nhập địa chỉ.", "Enter an address.");
     if (!imageFile) errors.image = localizedText("Vui lòng chọn ảnh nhân viên.", "Select an employee photo.");
     setFieldErrors(errors);
@@ -589,17 +592,17 @@ export default function EmployeeDirectory() {
           </label>
           <label className="text-sm font-semibold text-slate-700">
             Email <span className="text-rose-500">*</span>
-            <input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setFieldErrors((current) => ({ ...current, email: undefined })); }} placeholder="email@senviet.vn" aria-invalid={Boolean(fieldErrors.email)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.email ? "border-rose-400" : "border-slate-200"}`} />
+            <input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setFieldErrors((current) => ({ ...current, email: undefined })); }} placeholder="ten@gmail.com" aria-invalid={Boolean(fieldErrors.email)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.email ? "border-rose-400" : "border-slate-200"}`} />
             {fieldErrors.email && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.email}</span>}
           </label>
           <label className="text-sm font-semibold text-slate-700">
             {localizedText("CCCD", "ID number")} <span className="text-rose-500">*</span>
-            <input value={identityNumber} onChange={(event) => { setIdentityNumber(event.target.value); setFieldErrors((current) => ({ ...current, identityNumber: undefined })); }} placeholder={localizedText("Nhập số CCCD", "Enter ID number")} aria-invalid={Boolean(fieldErrors.identityNumber)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.identityNumber ? "border-rose-400" : "border-slate-200"}`} />
+            <input inputMode="numeric" value={identityNumber} onChange={(event) => { setIdentityNumber(event.target.value); setFieldErrors((current) => ({ ...current, identityNumber: undefined })); }} placeholder={localizedText("Nhập 12 chữ số CCCD", "Enter 12-digit ID number")} aria-invalid={Boolean(fieldErrors.identityNumber)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.identityNumber ? "border-rose-400" : "border-slate-200"}`} />
             {fieldErrors.identityNumber && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.identityNumber}</span>}
           </label>
           <label className="text-sm font-semibold text-slate-700">
             {localizedText("Số điện thoại", "Phone number")} <span className="text-rose-500">*</span>
-            <input type="tel" value={phone} onChange={(event) => { setPhone(event.target.value); setFieldErrors((current) => ({ ...current, phone: undefined })); }} placeholder="090 123 4567" aria-invalid={Boolean(fieldErrors.phone)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.phone ? "border-rose-400" : "border-slate-200"}`} />
+            <input type="tel" inputMode="numeric" value={phone} onChange={(event) => { setPhone(event.target.value); setFieldErrors((current) => ({ ...current, phone: undefined })); }} placeholder="0901234567" aria-invalid={Boolean(fieldErrors.phone)} disabled={isAddingEmployee || isSaving} className={`mt-1.5 h-10 w-full rounded-lg border px-3 text-sm font-normal outline-none focus:border-blue-400 ${fieldErrors.phone ? "border-rose-400" : "border-slate-200"}`} />
             {fieldErrors.phone && <span className="mt-1 block text-xs font-normal text-rose-600">{fieldErrors.phone}</span>}
           </label>
           <label className="text-sm font-semibold text-slate-700 sm:col-span-2">

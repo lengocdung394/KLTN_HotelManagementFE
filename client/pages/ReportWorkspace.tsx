@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, BedDouble, CalendarDays, RefreshCw, RotateCcw, Tag, TrendingUp, XCircle } from "lucide-react";
+import { BarChart3, BedDouble, CalendarDays, Download, FileSpreadsheet, FileText, RefreshCw, RotateCcw, Tag, TrendingUp, XCircle } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -24,6 +24,8 @@ import { toast } from "@/components/ui/use-toast";
 import ListPagination from "../components/ListPagination";
 import FilterSelect from "../components/FilterSelect";
 import DatePickerPopover from "../components/DatePickerPopover";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { exportReportExcel, exportReportPdf } from "../lib/reportExport";
 import {
   buildBookingRevenueChartData,
   buildRevenueChartData,
@@ -112,6 +114,7 @@ export default function ReportWorkspace() {
   const [cancelledPage, setCancelledPage] = useState(1);
   const [cancelledPageSize, setCancelledPageSize] = useState(10);
   const [isManuallyRefreshingReport, setIsManuallyRefreshingReport] = useState(false);
+  const [isExportingReport, setIsExportingReport] = useState<"pdf" | "xlsx" | null>(null);
   const { data: branches = [], isLoading: isLoadingBranches, isError: isBranchesError } =
     useGetSuperAdminBranchesQuery(undefined, { skip: !isSystemAdmin });
   const reportHotelId = isSystemAdmin ? Number(selectedBranchId) : Number(hotelId);
@@ -273,6 +276,47 @@ export default function ReportWorkspace() {
         await new Promise<void>((resolve) => window.setTimeout(resolve, remainingLoadingTime));
       }
       setIsManuallyRefreshingReport(false);
+    }
+  };
+  const exportReport = async (format: "pdf" | "xlsx") => {
+    if (!report || isExportingReport) return;
+    setIsExportingReport(format);
+    try {
+      const branchName = isSystemAdmin
+        ? branches.find((branch) => String(branch.id) === selectedBranchId)?.name
+          ?? localizedText("Chi nhánh chưa chọn", "Branch not selected")
+        : localizedText("Chi nhánh hiện tại", "Current branch");
+      const options = {
+        report,
+        branchName,
+        language: i18n.language?.startsWith("vi") ? "vi" as const : "en" as const,
+      };
+      if (format === "xlsx") {
+        await exportReportExcel(options);
+      } else {
+        const chartSections = [
+          "report-booking-revenue",
+          "report-service-revenue",
+          "report-promotions",
+          "report-room-types",
+          "report-room-status",
+        ]
+          .map((id) => document.getElementById(id))
+          .filter((section): section is HTMLElement => section instanceof HTMLElement);
+        await exportReportPdf({ ...options, chartSections });
+      }
+      toast({
+        title: format === "xlsx"
+          ? localizedText("Đã xuất báo cáo Excel.", "Excel report exported.")
+          : localizedText("Đã xuất báo cáo PDF.", "PDF report exported."),
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: localizedText("Không thể xuất báo cáo. Vui lòng thử lại.", "Could not export the report."),
+      });
+    } finally {
+      setIsExportingReport(null);
     }
   };
   const reportPeriodOptionLabels: Record<Exclude<ReportPeriod, "custom">, [string, string]> = {
@@ -468,7 +512,45 @@ export default function ReportWorkspace() {
               buttonClassName="flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-normal text-slate-700 transition hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={!report || isExportingReport !== null}
+                  aria-label={localizedText("Xuất báo cáo", "Export report")}
+                  title={localizedText("Xuất báo cáo", "Export report")}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isExportingReport
+                    ? <RefreshCw size={15} className="animate-spin" />
+                    : <Download size={15} />}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-2">
+                <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {localizedText("Định dạng xuất", "Export format")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void exportReport("xlsx")}
+                  disabled={isExportingReport !== null}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <FileSpreadsheet size={16} className="text-emerald-600" />
+                  Excel (.xlsx)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void exportReport("pdf")}
+                  disabled={isExportingReport !== null}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <FileText size={16} className="text-rose-600" />
+                  PDF
+                </button>
+              </PopoverContent>
+            </Popover>
             <button
               type="button"
               onClick={() => void refreshOrResetReport()}

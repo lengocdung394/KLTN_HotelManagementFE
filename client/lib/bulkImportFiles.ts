@@ -6,6 +6,8 @@ export type ZipFileEntry = {
 export type WorkbookSheet = {
   name: string;
   rows: Array<Array<string | number>>;
+  hidden?: boolean;
+  maskedTextColumns?: number[];
   validations?: Array<{
     range: string;
     type: "list" | "whole" | "decimal";
@@ -113,12 +115,15 @@ const resolveSheetPath = (entries: ZipFileEntry[], sheetName: string) => {
   return entryMap.get(sheetPath)!;
 };
 
-const parseXlsxRows = (entries: ZipFileEntry[], sheetBytes: Uint8Array): string[][] => {
+const parseXlsxRows = (entries: ZipFileEntry[], sheetBytes: Uint8Array, trimValues = true): string[][] => {
   const entryMap = new Map(entries.map((entry) => [entry.name, entry.content]));
 
   const sharedBytes = entryMap.get("xl/sharedStrings.xml");
   const sharedStrings = sharedBytes
-    ? Array.from(xmlDocument(sharedBytes).querySelectorAll("si")).map((item) => item.textContent?.trim() ?? "")
+    ? Array.from(xmlDocument(sharedBytes).querySelectorAll("si")).map((item) => {
+      const value = item.textContent ?? "";
+      return trimValues ? value.trim() : value;
+    })
     : [];
   const sheet = xmlDocument(sheetBytes);
   if (sheet.querySelector("parsererror")) throw new Error("Nội dung file Excel bị lỗi.");
@@ -131,7 +136,8 @@ const parseXlsxRows = (entries: ZipFileEntry[], sheetBytes: Uint8Array): string[
       const raw = type === "inlineStr"
         ? cell.querySelector("is")?.textContent ?? ""
         : cell.querySelector("v")?.textContent ?? "";
-      cells[index] = type === "s" ? sharedStrings[Number(raw)] ?? "" : raw.trim();
+      const value = type === "s" ? sharedStrings[Number(raw)] ?? "" : raw;
+      cells[index] = trimValues ? value.trim() : value;
     });
     return cells;
   });
@@ -145,9 +151,13 @@ export const readXlsxRows = async (data: ArrayBuffer | Uint8Array, sheetNumber =
   return parseXlsxRows(entries, sheetBytes);
 };
 
-export const readXlsxRowsByName = async (data: ArrayBuffer | Uint8Array, sheetName: string): Promise<string[][]> => {
+export const readXlsxRowsByName = async (
+  data: ArrayBuffer | Uint8Array,
+  sheetName: string,
+  trimValues = true,
+): Promise<string[][]> => {
   const entries = await readZipFiles(data);
-  return parseXlsxRows(entries, resolveSheetPath(entries, sheetName));
+  return parseXlsxRows(entries, resolveSheetPath(entries, sheetName), trimValues);
 };
 
 const escapeXml = (value: string) =>
@@ -246,13 +256,14 @@ export const createXlsxWorkbook = (
 ) => {
   if (sheets.length === 0) throw new Error("Workbook phải có ít nhất một sheet.");
 
-  const worksheetContent = sheets.map(({ rows, validations }) => {
+  const worksheetContent = sheets.map(({ rows, validations, maskedTextColumns }) => {
     const sheetRows = rows.map((row, rowIndex) => {
       const rowNumber = rowIndex + 1;
       const cells = row.map((value, columnIndex) => {
         const reference = `${columnName(columnIndex)}${rowNumber}`;
-        if (typeof value === "number" && Number.isFinite(value)) return `<c r="${reference}"><v>${value}</v></c>`;
-        return `<c r="${reference}" t="inlineStr"><is><t>${escapeXml(String(value))}</t></is></c>`;
+        const style = rowIndex > 0 && maskedTextColumns?.includes(columnIndex) ? ' s="1"' : "";
+        if (typeof value === "number" && Number.isFinite(value)) return `<c r="${reference}"${style}><v>${value}</v></c>`;
+        return `<c r="${reference}"${style} t="inlineStr"><is><t>${escapeXml(String(value))}</t></is></c>`;
       }).join("");
       return `<row r="${rowNumber}">${cells}</row>`;
     }).join("");
@@ -267,19 +278,24 @@ export const createXlsxWorkbook = (
   const contentTypes = sheets.map((_, index) =>
     `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
   ).join("");
-  const workbookSheets = sheets.map(({ name }, index) =>
-    `<sheet name="${escapeXml(name.slice(0, 31))}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`,
+  const workbookSheets = sheets.map(({ name, hidden }, index) =>
+    `<sheet name="${escapeXml(name.slice(0, 31))}" sheetId="${index + 1}"${hidden ? ' state="hidden"' : ""} r:id="rId${index + 1}"/>`,
   ).join("");
   const relationships = sheets.map((_, index) =>
     `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`,
   ).join("");
+  const hasMaskedTextColumns = sheets.some(({ maskedTextColumns }) => maskedTextColumns?.length);
+  const styleRelationship = hasMaskedTextColumns
+    ? `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`
+    : "";
+  const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="*•;*•;*•;*•"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
   const definedNames = namedRanges.length
     ? `<definedNames>${namedRanges.map(({ name, formula }) => `<definedName name="${escapeXml(name)}">${escapeXml(formula)}</definedName>`).join("")}</definedNames>`
     : "";
   const files = [
     {
       name: "[Content_Types].xml",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${contentTypes}</Types>`,
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${contentTypes}${hasMaskedTextColumns ? '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' : ""}</Types>`,
     },
     {
       name: "_rels/.rels",
@@ -291,9 +307,10 @@ export const createXlsxWorkbook = (
     },
     {
       name: "xl/_rels/workbook.xml.rels",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships}</Relationships>`,
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships}${styleRelationship}</Relationships>`,
     },
     ...worksheetContent.map((content, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, content })),
+    ...(hasMaskedTextColumns ? [{ name: "xl/styles.xml", content: styles }] : []),
   ];
   return makeZip(files, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 };
