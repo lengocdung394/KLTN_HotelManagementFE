@@ -189,19 +189,6 @@ export default function AppSidebar({
               {branchLabel}
             </span>
           </span>
-          {onToggleCollapse && (
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="hidden rounded-lg p-1 text-blue-200 hover:bg-white/10 hover:text-white lg:block"
-              title={t("navigation.collapseMenu", "Thu gọn menu")}
-              aria-label={t("navigation.collapseMenu", "Thu gọn menu")}
-            >
-              <span className="grid h-7 w-7 place-items-center rounded-full border border-blue-300/30 bg-blue-950/40 text-white shadow-sm">
-                <ChevronLeft size={14} />
-              </span>
-            </button>
-          )}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">

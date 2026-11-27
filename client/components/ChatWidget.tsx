@@ -659,10 +659,12 @@ export default function ChatWidget() {
 
         if (
           text.toLowerCase().includes("xếp lịch") ||
+          text.toLowerCase().includes("phân ca") ||
           reply.toLowerCase().includes("lịch trực") ||
-          reply.toLowerCase().includes("ca trực")
+          reply.toLowerCase().includes("ca trực") ||
+          reply.toLowerCase().includes("phân ca")
         ) {
-          window.dispatchEvent(new CustomEvent("senviet:schedule-updated"));
+          window.dispatchEvent(new CustomEvent("senviet:schedule-updated", { detail: { weekStartDate: state?.weekStartDate } }));
         }
 
         if (result.result?.sessionId) {
@@ -726,8 +728,22 @@ export default function ChatWidget() {
           : ["🎁 Dịch vụ & mã khuyến mãi đang áp dụng"]),
       ];
 
-  const [activeTab, setActiveTab] = useState<"ai" | "customer">(isSuperAdmin ? "ai" : "customer");
   const staffHotelId = auth?.hotelId;
+  const activeTabStorageKey = `senviet_admin_chat_active_tab_${staffHotelId || (isSuperAdmin ? "all" : "default")}`;
+  const [activeTab, setActiveTab] = useState<"ai" | "customer">(() => {
+    try {
+      const saved = localStorage.getItem(activeTabStorageKey);
+      if (saved === "ai" || saved === "customer") return saved;
+    } catch {}
+    return isSuperAdmin ? "ai" : "customer";
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(activeTabStorageKey, activeTab);
+    } catch {}
+  }, [activeTab, activeTabStorageKey]);
+
   const staffStorageKey = `senviet_staff_customer_sessions_${staffHotelId || (isSuperAdmin ? "all" : "default")}`;
 
   const [customerSessions, setCustomerSessions] = useState<Record<string, CustomerLiveSession>>(() => {
@@ -1184,6 +1200,7 @@ export default function ChatWidget() {
   });
   const windowDrag = useDraggablePosition(windowRef, {
     storageKey: "senviet_admin_chat_window_pos",
+    active: open && !isExpanded,
   });
 
   return (
@@ -1225,36 +1242,56 @@ export default function ChatWidget() {
         ) : null}
       </button>
 
+      {/* Backdrop when expanded */}
+      {open && isExpanded && (
+        <div
+          onClick={() => setIsExpanded(false)}
+          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px] transition-opacity"
+        />
+      )}
+
       {/* Chat window */}
       {open && (
         <div
           ref={windowRef}
-          style={{
-            ...windowDrag.dragStyle,
-            ...(customWidth ? { width: `${customWidth}px`, maxWidth: "calc(100vw - 1.5rem)" } : {}),
-          }}
+          style={
+            isExpanded
+              ? undefined
+              : {
+                  ...windowDrag.dragStyle,
+                  ...(customWidth ? { width: `${customWidth}px`, maxWidth: "calc(100vw - 1.5rem)" } : {}),
+                }
+          }
           className={`fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${
             isResizing || windowDrag.isDragging ? "" : "transition-all duration-300 ease-in-out"
           } ${
             isExpanded
-              ? "bottom-3 right-3 sm:bottom-6 sm:right-6 w-[calc(100vw-1.5rem)] sm:w-[48rem] md:w-[50vw] max-w-[60rem] h-[93vh] max-h-[58rem]"
+              ? "inset-3 sm:inset-6 mx-auto max-w-6xl"
               : "bottom-20 right-4 sm:bottom-24 sm:right-6 w-[calc(100vw-2rem)] sm:w-[30rem] h-[37rem] max-h-[85vh]"
           }`}
         >
-          {/* Thanh kéo tinh chỉnh chiều rộng ở cạnh trái */}
+          {/* Thanh kéo tinh chỉnh chiều rộng ở cạnh trái (chỉ hiện ở chế độ thu nhỏ) */}
+          {!isExpanded && (
+            <div
+              onMouseDown={handleStartResize}
+              title={isEn ? "Drag left edge to adjust chat width" : "Kéo cạnh trái để tinh chỉnh độ rộng khung chat"}
+              className="hidden sm:flex absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-50 items-center justify-center group hover:bg-blue-500/20 transition-colors"
+            >
+              <div className="h-10 w-0.5 rounded-full bg-slate-300 group-hover:bg-blue-500 transition-colors" />
+            </div>
+          )}
+          {/* Header (kéo thả di chuyển cửa sổ khi thu nhỏ) */}
           <div
-            onMouseDown={handleStartResize}
-            title={isEn ? "Drag left edge to adjust chat width" : "Kéo cạnh trái để tinh chỉnh độ rộng khung chat"}
-            className="hidden sm:flex absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize z-50 items-center justify-center group hover:bg-blue-500/20 transition-colors"
-          >
-            <div className="h-10 w-0.5 rounded-full bg-slate-300 group-hover:bg-blue-500 transition-colors" />
-          </div>
-          {/* Header (kéo thả di chuyển cửa sổ) */}
-          <div
-            onPointerDown={windowDrag.onPointerDown}
-            title={isEn ? "Drag header to move chat window" : "Kéo thanh tiêu đề để di chuyển khung chat"}
+            onPointerDown={isExpanded ? undefined : windowDrag.onPointerDown}
+            title={
+              isExpanded
+                ? undefined
+                : isEn
+                  ? "Drag header to move chat window"
+                  : "Kéo thanh tiêu đề để di chuyển khung chat"
+            }
             className={`flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3 text-white shadow-sm select-none ${
-              windowDrag.isDragging ? "cursor-grabbing" : "cursor-grab"
+              isExpanded ? "" : windowDrag.isDragging ? "cursor-grabbing" : "cursor-grab"
             }`}
           >
             <div className="flex items-center gap-2.5">

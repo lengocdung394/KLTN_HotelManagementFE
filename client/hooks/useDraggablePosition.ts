@@ -5,10 +5,13 @@ interface Position {
   y: number;
 }
 
+type DockSide = "left" | "right";
+
 interface UseDraggableOptions {
   storageKey?: string;
   allowInteractiveChildren?: boolean;
   margin?: number;
+  active?: boolean;
 }
 
 function clampPosition(x: number, y: number, width: number, height: number, margin: number): Position {
@@ -20,27 +23,32 @@ function clampPosition(x: number, y: number, width: number, height: number, marg
   };
 }
 
+function readStoredDockSide(storageKey?: string): DockSide {
+  if (!storageKey || typeof window === "undefined") return "right";
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return "right";
+    const parsed = JSON.parse(raw);
+    if (parsed?.side === "left" || parsed?.side === "right") {
+      return parsed.side;
+    }
+    if (Number.isFinite(parsed?.x)) {
+      return parsed.x < window.innerWidth / 2 ? "left" : "right";
+    }
+  } catch {
+    // ignore invalid storage
+  }
+  return "right";
+}
+
 export function useDraggablePosition(
   elementRef: RefObject<HTMLElement | null>,
   options: UseDraggableOptions = {},
 ) {
-  const { storageKey, allowInteractiveChildren = false, margin = 12 } = options;
+  const { storageKey, allowInteractiveChildren = false, margin = 16, active = true } = options;
 
-  const [position, setPosition] = useState<Position | null>(() => {
-    if (!storageKey || typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (typeof parsed?.x === "number" && typeof parsed?.y === "number") {
-        return parsed;
-      }
-    } catch {
-      // ignore invalid storage
-    }
-    return null;
-  });
-
+  const [dockSide, setDockSide] = useState<DockSide>(() => readStoredDockSide(storageKey));
+  const [dragPos, setDragPos] = useState<Position | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const wasDraggedRef = useRef(false);
   const dragStateRef = useRef<{
@@ -53,24 +61,9 @@ export function useDraggablePosition(
     moved: boolean;
   } | null>(null);
 
-  // Clamp saved/current position on mount & window resize so it never goes off-screen
-  useEffect(() => {
-    const syncClamp = () => {
-      if (!position || !elementRef.current) return;
-      const rect = elementRef.current.getBoundingClientRect();
-      const clamped = clampPosition(position.x, position.y, rect.width || 60, rect.height || 60, margin);
-      if (clamped.x !== position.x || clamped.y !== position.y) {
-        setPosition(clamped);
-      }
-    };
-    syncClamp();
-    window.addEventListener("resize", syncClamp);
-    return () => window.removeEventListener("resize", syncClamp);
-  }, [position, elementRef, margin]);
-
   const onPointerDown = useCallback(
     (e: ReactPointerEvent) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || !active) return;
       if (!allowInteractiveChildren) {
         const target = e.target as HTMLElement | null;
         if (target?.closest("button, a, input, textarea, select, [role='button']")) {
@@ -92,7 +85,7 @@ export function useDraggablePosition(
       };
       setIsDragging(true);
     },
-    [allowInteractiveChildren, elementRef],
+    [allowInteractiveChildren, elementRef, active],
   );
 
   useEffect(() => {
@@ -113,25 +106,33 @@ export function useDraggablePosition(
         state.height,
         margin,
       );
-      setPosition(next);
+      setDragPos(next);
     };
 
     const handleUp = () => {
       const state = dragStateRef.current;
-      if (state?.moved && storageKey) {
-        setPosition((curr) => {
-          if (curr) {
+      if (state?.moved) {
+        setDragPos((curr) => {
+          const centerX = curr ? curr.x + state.width / 2 : state.startX + state.width / 2;
+          const nextSide: DockSide = centerX < window.innerWidth / 2 ? "left" : "right";
+          setDockSide(nextSide);
+          if (storageKey) {
             try {
-              localStorage.setItem(storageKey, JSON.stringify(curr));
+              localStorage.setItem(storageKey, JSON.stringify({ side: nextSide }));
             } catch {
               // ignore storage errors
             }
           }
-          return curr;
+          return null;
         });
+      } else {
+        setDragPos(null);
       }
       dragStateRef.current = null;
       setIsDragging(false);
+      setTimeout(() => {
+        wasDraggedRef.current = false;
+      }, 0);
     };
 
     window.addEventListener("pointermove", handleMove);
@@ -145,7 +146,8 @@ export function useDraggablePosition(
   }, [isDragging, margin, storageKey]);
 
   const resetPosition = useCallback(() => {
-    setPosition(null);
+    setDockSide("right");
+    setDragPos(null);
     if (storageKey) {
       try {
         localStorage.removeItem(storageKey);
@@ -155,21 +157,29 @@ export function useDraggablePosition(
     }
   }, [storageKey]);
 
-  const dragStyle: CSSProperties = position
-    ? {
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        right: "auto",
-        bottom: "auto",
-      }
-    : {};
+  // Only allow temporary free coordinates while actively dragging; once released, always dock to bottom-left or bottom-right corner
+  const dragStyle: CSSProperties =
+    isDragging && dragPos
+      ? {
+          left: `${dragPos.x}px`,
+          top: `${dragPos.y}px`,
+          right: "auto",
+          bottom: "auto",
+        }
+      : dockSide === "left"
+        ? {
+            left: `${margin}px`,
+            right: "auto",
+            top: "auto",
+          }
+        : {};
 
   return {
-    position,
     isDragging,
-    dragStyle,
-    onPointerDown,
     wasDraggedRef,
+    onPointerDown,
+    dragStyle,
     resetPosition,
+    hasCustomPosition: dockSide === "left",
   };
 }

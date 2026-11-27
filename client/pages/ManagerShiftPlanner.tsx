@@ -82,7 +82,19 @@ export default function ManagerShiftPlanner({ onDraftStatusChange }: { onDraftSt
   const [pendingWeek, setPendingWeek] = useState<string | null>(null);
   const [error, setError] = useState("");
   const storageKey = shiftDraftStorageKey(hotelId, weekStart);
-  const { data: schedule, isLoading: isScheduleLoading, isError: isScheduleError } = useGetWeeklyShiftScheduleQuery(weekStart);
+  const { data: schedule, isLoading: isScheduleLoading, isError: isScheduleError, refetch } = useGetWeeklyShiftScheduleQuery(weekStart);
+
+  useEffect(() => {
+    const onScheduleUpdated = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ weekStartDate?: string }>)?.detail;
+      if (detail?.weekStartDate && !hasUnsavedChanges) {
+        setWeekStart(detail.weekStartDate);
+      }
+      refetch();
+    };
+    window.addEventListener("senviet:schedule-updated", onScheduleUpdated);
+    return () => window.removeEventListener("senviet:schedule-updated", onScheduleUpdated);
+  }, [refetch, hasUnsavedChanges]);
   const { data: employees = [], isLoading: isEmployeesLoading, isError: isEmployeesError, error: employeesError } = useGetMyHotelEmployeesQuery();
   const [saveSchedule, { isLoading: isSaving }] = useSaveWeeklyShiftScheduleMutation();
   const [clearSchedule, { isLoading: isClearing }] = useClearWeeklyShiftScheduleMutation();
