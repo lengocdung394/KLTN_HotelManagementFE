@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Bell, CheckCheck, LoaderCircle } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -64,6 +65,7 @@ const toLiveNotification = (payload: unknown): NotificationRecord | null => {
 };
 
 export default function NotificationBell() {
+  useTranslation();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const hotelId = useAppSelector((state) => state.auth.hotelId);
@@ -179,7 +181,8 @@ export default function NotificationBell() {
             dispatch(baseApi.util.invalidateTags(["Booking", "Room", "RefundCancellation", "CheckoutRefund"]));
           }
           if (
-            notification.type === "BOOKING_UPDATED"
+            notification.type === "BOOKING_CREATED"
+            || notification.type === "BOOKING_UPDATED"
             || notification.type === "PAYMENT_RECEIVED"
             || notification.type === "BOOKING_CANCELLED"
             || notification.type === "BOOKING_REFUND_REQUESTED"
@@ -202,6 +205,8 @@ export default function NotificationBell() {
       },
       onNewBookingNotification: () => {
         dispatch(baseApi.util.invalidateTags(["Notification", "Booking", "Room"]));
+        void refetchNotifications();
+        void refetchSummary();
       },
       onRoomUpdated: (payload) => {
         dispatch(baseApi.util.invalidateTags(["Room", "Notification"]));
@@ -299,15 +304,15 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-blue-700"
+        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/90 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
         aria-label={`${localizedText("Thông báo", "Notifications")}${unreadCount
           ? localizedText(`, ${unreadCount} chưa đọc`, `, ${unreadCount} unread`)
           : ""}`}
         aria-expanded={isOpen}
       >
-        <Bell size={19} />
+        <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
+          <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}

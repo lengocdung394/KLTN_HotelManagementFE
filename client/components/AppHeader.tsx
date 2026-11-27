@@ -48,7 +48,7 @@ export default function AppHeader({ onMenuClick, fullName, collapsed }: AppHeade
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <LanguageSwitcher />
 
         <NotificationBell />

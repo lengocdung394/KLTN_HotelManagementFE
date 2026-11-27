@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
@@ -243,6 +244,7 @@ const initials = (name: string) =>
     .toLocaleUpperCase("vi");
 
 export default function WeeklyShiftPrototype() {
+  useTranslation();
   const {
     data: employeeRecords,
     isLoading,
@@ -283,7 +285,7 @@ export default function WeeklyShiftPrototype() {
   );
   const [dirtyWeeks, setDirtyWeeks] = useState<Record<string, boolean>>({});
   const [savedWeeks, setSavedWeeks] = useState<Record<string, boolean>>({});
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ vi: string; en: string } | string>("");
   const [error, setError] = useState("");
 
   const weekStart = useMemo(
@@ -300,6 +302,14 @@ export default function WeeklyShiftPrototype() {
     isError: isScheduleError,
     refetch: refetchSchedule,
   } = useGetWeeklyShiftScheduleQuery(weekStart);
+
+  useEffect(() => {
+    const onScheduleUpdated = () => {
+      void refetchSchedule();
+    };
+    window.addEventListener("senviet:schedule-updated", onScheduleUpdated);
+    return () => window.removeEventListener("senviet:schedule-updated", onScheduleUpdated);
+  }, [refetchSchedule]);
   const [saveWeeklySchedule, { isLoading: isSaving }] =
     useSaveWeeklyShiftScheduleMutation();
   const [copyWeeklySchedule, { isLoading: isCopying }] =
@@ -653,33 +663,8 @@ export default function WeeklyShiftPrototype() {
       return;
     }
 
-    for (let dayIndex = 0; dayIndex < dates.length; dayIndex += 1) {
-      const workDate = dateKey(dates[dayIndex]);
-      if (workDate <= todayKey) continue;
-      for (const shift of shiftOrder) {
-        for (const role of staffRoles) {
-          const assignedCount = employees.reduce(
-            (count, employee, employeeIndex) =>
-              count +
-              (employeeShiftRole(employee.position) === role &&
-              weekGrid[employeeIndex][dayIndex] === shift
-                ? 1
-                : 0),
-            0,
-          );
-          const required = shiftRoleNeeds[shift][role];
-          if (assignedCount !== required) {
-            setError(
-              localizedText(
-                `${formatDate(dates[dayIndex])} · ${localizedShift(shift)} cần đúng ${required} nhân viên ${localizedRole(role)} (hiện có ${assignedCount}).`,
-                `${formatDate(dates[dayIndex])} · ${localizedShift(shift)} needs ${required} ${localizedRole(role)} employees (currently ${assignedCount}).`,
-              ),
-            );
-            return;
-          }
-        }
-      }
-    }
+    // Allow saving partial schedules (or when branch lacks certain roles like Security);
+    // show non-blocking coverage note in notice after saving if shortageCount > 0.
 
     const assignments: ShiftAssignmentRequest[] = [];
     dates.forEach((date, dayIndex) => {
@@ -717,10 +702,15 @@ export default function WeeklyShiftPrototype() {
         [weekKey]: savedSchedule.totalAssignments > 0,
       }));
       setNotice(
-        localizedText(
-          "Đã lưu và đăng lịch phân ca lên hệ thống.",
-          "Shift schedule saved and published to the system.",
-        ),
+        shortageCount > 0
+          ? {
+              vi: `Đã lưu và đăng lịch phân ca lên hệ thống (còn ${shortageCount} vị trí chưa đủ định mức).`,
+              en: `Shift schedule saved and published (${shortageCount} slots still below target staffing).`,
+            }
+          : {
+              vi: "Đã lưu và đăng lịch phân ca lên hệ thống.",
+              en: "Shift schedule saved and published to the system.",
+            },
       );
     } catch (saveError) {
       setError(
@@ -949,7 +939,6 @@ export default function WeeklyShiftPrototype() {
             onClick={() => void saveWeek()}
             disabled={
               !isDirty ||
-              shortageCount > 0 ||
               isSaving ||
               isCopying ||
               isClearing ||
@@ -972,7 +961,7 @@ export default function WeeklyShiftPrototype() {
           role="status"
           className="flex items-start justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900"
         >
-          <span>{notice}</span>
+          <span>{typeof notice === "string" ? notice : localizedText(notice.vi, notice.en)}</span>
           <button
             type="button"
             onClick={() => setNotice("")}
