@@ -306,7 +306,7 @@ export default function ServiceWorkspace({ branches = [], mode = "catalog" }: { 
     const activeCount = allServices.filter((service) => service.active).length;
     const categories = new Set(
       allServices
-        .map((service) => service.category.trim().toLocaleLowerCase(i18n.language))
+        .map((service) => (service.category ?? "").trim().toLocaleLowerCase(i18n.language))
         .filter(Boolean),
     );
     return {
